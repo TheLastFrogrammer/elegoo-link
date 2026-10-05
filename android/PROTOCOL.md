@@ -1,3 +1,33 @@
+# v0.3.0 protocol additions
+
+Inspected 2026-10-05. Start/config and paused/completed state mappings come from the official SDK baseline `46c7b814e055cf9675d58482d79f43d0bd2280da`. Previously commented-out methods are now backed by the primary author's packet captures and firmware probes in [bjan/pycentauri PROTOCOL.md](https://github.com/bjan/pycentauri/blob/2f6d9ed53922ea1d733394706ce2bafd875ae5b4/docs/PROTOCOL.md), pinned at `2f6d9ed53922ea1d733394706ce2bafd875ae5b4`. That source reports file/camera/deletion support on 02.01.00.00; it also documents older-firmware nonresponse. Wire-format facts were used for an independent implementation; no pycentauri source code is copied. This evidence is not a test of the user's printer.
+
+| Method | Parameters / result | App policy |
+| --- | --- | --- |
+| 1020 start | `filename`, `storage_media`; `config` contains `printer_check`, `bedlevel_force`, `delay_video`, `print_layout` A/B, `slot_map` entries `{t,canvas_id,tray_id}` | Listed .gcode file, fresh idle/fault-free status, final confirmation. App checks explicit mappings against fresh connected reported trays. No guessed tool count or silent partial mapping |
+| 1023 resume | Empty params | Machine 2, paused substate 2502/2505 only; confirmation |
+| 1028 heaters | `extruder`, `heater_bed` integer °C | Idle/fault-free status; conservative app bounds 0–300 / 0–100, zero off |
+| 1029 light | `power` 0/1; state `led.status` | Fresh status; uses power, not guessed status parameter |
+| 1030 fans | `fan`, `aux_fan` or `box_fan` 0–255 | User percentage rounded to byte range; fresh status |
+| 1031 speed | `mode` 0 silent, 1 balanced, 2 sport, 3 ludicrous | Printing substate 2075; confirmation |
+| 1036 history | Empty params; `history_task_list` oldest-first; task_status 1 complete / 2 cancelled | Present newest 50 rows, unknown states explicit |
+| 1042 camera | Empty params; `url` | Validate HTTP(S) with same selected private IPv4, no embedded credentials/fragment/redirects |
+| 1044 file list | `storage_media` local/u-disk, `offset`, `limit` 50; USB adds `dir` `/`; result `file_list`, `offset`, `total` | Sequential pages; listed filename and metadata; no invented thumbnail endpoint |
+| 1047 delete | `storage_media`, `file_path` array | One selected .gcode filename; fresh idle/fault-free status and list; confirmation; no replay |
+| 1048 storage | Empty params; `total_bytes`, `used_bytes` | Read-only display |
+
+Read queries 1036/1042/1044/1048 accept omitted error_code only with the exact expected result shape; error codes still take precedence. Changing commands require explicit error_code 0 and request ID/method correlation. Acknowledgement is separate from status evidence. Request publication is spaced at least 2 seconds; stop takes the next slot ahead of queued reads, without bypassing spacing or a pending changing command. Guards are repeated at dispatch. Query timeouts start at actual publication and report feature unavailability without disconnecting the monitor; failed query publication releases its busy state. Connection loss never replays changes.
+
+The camera's default independent endpoint is `http://<printer IP>:8080/?action=stream`. Playback uses bounded JPEG marker frames (2 MiB max), checks decoded dimensions, samples large frames, throttles to 5 fps and applies UI backpressure. It stops on tab change/background, closes its socket on cancellation and never follows redirects. Camera access still depends on firmware and local routing, even when independent of MQTT auth.
+
+Read-only discovery uses the existing UDP 52700/method 7000 parser, collecting up to 20 private IPv4 printers over four seconds. Per-IP credential encryption uses the unchanged Keystore alias and IP AAD, migrating existing ciphertext/IV without decryption/re-encryption. No access codes enter saved instance state or discovery traffic.
+
+Alerts require an observed active job plus explicit completed substate 2077, match its reported UUID/filename when present and deduplicate completion. A completed event that clears the filename uses the observed name. Idle/cancelled/stale/disconnected states never imply completion; reconnection can therefore miss an event. Newly appearing fault codes alert once until cleared. No separate cloud notification backend runs after process death.
+
+Homing/movement and filament-loading parameters are not exposed. Official cloud/Agora, timelapse export and other model protocols remain outside this release.
+
+The following sections describe earlier releases and the original audit; their stated gaps are historical.
+
 # CC2 source audit and port contract
 
 Baseline: `elegooofficial/elegoo-link` commit `46c7b814e055cf9675d58482d79f43d0bd2280da`, inspected 2026-10-05. Claims here refer to that code, not untested firmware guarantees.

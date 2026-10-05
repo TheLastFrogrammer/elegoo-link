@@ -17,8 +17,9 @@ public final class Cc2Discovery implements AutoCloseable {
     private volatile boolean closed;
     public static final class Info {
         public final String serial;
+        public final String name, model;
         public final Boolean lanOnly, codeProtected;
-        Info(String serial, Boolean lanOnly, Boolean codeProtected) { this.serial = serial; this.lanOnly = lanOnly; this.codeProtected = codeProtected; }
+        Info(String serial, String name, String model, Boolean lanOnly, Boolean codeProtected) { this.serial = serial; this.name = name; this.model = model; this.lanOnly = lanOnly; this.codeProtected = codeProtected; }
         public String summary() {
             return "Printer mode: " + (lanOnly == null ? "not reported" : lanOnly ? "LAN Only" : "cloud / WAN")
                 + "; access-code protection: " + (codeProtected == null ? "not reported" : codeProtected ? "enabled" : "disabled") + ".";
@@ -74,8 +75,34 @@ public final class Cc2Discovery implements AutoCloseable {
             JSONObject result = message.optJSONObject("result");
             if (result == null || (result.has("error_code") && result.optInt("error_code", -1) != 0) || !(result.opt("sn") instanceof String)) return null;
             String serial = result.getString("sn");
-            return validSerial(serial) ? new Info(serial, flag(result.opt("lan_status")), flag(result.opt("token_status"))) : null;
+            return validSerial(serial) ? new Info(serial, result.optString("host_name"), result.optString("machine_model"), flag(result.opt("lan_status")), flag(result.opt("token_status"))) : null;
         } catch (Exception ignored) { return null; }
+    }
+    public static final class Found {
+        public final String host; public final Info info;
+        Found(String host, Info info) { this.host = host; this.info = info; }
+    }
+    public List<Found> scan() throws IOException {
+        if (closed) throw new IOException("Discovery cancelled");
+        Map<String, Found> found = new LinkedHashMap<>();
+        byte[] request = "{\"id\":0,\"method\":7000}".getBytes(StandardCharsets.UTF_8), buffer = new byte[16384];
+        try (DatagramSocket socket = factory.create()) {
+            current = socket; if (closed) throw new IOException("Discovery cancelled"); socket.setBroadcast(true); socket.setSoTimeout(500);
+            long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis), nextSend = 0;
+            while (!closed && System.nanoTime() < deadline) {
+                long now = System.nanoTime();
+                if (now >= nextSend) {
+                    for (InetAddress target : broadcasts) try { socket.send(new DatagramPacket(request, request.length, target, port)); } catch (IOException ignored) { }
+                    nextSend = now + TimeUnit.SECONDS.toNanos(1);
+                }
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+                try { socket.receive(packet); } catch (SocketTimeoutException ignored) { continue; }
+                if (packet.getLength() == buffer.length || !(packet.getAddress() instanceof Inet4Address)) continue;
+                String host = packet.getAddress().getHostAddress(); Info info = parse(new String(packet.getData(), 0, packet.getLength(), StandardCharsets.UTF_8));
+                if (info != null) try { new PrinterHttp(host, ""); if (found.size() < 20) found.put(host, new Found(host, info)); } catch (IllegalArgumentException ignored) { }
+            }
+        } finally { current = null; }
+        return new ArrayList<>(found.values());
     }
     private static Boolean flag(Object value) {
         if (value instanceof Boolean) return (Boolean) value;

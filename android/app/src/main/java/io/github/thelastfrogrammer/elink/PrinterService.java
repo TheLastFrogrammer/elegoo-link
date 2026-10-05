@@ -8,8 +8,10 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.OpenableColumns;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.*;
 import java.util.Locale;
+import java.util.*;
 import java.util.concurrent.*;
 
 /** User-started foreground connection, independent of Activity instances. Main thread owns UI state. */
@@ -30,13 +32,19 @@ public final class PrinterService extends Service {
     private String host = "", code = "", serial = "";
     public String connection = "Disconnected", feedback = "Development build: printer behavior still needs hardware testing.";
     public JSONObject status = new JSONObject(), attributes = new JSONObject(), canvas;
+    public JSONObject filePage = new JSONObject(), disk = new JSONObject(), history = new JSONObject();
+    public String storage = "local", cameraUrl = "", fileMessage = "Refresh to browse printer files.", historyMessage = "Refresh to load print history.";
+    public int fileOffset;
+    public long filesAt;
+    private final Set<Integer> queryBusy = new HashSet<>();
+    private PrintAlerts alerts = new PrintAlerts();
     public File selectedFile;
     public String selectedName;
     public boolean importing;
     private long canvasAt, lastNotification;
     private final Runnable reconnect = this::attempt;
     private final Runnable freshness = new Runnable() {
-        public void run() { if (destroyed) return; changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
+        public void run() { if (destroyed) return; if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
     };
     @Override public void onCreate() {
         super.onCreate();
@@ -63,7 +71,7 @@ public final class PrinterService extends Service {
         new PrinterHttp(host, code);
         if (!serial.isEmpty() && !Cc2Discovery.validSerial(serial)) throw new IllegalArgumentException("Invalid serial number");
         generation++; main.removeCallbacks(reconnect); if (session != null) session.close(); session = null;
-        this.host = host; this.code = code; this.serial = serial; wanted = true; retries.connected();
+        this.host = host; this.code = code; this.serial = serial; wanted = true; retries.connected(); alerts = new PrintAlerts();
         startMonitoring(); attempt();
     }
     private void attempt() {
@@ -72,23 +80,37 @@ public final class PrinterService extends Service {
         try { route = NetworkRoute.local(this); }
         catch (IOException error) { failed(error.getMessage(), true); return; }
         long current = ++generation;
-        status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
+        resetData();
         session = new Cc2Session(host, code, new Cc2Session.Listener() {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
             public void connection(String text, boolean registered) { deliver(() -> { connection = text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
-            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } }); }
+            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } showAlert(alerts.update(value)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
             public void uploadProgress(int percent) { deliver(() -> feedback = "Uploading " + selectedName + ": " + percent + "%"); }
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
+            public void query(int method, JSONObject params, JSONObject result) { deliver(() -> {
+                queryBusy.remove(method);
+                if (method == Cc2Codec.FILES) { filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer."; }
+                if (method == Cc2Codec.HISTORY) { history = result; historyMessage = "History received from printer."; }
+                if (method == Cc2Codec.DISK) disk = result;
+                if (method == Cc2Codec.CAMERA) {
+                    try { cameraUrl = FeatureData.cameraUrl(host, result.getString("url")); feedback = "Camera address received. Open Camera to view it."; }
+                    catch (Exception error) { cameraUrl = ""; feedback = "Printer returned a camera URL outside the selected printer address; it was not opened."; }
+                }
+                if (method == Cc2Codec.DELETE) browse(storage, 0);
+            }); }
+            public void queryError(int method, String text) { deliver(() -> { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }); }
+            public void uploaded(String name) { deliver(() -> { feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0); }); }
         }, route.http(), route.sockets(), new PrinterIdentity(serial, route.discovery()));
         connection = "Identifying printer for MQTT…"; changed(); session.connect();
     }
     private void failed(String message, boolean retryable) {
+        alerts.disconnected();
         generation++; if (session != null) session.close(); session = null;
-        status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
+        resetData();
         int delay = wanted && retryable ? retries.nextDelaySeconds() : -1;
         if (delay >= 0) {
             connection = message + "\nRetry " + retries.attempts() + "/5 in " + delay + "s. Use Disconnect to cancel.";
@@ -104,10 +126,39 @@ public final class PrinterService extends Service {
     public void command(int method) { if (session != null) session.command(method); }
     public void autoRefill(boolean enabled) { if (canvasFresh() && session != null) session.autoRefill(enabled); }
     public void upload() { if (session != null && selectedFile != null && !importing) { session.upload(selectedFile, selectedName); changed(); } }
+    public void cancelUpload() { if (session != null) session.cancelUpload(); }
+    public boolean busy(int method) { return queryBusy.contains(method); }
+    public boolean filesFresh() { return ready() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
+    public void browse(String storage, int offset) { if (!ready() || busy(Cc2Codec.FILES)) return; Cc2Codec.storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid offset"); queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files…"; session.files(storage, offset); changed(); }
+    public void loadHistory() { if (ready() && !busy(Cc2Codec.HISTORY)) { queryBusy.add(Cc2Codec.HISTORY); historyMessage = "Loading history…"; session.history(); changed(); } }
+    public void loadDisk() { if (ready() && !busy(Cc2Codec.DISK)) { queryBusy.add(Cc2Codec.DISK); session.disk(); changed(); } }
+    public void camera() { if (ready() && !busy(Cc2Codec.CAMERA)) { queryBusy.add(Cc2Codec.CAMERA); session.camera(); changed(); } }
+    private boolean knownFile(String storage, String filename) {
+        if (!filesFresh() || !this.storage.equals(storage)) return false;
+        JSONArray files = filePage.optJSONArray("file_list"); if (files == null) return false;
+        for (int i = 0; i < files.length(); i++) { JSONObject file = files.optJSONObject(i); if (file != null && filename.equals(file.optString("filename"))) return true; }
+        return false;
+    }
+    public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, JSONArray maps) {
+        if (!fresh() || !Cc2Codec.idle(status) || !knownFile(storage, filename) || maps.length() > 0 && (!canvasFresh() || !FeatureData.mappings(canvas, maps))) {
+            feedback = "Refresh status, files and trays before starting. The printer must be idle and mappings must refer to reported trays."; changed(); return;
+        }
+        session.start(storage, filename, leveling, force, timelapse, plate, maps);
+    }
+    public void delete(String storage, String filename) { if (fresh() && Cc2Codec.idle(status) && knownFile(storage, filename)) session.delete(storage, filename); else { feedback = "Refresh files and wait for the printer to be idle before deleting."; changed(); } }
+    public void light(boolean on) { if (fresh()) session.light(on); }
+    public void temperatures(int nozzle, int bed) { if (fresh() && Cc2Codec.idle(status)) session.temperatures(nozzle, bed); }
+    public void fan(String name, int percent) { if (fresh()) session.fan(name, percent); }
+    public void speed(int mode) { if (fresh() && Cc2Codec.canPause(status)) session.speed(mode); }
+    private void resetData() {
+        status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
+        filePage = new JSONObject(); disk = new JSONObject(); history = new JSONObject(); filesAt = 0; fileOffset = 0; cameraUrl = "";
+        queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
+    }
     public void disconnect() {
         wanted = false; generation++; main.removeCallbacks(reconnect);
         if (session != null) session.close(); session = null; code = "";
-        status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
+        resetData();
         connection = "Disconnected"; stopMonitoring(); changed();
     }
     public void select(Uri uri) {
@@ -152,6 +203,15 @@ public final class PrinterService extends Service {
         });
     }
     private void changed() { if (observer != null && !destroyed) observer.changed(); }
+    private void showAlert(String text) {
+        if (text.isEmpty() || !getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alerts", true)) return;
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("printer-alerts", "Print completion and faults", NotificationManager.IMPORTANCE_DEFAULT));
+        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        manager.notify(text.startsWith("Print complete") ? 2 : 3, new Notification.Builder(this, "printer-alerts").setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("Link Workshop · " + host).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
+    }
     private Notification notification() {
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent view = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

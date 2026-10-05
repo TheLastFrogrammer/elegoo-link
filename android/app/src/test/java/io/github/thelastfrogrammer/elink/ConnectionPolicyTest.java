@@ -34,11 +34,11 @@ public class ConnectionPolicyTest {
         assertFalse(message.contains("access code rejected")); assertFalse(PrinterErrors.retryable(error));
         assertFalse(PrinterErrors.retryable(new PrinterErrors.CloudMode()));
     }
-    @Test public void refillRequiresAnExplicitBooleanPayloadAndResumeRemainsBlocked() throws Exception {
+    @Test public void settingPayloadsStayExplicitAndAxisMovementRemainsBlocked() throws Exception {
         assertTrue(Cc2Codec.autoRefillRequest(8, true).getJSONObject("params").getBoolean("auto_refill"));
         assertEquals(2004, Cc2Codec.autoRefillRequest(9, false).getInt("method"));
         assertEquals(2005, Cc2Codec.request(10, Cc2Codec.CANVAS).getInt("method"));
         try { Cc2Codec.request(11, Cc2Codec.AUTO_REFILL); fail("Do not invent a missing setting"); } catch (IllegalArgumentException expected) { }
-        try { Cc2Codec.request(12, 1023); fail("Resume is unverified"); } catch (IllegalArgumentException expected) { }
+        try { Cc2Codec.request(12, 1027); fail("Axis movement is unverified"); } catch (IllegalArgumentException expected) { }
     }
 }

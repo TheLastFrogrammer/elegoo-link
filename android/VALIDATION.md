@@ -1,3 +1,23 @@
+# v0.3.0 validation
+
+Validated 2026-10-05. New controls have not been exercised on a physical CC2 or S24+. The user's earlier broker authorization refusal remains the latest supplied connection result; this feature release does not establish that authentication is resolved.
+
+- Clean Gradle build, build cache disabled: testDebugUnitTest, lintDebug and assembleDebug passed. JDK 17, Gradle 8.13, AGP 8.11.1, platform 36/build tools 35.0.0.
+- 64 tests passed in the full suite. Subsequent filename validation was tightened to reject multiple embedded control characters; nine feature tests passed again. A new mid-transfer cancellation test was added; the final focused run passed all 13 feature/upload tests. Together 65 distinct tests passed, zero failures/errors.
+- New coverage: exact start/config fields and defensive mapping copies; unsafe file paths/settings; offset/limit and USB root pagination; deletion arrays; heater/fan/speed/light bounds; paused-state resume; query shapes/request context; reported tray mapping; same-host camera URLs; history ordering; observed-job completion/fault deduplication; bounded multipart JPEG extraction; query rejection/publish failure without loss of monitoring; correlated resume acknowledgement; state change blocking a queued start; stop priority over queued reads; upload cancellation after the first acknowledged chunk preventing any next chunk.
+- Lint: 0 errors, 20 warnings, all English UI text/resource translation warnings. API-27 navigation-bar appearance attributes now live in values-v27; API-26 fallback uses a contrasting navigation bar.
+- Final APK repackaged from an empty app/build directory with build cache disabled; all 31 assembly tasks executed. Actual APK manifest verified: v0.3.0/code 5, min 26, target/compile 36. DEX verified contains the final control-character validation and new print/appearance UI. Light/dark/launch resources, night/version variants and embedded licenses are packaged.
+- APK Signature Scheme v2 verified, one signer. Certificate SHA-256 unchanged: 9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3. Compatible update over v0.2.0–v0.2.2.
+- APK: 224543 bytes; SHA-256 2a92ee44eb3969c10f7e4de291961ef3dd93b822d7850fd8f04eba87c463466b.
+
+No emulator/device is attached. Automated transport fixtures validate this implementation, not a real printer's responses. Native theme/layout and lifecycle behavior, discovery broadcast routing, credential migration/Keystore, notifications/battery management and camera decode/playback still need device testing. HTTP upload remains unavailable when port 80 is unreachable. Camera opens independently of MQTT but still depends on the printer's stream endpoint and local routing. Feature errors/timeouts do not establish firmware support; acknowledgements do not alone prove the physical result.
+
+On-device acceptance: install normally over v0.2, check System/Light/Dark including dialogs and rotation, select/discover/save profiles, reconnect and compare status/trays against the touchscreen. Verify file pagination/metadata/history/storage and camera start/stop/snapshot. On suitable test files/jobs, verify explicit start settings/tool maps, pause/resume/stop, confirmed idle deletion, heater/fan/light/speed/refill state, cancellation and alerts. Change state while a start is queued; it must not dispatch. Disconnect/process death must never replay a changing command or upload. Completion during stale/disconnected gaps can be missed and is never inferred from idle.
+
+Cloud/remote access, timelapse export, filament loading, thumbnails, axis movement and other models remain pending. No cloud credentials or signing keys are included in the source archive.
+
+Earlier validation records follow.
+
 # v0.2.2 validation
 
 Validated on 2026-10-05. The user's v0.2.1 screenshot establishes that the HTTP prerequisite is bypassed and the MQTT broker responds with authorization refusal code 5. It does not establish that the access code itself is incorrect. Authentication/registration after this update remains physically unverified.

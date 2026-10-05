@@ -68,4 +68,15 @@ public class PrinterHttpTest {
             assertTrue(requests.isEmpty());
         } finally { file.delete(); }
     }
+    @Test public void cancelAfterAcknowledgedChunkStopsBeforeNextChunk() throws Exception {
+        File file=File.createTempFile("contract", ".gcode");
+        try {
+            try(RandomAccessFile output=new RandomAccessFile(file,"rw")) {output.setLength(2*1024*1024);}
+            PrinterHttp client=new PrinterHttp("192.168.1.50","token");List<Integer> progress=new ArrayList<>();
+            try {client.upload(file,"test.gcode",percent -> {progress.add(percent);client.cancel();});fail("Cancelled upload must not complete");}
+            catch(IOException expected) {assertTrue(expected.getMessage().contains("cancelled"));}
+            assertEquals(1,requests.size());assertEquals(Collections.singletonList(50),progress);
+        }finally{file.delete();}
+    }
+
 }

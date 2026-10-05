@@ -34,8 +34,9 @@ public class Cc2CodecTest {
         assertFalse(Cc2Codec.validRegistration(new JSONObject("{\"client_id\":\"ours\",\"error\":\"too many clients\"}"), "ours"));
         assertTrue(Cc2Codec.validRegistration(new JSONObject("{\"client_id\":\"ours\",\"error\":\"ok\"}"), "ours"));
     }
-    @Test public void unknownCommandsAndUnconfirmedResumeAreNotSent() throws Exception {
-        try { Cc2Codec.request(1, 1023); fail("Resume must remain unsupported"); } catch (IllegalArgumentException expected) { }
+    @Test public void axisMovementAndUnknownCommandsAreNotSent() throws Exception {
+        assertEquals(1023, Cc2Codec.request(1, Cc2Codec.RESUME).getInt("method"));
+        try { Cc2Codec.request(1, 1027); fail("Unverified axis movement remains unsupported"); } catch (IllegalArgumentException expected) { }
         assertEquals(1021, Cc2Codec.request(77, Cc2Codec.PAUSE).getInt("method"));
         assertEquals(77, Cc2Codec.request(77, Cc2Codec.PAUSE).getInt("id"));
         assertEquals(0, Cc2Codec.request(77, Cc2Codec.PAUSE).getJSONObject("params").length());

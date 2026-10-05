@@ -16,6 +16,10 @@ public class Cc2SessionTest {
     private static final class Listener implements Cc2Session.Listener {
         final BlockingQueue<JSONObject> statuses = new LinkedBlockingQueue<>(), canvases = new LinkedBlockingQueue<>(), attrs = new LinkedBlockingQueue<>();
         final BlockingQueue<String> results = new LinkedBlockingQueue<>(), failures = new LinkedBlockingQueue<>();
+        final BlockingQueue<JSONObject> queries = new LinkedBlockingQueue<>();
+        final BlockingQueue<String> queryErrors = new LinkedBlockingQueue<>();
+        public void query(int method, JSONObject params, JSONObject result) { try { queries.add(new JSONObject().put("method",method).put("params",params).put("result",result)); } catch (Exception error) { throw new AssertionError(error); } }
+        public void queryError(int method,String message) { queryErrors.add(method+":"+message); }
         volatile boolean retryable;
         public void connection(String message, boolean registered) { }
         public void status(JSONObject snapshot) { statuses.add(snapshot); }
@@ -39,6 +43,8 @@ public class Cc2SessionTest {
         String responseTopic;
         volatile boolean connected;
         String password;
+        volatile int machine = 2, sub = 2075;
+        volatile boolean rejectCamera, failDisk;
         final List<String> subscriptions = new CopyOnWriteArrayList<>();
         final BlockingQueue<JSONObject> writes = new LinkedBlockingQueue<>();
         final List<JSONObject> requests = new CopyOnWriteArrayList<>();
@@ -61,11 +67,15 @@ public class Cc2SessionTest {
                 }
                 if (!request.has("method")) return;
                 requests.add(request); int method = request.getInt("method");
-                if (method == Cc2Codec.PAUSE || method == Cc2Codec.AUTO_REFILL || method == Cc2Codec.STOP) { writes.add(request); return; }
+                if (Cc2Codec.changing(method)) { writes.add(request); return; }
                 JSONObject result = new JSONObject().put("error_code", 0);
-                if (method == Cc2Codec.STATUS) result.put("machine_status", new JSONObject().put("status", 2).put("sub_status", 2075));
+                if (method == Cc2Codec.STATUS) result.put("machine_status", new JSONObject().put("status", machine).put("sub_status", sub));
                 if (method == Cc2Codec.CANVAS) result.put("canvas_info", new JSONObject().put("auto_refill", false));
                 if (method == Cc2Codec.ATTRIBUTES) result.put("hostname", "Test CC2");
+                if (method == Cc2Codec.FILES) result = new JSONObject().put("file_list",new org.json.JSONArray().put(new JSONObject().put("filename","test.gcode"))).put("total",51);
+                if (method == Cc2Codec.CAMERA) result = rejectCamera ? new JSONObject().put("error_code",1001) : new JSONObject().put("url","http://192.168.1.50:8080/?action=stream");
+                if (method == Cc2Codec.HISTORY) result = new JSONObject().put("history_task_list",new org.json.JSONArray());
+                if (method == Cc2Codec.DISK) { if (failDisk) throw new IOException("publish failed"); result = new JSONObject().put("total_bytes",1000).put("used_bytes",500); }
                 response(request.getInt("id"), method, result);
             } catch (Exception error) { throw new MqttException(error); }
         }
@@ -75,7 +85,7 @@ public class Cc2SessionTest {
         }
     }
     private static <T> T take(BlockingQueue<T> queue) throws Exception {
-        T value = queue.poll(4, TimeUnit.SECONDS); assertNotNull("Expected callback", value); return value;
+        T value = queue.poll(12, TimeUnit.SECONDS); assertNotNull("Expected callback", value); return value;
     }
     @Test public void connectsRegistersAndDeliversAttributesStatusAndCanvas() throws Exception {
         Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
@@ -180,4 +190,39 @@ public class Cc2SessionTest {
         try { session.connect(); assertTrue(take(listener.failures).contains("cloud / WAN mode")); assertFalse(listener.retryable); assertFalse(session.ready()); }
         finally { session.close(); }
     }
+    private static Cc2Session session(Listener listener,List<FakeMqtt> clients,int machine,int sub) {
+        return new Cc2Session("192.168.1.50","code",listener,url -> { throw new IOException("HTTP must remain optional"); },null,
+            (uri,id) -> { FakeMqtt f=new FakeMqtt(uri,id); f.machine=machine;f.sub=sub;clients.add(f);return f; },http -> "TEST");
+    }
+    @Test public void queryResultsKeepRequestContextAndFailuresLeaveMonitoringConnected() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();Cc2Session s=session(l,clients,2,2075);
+        try {
+            s.connect();take(l.statuses);FakeMqtt f=clients.get(0);s.files("u-disk",50);JSONObject query=take(l.queries);
+            assertEquals(Cc2Codec.FILES,query.getInt("method"));assertEquals(50,query.getJSONObject("params").getInt("offset"));assertEquals("u-disk",query.getJSONObject("params").getString("storage_media"));assertEquals("test.gcode",query.getJSONObject("result").getJSONArray("file_list").getJSONObject(0).getString("filename"));
+            f.rejectCamera=true;s.camera();assertTrue(take(l.queryErrors).startsWith(Cc2Codec.CAMERA+":"));assertTrue(s.ready());
+            f.failDisk=true;s.disk();assertTrue(take(l.queryErrors).contains("could not be sent"));assertTrue(s.ready());
+            f.failDisk=false;s.disk();assertEquals(1000,take(l.queries).getJSONObject("result").getInt("total_bytes"));assertTrue(s.fresh());
+        } finally { s.close(); }
+    }
+    @Test public void resumePublishesOnlyWhenPausedAndUsesMatchingAcknowledgement() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();Cc2Session s=session(l,clients,2,2502);
+        try { s.connect();take(l.statuses);s.command(Cc2Codec.RESUME);FakeMqtt f=clients.get(0);JSONObject request=take(f.writes);assertEquals(1023,request.getInt("method"));assertEquals(0,request.getJSONObject("params").length());take(l.results);f.sub=2075;f.response(request.getInt("id"),1023,new JSONObject().put("error_code",0));assertTrue(take(l.results).contains("resume"));take(l.statuses);s.command(Cc2Codec.RESUME);assertTrue(take(l.results).contains("unavailable"));assertTrue(f.writes.isEmpty()); }
+        finally {s.close();}
+    }
+    @Test public void queuedStartRechecksStateAtPublication() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();Cc2Session s=session(l,clients,1,0);
+        try {s.connect();take(l.statuses);FakeMqtt f=clients.get(0);s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());
+            JSONObject push=new JSONObject().put("method",6000).put("id",1).put("result",new JSONObject().put("machine_status",new JSONObject().put("status",2).put("sub_status",2075)));
+            f.callback.messageArrived(f.subscriptions.get(1),new MqttMessage(push.toString().getBytes(StandardCharsets.UTF_8)));take(l.statuses);
+            assertTrue(take(l.results).contains("Control unavailable"));assertTrue(f.writes.isEmpty());assertEquals(0,f.requests.stream().filter(r -> r.optInt("method")==Cc2Codec.START).count());
+        } finally {s.close();}
+    }
+    @Test public void stopTakesNextSlotAheadOfQueuedFeatureReads() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();Cc2Session s=session(l,clients,2,2075);
+        try {s.connect();take(l.statuses);FakeMqtt f=clients.get(0);s.files("local",0);s.history();s.camera();s.command(Cc2Codec.STOP);JSONObject stop=take(f.writes);assertEquals(Cc2Codec.STOP,stop.getInt("method"));
+            int position=-1;for(int i=0;i<f.requests.size();i++)if(f.requests.get(i).optInt("method")==Cc2Codec.STOP)position=i;
+            assertTrue(position>=0);for(int i=0;i<position;i++)assertFalse(Cc2Codec.isQuery(f.requests.get(i).optInt("method")));
+        }finally{s.close();}
+    }
+
 }

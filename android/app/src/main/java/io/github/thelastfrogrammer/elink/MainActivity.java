@@ -6,20 +6,46 @@ import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.graphics.Bitmap;
+import android.content.res.*;
 import android.os.*;
 import android.text.InputType;
 import android.view.*;
 import android.widget.*;
 import org.json.JSONObject;
+import org.json.JSONArray;
 import java.io.*;
 import java.util.Locale;
+import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, INK = 0xff142c3b, MUTED = 0xff536976, TEAL = 0xff006b65;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3;
+    private int INK = 0xff142c3b, MUTED = 0xff536976, TEAL = 0xff006b65, BACKGROUND = 0xffedf3f4, SURFACE = Color.WHITE, BUTTON = 0xffe0efec;
+    private boolean dark;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService checks = Executors.newSingleThreadExecutor();
     private LinearLayout content;
+    private LinearLayout currentSection, fileRows;
+    private final LinearLayout[] pages = new LinearLayout[4];
+    private final Button[] tabs = new Button[4];
+    private int page = 3;
+    private SharedPreferences settings;
+    private ProfileStore profiles;
+    private EditText profileName, cameraAddress;
+    private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
+    private Spinner storagePicker;
+    private Button resume, discover, saveProfile, chooseProfile, removeProfile, cancelUpload, listFiles, previousFiles, nextFiles, loadHistory, loadDisk,
+        cameraStart, cameraQuery, cameraSnapshot, heater, fan, speed, lightOn, lightOff;
+    private ImageView cameraImage;
+    private JSONObject renderedFiles;
+    private Cc2Discovery scanning;
+    private MjpegPlayer cameraPlayer;
+    private Bitmap lastFrame, pendingSnapshot;
+    private String cameraHost = "";
+    private String cameraReported = "";
+    private boolean scanningNow;
     private EditText host, access, serial;
     private CheckBox remember;
     private TextView connection, state, temperatures, job, feedback, selected, faults, trays, identity, diagnostics;
@@ -34,7 +60,7 @@ public final class MainActivity extends Activity {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
-            if (printer.connecting()) { access.setText(printer.accessCode()); serial.setText(printer.serial()); }
+            if (printer.connecting()) { host.setText(printer.host()); access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) printer.observe(MainActivity.this::render);
             render();
         }
@@ -44,9 +70,15 @@ public final class MainActivity extends Activity {
         public void run() { if (active) { render(); main.postDelayed(this, 1000); } }
     };
     @Override public void onCreate(Bundle saved) {
+        settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        int appearance = settings.getInt("theme", 0);
+        dark = appearance == 2 || appearance == 0 && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        if (dark) { INK = 0xffe4eff2; MUTED = 0xffa7bec6; TEAL = 0xff63d5c7; BACKGROUND = 0xff10191d; SURFACE = 0xff1b292f; BUTTON = 0xff223b3b; }
+        setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
         super.onCreate(saved);
         credentials = new CredentialStore(this);
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(0xffedf3f4);
+        profiles = new ProfileStore(this);
+        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BACKGROUND);
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(20), dp(24), dp(20), dp(24)); scroll.addView(content);
         scroll.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -56,8 +88,14 @@ public final class MainActivity extends Activity {
             return insets;
         });
         setContentView(scroll);
-        label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 28, INK, true);
-        label(content, "Centauri Carbon 2 · local Wi-Fi · v0.2.2", 14, MUTED, false);
+        label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 25, INK, true);
+        label(content, "Centauri Carbon 2 · local Wi-Fi · v0.3.0", 14, MUTED, false);
+        summary = label(content, "Disconnected · open Settings to connect", 14, TEAL, true);
+        LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); content.addView(navigation);
+        String[] titles = {"Monitor", "Files", "Camera", "Settings"};
+        for (int i = 0; i < 4; i++) { final int target = i; tabs[i] = new Button(this); styleButton(tabs[i]); tabs[i].setText(titles[i]); tabs[i].setTextSize(12); tabs[i].setPadding(dp(2), 0, dp(2), 0); tabs[i].setOnClickListener(v -> selectPage(target)); navigation.addView(tabs[i], new LinearLayout.LayoutParams(0, dp(48), 1)); }
+        for (int i = 0; i < 4; i++) { pages[i] = new LinearLayout(this); pages[i].setOrientation(LinearLayout.VERTICAL); content.addView(pages[i]); }
+        currentSection = pages[3];
         LinearLayout connectionCard = card("Connection");
         host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
@@ -72,7 +110,16 @@ public final class MainActivity extends Activity {
         check = button(connectionCard, "Check connection", this::checkConnection);
         diagnostics = label(connectionCard, "Check connection tests HTTP, MQTT and UDP discovery, including reported LAN mode and code protection. HTTP is optional for monitoring; file uploads still require it. No access code is included in the report.", 13, MUTED, false);
         diagnostics.setTextIsSelectable(true);
-        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(); remember.setChecked(false); access.setText(""); message("Saved access code removed. An existing connection keeps its in-memory code until disconnected."); });
+        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); message("Saved access code removed. An existing connection keeps its in-memory code until disconnected."); });
+        remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
+        discover = button(connectionCard, "Find printers on Wi-Fi", this::scanPrinters);
+        profileName = input(connectionCard, "Printer profile name", false);
+        serial.setText(profiles.find(host.getText().toString()).optString("serial"));
+        profileName.setText(profiles.find(host.getText().toString()).optString("name"));
+        saveProfile = button(connectionCard, "Save printer profile", this::savePrinter);
+        chooseProfile = button(connectionCard, "Choose saved printer", this::choosePrinter);
+        removeProfile = button(connectionCard, "Remove this profile…", this::removePrinter);
+        currentSection = pages[0];
         LinearLayout monitor = card("Live monitor");
         identity = label(monitor, "Connect to identify the printer and firmware.", 13, MUTED, false);
         state = label(monitor, "Waiting for printer", 22, INK, true);
@@ -87,8 +134,17 @@ public final class MainActivity extends Activity {
         refill = button(canvas, "Automatic refill", this::confirmRefill);
         LinearLayout controls = card("Print controls");
         pause = button(controls, "Pause print", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE));
+        resume = button(controls, "Resume print…", () -> confirmCommand("Resume after checking why the printer paused?", Cc2Codec.RESUME));
         stop = button(controls, "Stop print…", () -> confirmCommand("Stop the current print? It cannot be resumed through this app.", Cc2Codec.STOP));
-        label(controls, "Controls require fresh printer status. Resume is pending protocol verification.", 13, MUTED, false);
+        label(controls, "Controls require fresh status and an appropriate printer state. Printer-changing commands are never automatically replayed.", 13, MUTED, false);
+        LinearLayout tuning = card("Printer settings");
+        lightOn = button(tuning, "Chamber light on", () -> { if (printer != null) printer.light(true); });
+        lightOff = button(tuning, "Chamber light off", () -> { if (printer != null) printer.light(false); });
+        heater = button(tuning, "Temperature targets…", this::temperatureDialog);
+        fan = button(tuning, "Fan setting…", this::fanDialog);
+        speed = button(tuning, "Print speed mode…", this::speedDialog);
+        label(tuning, "Temperature targets are available while idle. Firmware can reject an unavailable setting; acknowledgements and updated status are shown separately.", 13, MUTED, false);
+        currentSection = pages[1];
         LinearLayout files = card("Send a sliced file");
         selected = label(files, "Choose a .gcode file sliced for this printer.", 14, MUTED, false);
         pick = button(files, "Choose G-code", () -> {
@@ -97,19 +153,31 @@ public final class MainActivity extends Activity {
         upload = button(files, "Upload to printer", () -> {
             if (printer == null || printer.selectedName == null) return;
             new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
-                .setMessage("This sends the file only. A file with the same name may be replaced. Start the job from the printer screen after checking the plate and filament.")
+                .setMessage("This sends the file only. A file with the same name may be replaced. Refresh Files after upload and choose Print setup to start it.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         });
+        cancelUpload = button(files, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); });
         label(files, "Connection and uploads continue while choosing a file, rotating, or switching apps. Use Disconnect in the app or notification to stop the session. Android may still stop the app under memory or battery restrictions.", 13, MUTED, false);
         label(files, "File uploads require HTTP port 80. If HTTP is unavailable, you can still monitor and use supported MQTT controls.", 13, MUTED, false);
-        feedback = label(content, "Development build: printer behavior still needs hardware testing.", 14, MUTED, false);
+        buildFileBrowser();
+        currentSection = pages[2]; buildCamera();
+        currentSection = pages[3];
+        LinearLayout preferences = card("App preferences");
+        button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
+        CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
+        alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
+        label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
         LinearLayout coming = card("Next in the workshop");
-        label(coming, "Start & resume · camera & timelapse · printer file browser · full discovery list · completion alerts · remote access", 15, INK, false);
-        label(coming, "These features are unavailable in this build. The ongoing notification shows connection and print state; separate completion alerts are still pending.", 13, MUTED, false);
+        label(coming, "Official cloud login · remote access · timelapse export · filament loading · other printer models", 15, INK, false);
+        label(coming, "These features remain pending. New controls, files and camera behavior still need testing with your printer; unsupported requests report their error or timeout.", 13, MUTED, false);
         button(coming, "About & licenses", this::showLicenses);
-        try { access.setText(credentials.load()); }
-        catch (Exception error) { credentials.forget(); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); }
-        if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); }
+        currentSection = null; feedback = label(content, "Development build: printer behavior still needs hardware testing.", 14, MUTED, false);
+        if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
+        try { access.setText(credentials.load(host.getText().toString().trim())); remember.setChecked(saved == null ? credentials.remembers(host.getText().toString().trim()) : saved.getBoolean("remember", false)); }
+        catch (Exception error) { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); }
+        TransientInputs transientInputs = (TransientInputs) getLastNonConfigurationInstance();
+        if (transientInputs != null && host.getText().toString().equals(transientInputs.host)) { access.setText(transientInputs.code); pendingSnapshot = transientInputs.snapshot; }
+        selectPage(saved == null ? settings.getInt("page", 3) : saved.getInt("page", 3));
         bound = bindService(new Intent(this, PrinterService.class), binding, BIND_AUTO_CREATE);
         render();
     }
@@ -152,7 +220,7 @@ public final class MainActivity extends Activity {
     }
     private void confirmCommand(String title, int method) {
         new AlertDialog.Builder(this).setTitle(title).setNegativeButton("Cancel", null)
-            .setPositiveButton(method == Cc2Codec.PAUSE ? "Pause" : "Stop", (dialog, which) -> { if (printer != null) printer.command(method); }).show();
+            .setPositiveButton(method == Cc2Codec.PAUSE ? "Pause" : method == Cc2Codec.RESUME ? "Resume" : "Stop", (dialog, which) -> { if (printer != null) printer.command(method); }).show();
     }
     private void confirmRefill() {
         if (printer == null || !printer.canvasFresh() || !printer.canvas.has("auto_refill")) return;
@@ -161,15 +229,228 @@ public final class MainActivity extends Activity {
             .setMessage("This changes the printer's CANVAS automatic-refill setting. Tray selection and filament loading remain controlled by the printer.")
             .setNegativeButton("Cancel", null).setPositiveButton(enabled ? "Enable" : "Disable", (dialog, which) -> { if (printer != null) printer.autoRefill(enabled); }).show();
     }
+    private void selectPage(int selected) {
+        page = Math.max(0, Math.min(3, selected));
+        if (page != 2) stopCamera();
+        for (int i = 0; i < 4; i++) { pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE); tabs[i].setTypeface(Typeface.DEFAULT, i == page ? Typeface.BOLD : Typeface.NORMAL); tabs[i].setAlpha(i == page ? 1f : 0.7f); }
+        settings.edit().putInt("page", page).apply();
+    }
+    private void appearanceDialog() {
+        new AlertDialog.Builder(this).setTitle("Appearance").setSingleChoiceItems(new String[] {"Follow system", "Light", "Dark"}, settings.getInt("theme", 0), (dialog, which) -> {
+            settings.edit().putInt("theme", which).apply(); dialog.dismiss(); recreate();
+        }).setNegativeButton("Cancel", null).show();
+    }
+    private void savePrinter() {
+        String address = host.getText().toString().trim(), code = access.getText().toString();
+        try {
+            new PrinterHttp(address, code);
+            profiles.save(profileName.getText().toString().trim(), address, serial.getText().toString().trim());
+            credentials.save(address, code, remember.isChecked()); message("Printer profile saved. Access-code storage follows the Remember setting.");
+        } catch (Exception error) { message("Profile could not be saved. Check the IP and serial, or uncheck Remember if credential storage is unavailable."); }
+    }
+    private void choosePrinter() {
+        JSONArray rows = profiles.all(); if (rows.length() == 0) { message("No saved printers. Enter an IP or use Find printers, then Save printer profile."); return; }
+        String[] names = new String[rows.length()];
+        for (int i = 0; i < names.length; i++) { JSONObject row = rows.optJSONObject(i); names[i] = row == null ? "Invalid profile" : row.optString("name") + " · " + row.optString("host"); }
+        new AlertDialog.Builder(this).setTitle("Saved printers").setItems(names, (dialog, which) -> {
+            JSONObject row = rows.optJSONObject(which); if (row != null) selectPrinter(row.optString("host"), row.optString("serial"), row.optString("name"));
+        }).setNegativeButton("Cancel", null).show();
+    }
+    private void selectPrinter(String address, String number, String name) {
+        if (printer != null && printer.connecting()) { message("Disconnect before selecting another printer."); return; }
+        stopCamera(); host.setText(address); serial.setText(number); profileName.setText(name); access.setText(""); remember.setChecked(credentials.remembers(address));
+        try { access.setText(credentials.load(address)); } catch (Exception error) { credentials.forget(address); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again."); }
+        cameraHost = ""; diagnostics.setText("Run Check connection to inspect this printer."); render();
+    }
+    private void removePrinter() {
+        String address = host.getText().toString().trim();
+        new AlertDialog.Builder(this).setTitle("Remove saved profile?").setMessage("This removes the profile and its saved access code from this phone.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Remove", (dialog, which) -> { profiles.remove(address); credentials.forget(address); access.setText(""); remember.setChecked(false); profileName.setText(""); message("Saved profile removed."); }).show();
+    }
+    private void scanPrinters() {
+        if (scanningNow) return;
+        scanningNow = true; render();
+        checks.execute(() -> {
+            List<Cc2Discovery.Found> found = Collections.emptyList(); String failure = "";
+            try (Cc2Discovery scanner = NetworkRoute.local(getApplicationContext()).discovery()) { scanning = scanner; found = scanner.scan(); }
+            catch (Exception error) { failure = "Could not scan local Wi-Fi. Confirm the phone is connected to the printer's network."; }
+            finally { scanning = null; }
+            List<Cc2Discovery.Found> result = found; String error = failure;
+            main.post(() -> {
+                if (isDestroyed()) return; scanningNow = false; render();
+                if (!error.isEmpty()) { message(error); return; }
+                if (result.isEmpty()) { message("No CC2 discovery replies received. You can still enter the printer IP and serial manually; some networks block broadcasts."); return; }
+                String[] names = new String[result.size()];
+                for (int i = 0; i < names.length; i++) { Cc2Discovery.Found entry = result.get(i); names[i] = StatusPresentation.clean(entry.info.name.isEmpty() ? entry.info.model : entry.info.name) + " · " + entry.host + "\n" + entry.info.summary(); }
+                new AlertDialog.Builder(this).setTitle("Printers found").setItems(names, (dialog, which) -> {
+                    Cc2Discovery.Found entry = result.get(which); selectPrinter(entry.host, entry.info.serial, entry.info.name); message(entry.info.summary());
+                }).setNegativeButton("Cancel", null).show();
+            });
+        });
+    }
+    private void buildFileBrowser() {
+        LinearLayout browser = card("Printer files");
+        storagePicker = spinner(browser, new String[] {"Internal storage", "USB drive"});
+        storagePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { if (printer != null && printer.ready() && !printer.busy(Cc2Codec.FILES)) printer.browse(position == 0 ? "local" : "u-disk", 0); }
+        });
+        listFiles = button(browser, "Refresh files", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
+        fileInfo = label(browser, "Connect, then refresh to browse printer files.", 14, MUTED, false);
+        fileRows = new LinearLayout(this); fileRows.setOrientation(LinearLayout.VERTICAL); browser.addView(fileRows);
+        previousFiles = button(browser, "Previous 50 files", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); });
+        nextFiles = button(browser, "Next 50 files", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); });
+        label(browser, "Select a G-code file for metadata, print setup or deletion. Starting and deleting require fresh status, a recent file list, and an idle printer.", 13, MUTED, false);
+        LinearLayout storage = card("Storage & print history");
+        diskInfo = label(storage, "Storage usage not loaded.", 14, MUTED, false);
+        loadDisk = button(storage, "Refresh storage usage", () -> { if (printer != null) printer.loadDisk(); });
+        loadHistory = button(storage, "Refresh print history", () -> { if (printer != null) printer.loadHistory(); });
+        historyInfo = label(storage, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
+    }
+    private Spinner spinner(LinearLayout parent, String[] items) {
+        Spinner view = new Spinner(this); ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, items); adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); view.setAdapter(adapter); view.setBackgroundTintList(tint(TEAL)); parent.addView(view, new LinearLayout.LayoutParams(-1, dp(52))); return view;
+    }
+    private LinearLayout dialogBody() { LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8)); return body; }
+    private void fileActions(JSONObject file, String storage) {
+        String name = file.optString("filename");
+        try { Cc2Codec.filename(name); } catch (Exception error) { message("Only .gcode files can be started or deleted here."); return; }
+        LinearLayout body = dialogBody(); label(body, FeatureData.file(file), 14, INK, false);
+        ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
+        button(body, "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); });
+        button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, which) -> { if (printer != null) printer.delete(storage, name); }).show(); });
+        dialog.show();
+    }
+    private void startDialog(JSONObject file, String storage) {
+        if (printer == null || !printer.fresh() || !Cc2Codec.idle(printer.status) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
+        String name = file.optString("filename");
+        LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name) + "\nCheck the build plate, material and sliced printer profile before starting.", 14, INK, false);
+        CheckBox leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record timelapse on printer", false);
+        force.setOnCheckedChangeListener((view, checked) -> { if (checked) leveling.setChecked(true); });
+        leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
+        label(body, "Build plate selection (as reported by the protocol)", 13, MUTED, false);
+        Spinner plate = spinner(body, new String[] {"Plate A", "Plate B"});
+        label(body, "Number of tools used in this sliced file", 13, MUTED, false);
+        Spinner toolCount = spinner(body, new String[] {"1 tool", "2 tools", "3 tools", "4 tools", "5 tools", "6 tools", "7 tools", "8 tools"});
+        List<JSONObject> trays = new ArrayList<>(); List<String> choices = new ArrayList<>(); choices.add("Printer / G-code default");
+        if (printer.canvasFresh()) {
+            JSONArray units = printer.canvas.optJSONArray("canvas_list");
+            if (units != null) for (int u = 0; u < units.length(); u++) {
+                JSONObject unit = units.optJSONObject(u); if (unit == null || !(Boolean.TRUE.equals(unit.opt("connected")) || unit.optInt("connected", 0) == 1)) continue;
+                JSONArray slots = unit.optJSONArray("tray_list"); if (slots == null) continue;
+                for (int t = 0; t < slots.length(); t++) {
+                    JSONObject slot = slots.optJSONObject(t); if (slot == null || slot.optString("filament_type").isEmpty() || unit.optInt("canvas_id", -1) < 0 || slot.optInt("tray_id", -1) < 0) continue;
+                    try { trays.add(new JSONObject().put("canvas_id", unit.getInt("canvas_id")).put("tray_id", slot.getInt("tray_id"))); }
+                    catch (Exception error) { continue; }
+                    choices.add("CANVAS " + unit.optInt("canvas_id") + " · Tray " + slot.optInt("tray_id") + " · " + StatusPresentation.clean(slot.optString("filament_type")) + " " + StatusPresentation.clean(slot.optString("filament_color")));
+                }
+            }
+        }
+        Spinner[] maps = new Spinner[8]; TextView[] labels = new TextView[8];
+        for (int t = 0; t < 8; t++) { labels[t] = label(body, "G-code tool " + t, 13, MUTED, false); maps[t] = spinner(body, choices.toArray(new String[0])); }
+        toolCount.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { for (int t = 0; t < 8; t++) { maps[t].setVisibility(t <= position ? View.VISIBLE : View.GONE); labels[t].setVisibility(t <= position ? View.VISIBLE : View.GONE); } }
+        });
+        label(body, "Verify the tool count against your sliced file. Leave every tool at default to use the printer / G-code mapping, or explicitly map every tool to a reported tray. Timelapse records on the printer; export is not included yet.", 13, MUTED, false);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        AlertDialog setup = new AlertDialog.Builder(this).setTitle("Print setup").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Review start…", null).create();
+        setup.setOnShowListener(d -> setup.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            JSONArray mapping = new JSONArray(); int count = toolCount.getSelectedItemPosition() + 1, explicit = 0;
+            try {
+                for (int t = 0; t < count; t++) { int selected = maps[t].getSelectedItemPosition(); if (selected > 0) { JSONObject tray = new JSONObject(trays.get(selected - 1).toString()); tray.put("t", t); mapping.put(tray); explicit++; } }
+                if (explicit != 0 && explicit != count) { message("Map every used tool, or leave all tools at Printer / G-code default."); new AlertDialog.Builder(this).setMessage("Map every used tool, or leave all tools at default.").setPositiveButton("OK", null).show(); return; }
+            } catch (Exception error) { message("Could not prepare tool mappings. Refresh trays."); return; }
+            setup.dismiss();
+            String text = StatusPresentation.clean(name) + "\nStorage: " + (storage.equals("local") ? "Internal" : "USB") + "\nPlate " + (plate.getSelectedItemPosition() == 0 ? "A" : "B")
+                + " · Bed check " + (leveling.isChecked() ? "on" : "off") + " · Force leveling " + (force.isChecked() ? "on" : "off") + "\nTimelapse " + (timelapse.isChecked() ? "on" : "off")
+                + "\n" + count + " tool(s): " + (mapping.length() == 0 ? "printer / G-code default mapping" : "explicit reported tray mappings") + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
+            new AlertDialog.Builder(this).setTitle("Start this print?").setMessage(text).setNegativeButton("Cancel", null).setPositiveButton("Start print", (confirm, which) -> {
+                if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
+            }).show();
+        })); setup.show();
+    }
+    private void temperatureDialog() {
+        LinearLayout body = dialogBody(); label(body, "While idle: nozzle 0–300°C, bed 0–100°C. Zero turns that heater off. Use the correct targets for your filament and build plate.", 14, INK, false);
+        EditText nozzle = input(body, "Nozzle target °C", false), bed = input(body, "Bed target °C", false); nozzle.setInputType(InputType.TYPE_CLASS_NUMBER); bed.setInputType(InputType.TYPE_CLASS_NUMBER);
+        JSONObject n = snapshot.optJSONObject("extruder"), b = snapshot.optJSONObject("heater_bed"); nozzle.setText(String.valueOf(n == null ? 0 : n.optInt("target"))); bed.setText(String.valueOf(b == null ? 0 : b.optInt("target")));
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Temperature targets").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set targets", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { int nt = Integer.parseInt(nozzle.getText().toString()), bt = Integer.parseInt(bed.getText().toString()); Cc2Codec.temperatureRequest(0, nt, bt); if (printer != null) printer.temperatures(nt, bt); dialog.dismiss(); } catch (Exception error) { nozzle.setError("Nozzle 0–300°C; bed 0–100°C"); } })); dialog.show();
+    }
+    private void fanDialog() {
+        LinearLayout body = dialogBody(); Spinner kind = spinner(body, new String[] {"Part cooling", "Auxiliary", "Chamber"});
+        TextView value = label(body, "Fan: 0%", 15, INK, false); SeekBar amount = new SeekBar(this); amount.setMax(100); body.addView(amount);
+        amount.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { public void onProgressChanged(SeekBar bar, int progress, boolean user) { value.setText("Fan: " + progress + "%"); } public void onStartTrackingTouch(SeekBar bar) { } public void onStopTrackingTouch(SeekBar bar) { } });
+        new AlertDialog.Builder(this).setTitle("Fan setting").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set fan", (dialog, which) -> { if (printer != null) printer.fan(new String[] {"fan", "aux_fan", "box_fan"}[kind.getSelectedItemPosition()], amount.getProgress()); }).show();
+    }
+    private void speedDialog() { new AlertDialog.Builder(this).setTitle("Print speed mode").setItems(new String[] {"Silent", "Balanced", "Sport", "Ludicrous"}, (dialog, which) -> {
+        new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the current print's speed mode. Filament changes may reset the mode on some firmware.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
+    }).setNegativeButton("Cancel", null).show(); }
+    private void buildCamera() {
+        LinearLayout card = card("Live camera");
+        cameraAddress = input(card, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        cameraQuery = button(card, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
+        cameraInfo = label(card, "Local JPEG camera stream. Start is independent of MQTT authentication; the default CC2 endpoint uses port 8080.", 14, MUTED, false);
+        cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
+        cameraStart = button(card, "Start camera", this::toggleCamera);
+        cameraSnapshot = button(card, "Save snapshot…", () -> {
+            if (lastFrame == null) return; pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
+            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
+        });
+        button(card, "Larger camera view", () -> { cameraImage.getLayoutParams().height = cameraImage.getLayoutParams().height == dp(240) ? dp(400) : dp(240); cameraImage.requestLayout(); });
+        label(card, "Camera stops when you leave this tab or put the app in the background. Printer monitoring continues in its foreground service. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
+    }
+    private void toggleCamera() {
+        if (cameraPlayer != null) { stopCamera(); return; }
+        try {
+            String address = host.getText().toString().trim(), url = FeatureData.cameraUrl(address, cameraAddress.getText().toString().trim());
+            NetworkRoute route = NetworkRoute.local(this); cameraInfo.setText("Opening camera…");
+            cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
+                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true); }
+                public void error(String text) { stopCamera(); cameraInfo.setText(text); }
+            }); cameraStart.setText("Stop camera");
+        } catch (Exception error) { cameraInfo.setText("Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
+    }
+    private void stopCamera() { MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); }
+    private void renderFeatures(boolean ready, boolean fresh) {
+        listFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES)); storagePicker.setEnabled(!ready || !printer.busy(Cc2Codec.FILES));
+        loadHistory.setEnabled(ready && !printer.busy(Cc2Codec.HISTORY)); loadDisk.setEnabled(ready && !printer.busy(Cc2Codec.DISK)); cameraQuery.setEnabled(ready && !printer.busy(Cc2Codec.CAMERA));
+        JSONObject files = printer == null ? new JSONObject() : printer.filePage;
+        JSONArray rows = files.optJSONArray("file_list"); int count = rows == null ? 0 : rows.length(), offset = printer == null ? 0 : printer.fileOffset;
+        previousFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES) && offset > 0);
+        nextFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES) && count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total")));
+        fileInfo.setText(printer == null ? "Connect to browse printer files." : printer.fileMessage + (rows == null ? "" : "\n" + (printer.storage.equals("local") ? "Internal" : "USB") + " · " + count + " file(s) · offset " + offset + (printer.filesFresh() ? "" : " · list stale")));
+        if (files != renderedFiles) {
+            renderedFiles = files; fileRows.removeAllViews();
+            if (rows != null) for (int i = 0; i < Math.min(rows.length(), 50); i++) {
+                JSONObject row = rows.optJSONObject(i); if (row == null) continue; String storage = printer.storage;
+                button(fileRows, StatusPresentation.clean(row.optString("filename", "Unnamed entry")), () -> fileActions(row, storage));
+                label(fileRows, FeatureData.size(row.optLong("size", -1)) + (row.has("layer") ? " · " + row.optInt("layer") + " layers" : ""), 12, MUTED, false);
+            }
+        }
+        diskInfo.setText(printer == null || printer.disk.length() == 0 ? "Storage usage not loaded." : FeatureData.disk(printer.disk));
+        historyInfo.setText(printer == null ? "History not loaded." : printer.history.length() == 0 ? printer.historyMessage : FeatureData.history(printer.history));
+        String selectedHost = host.getText().toString().trim();
+        if (!cameraHost.equals(selectedHost)) { stopCamera(); cameraHost = selectedHost; cameraReported = ""; cameraAddress.setText(selectedHost.isEmpty() ? "" : "http://" + selectedHost + ":8080/?action=stream"); lastFrame = null; cameraImage.setImageDrawable(null); }
+        if (ready && !printer.cameraUrl.isEmpty() && cameraPlayer == null && !printer.cameraUrl.equals(cameraReported)) { cameraAddress.setText(printer.cameraUrl); cameraReported = printer.cameraUrl; }
+        cameraSnapshot.setEnabled(lastFrame != null);
+    }
     private void render() {
         if (connect == null || isDestroyed()) return;
         boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
         snapshot = printer == null ? new JSONObject() : printer.status;
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
+        summary.setText(ready ? "Connected · " + printer.host() + " · " + (fresh ? StatusPresentation.state(snapshot) : "Status stale") : connecting ? "Connecting · " + printer.host() : "Disconnected · open Settings to connect");
         if (connecting && !printer.host().equals(host.getText().toString())) { host.setText(printer.host()); access.setText(""); }
         host.setEnabled(!connecting); access.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting);
         connect.setEnabled(printer != null); connect.setText(connecting ? "Disconnect" : "Connect"); check.setEnabled(!checking);
-        refresh.setEnabled(ready); pause.setEnabled(fresh && Cc2Codec.canPause(snapshot)); stop.setEnabled(fresh && Cc2Codec.canStop(snapshot));
+        refresh.setEnabled(ready); pause.setEnabled(fresh && Cc2Codec.canPause(snapshot)); resume.setEnabled(fresh && Cc2Codec.canResume(snapshot)); stop.setEnabled(fresh && Cc2Codec.canStop(snapshot));
+        discover.setEnabled(!connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
+        saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
+        lightOn.setEnabled(fresh); lightOff.setEnabled(fresh); heater.setEnabled(fresh && Cc2Codec.idle(snapshot)); fan.setEnabled(fresh); speed.setEnabled(fresh && Cc2Codec.canPause(snapshot));
+        cancelUpload.setEnabled(busy);
+        renderFeatures(ready, fresh);
         refill.setEnabled(printer != null && printer.canvasFresh() && printer.canvas.has("auto_refill"));
         if (printer != null && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText("Automatic refill unavailable");
@@ -187,7 +468,7 @@ public final class MainActivity extends Activity {
         } else job.setText(ready ? "No active print reported." : "Connect for live print status.");
         String codes = StatusPresentation.faultCodes(snapshot);
         faults.setText(snapshot.length() == 0 ? "Awaiting printer fault status." : codes.isEmpty() ? "No active fault codes reported." : "Printer reports fault code(s): " + codes + ". Check the printer screen for instructions.");
-        faults.setTextColor(codes.isEmpty() ? MUTED : 0xffa32929);
+        faults.setTextColor(codes.isEmpty() ? MUTED : dark ? 0xffffa398 : 0xffa32929);
         trays.setText(printer == null ? "Connect for CANVAS tray status." : StatusPresentation.canvas(printer.canvas) + (printer.canvas != null && !printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : ""));
         if (printer != null) {
             JSONObject version = printer.attributes.optJSONObject("software_version");
@@ -205,39 +486,54 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == PICK_FILE && result == RESULT_OK && data != null && data.getData() != null && printer != null) printer.select(data.getData());
+        if (request == PICK_SNAPSHOT && result != RESULT_OK) pendingSnapshot = null;
+        if (request == PICK_SNAPSHOT && result == RESULT_OK && data != null && data.getData() != null && pendingSnapshot != null) {
+            Bitmap image = pendingSnapshot; pendingSnapshot = null; android.net.Uri uri = data.getData();
+            checks.execute(() -> { String text; try (OutputStream output = getContentResolver().openOutputStream(uri)) { if (output == null || !image.compress(Bitmap.CompressFormat.JPEG, 92, output)) throw new IOException(); text = "Camera snapshot saved."; } catch (Exception error) { text = "Snapshot could not be saved. Capture it again."; } String done = text; main.post(() -> { if (!isDestroyed()) message(done); }); });
+        }
     }
     @Override protected void onStart() { super.onStart(); active = true; if (printer != null) printer.observe(this::render); main.post(clock); }
-    @Override protected void onStop() { active = false; main.removeCallbacks(clock); if (printer != null) printer.observe(null); super.onStop(); }
-    @Override protected void onDestroy() { if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
-    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); }
+    @Override protected void onStop() { active = false; stopCamera(); main.removeCallbacks(clock); if (printer != null) printer.observe(null); super.onStop(); }
+    @Override protected void onDestroy() { if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
+    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("page", page); }
+    private static final class TransientInputs { String host, code; Bitmap snapshot; }
+    @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
         try {
-            StringBuilder text = new StringBuilder("Link Workshop v0.2.0\nIndependent Android app derived from Elegoo Link.\n\n");
+            StringBuilder text = new StringBuilder("Link Workshop v0.3.0\nIndependent Android app derived from Elegoo Link.\n\n");
             for (String name : new String[] {"THIRD_PARTY_NOTICES.md", "Apache-2.0.txt", "Paho-NOTICE.txt", "Paho-EDL-1.0.txt", "Paho-EPL-2.0.txt"}) {
                 try (InputStream input = getAssets().open("licenses/" + name); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");
                 }
             }
-            ScrollView scroll = new ScrollView(this); TextView view = new TextView(this); view.setText(text.toString()); view.setTextSize(13); view.setPadding(dp(20), dp(12), dp(20), dp(12)); scroll.addView(view);
+            ScrollView scroll = new ScrollView(this); TextView view = new TextView(this); view.setText(text.toString()); view.setTextColor(INK); view.setTextSize(13); view.setPadding(dp(20), dp(12), dp(20), dp(12)); scroll.addView(view);
             new AlertDialog.Builder(this).setTitle("About & licenses").setView(scroll).setPositiveButton("Close", null).show();
         } catch (IOException error) { feedback.setText("License information could not be opened."); }
     }
     private LinearLayout card(String title) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(14), dp(16), dp(14));
-        GradientDrawable background = new GradientDrawable(); background.setColor(Color.WHITE); background.setCornerRadius(dp(16)); card.setBackground(background);
-        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(18); content.addView(card, layout); label(card, title, 18, INK, true); return card;
+        GradientDrawable background = new GradientDrawable(); background.setColor(SURFACE); background.setCornerRadius(dp(16)); card.setBackground(background);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(18); (currentSection == null ? content : currentSection).addView(card, layout); label(card, title, 18, INK, true); return card;
     }
     private TextView label(LinearLayout parent, String text, int size, int color, boolean bold) {
         TextView view = new TextView(this); view.setText(text); view.setTextSize(size); view.setTextColor(color); if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setPadding(0, dp(5), 0, dp(7)); parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); return view;
     }
     private EditText input(LinearLayout parent, String hint, boolean password) {
-        EditText input = new EditText(this); input.setHint(hint); input.setSingleLine(true); input.setTextColor(INK); if (password) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        EditText input = new EditText(this); input.setHint(hint); input.setHintTextColor(MUTED); input.setBackgroundTintList(tint(TEAL)); input.setSingleLine(true); input.setTextColor(tint(INK)); if (password) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         parent.addView(input, new LinearLayout.LayoutParams(-1, dp(56))); return input;
     }
     private Button button(LinearLayout parent, String text, Runnable action) {
-        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setTextColor(TEAL); button.setMinHeight(dp(48));
-        button.setOnClickListener(view -> action.run()); parent.addView(button, new LinearLayout.LayoutParams(-1, -2)); return button;
+        Button button = new Button(this); button.setText(text); styleButton(button);
+        button.setOnClickListener(view -> action.run()); LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6); parent.addView(button, layout); return button;
     }
+    private ColorStateList tint(int color) { return new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, color}); }
+    private void styleButton(Button button) {
+        button.setAllCaps(false); button.setTextColor(tint(TEAL)); button.setMinHeight(dp(48));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(BUTTON); shape.setCornerRadius(dp(10));
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6); button.setLayoutParams(layout); button.setPadding(dp(10), dp(8), dp(10), dp(8));
+    }
+    private CheckBox checkbox(LinearLayout parent, String text, boolean checked) { CheckBox view = new CheckBox(this); view.setText(text); view.setTextColor(INK); view.setButtonTintList(tint(TEAL)); view.setChecked(checked); parent.addView(view); return view; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

@@ -21,6 +21,9 @@ public final class Cc2Session implements AutoCloseable {
         default void attributes(JSONObject attributes) { }
         default void canvas(JSONObject canvas) { }
         default void failure(String message, boolean retryable) { }
+        default void query(int method, JSONObject params, JSONObject result) { }
+        default void queryError(int method, String message) { }
+        default void uploaded(String filename) { }
     }
     interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
     public interface IdentityResolver extends AutoCloseable {
@@ -42,6 +45,11 @@ public final class Cc2Session implements AutoCloseable {
     private final Cc2Codec codec = new Cc2Codec();
     private final AtomicInteger ids = new AtomicInteger(1);
     private final Map<Integer, Pending> pending = new HashMap<>(); // worker thread only
+    private final Set<Integer> queued = new HashSet<>();
+    private long nextRequestAt;
+    private final Deque<JSONObject> requestQueue = new ArrayDeque<>();
+    private ScheduledFuture<?> dispatch;
+    private volatile boolean uploadCancelled;
     private final CompletableFuture<JSONObject> registration = new CompletableFuture<>();
     private volatile MqttClient mqtt;
     private volatile PrinterHttp uploadHttp;
@@ -49,10 +57,11 @@ public final class Cc2Session implements AutoCloseable {
     private volatile String sessionToken;
     private boolean canvasSupported = true;
     private volatile long statusAt;
+    private long canvasAt;
     private String base;
     private static final class Pending {
-        final int method; final long deadline;
-        Pending(int method) { this.method = method; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8); }
+        final int method; final long deadline; final JSONObject params;
+        Pending(int method, JSONObject params) { this.method = method; this.params = params; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Cc2Codec.isQuery(method) ? 15 : 8); }
     }
     public Cc2Session(String host, String accessCode, Listener listener) {
         this(host, accessCode, listener, url -> (java.net.HttpURLConnection) url.openConnection(), null);
@@ -151,16 +160,30 @@ public final class Cc2Session implements AutoCloseable {
         execute(() -> {
             try {
                 JSONObject snapshot = codec.snapshot();
-                if (!fresh() || (method == Cc2Codec.PAUSE ? !Cc2Codec.canPause(snapshot) : method != Cc2Codec.STOP || !Cc2Codec.canStop(snapshot))) {
+                if (!fresh() || (method == Cc2Codec.PAUSE ? !Cc2Codec.canPause(snapshot) : method == Cc2Codec.RESUME ? !Cc2Codec.canResume(snapshot) : method != Cc2Codec.STOP || !Cc2Codec.canStop(snapshot))) {
                     emitResult("Control unavailable. Refresh the printer status first."); return;
                 }
-                if (pending.values().stream().anyMatch(p -> p.method == Cc2Codec.PAUSE || p.method == Cc2Codec.STOP)) {
+                if (pending.values().stream().anyMatch(p -> changing(p.method)) || queued.stream().anyMatch(Cc2Session::changing)) {
                     emitResult("Waiting for the previous command response."); return;
                 }
                 send(method);
             } catch (Exception exception) { emitResult(error(exception)); }
         });
     }
+    public void files(String storage, int offset) { execute(() -> prepare(() -> Cc2Codec.filesRequest(ids.getAndIncrement(), storage, offset))); }
+    public void history() { execute(() -> send(Cc2Codec.HISTORY)); }
+    public void disk() { execute(() -> send(Cc2Codec.DISK)); }
+    public void camera() { execute(() -> send(Cc2Codec.CAMERA)); }
+    public void delete(String storage, String filename) { execute(() -> prepare(() -> Cc2Codec.deleteRequest(ids.getAndIncrement(), storage, filename))); }
+    public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, org.json.JSONArray maps) {
+        execute(() -> prepare(() -> Cc2Codec.startRequest(ids.getAndIncrement(), storage, filename, leveling, force, timelapse, plate, maps)));
+    }
+    public void light(boolean on) { execute(() -> prepare(() -> Cc2Codec.lightRequest(ids.getAndIncrement(), on))); }
+    public void temperatures(int nozzle, int bed) { execute(() -> prepare(() -> Cc2Codec.temperatureRequest(ids.getAndIncrement(), nozzle, bed))); }
+    public void fan(String name, int percent) { execute(() -> prepare(() -> Cc2Codec.fanRequest(ids.getAndIncrement(), name, percent))); }
+    public void speed(int mode) { execute(() -> prepare(() -> Cc2Codec.speedRequest(ids.getAndIncrement(), mode))); }
+    private interface Prepared { JSONObject get() throws Exception; }
+    private void prepare(Prepared request) { try { send(request.get()); } catch (Exception error) { emitResult("Invalid request. Check the selected file and settings."); } }
     private void send(int method) {
         if (!ready()) return;
         int id = ids.getAndIncrement();
@@ -169,13 +192,58 @@ public final class Cc2Session implements AutoCloseable {
     }
     private void send(JSONObject message) {
         int id = message.optInt("id"), method = message.optInt("method");
+        if (!ready()) return;
+        if (queued.contains(method) || pending.values().stream().anyMatch(p -> p.method == method)
+            || changing(method) && (queued.stream().anyMatch(Cc2Session::changing) || pending.values().stream().anyMatch(p -> changing(p.method)))) {
+            emitResult("Waiting for the previous request to finish."); return;
+        }
+        queued.add(method);
+        // Stop takes the next available slot ahead of reads; all requests retain the firmware spacing.
+        if (method == Cc2Codec.STOP) requestQueue.addFirst(message); else requestQueue.addLast(message);
+        scheduleDispatch();
+    }
+    private void scheduleDispatch() {
+        if (dispatch != null || requestQueue.isEmpty() || !ready()) return;
+        dispatch = worker.schedule(() -> {
+            dispatch = null;
+            if (!ready() || requestQueue.isEmpty()) return;
+            JSONObject message = requestQueue.removeFirst(); int method = message.optInt("method");
+            queued.remove(method);
+            if (!allowed(message)) emitResult("Control unavailable. Refresh status and check the printer state before trying again.");
+            else { nextRequestAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2); transmit(message.optInt("id"), method, message); }
+            scheduleDispatch();
+        }, Math.max(0, nextRequestAt - System.nanoTime()), TimeUnit.NANOSECONDS);
+    }
+    private boolean allowed(JSONObject message) {
+        int method = message.optInt("method");
+        if (!changing(method)) return true;
+        if (!fresh()) return false;
         try {
-            pending.put(id, new Pending(method));
+            JSONObject status = codec.snapshot();
+            if (method == Cc2Codec.PAUSE) return Cc2Codec.canPause(status);
+            if (method == Cc2Codec.RESUME) return Cc2Codec.canResume(status);
+            if (method == Cc2Codec.STOP) return Cc2Codec.canStop(status);
+            if (method == Cc2Codec.START) {
+                org.json.JSONArray maps = message.getJSONObject("params").getJSONObject("config").getJSONArray("slot_map");
+                return Cc2Codec.idle(status) && StatusPresentation.faultCodes(status).isEmpty()
+                    && (maps.length() == 0 || canvasAt != 0 && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45)
+                        && FeatureData.mappings(status.optJSONObject("canvas_info"), maps));
+            }
+            if (method == Cc2Codec.DELETE || method == Cc2Codec.TEMPERATURE) return Cc2Codec.idle(status) && StatusPresentation.faultCodes(status).isEmpty();
+            if (method == Cc2Codec.AUTO_REFILL) return canvasAt != 0 && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45);
+            if (method == Cc2Codec.SPEED) return Cc2Codec.canPause(status);
+            return true;
+        } catch (Exception error) { return false; }
+    }
+    private void transmit(int id, int method, JSONObject message) {
+        try {
+            pending.put(id, new Pending(method, message.getJSONObject("params")));
             publish(base + clientId + "/api_request", message);
             if (changing(method)) emitResult("Command sent; waiting for printer acknowledgement…");
         } catch (Exception exception) {
             pending.remove(id);
-            emitResult("Request failed; outcome unknown. Refresh before trying again.");
+            if (Cc2Codec.isQuery(method)) { Listener current = listener; if (current != null) current.queryError(method, "Request could not be sent. Refresh to retry."); }
+            else emitResult("Request failed; outcome unknown. Refresh before trying again.");
         }
     }
     private void publish(String topic, JSONObject payload) throws Exception {
@@ -192,26 +260,40 @@ public final class Cc2Session implements AutoCloseable {
                 if (request == null || method != request.method) return;
                 pending.remove(message.getInt("id"));
                 JSONObject result = message.optJSONObject("result");
-                if (result == null || result.optInt("error_code", -1) != 0) {
+                boolean query = Cc2Codec.isQuery(method);
+                if (result == null || result.has("error_code") && result.optInt("error_code", -1) != 0
+                    || !result.has("error_code") && !(query && Cc2Codec.queryShape(method, result))) {
                     int code = result == null ? -1 : result.optInt("error_code", -1);
                     if (code == 1000) { fail(PrinterErrors.code(code), false); return; }
                     if (method == Cc2Codec.CANVAS && code == 1001) canvasSupported = false;
-                    emitResult(PrinterErrors.code(code)); return;
+                    emitResult(PrinterErrors.code(code)); Listener current = listener;
+                    if (query && current != null) current.queryError(method, PrinterErrors.code(code)); return;
                 }
+                if (query) {
+                    Listener current = listener;
+                    if (current != null) {
+                        if (Cc2Codec.queryShape(method, result)) current.query(method, request.params, result);
+                        else current.queryError(method, "Printer returned unexpected data for this feature.");
+                    }
+                    return;
+                }
+                if (method == Cc2Codec.DELETE) { Listener current = listener; if (current != null) current.query(method, request.params, result); emitResult("File deletion acknowledged. Refreshing files."); return; }
                 if (method == Cc2Codec.AUTO_REFILL) { emitResult("Automatic refill acknowledged. Refreshing tray state."); send(Cc2Codec.CANVAS); return; }
                 Listener current = listener;
                 if (method == Cc2Codec.ATTRIBUTES && current != null) current.attributes(result);
                 if (method == Cc2Codec.CANVAS && result.optJSONObject("canvas_info") != null) {
+                    canvasAt = System.nanoTime();
                     codec.canvas(result.getJSONObject("canvas_info"));
                     if (current != null) current.canvas(result.getJSONObject("canvas_info"));
                 }
-                if (method == Cc2Codec.PAUSE || method == Cc2Codec.STOP) {
-                    emitResult("Printer acknowledged " + (method == Cc2Codec.PAUSE ? "pause" : "stop") + ". Waiting for status update.");
+                if (changing(method)) {
+                    emitResult("Printer acknowledged " + methodName(method) + ". Waiting for status update.");
                     send(Cc2Codec.STATUS); return;
                 }
             } else if (!topic.equals(base + "api_status") || method != 6000) return;
             if (method == Cc2Codec.STATUS || method == 6000) {
                 if (codec.accept(message)) {
+                    if (message.getJSONObject("result").has("canvas_info")) canvasAt = System.nanoTime();
                     statusAt = System.nanoTime();
                     Listener current = listener; if (current != null) current.status(codec.snapshot(), message.getJSONObject("result").has("canvas_info"));
                 } else if (pending.values().stream().noneMatch(p -> p.method == Cc2Codec.STATUS)) {
@@ -229,20 +311,23 @@ public final class Cc2Session implements AutoCloseable {
             if (changing(request.method))
                 emitResult("No command acknowledgement. Outcome unknown; refresh before trying again.");
             else if (request.method == Cc2Codec.STATUS) { statusAt = 0; emitResult("Status request timed out. Controls disabled until fresh status arrives."); }
+            else if (Cc2Codec.isQuery(request.method)) { Listener current = listener; if (current != null) current.queryError(request.method, "No response. This feature may be unavailable on the current firmware; refresh to retry."); }
         }
     }
     public synchronized void upload(File file, String name) {
         if (!ready() || uploading) return;
-        uploading = true;
+        uploading = true; uploadCancelled = false;
         PrinterHttp uploader = new PrinterHttp(http.host(), sessionToken, connections); uploadHttp = uploader;
         transfer.execute(() -> {
             try {
                 uploader.upload(file, name, percent -> { Listener current = listener; if (current != null && !closed) current.uploadProgress(percent); });
-                emitResult("Upload acknowledged by printer. Start the job from the printer screen.");
-            } catch (Exception exception) { if (!closed) emitResult(PrinterErrors.describe(exception, "Upload")); }
+                emitResult("Upload acknowledged by printer. Refresh Files to review print setup.");
+                Listener current = listener; if (current != null && !closed) current.uploaded(name);
+            } catch (Exception exception) { if (!closed && !uploadCancelled) emitResult(PrinterErrors.describe(exception, "Upload")); }
             finally { uploading = false; uploadHttp = null; }
         });
     }
+    public void cancelUpload() { PrinterHttp uploader = uploadHttp; if (uploader != null) { uploadCancelled = true; uploader.cancel(); emitResult("Upload cancelled. A partial file may remain on the printer; refresh files before trying again."); } }
     private void execute(Runnable task) { if (!closed) try { worker.execute(() -> { if (!closed) task.run(); }); } catch (RejectedExecutionException ignored) { } }
     private void emitConnection(String message, boolean connected) { Listener current = listener; if (current != null && !closed) current.connection(message, connected); }
     private void emitResult(String message) { Listener current = listener; if (current != null && !closed) current.result(message); }
@@ -251,7 +336,14 @@ public final class Cc2Session implements AutoCloseable {
         if (pending.values().stream().anyMatch(p -> changing(p.method))) emitResult("Connection lost with a command pending. Outcome unknown; commands will not be replayed.");
         Listener current = listener; close(); if (current != null) current.failure(message, retryable);
     }
-    private static boolean changing(int method) { return method == Cc2Codec.PAUSE || method == Cc2Codec.STOP || method == Cc2Codec.AUTO_REFILL; }
+    private static boolean changing(int method) { return Cc2Codec.changing(method); }
+    private static String methodName(int method) {
+        if (method == Cc2Codec.START) return "print start"; if (method == Cc2Codec.PAUSE) return "pause";
+        if (method == Cc2Codec.STOP) return "stop"; if (method == Cc2Codec.RESUME) return "resume";
+        if (method == Cc2Codec.LIGHT) return "light setting"; if (method == Cc2Codec.TEMPERATURE) return "temperature targets";
+        if (method == Cc2Codec.FAN) return "fan setting"; if (method == Cc2Codec.SPEED) return "speed mode";
+        return "setting";
+    }
     private static String error(Exception exception) {
         if (exception instanceof TimeoutException) return "Printer registration timed out";
         if (exception instanceof MqttException) return "MQTT connection failed (code " + ((MqttException) exception).getReasonCode() + "). Check LAN mode and access code.";
