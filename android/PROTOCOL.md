@@ -24,3 +24,11 @@ Start-print (1020), CANVAS status (2005), auto refill (2004) and printer downloa
 Discovery is also implemented upstream: CC2 UDP port 52700 and method 7000, with LAN/cloud and token-status fields. It is the next LAN extension, and will need Android Wi-Fi/broadcast handling and device testing.
 
 Cloud code uses HTTP/MQTT plus Agora RTM and a generated private config. `thirdparty/agora/` contains desktop platform dependencies; the repository has no Android cloud build or APK app. Camera capability flags alone do not specify a working stream URL or playback format. The CC2 discovery source explicitly says it has no specific built-in web interface, so a WebView shortcut cannot be assumed to replace this app.
+
+## v0.2.0 additions
+
+The baseline command mapping remains the same. This release additionally implements CANVAS query 2005 and confirmed auto-refill 2004 (`params.auto_refill`: boolean), parses 1001 attributes, and displays nested `exception.exception_code` without guessing fault meanings. Unknown tray states remain numeric; camera/start/resume are still absent.
+
+MQTT registration timeout is now 8 seconds. An Android connectedDevice foreground service owns each session independently of Activity lifetime. Local HTTP and MQTT socket factories use a Wi-Fi/Ethernet Network instead of relying on the default cellular route. A new session and fresh full status are required after each reconnect; no printer-changing commands or uploads are automatically replayed. Retry policy: five delays 1/2/4/8/16 seconds, reset on registration success, stop on known authentication/rejected-registration errors.
+
+Connection diagnosis performs TCP-only probes on 80/1883 and an authenticated `/system/info` read. A reachable TCP broker does not establish MQTT credentials or registration. Raw exception URLs and access-code-bearing payloads are not displayed. Credential storage is optional Android Keystore AES-GCM with IP-bound AAD; backups exclude preferences. The local code does not require an official cloud account.

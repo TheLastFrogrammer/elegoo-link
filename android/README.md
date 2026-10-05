@@ -1,44 +1,43 @@
 # Link Workshop for Android
 
-An independent Android development app built alongside the official Elegoo Link SDK in this fork. The upstream C++ SDK remains available and unchanged. This is **v0.1.0, a LAN foundation**, not a complete replacement for Elegoo's app. It has not yet been tested on a physical printer.
+Independent native Android client built alongside the official Elegoo Link SDK. **v0.2.0 adds connection diagnostics and daily-use foundations**, including a user-started foreground service. Physical CC2/S24+ testing is still outstanding.
 
-## First target
+Minimum Android 8/API 26; compile/target Android 16/API 36. The first printer target is Centauri Carbon 2. The Android app ports the inspected LAN behavior to Java and Eclipse Paho; it does not load the desktop C++ SDK through JNI.
 
-Centauri Carbon 2 on a local network, with a native phone interface. Minimum Android 8/API 26; compile and target Android 16/API 36. The Samsung Galaxy S24+ is the intended initial test device.
+## Implemented
 
-Implemented:
+- Private IPv4 / LAN access-code connection; printer identity over HTTP, MQTT registration and full/incremental status merging.
+- Connection check: local phone IP, separate TCP checks for HTTP 80 and MQTT 1883, then authenticated HTTP printer identification. The report omits access codes.
+- Local traffic explicitly uses Android's Wi-Fi/Ethernet network, including Wi-Fi without internet; cellular being the default route no longer sends printer requests over cellular.
+- User-started foreground service keeps the connection and uploads independent of Activity rotation, file selection and switching apps. Its ongoing notification has a Disconnect action and shows state/staleness. Android can still kill a service or suspend network/CPU access under battery restrictions; this build does not hold a wake lock.
+- Optional remembered access code encrypted with AES-256-GCM. The key remains in Android Keystore, the IP binds ciphertext through authenticated additional data, and application backup is disabled. Forget removes the saved credential. The existing session retains its in-memory code until disconnected.
+- Up to five connection-only retries at 1, 2, 4, 8 and 16 seconds. A successful registration resets the backoff. Authentication/rejected registration failures stop retries. Every retry uses a new MQTT client and registration; printer-changing commands and uploads are never replayed.
+- Printer/firmware identity, heater temperatures/targets, print state/progress/layers/remaining time and active printer exception codes. Unknown fault/state codes remain explicit; no invented fault explanations.
+- CANVAS tray IDs, materials/names/colors, active tray, reported tray states and nozzle ranges; upstream CANVAS query 2005. Automatic refill 2004 is confirmed and acknowledged, enabled only with fresh status/tray data. Status push events can also update trays.
+- Pause and stop with state/freshness guards, confirmation, request correlation and acknowledgement timeout.
+- System document picker, service-owned private file copy and upload-only .gcode transfer with MD5 and 1 MiB HTTP chunks. Files up to 512 MiB with simple filenames. Uploading never starts a print.
 
-- Manual private IPv4 connection and access-code authentication.
-- Fetch the printer serial number through `/system/info`, connect to its MQTT broker, subscribe and complete CC2 registration.
-- Full status refresh and incremental status merging, including heater readings, job progress, layers and estimated remaining time.
-- Pause and stop with state guards, confirmation, request-ID correlation, acknowledgement timeout and no automatic command retry.
-- Android document picker, private temporary file copy, MD5 and 1 MiB chunked HTTP G-code upload. Uploading never starts a print.
-- Foreground-only sessions. Backgrounding disconnects MQTT and cancels uploads. The file picker also disconnects; reconnect afterwards. Access codes are kept in memory and never saved to disk or logs. The printer IP is saved.
+Not implemented: start/resume, discovery, printer file browser/deletion, camera/timelapse export, temperature/fan/movement/light controls, cloud account login, separate completion alerts, multiple profiles, other printer models or phone-side slicing.
 
-Not implemented: discovery, resume, start-print UI, file browsing/deletion/download, camera, cloud login, background notifications, multi-printer profiles, CANVAS controls, slicing or other printer models. See [ROADMAP.md](ROADMAP.md) and [PROTOCOL.md](PROTOCOL.md).
+## Try it / connection troubleshooting
+
+1. Install the development APK. If Android rejects it as an incompatible update, uninstall v0.1.0 first: the earlier scratch build's private debug signing key was not retained. This clears that app's saved IP; this is not required unless the signature differs.
+2. Put printer and phone on the same local Wi-Fi. In printer Settings → LAN Only, enable LAN Only. Get the current IP from Settings → Network. Enter the LAN access code from LAN Only, not the cloud pairing PIN from Account. Blank uses the upstream default 123456 when code protection is disabled.
+3. Choose **Check connection**. Neither TCP port reachable means an IP/routing/isolation problem, before authentication. HTTP reachable but 1883 blocked points to LAN mode/MQTT/firewall. An HTTP access-code rejection points to credentials. Both TCP ports reachable does not itself establish MQTT authentication or registration.
+4. Press Connect. Authentication and registration failures are separate; retry messages identify stage, attempt and delay. Saved credentials are opt-in and never written as plaintext or included in reports/logs.
+5. Allow notifications if desired. Denial does not prevent a foreground service, but may hide its notification from the notification drawer on newer Android; use the app's Disconnect button. Opening a file picker no longer deliberately disconnects. Use Disconnect to stop monitoring or cancel an upload; partial-file cleanup remains manual.
+6. Compare live readings to the touchscreen. CANVAS status codes/tray IDs are shown exactly as firmware reports them. Start uploaded jobs on the touchscreen. Verify refill/pause/stop on an appropriate test job before relying on them.
+
+LAN Only is the currently supported authentication/configuration path, not a requirement of Android itself. Cloud/WAN pairing is a separate protocol path. LAN Only may interrupt the printer's cloud/Matrix connection; simultaneous access depends on firmware and has not been validated here. No router port forwarding is needed. Printer HTTP/MQTT traffic follows the upstream plaintext LAN protocols.
 
 ## Build
 
-Install JDK 17 and Android SDK platform 36/build tools 35.0.0. Open this `android` directory in Android Studio, or set `ANDROID_HOME` and run:
+JDK 17, Android SDK platform 36/build tools 35.0.0:
 
 ```sh
 ./gradlew testDebugUnitTest lintDebug assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`. It is a debug-signed development APK, separate from the official app (`io.github.thelastfrogrammer.elink`). No cloud keys, printer credentials or release signing keys are required to build it. Keep one signing key for future distributable releases; a newly generated debug key from another machine may require uninstalling the previous debug build.
+APK: app/build/outputs/apk/debug/app-debug.apk. Application ID io.github.thelastfrogrammer.elink. These are debug-signed development builds; retain your signing key privately for compatible subsequent installations. No printer credentials/cloud keys are needed to build.
 
-## Try it
-
-1. Install the development APK on the phone.
-2. Put the phone and CC2 on the same non-isolated local network, and use the printer's LAN mode/access code where required. WAN-mode pairing is not implemented.
-3. Enter the printer IP and its LAN access code; leave the code blank only if the upstream default `123456` is appropriate for your configuration.
-4. Connect and check the displayed state against the printer screen. Local communication uses the upstream plaintext HTTP/MQTT protocols; no router port forwarding is needed.
-5. For upload, choose a `.gcode` file already sliced for the CC2, reconnect, then upload. Use a simple filename. This version limits imported files to 512 MiB. Start printing from the printer screen.
-
-Initial hardware verification should cover registration, stale status, network loss, access-code errors, comparison with the printer screen, pause/stop acknowledgements, chunked upload, rotation, background cancellation and picking a file. Compilation and simulated protocol tests do not establish real-printer compatibility.
-
-## Architecture choice
-
-The Android app ports the inspected CC2 LAN adapter behavior to Java and uses Eclipse Paho for MQTT. This avoids bundling the desktop-oriented C++ dependencies (Paho C++, curl, OpenSSL, IXWebSocket and desktop Agora libraries) before there is an Android build for them. The upstream protocol files are retained as the reference, and the port has isolated codec/HTTP tests. A future NDK/JNI adapter can implement the same app-facing responsibilities if native SDK reuse proves beneficial. This app does not currently load or cross-compile the C++ SDK.
-
-Licensing: the repository's Apache-2.0 [LICENSE](../LICENSE) applies to the new Android code; derived protocol files identify their source. Eclipse Paho Java is EPL-2.0/EDL-1.0; its attribution is recorded in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.
+See [PROTOCOL.md](PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md). Apache-2.0 applies to this repository; Eclipse Paho EPL-2.0/EDL-1.0 attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.

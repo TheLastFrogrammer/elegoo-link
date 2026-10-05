@@ -17,3 +17,7 @@ The app is a printer management client. Phone-side slicing is a separate project
 ## Next hardware feedback
 
 Confirm the exact printer model/firmware, LAN mode, successful connection or displayed error, and whether the monitor matches the printer screen. Do not send access codes. Before extending camera/files/resume, prefer firmware source and documented SDK behavior, then compare real traffic from an authorized official client if source is incomplete.
+
+## v0.2.0 progress
+
+Stage 2 now includes foreground service ownership, retained session across Activity changes, optional encrypted single-printer credentials, bounded reconnect, network binding and layered connection diagnosis. Stage 4 now includes read-only CANVAS trays and confirmed automatic-refill requests; it does not include camera or filament loading. Physical printer/phone verification remains pending. Discovery, additional profiles, complete print setup/start/resume, camera and separate completion alerts are still future work.

@@ -11,10 +11,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class PrinterHttp {
     public interface Progress { void update(int percentage); }
+    public interface ConnectionFactory { HttpURLConnection open(URL url) throws IOException; }
     private final String host, token;
+    private final ConnectionFactory connections;
     private volatile HttpURLConnection active;
     private final AtomicBoolean cancelled = new AtomicBoolean();
     public PrinterHttp(String host, String token) {
+        this(host, token, url -> (HttpURLConnection) url.openConnection());
+    }
+    public PrinterHttp(String host, String token, ConnectionFactory connections) {
         // Keep credentials on the local network; do not accept arbitrary URLs, paths or redirects.
         if (!host.matches("[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+")) throw new IllegalArgumentException("Enter the printer's IPv4 address");
         String[] octets = host.split("\\.");
@@ -23,7 +28,7 @@ public final class PrinterHttp {
         if (!(a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168) || (a == 169 && b == 254)))
             throw new IllegalArgumentException("Use a local/private printer address");
         if (token.contains("\r") || token.contains("\n")) throw new IllegalArgumentException("Invalid access code");
-        this.host = host; this.token = token.isEmpty() ? "123456" : token;
+        this.host = host; this.token = token.isEmpty() ? "123456" : token; this.connections = connections;
     }
     public String host() { return host; }
     public String token() { return token; }
@@ -33,9 +38,9 @@ public final class PrinterHttp {
         HttpURLConnection connection = open("/system/info?X-Token=" + URLEncoder.encode(token, "UTF-8"));
         try {
             JSONObject response = readResponse(connection);
-            if (response.optInt("error_code", 0) != 0) throw new IOException("Printer rejected system information request");
+            if (response.optInt("error_code", 0) != 0) throw new PrinterErrors.Rejected(response.optInt("error_code", -1));
             JSONObject info = response.optJSONObject("system_info");
-            if (info == null || info.optString("sn").isEmpty()) throw new IOException("Printer did not return a serial number");
+            if (info == null || info.optString("sn").isEmpty()) throw new PrinterErrors.MissingIdentity();
             return info;
         } finally { connection.disconnect(); active = null; }
     }
@@ -69,7 +74,7 @@ public final class PrinterHttp {
                     connection.setRequestProperty("X-File-MD5", digest.toString());
                     try (OutputStream output = connection.getOutputStream()) { output.write(chunk, 0, count); }
                     JSONObject response = readResponse(connection);
-                    if (response.optInt("error_code", -1) != 0) throw new IOException("Upload rejected (code " + response.optInt("error_code", -1) + ")");
+                    if (response.optInt("error_code", -1) != 0) throw new PrinterErrors.Rejected(response.optInt("error_code", -1));
                 } finally { connection.disconnect(); active = null; }
                 offset += count;
                 progress.update((int) (offset * 100 / size));
@@ -79,7 +84,7 @@ public final class PrinterHttp {
     private void checkCancelled() throws IOException { if (cancelled.get()) throw new IOException("Operation cancelled"); }
     private HttpURLConnection open(String path) throws Exception {
         checkCancelled();
-        HttpURLConnection connection = (HttpURLConnection) new URL("http://" + host + path).openConnection();
+        HttpURLConnection connection = connections.open(new URL("http://" + host + path));
         active = connection;
         connection.setInstanceFollowRedirects(false);
         connection.setConnectTimeout(5000); connection.setReadTimeout(8000);
@@ -89,7 +94,8 @@ public final class PrinterHttp {
     }
     private JSONObject readResponse(HttpURLConnection connection) throws Exception {
         int code = connection.getResponseCode();
-        if (code != 200) throw new IOException(code == 401 ? "Access code rejected" : "Printer HTTP error " + code);
+        if (code == 401 || code == 403) throw new PrinterErrors.Rejected(1000);
+        if (code != 200) throw new PrinterErrors.HttpStatus(code);
         try (InputStream input = connection.getInputStream(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
             byte[] bytes = new byte[4096]; int count;
             while ((count = input.read(bytes)) != -1) {

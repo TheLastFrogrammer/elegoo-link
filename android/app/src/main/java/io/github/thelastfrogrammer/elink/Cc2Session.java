@@ -15,15 +15,23 @@ public final class Cc2Session implements AutoCloseable {
     public interface Listener {
         void connection(String message, boolean registered);
         void status(JSONObject snapshot);
+        default void status(JSONObject snapshot, boolean canvasUpdated) { status(snapshot); }
         void result(String message);
         void uploadProgress(int percent);
+        default void attributes(JSONObject attributes) { }
+        default void canvas(JSONObject canvas) { }
+        default void failure(String message, boolean retryable) { }
     }
+    interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
     private volatile Listener listener;
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService transfer = Executors.newSingleThreadExecutor();
     private final String clientId = "1_PC_" + (1000 + new java.security.SecureRandom().nextInt(9000));
     private final String requestId = clientId + "_req";
     private final PrinterHttp http;
+    private final PrinterHttp.ConnectionFactory connections;
+    private final javax.net.SocketFactory sockets;
+    private final MqttFactory clients;
     private final Cc2Codec codec = new Cc2Codec();
     private final AtomicInteger ids = new AtomicInteger(1);
     private final Map<Integer, Pending> pending = new HashMap<>(); // worker thread only
@@ -31,6 +39,7 @@ public final class Cc2Session implements AutoCloseable {
     private volatile MqttClient mqtt;
     private volatile PrinterHttp uploadHttp;
     private volatile boolean closed, ready, uploading;
+    private boolean canvasSupported = true;
     private volatile long statusAt;
     private String base;
     private static final class Pending {
@@ -38,30 +47,39 @@ public final class Cc2Session implements AutoCloseable {
         Pending(int method) { this.method = method; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(8); }
     }
     public Cc2Session(String host, String accessCode, Listener listener) {
-        http = new PrinterHttp(host, accessCode); this.listener = listener;
+        this(host, accessCode, listener, url -> (java.net.HttpURLConnection) url.openConnection(), null);
+    }
+    public Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets) {
+        this(host, accessCode, listener, connections, sockets, (uri, id) -> new MqttClient(uri, id, new MemoryPersistence()));
+    }
+    Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets, MqttFactory clients) {
+        http = new PrinterHttp(host, accessCode, connections); this.connections = connections; this.sockets = sockets;
+        this.clients = clients; this.listener = listener;
     }
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
     public void connect() { execute(this::connectOnWorker); }
     private void connectOnWorker() {
+        String stage = "HTTP (port 80)";
         try {
             emitConnection("Reading printer information…", false);
             JSONObject info = http.systemInfo();
             if (closed) return;
             base = "elegoo/" + info.getString("sn") + "/";
-            MqttClient client = new MqttClient("tcp://" + http.host() + ":1883", clientId, new MemoryPersistence());
+            stage = "MQTT (port 1883)";
+            MqttClient client = clients.create("tcp://" + http.host() + ":1883", clientId);
             mqtt = client;
             client.setTimeToWait(8000);
             client.setCallback(new MqttCallback() {
                 public void connectionLost(Throwable cause) {
                     registration.completeExceptionally(new IllegalStateException("MQTT connection lost"));
-                    execute(() -> fail("Connection lost. Reconnect to the printer."));
+                    execute(() -> fail("MQTT connection lost. Reconnecting requires a new registration.", true));
                 }
                 public void deliveryComplete(IMqttDeliveryToken token) { }
                 public void messageArrived(String topic, MqttMessage message) {
                     if (closed) return;
-                    if (message.getPayload().length > 2 * 1024 * 1024) { execute(() -> fail("Printer message too large")); return; }
+                    if (message.getPayload().length > 2 * 1024 * 1024) { execute(() -> fail("Printer message too large", false)); return; }
                     try {
                         JSONObject payload = new JSONObject(new String(message.getPayload(), StandardCharsets.UTF_8));
                         if (topic.equals(base + requestId + "/register_response")) registration.complete(payload);
@@ -73,32 +91,44 @@ public final class Cc2Session implements AutoCloseable {
             options.setUserName("elegoo"); options.setPassword(http.token().toCharArray());
             options.setCleanSession(true); options.setAutomaticReconnect(false);
             options.setConnectionTimeout(5); options.setKeepAliveInterval(20);
+            if (sockets != null) options.setSocketFactory(sockets);
             emitConnection("Connecting…", false);
             client.connect(options);
             if (closed) return;
+            stage = "Printer registration";
+            emitConnection("Registering with printer…", false);
             client.subscribe(new String[] {base + clientId + "/api_response", base + "api_status", base + requestId + "/register_response"}, new int[] {0, 0, 0});
             publish(base + "api_register", new JSONObject().put("client_id", clientId).put("request_id", requestId));
-            JSONObject reply = registration.get(3, TimeUnit.SECONDS);
-            if (!Cc2Codec.validRegistration(reply, clientId)) throw new IllegalStateException("Printer registration rejected: " + reply.optString("error", "unknown reason"));
+            JSONObject reply = registration.get(8, TimeUnit.SECONDS);
+            if (!Cc2Codec.validRegistration(reply, clientId)) { fail("Printer registration rejected. Check LAN Only and close other printer clients before trying again.", false); return; }
             if (closed) return;
             ready = true;
             emitConnection("Connected on local Wi-Fi", true);
-            send(Cc2Codec.ATTRIBUTES); send(Cc2Codec.STATUS);
+            send(Cc2Codec.ATTRIBUTES); send(Cc2Codec.STATUS); send(Cc2Codec.CANVAS);
             worker.scheduleWithFixedDelay(() -> {
                 if (!ready()) return;
                 try { publish(base + clientId + "/api_request", new JSONObject().put("type", "PING")); }
-                catch (Exception exception) { fail("Heartbeat failed. Reconnect to the printer."); }
+                catch (Exception exception) { fail("Printer heartbeat failed.", true); }
             }, 10, 10, TimeUnit.SECONDS);
             worker.scheduleWithFixedDelay(() -> {
                 if (!ready()) return;
                 if (pending.values().stream().noneMatch(p -> p.method == Cc2Codec.STATUS)) send(Cc2Codec.STATUS);
             }, 15, 15, TimeUnit.SECONDS);
+            worker.scheduleWithFixedDelay(() -> { if (ready() && canvasSupported && pending.values().stream().noneMatch(p -> p.method == Cc2Codec.CANVAS)) send(Cc2Codec.CANVAS); }, 30, 30, TimeUnit.SECONDS);
             worker.scheduleWithFixedDelay(this::expireRequests, 1, 1, TimeUnit.SECONDS);
         } catch (Exception exception) {
-            if (!closed) fail(error(exception));
+            if (!closed) fail(PrinterErrors.describe(exception, stage), PrinterErrors.retryable(exception));
         } finally { if (closed) disposeMqtt(); }
     }
-    public void refresh() { execute(() -> { if (ready()) send(Cc2Codec.STATUS); }); }
+    public void refresh() { execute(() -> { if (ready()) { send(Cc2Codec.STATUS); if (canvasSupported) send(Cc2Codec.CANVAS); } }); }
+    public void autoRefill(boolean enabled) {
+        execute(() -> {
+            if (!fresh()) { emitResult("Refresh printer status before changing automatic refill."); return; }
+            if (pending.values().stream().anyMatch(p -> p.method == Cc2Codec.AUTO_REFILL)) { emitResult("Waiting for automatic-refill acknowledgement."); return; }
+            try { send(Cc2Codec.autoRefillRequest(ids.getAndIncrement(), enabled)); }
+            catch (Exception exception) { emitResult("Could not send automatic-refill request."); }
+        });
+    }
     public void command(int method) {
         execute(() -> {
             try {
@@ -116,10 +146,15 @@ public final class Cc2Session implements AutoCloseable {
     private void send(int method) {
         if (!ready()) return;
         int id = ids.getAndIncrement();
+        try { send(Cc2Codec.request(id, method)); }
+        catch (Exception exception) { emitResult("Could not prepare printer request."); }
+    }
+    private void send(JSONObject message) {
+        int id = message.optInt("id"), method = message.optInt("method");
         try {
             pending.put(id, new Pending(method));
-            publish(base + clientId + "/api_request", Cc2Codec.request(id, method));
-            if (method == Cc2Codec.PAUSE || method == Cc2Codec.STOP) emitResult("Command sent; waiting for printer acknowledgement…");
+            publish(base + clientId + "/api_request", message);
+            if (changing(method)) emitResult("Command sent; waiting for printer acknowledgement…");
         } catch (Exception exception) {
             pending.remove(id);
             emitResult("Request failed; outcome unknown. Refresh before trying again.");
@@ -140,7 +175,17 @@ public final class Cc2Session implements AutoCloseable {
                 pending.remove(message.getInt("id"));
                 JSONObject result = message.optJSONObject("result");
                 if (result == null || result.optInt("error_code", -1) != 0) {
-                    emitResult("Printer rejected request (code " + (result == null ? "missing" : result.optInt("error_code", -1)) + ")"); return;
+                    int code = result == null ? -1 : result.optInt("error_code", -1);
+                    if (code == 1000) { fail(PrinterErrors.code(code), false); return; }
+                    if (method == Cc2Codec.CANVAS && code == 1001) canvasSupported = false;
+                    emitResult(PrinterErrors.code(code)); return;
+                }
+                if (method == Cc2Codec.AUTO_REFILL) { emitResult("Automatic refill acknowledged. Refreshing tray state."); send(Cc2Codec.CANVAS); return; }
+                Listener current = listener;
+                if (method == Cc2Codec.ATTRIBUTES && current != null) current.attributes(result);
+                if (method == Cc2Codec.CANVAS && result.optJSONObject("canvas_info") != null) {
+                    codec.canvas(result.getJSONObject("canvas_info"));
+                    if (current != null) current.canvas(result.getJSONObject("canvas_info"));
                 }
                 if (method == Cc2Codec.PAUSE || method == Cc2Codec.STOP) {
                     emitResult("Printer acknowledged " + (method == Cc2Codec.PAUSE ? "pause" : "stop") + ". Waiting for status update.");
@@ -150,7 +195,7 @@ public final class Cc2Session implements AutoCloseable {
             if (method == Cc2Codec.STATUS || method == 6000) {
                 if (codec.accept(message)) {
                     statusAt = System.nanoTime();
-                    Listener current = listener; if (current != null) current.status(codec.snapshot());
+                    Listener current = listener; if (current != null) current.status(codec.snapshot(), message.getJSONObject("result").has("canvas_info"));
                 } else if (pending.values().stream().noneMatch(p -> p.method == Cc2Codec.STATUS)) {
                     statusAt = 0; send(Cc2Codec.STATUS);
                 }
@@ -163,7 +208,7 @@ public final class Cc2Session implements AutoCloseable {
             Pending request = iterator.next();
             if (System.nanoTime() <= request.deadline) continue;
             iterator.remove();
-            if (request.method == Cc2Codec.PAUSE || request.method == Cc2Codec.STOP)
+            if (changing(request.method))
                 emitResult("No command acknowledgement. Outcome unknown; refresh before trying again.");
             else if (request.method == Cc2Codec.STATUS) { statusAt = 0; emitResult("Status request timed out. Controls disabled until fresh status arrives."); }
         }
@@ -171,23 +216,28 @@ public final class Cc2Session implements AutoCloseable {
     public synchronized void upload(File file, String name) {
         if (!ready() || uploading) return;
         uploading = true;
-        PrinterHttp uploader = new PrinterHttp(http.host(), http.token()); uploadHttp = uploader;
+        PrinterHttp uploader = new PrinterHttp(http.host(), http.token(), connections); uploadHttp = uploader;
         transfer.execute(() -> {
             try {
                 uploader.upload(file, name, percent -> { Listener current = listener; if (current != null && !closed) current.uploadProgress(percent); });
                 emitResult("Upload acknowledged by printer. Start the job from the printer screen.");
-            } catch (Exception exception) { if (!closed) emitResult("Upload failed: " + error(exception)); }
+            } catch (Exception exception) { if (!closed) emitResult(PrinterErrors.describe(exception, "Upload")); }
             finally { uploading = false; uploadHttp = null; }
         });
     }
     private void execute(Runnable task) { if (!closed) try { worker.execute(() -> { if (!closed) task.run(); }); } catch (RejectedExecutionException ignored) { } }
     private void emitConnection(String message, boolean connected) { Listener current = listener; if (current != null && !closed) current.connection(message, connected); }
     private void emitResult(String message) { Listener current = listener; if (current != null && !closed) current.result(message); }
-    private void fail(String message) { ready = false; statusAt = 0; emitConnection(message, false); close(); }
+    private void fail(String message, boolean retryable) {
+        ready = false; statusAt = 0;
+        if (pending.values().stream().anyMatch(p -> changing(p.method))) emitResult("Connection lost with a command pending. Outcome unknown; commands will not be replayed.");
+        Listener current = listener; close(); if (current != null) current.failure(message, retryable);
+    }
+    private static boolean changing(int method) { return method == Cc2Codec.PAUSE || method == Cc2Codec.STOP || method == Cc2Codec.AUTO_REFILL; }
     private static String error(Exception exception) {
         if (exception instanceof TimeoutException) return "Printer registration timed out";
         if (exception instanceof MqttException) return "MQTT connection failed (code " + ((MqttException) exception).getReasonCode() + "). Check LAN mode and access code.";
-        return exception.getMessage() == null ? exception.getClass().getSimpleName() : exception.getMessage();
+        return PrinterErrors.describe(exception, "Printer request");
     }
     private void disposeMqtt() {
         MqttClient current = mqtt;

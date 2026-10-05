@@ -8,14 +8,17 @@ import java.util.Iterator;
 
 /** Pure protocol logic, independent of Android and MQTT transport. */
 public final class Cc2Codec {
-    public static final int ATTRIBUTES = 1001, STATUS = 1002, PAUSE = 1021, STOP = 1022;
+    public static final int ATTRIBUTES = 1001, STATUS = 1002, PAUSE = 1021, STOP = 1022, CANVAS = 2005, AUTO_REFILL = 2004;
     private JSONObject snapshot;
     private int sequence = -1, gaps;
 
     public static JSONObject request(int id, int method) throws JSONException {
-        if (method != ATTRIBUTES && method != STATUS && method != PAUSE && method != STOP)
+        if (method != ATTRIBUTES && method != STATUS && method != PAUSE && method != STOP && method != CANVAS)
             throw new IllegalArgumentException("Unverified command");
         return new JSONObject().put("id", id).put("method", method).put("params", new JSONObject());
+    }
+    public static JSONObject autoRefillRequest(int id, boolean enabled) throws JSONException {
+        return new JSONObject().put("id", id).put("method", AUTO_REFILL).put("params", new JSONObject().put("auto_refill", enabled));
     }
 
     public static boolean validRegistration(JSONObject message, String clientId) {
@@ -48,6 +51,10 @@ public final class Cc2Codec {
 
     public synchronized JSONObject snapshot() throws JSONException {
         return snapshot == null ? new JSONObject() : copy(snapshot);
+    }
+    /** A separate CANVAS query must update the delta baseline, so unrelated deltas cannot restore old tray data. */
+    public synchronized void canvas(JSONObject canvas) throws JSONException {
+        if (snapshot != null) snapshot.put("canvas_info", copy(canvas));
     }
 
     private static JSONObject copy(JSONObject object) throws JSONException { return new JSONObject(object.toString()); }

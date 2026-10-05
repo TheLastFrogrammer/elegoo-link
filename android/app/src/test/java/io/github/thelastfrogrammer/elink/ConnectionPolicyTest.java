@@ -1,0 +1,37 @@
+package io.github.thelastfrogrammer.elink;
+import java.net.ConnectException;
+import java.net.SocketTimeoutException;
+import org.junit.Test;
+import static org.junit.Assert.*;
+
+public class ConnectionPolicyTest {
+    @Test public void retriesAreBoundedAndResetOnlyAfterConnectionSuccess() {
+        ReconnectPolicy policy = new ReconnectPolicy();
+        for (int delay : new int[] {1, 2, 4, 8, 16}) assertEquals(delay, policy.nextDelaySeconds());
+        assertEquals(-1, policy.nextDelaySeconds()); assertEquals(-1, policy.nextDelaySeconds());
+        policy.connected(); assertEquals(1, policy.nextDelaySeconds());
+    }
+    @Test public void authenticationErrorsDoNotCauseRetryStorms() {
+        assertFalse(PrinterErrors.retryable(new PrinterErrors.Rejected(1000)));
+        assertFalse(PrinterErrors.retryable(new IllegalStateException("Registration rejected")));
+        assertTrue(PrinterErrors.retryable(new ConnectException("failed")));
+        assertTrue(PrinterErrors.retryable(new SocketTimeoutException("failed")));
+        assertFalse(PrinterErrors.retryable(new PrinterErrors.HttpStatus(404)));
+        assertTrue(PrinterErrors.retryable(new PrinterErrors.HttpStatus(503)));
+        assertTrue(PrinterErrors.describe(new PrinterErrors.HttpStatus(404), "HTTP").contains("HTTP 404"));
+    }
+    @Test public void rawCredentialBearingUrlsNeverAppearInUserErrors() {
+        String secret = "do-not-leak";
+        String text = PrinterErrors.describe(new ConnectException("http://192.168.1.2/system/info?X-Token=" + secret), "HTTP (port 80)");
+        assertFalse(text.contains(secret)); assertFalse(text.contains("X-Token")); assertTrue(text.contains("could not reach"));
+        text = PrinterErrors.describe(new RuntimeException("X-Token=" + secret), "HTTP");
+        assertFalse(text.contains(secret)); assertTrue(text.contains("Check connection"));
+    }
+    @Test public void refillRequiresAnExplicitBooleanPayloadAndResumeRemainsBlocked() throws Exception {
+        assertTrue(Cc2Codec.autoRefillRequest(8, true).getJSONObject("params").getBoolean("auto_refill"));
+        assertEquals(2004, Cc2Codec.autoRefillRequest(9, false).getInt("method"));
+        assertEquals(2005, Cc2Codec.request(10, Cc2Codec.CANVAS).getInt("method"));
+        try { Cc2Codec.request(11, Cc2Codec.AUTO_REFILL); fail("Do not invent a missing setting"); } catch (IllegalArgumentException expected) { }
+        try { Cc2Codec.request(12, 1023); fail("Resume is unverified"); } catch (IllegalArgumentException expected) { }
+    }
+}
