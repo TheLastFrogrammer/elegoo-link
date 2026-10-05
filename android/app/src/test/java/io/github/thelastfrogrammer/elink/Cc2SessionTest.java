@@ -34,17 +34,18 @@ public class Cc2SessionTest {
             public InputStream getInputStream() { return new ByteArrayInputStream(response.getBytes(StandardCharsets.UTF_8)); }
         };
     }
-    private static final class FakeMqtt extends MqttClient {
+    private static class FakeMqtt extends MqttClient {
         MqttCallback callback;
         String responseTopic;
         volatile boolean connected;
+        String password;
         final List<String> subscriptions = new CopyOnWriteArrayList<>();
         final BlockingQueue<JSONObject> writes = new LinkedBlockingQueue<>();
         final List<JSONObject> requests = new CopyOnWriteArrayList<>();
         FakeMqtt(String uri, String id) throws MqttException { super(uri, id, new MemoryPersistence()); }
         @Override public void setCallback(MqttCallback callback) { this.callback = callback; }
-        @Override public void connect(MqttConnectOptions options) {
-            assertEquals("elegoo", options.getUserName()); assertFalse(options.isAutomaticReconnect()); connected = true;
+        @Override public void connect(MqttConnectOptions options) throws MqttException {
+            assertEquals("elegoo", options.getUserName()); assertFalse(options.isAutomaticReconnect()); password = new String(options.getPassword()); connected = true;
         }
         @Override public void subscribe(String[] topics, int[] qos) { subscriptions.addAll(Arrays.asList(topics)); responseTopic = topics[0]; }
         @Override public boolean isConnected() { return connected; }
@@ -125,5 +126,35 @@ public class Cc2SessionTest {
             clients.get(0).response(refill.getInt("id"), 2004, new JSONObject().put("error_code", 0));
             assertTrue(take(listener.results).contains("acknowledged")); take(listener.canvases);
         } finally { session.close(); }
+    }
+    @Test public void discoveredIdentityRegistersAndReceivesStatusWithoutOpeningHttp() throws Exception {
+        Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
+        Cc2Session session = new Cc2Session("192.168.1.84", "actual-code", listener,
+            url -> { fail("Monitoring must not require HTTP when identity is available"); return null; }, null,
+            (uri, id) -> { FakeMqtt fake = new FakeMqtt(uri, id); clients.add(fake); return fake; }, http -> "DISCOVERED-CC2");
+        try {
+            session.connect(); take(listener.statuses); assertTrue(session.ready());
+            assertEquals("actual-code", clients.get(0).password);
+            assertTrue(clients.get(0).subscriptions.stream().allMatch(topic -> topic.startsWith("elegoo/DISCOVERED-CC2/")));
+            session.command(Cc2Codec.PAUSE); assertEquals(Cc2Codec.PAUSE, take(clients.get(0).writes).getInt("method"));
+        } finally { session.close(); }
+    }
+    @Test public void manualIdentityStillRequiresMqttAuthentication() throws Exception {
+        Listener listener = new Listener();
+        Cc2Session session = new Cc2Session("192.168.1.84", "wrong-code", listener,
+            url -> { fail("HTTP must not open"); return null; }, null,
+            (uri, id) -> new FakeMqtt(uri, id) {
+                @Override public void connect(MqttConnectOptions options) throws MqttSecurityException { throw new MqttSecurityException(5); }
+            }, new PrinterIdentity("MANUAL-CC2", new Cc2Discovery()));
+        try { session.connect(); assertTrue(take(listener.failures).contains("MQTT access code rejected")); assertFalse(listener.retryable); assertFalse(session.ready()); }
+        finally { session.close(); }
+    }
+    @Test public void invalidIdentityCannotBecomeAMqttTopic() throws Exception {
+        Listener listener = new Listener();
+        Cc2Session session = new Cc2Session("192.168.1.84", "code", listener,
+            url -> { fail("HTTP must not open"); return null; }, null,
+            (uri, id) -> { fail("Invalid identity must not open MQTT"); return null; }, http -> "#/wrong");
+        try { session.connect(); assertTrue(take(listener.failures).contains("Serial Number")); assertFalse(listener.retryable); }
+        finally { session.close(); }
     }
 }

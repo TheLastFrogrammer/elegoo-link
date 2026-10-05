@@ -4,6 +4,7 @@ import android.content.Context;
 import android.net.*;
 import java.io.IOException;
 import java.net.*;
+import java.util.*;
 import javax.net.SocketFactory;
 
 /** Bind local printer traffic to Wi-Fi, including Wi-Fi without internet validated by Android. */
@@ -23,6 +24,24 @@ public final class NetworkRoute {
     }
     public SocketFactory sockets() { return network.getSocketFactory(); }
     public PrinterHttp.ConnectionFactory http() { return url -> (HttpURLConnection) network.openConnection(url); }
+    public Cc2Discovery discovery() {
+        List<InetAddress> broadcasts = new ArrayList<>();
+        LinkProperties props = manager.getLinkProperties(network);
+        if (props != null) for (LinkAddress address : props.getLinkAddresses()) {
+            if (!(address.getAddress() instanceof Inet4Address) || address.getPrefixLength() >= 31) continue;
+            byte[] bytes = address.getAddress().getAddress();
+            int ip = 0; for (byte value : bytes) ip = (ip << 8) | (value & 255);
+            int mask = address.getPrefixLength() == 0 ? 0 : -1 << (32 - address.getPrefixLength());
+            int broadcast = ip | ~mask;
+            try { broadcasts.add(InetAddress.getByAddress(new byte[] {(byte)(broadcast >>> 24), (byte)(broadcast >>> 16), (byte)(broadcast >>> 8), (byte)broadcast})); }
+            catch (UnknownHostException ignored) { }
+        }
+        return new Cc2Discovery(() -> {
+            DatagramSocket socket = new DatagramSocket();
+            try { network.bindSocket(socket); return socket; }
+            catch (IOException error) { socket.close(); throw error; }
+        }, broadcasts);
+    }
     public String details() {
         StringBuilder text = new StringBuilder("Local printer traffic: Wi-Fi / Ethernet\n");
         LinkProperties props = manager.getLinkProperties(network);
@@ -33,17 +52,22 @@ public final class NetworkRoute {
         if (caps != null && caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) text.append("VPN detected. Printer traffic uses the local network directly; VPN policy can still block it.\n");
         return text.toString();
     }
-    public String check(String host, String code) {
+    public String check(String host, String code, String manualSerial) {
         PrinterHttp http = new PrinterHttp(host, code, http());
         StringBuilder text = new StringBuilder(details()).append("Printer IP: ").append(host).append("\n\n");
         boolean web = probe(host, 80, text), mqtt = probe(host, 1883, text);
+        boolean identity = !manualSerial.isEmpty();
+        if (identity) text.append("MQTT identity: manual serial supplied; Connect verifies registration.\n");
+        else try (Cc2Discovery discovery = discovery()) {
+            discovery.discover(host); identity = true; text.append("UDP 52700 discovery: printer identity received.\n");
+        } catch (IOException error) { text.append("UDP 52700 discovery: no printer identity received.\n"); }
         if (web) {
-            try { http.systemInfo(); text.append("HTTP system info: accepted; printer identity returned.\n"); }
+            try { http.systemInfo(); identity = true; text.append("HTTP system info: accepted; printer identity returned.\n"); }
             catch (Exception error) { text.append("HTTP system info: ").append(PrinterErrors.describe(error, "HTTP authentication")).append('\n'); }
         }
-        if (!web && !mqtt) text.append("\nNeither printer port is reachable. An access code cannot fix this. Confirm the current printer IP, LAN Only, same Wi-Fi, and that the router does not isolate guest devices.");
+        if (!web && !mqtt) text.append("\nNeither TCP port is reachable. Confirm the current printer IP, LAN Only, same Wi-Fi, and that the router does not isolate guest devices.");
         else if (!mqtt) text.append("\nHTTP is reachable but MQTT is not. Confirm LAN Only is enabled and local port 1883 is not blocked.");
-        else if (!web) text.append("\nMQTT is reachable but HTTP is not. This app also needs the printer's HTTP system-information endpoint on port 80.");
+        else if (!web) text.append(identity ? "\nMQTT is reachable and identity is available. Connect can use MQTT without HTTP. HTTP file uploads remain unavailable." : "\nMQTT is reachable. Enter the exact Serial Number from Settings → Device in the optional serial field to connect without HTTP or UDP discovery. HTTP file uploads remain unavailable.");
         else text.append("\nBoth ports are reachable. TCP checks alone do not prove MQTT authentication or client registration; Connect tests those next.");
         http.cancel(); return text.toString();
     }

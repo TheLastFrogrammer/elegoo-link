@@ -21,3 +21,7 @@ Confirm the exact printer model/firmware, LAN mode, successful connection or dis
 ## v0.2.0 progress
 
 Stage 2 now includes foreground service ownership, retained session across Activity changes, optional encrypted single-printer credentials, bounded reconnect, network binding and layered connection diagnosis. Stage 4 now includes read-only CANVAS trays and confirmed automatic-refill requests; it does not include camera or filament loading. Physical printer/phone verification remains pending. Discovery, additional profiles, complete print setup/start/resume, camera and separate completion alerts are still future work.
+
+## v0.2.1 delivered
+
+Selected-IP UDP identity discovery and optional manual serial remove the HTTP prerequisite for MQTT monitoring. A full discovery picker and an alternative upload transport remain pending. Verify on the CC2 V02.01.00.00 that refused HTTP does not block MQTT registration/status.

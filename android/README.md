@@ -1,13 +1,13 @@
 # Link Workshop for Android
 
-Independent native Android client built alongside the official Elegoo Link SDK. **v0.2.0 adds connection diagnostics and daily-use foundations**, including a user-started foreground service. Physical CC2/S24+ testing is still outstanding.
+Independent native Android client built alongside the official Elegoo Link SDK. **v0.2.1 removes HTTP as a prerequisite for MQTT monitoring**: identity comes from UDP discovery or an optional manually supplied serial number, with HTTP as a fallback. A physical v0.2.0 diagnostic showed MQTT reachable and HTTP refused on the user’s CC2; this fix still needs device verification.
 
 Minimum Android 8/API 26; compile/target Android 16/API 36. The first printer target is Centauri Carbon 2. The Android app ports the inspected LAN behavior to Java and Eclipse Paho; it does not load the desktop C++ SDK through JNI.
 
 ## Implemented
 
-- Private IPv4 / LAN access-code connection; printer identity over HTTP, MQTT registration and full/incremental status merging.
-- Connection check: local phone IP, separate TCP checks for HTTP 80 and MQTT 1883, then authenticated HTTP printer identification. The report omits access codes.
+- Private IPv4 / LAN access-code connection; printer identity through UDP 52700/method 7000, optional manual serial, or HTTP fallback; MQTT registration and full/incremental status merging.
+- Connection check: local phone IP, separate TCP checks for HTTP 80 and MQTT 1883, UDP printer-identity lookup, then authenticated HTTP identification when HTTP is reachable. Only discovery replies from the selected IP are accepted. The report omits access codes.
 - Local traffic explicitly uses Android's Wi-Fi/Ethernet network, including Wi-Fi without internet; cellular being the default route no longer sends printer requests over cellular.
 - User-started foreground service keeps the connection and uploads independent of Activity rotation, file selection and switching apps. Its ongoing notification has a Disconnect action and shows state/staleness. Android can still kill a service or suspend network/CPU access under battery restrictions; this build does not hold a wake lock.
 - Optional remembered access code encrypted with AES-256-GCM. The key remains in Android Keystore, the IP binds ciphertext through authenticated additional data, and application backup is disabled. Forget removes the saved credential. The existing session retains its in-memory code until disconnected.
@@ -17,16 +17,16 @@ Minimum Android 8/API 26; compile/target Android 16/API 36. The first printer ta
 - Pause and stop with state/freshness guards, confirmation, request correlation and acknowledgement timeout.
 - System document picker, service-owned private file copy and upload-only .gcode transfer with MD5 and 1 MiB HTTP chunks. Files up to 512 MiB with simple filenames. Uploading never starts a print.
 
-Not implemented: start/resume, discovery, printer file browser/deletion, camera/timelapse export, temperature/fan/movement/light controls, cloud account login, separate completion alerts, multiple profiles, other printer models or phone-side slicing.
+Not implemented: start/resume, a full discovered-printer list, printer file browser/deletion, camera/timelapse export, temperature/fan/movement/light controls, cloud account login, separate completion alerts, multiple profiles, other printer models or phone-side slicing.
 
 ## Try it / connection troubleshooting
 
 1. Install the development APK. If Android rejects it as an incompatible update, uninstall v0.1.0 first: the earlier scratch build's private debug signing key was not retained. This clears that app's saved IP; this is not required unless the signature differs.
 2. Put printer and phone on the same local Wi-Fi. In printer Settings → LAN Only, enable LAN Only. Get the current IP from Settings → Network. Enter the LAN access code from LAN Only, not the cloud pairing PIN from Account. Blank uses the upstream default 123456 when code protection is disabled.
-3. Choose **Check connection**. Neither TCP port reachable means an IP/routing/isolation problem, before authentication. HTTP reachable but 1883 blocked points to LAN mode/MQTT/firewall. An HTTP access-code rejection points to credentials. Both TCP ports reachable does not itself establish MQTT authentication or registration.
-4. Press Connect. Authentication and registration failures are separate; retry messages identify stage, attempt and delay. Saved credentials are opt-in and never written as plaintext or included in reports/logs.
+3. Leave **Serial number (optional)** blank for automatic discovery. Choose **Check connection**. MQTT 1883 is needed for monitoring/controls; HTTP 80 is optional for identity and required for the existing upload implementation. If MQTT is reachable but both UDP identity and HTTP fail, enter the exact **Serial Number** from printer Settings → Device. A supplied serial does not bypass MQTT authentication or registration. Neither TCP port reachable indicates a transport problem; check IP/routing/isolation. TCP reachability alone does not establish authentication.
+4. Press Connect. Discovery runs first unless a manual serial is supplied; HTTP is used only when discovery fails. Authentication and registration failures are separate; retry messages identify stage, attempt and delay. Saved credentials are opt-in and never written as plaintext or included in reports/logs.
 5. Allow notifications if desired. Denial does not prevent a foreground service, but may hide its notification from the notification drawer on newer Android; use the app's Disconnect button. Opening a file picker no longer deliberately disconnects. Use Disconnect to stop monitoring or cancel an upload; partial-file cleanup remains manual.
-6. Compare live readings to the touchscreen. CANVAS status codes/tray IDs are shown exactly as firmware reports them. Start uploaded jobs on the touchscreen. Verify refill/pause/stop on an appropriate test job before relying on them.
+6. Install v0.2.1 over v0.2.0 normally; the same signing key is retained. Compare live readings to the touchscreen. CANVAS status codes/tray IDs are shown exactly as firmware reports them. Start uploaded jobs on the touchscreen. Verify refill/pause/stop on an appropriate test job before relying on them.
 
 LAN Only is the currently supported authentication/configuration path, not a requirement of Android itself. Cloud/WAN pairing is a separate protocol path. LAN Only may interrupt the printer's cloud/Matrix connection; simultaneous access depends on firmware and has not been validated here. No router port forwarding is needed. Printer HTTP/MQTT traffic follows the upstream plaintext LAN protocols.
 

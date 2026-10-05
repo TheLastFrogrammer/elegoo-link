@@ -27,7 +27,7 @@ public final class PrinterService extends Service {
     private Cc2Session session;
     private boolean wanted, foreground, destroyed;
     private long generation;
-    private String host = "", code = "";
+    private String host = "", code = "", serial = "";
     public String connection = "Disconnected", feedback = "Development build: printer behavior still needs hardware testing.";
     public JSONObject status = new JSONObject(), attributes = new JSONObject(), canvas;
     public File selectedFile;
@@ -53,15 +53,17 @@ public final class PrinterService extends Service {
     public void observe(Observer observer) { this.observer = observer; if (observer != null) observer.changed(); }
     public String host() { return host; }
     public String accessCode() { return code; }
+    public String serial() { return serial; }
     public boolean connecting() { return wanted; }
     public boolean ready() { return session != null && session.ready(); }
     public boolean fresh() { return session != null && session.fresh(); }
     public boolean uploading() { return session != null && session.uploading(); }
     public boolean canvasFresh() { return fresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
-    public void connect(String host, String code) {
+    public void connect(String host, String code, String serial) {
         new PrinterHttp(host, code);
+        if (!serial.isEmpty() && !Cc2Discovery.validSerial(serial)) throw new IllegalArgumentException("Invalid serial number");
         generation++; main.removeCallbacks(reconnect); if (session != null) session.close(); session = null;
-        this.host = host; this.code = code; wanted = true; retries.connected();
+        this.host = host; this.code = code; this.serial = serial; wanted = true; retries.connected();
         startMonitoring(); attempt();
     }
     private void attempt() {
@@ -81,8 +83,8 @@ public final class PrinterService extends Service {
             public void result(String text) { deliver(() -> feedback = text); }
             public void uploadProgress(int percent) { deliver(() -> feedback = "Uploading " + selectedName + ": " + percent + "%"); }
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
-        }, route.http(), route.sockets());
-        connection = "Reading printer information…"; changed(); session.connect();
+        }, route.http(), route.sockets(), new PrinterIdentity(serial, route.discovery()));
+        connection = "Identifying printer for MQTT…"; changed(); session.connect();
     }
     private void failed(String message, boolean retryable) {
         generation++; if (session != null) session.close(); session = null;

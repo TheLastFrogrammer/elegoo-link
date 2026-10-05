@@ -19,6 +19,7 @@ public final class PrinterErrors {
         public HttpStatus(int status) { this.status = status; }
     }
     public static final class MissingIdentity extends IOException { }
+    public static final class IdentityUnavailable extends IOException { }
     public static String code(int code) {
         String reason;
         switch (code) {
@@ -38,6 +39,7 @@ public final class PrinterErrors {
         return reason + " (code " + code + ").";
     }
     public static String describe(Throwable error, String stage) {
+        if (error instanceof IdentityUnavailable) return "Could not obtain the printer serial through UDP discovery or HTTP. Enter the exact Serial Number from Settings → Device in the optional serial field, then connect over MQTT.";
         if (error instanceof Rejected) return error.getMessage();
         if (error instanceof HttpStatus) return stage + " replied with HTTP " + ((HttpStatus) error).status + ". Verify that this IP belongs to the CC2 and that its firmware exposes /system/info.";
         if (error instanceof MissingIdentity) return "HTTP connected, but the response did not contain the printer serial number. Check the IP and CC2 firmware/API compatibility.";
@@ -59,7 +61,7 @@ public final class PrinterErrors {
     }
     public static boolean retryable(Throwable error) {
         if (error instanceof Rejected || error instanceof IllegalArgumentException || error instanceof IllegalStateException) return false;
-        if (error instanceof MissingIdentity || error instanceof org.json.JSONException) return false;
+        if (error instanceof MissingIdentity || error instanceof IdentityUnavailable || error instanceof org.json.JSONException) return false;
         if (error instanceof HttpStatus) return ((HttpStatus) error).status >= 500;
         if (error instanceof MqttException) {
             int code = ((MqttException) error).getReasonCode();

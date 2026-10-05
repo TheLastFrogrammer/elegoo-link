@@ -20,7 +20,7 @@ public final class MainActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService checks = Executors.newSingleThreadExecutor();
     private LinearLayout content;
-    private EditText host, access;
+    private EditText host, access, serial;
     private CheckBox remember;
     private TextView connection, state, temperatures, job, feedback, selected, faults, trays, identity, diagnostics;
     private Button connect, pause, stop, refresh, upload, pick, refill, check, forget;
@@ -34,7 +34,7 @@ public final class MainActivity extends Activity {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
-            if (printer.connecting()) access.setText(printer.accessCode());
+            if (printer.connecting()) { access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) printer.observe(MainActivity.this::render);
             render();
         }
@@ -57,17 +57,20 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 28, INK, true);
-        label(content, "Centauri Carbon 2 · local Wi-Fi · v0.2.0", 14, MUTED, false);
+        label(content, "Centauri Carbon 2 · local Wi-Fi · v0.2.1", 14, MUTED, false);
         LinearLayout connectionCard = card("Connection");
         host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "LAN access code", true); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        serial = input(connectionCard, "Serial number (optional)", false);
+        serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        label(connectionCard, "Leave serial blank for automatic identity discovery. If discovery fails, enter Serial Number from Settings → Device to connect directly over MQTT.", 13, MUTED, false);
         remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
         label(connectionCard, "IP: printer Settings → Network. Access code: Settings → LAN Only. Enable LAN Only and use the same local Wi-Fi. Leave the code blank if code protection is off.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
         connect = button(connectionCard, "Connect", this::toggleConnection);
         check = button(connectionCard, "Check connection", this::checkConnection);
-        diagnostics = label(connectionCard, "Check connection tests HTTP and MQTT separately and shows this phone's local network. No access code is included in the report.", 13, MUTED, false);
+        diagnostics = label(connectionCard, "Check connection tests HTTP, MQTT and UDP identity discovery. HTTP is optional for monitoring; file uploads still require it. No access code is included in the report.", 13, MUTED, false);
         diagnostics.setTextIsSelectable(true);
         forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(); remember.setChecked(false); access.setText(""); message("Saved access code removed. An existing connection keeps its in-memory code until disconnected."); });
         LinearLayout monitor = card("Live monitor");
@@ -98,14 +101,15 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         });
         label(files, "Connection and uploads continue while choosing a file, rotating, or switching apps. Use Disconnect in the app or notification to stop the session. Android may still stop the app under memory or battery restrictions.", 13, MUTED, false);
+        label(files, "File uploads require HTTP port 80. If HTTP is unavailable, you can still monitor and use supported MQTT controls.", 13, MUTED, false);
         feedback = label(content, "Development build: printer behavior still needs hardware testing.", 14, MUTED, false);
         LinearLayout coming = card("Next in the workshop");
-        label(coming, "Start & resume · camera & timelapse · printer file browser · discovery · completion alerts · remote access", 15, INK, false);
+        label(coming, "Start & resume · camera & timelapse · printer file browser · full discovery list · completion alerts · remote access", 15, INK, false);
         label(coming, "These features are unavailable in this build. The ongoing notification shows connection and print state; separate completion alerts are still pending.", 13, MUTED, false);
         button(coming, "About & licenses", this::showLicenses);
         try { access.setText(credentials.load()); }
         catch (Exception error) { credentials.forget(); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); }
-        if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); }
+        if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); }
         bound = bindService(new Intent(this, PrinterService.class), binding, BIND_AUTO_CREATE);
         render();
     }
@@ -113,6 +117,8 @@ public final class MainActivity extends Activity {
         if (printer == null) return;
         if (printer.connecting()) { printer.disconnect(); return; }
         String address = host.getText().toString().trim(), code = access.getText().toString();
+        String serialNumber = serial.getText().toString().trim();
+        if (!serialNumber.isEmpty() && !Cc2Discovery.validSerial(serialNumber)) { message("Enter the exact printer serial, using letters, numbers, hyphens or underscores, without spaces."); return; }
         try { new PrinterHttp(address, code); }
         catch (Exception error) { message("Enter a valid private IPv4 address and LAN access code."); return; }
         try { credentials.save(address, code, remember.isChecked()); }
@@ -124,18 +130,20 @@ public final class MainActivity extends Activity {
         }
         try {
             startForegroundService(new Intent(this, PrinterService.class));
-            printer.connect(address, code); render();
+            printer.connect(address, code, serialNumber); render();
         } catch (Exception error) { printer.disconnect(); message("Android could not start printer monitoring. Keep the app open and check its permissions."); }
     }
     private void checkConnection() {
         if (checking) return;
         String address = host.getText().toString().trim(), code = access.getText().toString();
+        String serialNumber = serial.getText().toString().trim();
+        if (!serialNumber.isEmpty() && !Cc2Discovery.validSerial(serialNumber)) { diagnostics.setText("Enter a valid serial number or leave it blank for discovery."); return; }
         try { new PrinterHttp(address, code); } catch (Exception error) { diagnostics.setText("Enter a valid private IPv4 address before checking."); return; }
-        checking = true; diagnostics.setText("Checking Wi-Fi, HTTP port 80, MQTT port 1883, and printer identity…"); render();
+        checking = true; diagnostics.setText("Checking Wi-Fi, HTTP 80, MQTT 1883, and UDP discovery 52700…"); render();
         Context context = getApplicationContext();
         checks.execute(() -> {
             String report;
-            try { report = NetworkRoute.local(context).check(address, code); }
+            try { report = NetworkRoute.local(context).check(address, code, serialNumber); }
             catch (IOException error) { report = "No local Wi-Fi network is available. Connect the phone to the printer's Wi-Fi and check again."; }
             catch (Exception error) { report = "Connection check failed. Confirm the current printer IP and the phone's Wi-Fi."; }
             String result = report;
@@ -159,7 +167,7 @@ public final class MainActivity extends Activity {
         snapshot = printer == null ? new JSONObject() : printer.status;
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
         if (connecting && !printer.host().equals(host.getText().toString())) { host.setText(printer.host()); access.setText(""); }
-        host.setEnabled(!connecting); access.setEnabled(!connecting); remember.setEnabled(!connecting);
+        host.setEnabled(!connecting); access.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting);
         connect.setEnabled(printer != null); connect.setText(connecting ? "Disconnect" : "Connect"); check.setEnabled(!checking);
         refresh.setEnabled(ready); pause.setEnabled(fresh && Cc2Codec.canPause(snapshot)); stop.setEnabled(fresh && Cc2Codec.canStop(snapshot));
         refill.setEnabled(printer != null && printer.canvasFresh() && printer.canvas.has("auto_refill"));
@@ -201,7 +209,7 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() { super.onStart(); active = true; if (printer != null) printer.observe(this::render); main.post(clock); }
     @Override protected void onStop() { active = false; main.removeCallbacks(clock); if (printer != null) printer.observe(null); super.onStop(); }
     @Override protected void onDestroy() { if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
-    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("host", host.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); }
+    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); }
     private void showLicenses() {
         try {
             StringBuilder text = new StringBuilder("Link Workshop v0.2.0\nIndependent Android app derived from Elegoo Link.\n\n");

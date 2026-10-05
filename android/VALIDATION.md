@@ -1,3 +1,19 @@
+# v0.2.1 validation
+
+Validated on 2026-10-05. The user's v0.2.0 diagnostic confirms phone 192.168.1.69/24 can reach printer 192.168.1.84 on MQTT 1883 while HTTP 80 is refused/unreachable. Physical connection on v0.2.1 still requires verification.
+
+- Clean Gradle build with build cache disabled: testDebugUnitTest, lintDebug, assembleDebug passed. JDK 17, Gradle 8.13, AGP 8.11.1, SDK platform 36/build tools 35.0.0.
+- 35 JVM tests passed, zero failures/errors. Ten added tests cover upstream UDP identity formats, echoed/malformed/wrong-method/unsafe replies, actual loopback UDP request/reply, rejection of a different source IP, socket cancellation, manual identity without either transport, actionable missing identity, MQTT registration/status/control with HTTP unopened, retained MQTT credential rejection, and invalid identity blocking MQTT.
+- Existing tests continue to cover HTTP upload chunks/checksum, delta merging, request correlation, CANVAS freshness, errors and reconnect/no-replay policy.
+- Lint: 0 errors, 13 warnings (English text construction and test-only JSON dependency update).
+- Final APK manifest and DEX inspected: version name 0.2.1, code 3, min SDK 26, target/compile 36; Cc2Discovery, PrinterIdentity and optional serial UI present.
+- APK Signature Scheme v2 verified. Signing certificate SHA-256: 9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3, the same certificate as v0.2.0. Normal update installation is supported.
+- APK SHA-256: c3f12883eeef05d6c2fc8fbe322f2654da215206ba611c12a4754021bc661656.
+
+No emulator, physical Galaxy S24+ or physical CC2 is attached. Loopback UDP and fake MQTT transports verify the implementation but do not establish firmware compatibility. On-device next check: connect with blank serial; if UDP identity fails, enter the exact printer Settings → Device Serial Number; verify MQTT authentication, registration and live status. HTTP remains required by the upload implementation, and is unavailable on the observed IP at test time. No cloud protocol, new printer-changing command, automatic upload replay or signing-key rotation is introduced.
+
+Previous release validation follows.
+
 # v0.2.0 validation
 
 Validated on 2026-10-05. APK behavior on a physical printer/phone remains unverified.

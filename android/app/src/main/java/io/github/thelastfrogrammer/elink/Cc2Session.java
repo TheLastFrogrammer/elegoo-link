@@ -23,6 +23,10 @@ public final class Cc2Session implements AutoCloseable {
         default void failure(String message, boolean retryable) { }
     }
     interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
+    public interface IdentityResolver extends AutoCloseable {
+        String resolve(PrinterHttp http) throws Exception;
+        default void close() { }
+    }
     private volatile Listener listener;
     private final ScheduledExecutorService worker = Executors.newSingleThreadScheduledExecutor();
     private final ExecutorService transfer = Executors.newSingleThreadExecutor();
@@ -32,6 +36,7 @@ public final class Cc2Session implements AutoCloseable {
     private final PrinterHttp.ConnectionFactory connections;
     private final javax.net.SocketFactory sockets;
     private final MqttFactory clients;
+    private final IdentityResolver identity;
     private final Cc2Codec codec = new Cc2Codec();
     private final AtomicInteger ids = new AtomicInteger(1);
     private final Map<Integer, Pending> pending = new HashMap<>(); // worker thread only
@@ -50,23 +55,30 @@ public final class Cc2Session implements AutoCloseable {
         this(host, accessCode, listener, url -> (java.net.HttpURLConnection) url.openConnection(), null);
     }
     public Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets) {
-        this(host, accessCode, listener, connections, sockets, (uri, id) -> new MqttClient(uri, id, new MemoryPersistence()));
+        this(host, accessCode, listener, connections, sockets, new PrinterIdentity("", new Cc2Discovery()));
+    }
+    public Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets, IdentityResolver identity) {
+        this(host, accessCode, listener, connections, sockets, (uri, id) -> new MqttClient(uri, id, new MemoryPersistence()), identity);
     }
     Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets, MqttFactory clients) {
+        this(host, accessCode, listener, connections, sockets, clients, http -> http.systemInfo().getString("sn"));
+    }
+    Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets, MqttFactory clients, IdentityResolver identity) {
         http = new PrinterHttp(host, accessCode, connections); this.connections = connections; this.sockets = sockets;
-        this.clients = clients; this.listener = listener;
+        this.clients = clients; this.listener = listener; this.identity = identity;
     }
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
     public void connect() { execute(this::connectOnWorker); }
     private void connectOnWorker() {
-        String stage = "HTTP (port 80)";
+        String stage = "Printer identity";
         try {
-            emitConnection("Reading printer information…", false);
-            JSONObject info = http.systemInfo();
+            emitConnection("Identifying printer for MQTT…", false);
+            String serial = identity.resolve(http);
+            if (!Cc2Discovery.validSerial(serial)) throw new PrinterErrors.IdentityUnavailable();
             if (closed) return;
-            base = "elegoo/" + info.getString("sn") + "/";
+            base = "elegoo/" + serial + "/";
             stage = "MQTT (port 1883)";
             MqttClient client = clients.create("tcp://" + http.host() + ":1883", clientId);
             mqtt = client;
@@ -248,6 +260,7 @@ public final class Cc2Session implements AutoCloseable {
         if (closed) return;
         closed = true; ready = false; listener = null;
         registration.completeExceptionally(new IllegalStateException("Session closed"));
+        try { identity.close(); } catch (Exception ignored) { }
         http.cancel(); PrinterHttp uploader = uploadHttp; if (uploader != null) uploader.cancel();
         worker.shutdownNow(); transfer.shutdownNow();
         Thread cleanup = new Thread(this::disposeMqtt, "mqtt-cleanup"); cleanup.setDaemon(true); cleanup.start();

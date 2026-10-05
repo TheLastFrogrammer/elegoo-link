@@ -21,7 +21,7 @@ The CC2 command mapping table comments out resume (1023), homing (1026), movemen
 
 Start-print (1020), CANVAS status (2005), auto refill (2004) and printer downloads (1057/1058) are active upstream. Start-print includes bed checks, plate type, timelapse configuration and tray mappings; the first app deliberately leaves starting a job to the printer screen until these options can be represented and tested properly.
 
-Discovery is also implemented upstream: CC2 UDP port 52700 and method 7000, with LAN/cloud and token-status fields. It is the next LAN extension, and will need Android Wi-Fi/broadcast handling and device testing.
+Discovery is also implemented upstream: CC2 UDP port 52700 and method 7000, with LAN/cloud and token-status fields. v0.2.1 implements identity lookup for the manually selected IP, with Android-bound UDP unicast and subnet broadcast. A full discovery picker remains pending.
 
 Cloud code uses HTTP/MQTT plus Agora RTM and a generated private config. `thirdparty/agora/` contains desktop platform dependencies; the repository has no Android cloud build or APK app. Camera capability flags alone do not specify a working stream URL or playback format. The CC2 discovery source explicitly says it has no specific built-in web interface, so a WebView shortcut cannot be assumed to replace this app.
 
@@ -32,3 +32,11 @@ The baseline command mapping remains the same. This release additionally impleme
 MQTT registration timeout is now 8 seconds. An Android connectedDevice foreground service owns each session independently of Activity lifetime. Local HTTP and MQTT socket factories use a Wi-Fi/Ethernet Network instead of relying on the default cellular route. A new session and fresh full status are required after each reconnect; no printer-changing commands or uploads are automatically replayed. Retry policy: five delays 1/2/4/8/16 seconds, reset on registration success, stop on known authentication/rejected-registration errors.
 
 Connection diagnosis performs TCP-only probes on 80/1883 and an authenticated `/system/info` read. A reachable TCP broker does not establish MQTT credentials or registration. Raw exception URLs and access-code-bearing payloads are not displayed. Credential storage is optional Android Keystore AES-GCM with IP-bound AAD; backups exclude preferences. The local code does not require an official cloud account.
+
+## v0.2.1 identity correction
+
+The v0.2.0 phone diagnostic shows 192.168.1.69/24 reaching printer 192.168.1.84 on MQTT 1883 while HTTP 80 is refused/unreachable. The old app always read `/system/info` before opening MQTT; the upstream adapter requires that HTTP read only when a serial was not already supplied.
+
+Identity resolution now uses the optional exact manual serial first, otherwise read-only UDP method 7000 on port 52700. UDP goes to the selected IP and the local IPv4 subnet broadcast, retransmits once per second, and times out after four seconds. Only replies from the selected IP with id 0, a result object and a bounded topic-safe serial are accepted; echoed requests, malformed data and replies from other IPs are ignored. Disconnect closes the discovery socket. Discovery does not transmit the access code.
+
+If UDP fails, authenticated HTTP identity remains a compatibility fallback. If both identity paths fail, the app requests a manual serial and stops retries. The serial is never guessed from an account ID or hardcoded from a screenshot. MQTT still authenticates and registers normally before status or controls become ready. File uploads retain their existing HTTP dependency and are never automatically replayed. No cloud authentication or broader control methods are added.
