@@ -27,6 +27,13 @@ public class ConnectionPolicyTest {
         text = PrinterErrors.describe(new RuntimeException("X-Token=" + secret), "HTTP");
         assertFalse(text.contains(secret)); assertTrue(text.contains("Check connection"));
     }
+    @Test public void mqttNotAuthorizedDoesNotClaimPasswordWasNecessarilyWrong() {
+        org.eclipse.paho.client.mqttv3.MqttException error = new org.eclipse.paho.client.mqttv3.MqttSecurityException(5);
+        String message = PrinterErrors.describe(error, "MQTT (port 1883)");
+        assertTrue(message.contains("not authorized")); assertTrue(message.contains("does not specify"));
+        assertFalse(message.contains("access code rejected")); assertFalse(PrinterErrors.retryable(error));
+        assertFalse(PrinterErrors.retryable(new PrinterErrors.CloudMode()));
+    }
     @Test public void refillRequiresAnExplicitBooleanPayloadAndResumeRemainsBlocked() throws Exception {
         assertTrue(Cc2Codec.autoRefillRequest(8, true).getJSONObject("params").getBoolean("auto_refill"));
         assertEquals(2004, Cc2Codec.autoRefillRequest(9, false).getInt("method"));

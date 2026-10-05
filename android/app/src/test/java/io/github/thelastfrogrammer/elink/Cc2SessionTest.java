@@ -46,6 +46,7 @@ public class Cc2SessionTest {
         @Override public void setCallback(MqttCallback callback) { this.callback = callback; }
         @Override public void connect(MqttConnectOptions options) throws MqttException {
             assertEquals("elegoo", options.getUserName()); assertFalse(options.isAutomaticReconnect()); password = new String(options.getPassword()); connected = true;
+            assertEquals(MqttConnectOptions.MQTT_VERSION_3_1_1, options.getMqttVersion());
         }
         @Override public void subscribe(String[] topics, int[] qos) { subscriptions.addAll(Arrays.asList(topics)); responseTopic = topics[0]; }
         @Override public boolean isConnected() { return connected; }
@@ -145,8 +146,8 @@ public class Cc2SessionTest {
             url -> { fail("HTTP must not open"); return null; }, null,
             (uri, id) -> new FakeMqtt(uri, id) {
                 @Override public void connect(MqttConnectOptions options) throws MqttSecurityException { throw new MqttSecurityException(5); }
-            }, new PrinterIdentity("MANUAL-CC2", new Cc2Discovery()));
-        try { session.connect(); assertTrue(take(listener.failures).contains("MQTT access code rejected")); assertFalse(listener.retryable); assertFalse(session.ready()); }
+            }, new PrinterIdentity("MANUAL-CC2", new Cc2Discovery(() -> { throw new IOException("UDP blocked"); }, Collections.emptyList())));
+        try { session.connect(); assertTrue(take(listener.failures).contains("not authorized")); assertFalse(listener.retryable); assertFalse(session.ready()); }
         finally { session.close(); }
     }
     @Test public void invalidIdentityCannotBecomeAMqttTopic() throws Exception {
@@ -155,6 +156,28 @@ public class Cc2SessionTest {
             url -> { fail("HTTP must not open"); return null; }, null,
             (uri, id) -> { fail("Invalid identity must not open MQTT"); return null; }, http -> "#/wrong");
         try { session.connect(); assertTrue(take(listener.failures).contains("Serial Number")); assertFalse(listener.retryable); }
+        finally { session.close(); }
+    }
+    @Test public void disabledCodeProtectionUsesDefaultForMqttDespiteEnteredCode() throws Exception {
+        Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
+        Cc2Session session = new Cc2Session("192.168.1.84", "stale-code", listener,
+            url -> { fail("HTTP must not open"); return null; }, null,
+            (uri, id) -> { FakeMqtt fake = new FakeMqtt(uri, id); clients.add(fake); return fake; },
+            new PrinterIdentity("MANUAL", PrinterIdentityTest.reply(true, false)));
+        try {
+            session.connect(); take(listener.statuses); assertTrue(session.ready());
+            assertEquals("123456", clients.get(0).password);
+            assertTrue(clients.get(0).subscriptions.get(0).startsWith("elegoo/DISCOVERED/"));
+            assertTrue(take(listener.results).contains("disabled"));
+        } finally { session.close(); }
+    }
+    @Test public void reportedCloudModeDoesNotSendLanCredentialsToMqtt() throws Exception {
+        Listener listener = new Listener();
+        Cc2Session session = new Cc2Session("192.168.1.84", "code", listener,
+            url -> { fail("HTTP must not open"); return null; }, null,
+            (uri, id) -> { fail("Cloud mode must stop before MQTT LAN authentication"); return null; },
+            new PrinterIdentity("", PrinterIdentityTest.reply(false, true)));
+        try { session.connect(); assertTrue(take(listener.failures).contains("cloud / WAN mode")); assertFalse(listener.retryable); assertFalse(session.ready()); }
         finally { session.close(); }
     }
 }

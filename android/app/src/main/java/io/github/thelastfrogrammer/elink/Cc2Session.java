@@ -25,6 +25,8 @@ public final class Cc2Session implements AutoCloseable {
     interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
     public interface IdentityResolver extends AutoCloseable {
         String resolve(PrinterHttp http) throws Exception;
+        default String password(PrinterHttp http) throws Exception { return http.token(); }
+        default String summary() { return ""; }
         default void close() { }
     }
     private volatile Listener listener;
@@ -44,6 +46,7 @@ public final class Cc2Session implements AutoCloseable {
     private volatile MqttClient mqtt;
     private volatile PrinterHttp uploadHttp;
     private volatile boolean closed, ready, uploading;
+    private volatile String sessionToken;
     private boolean canvasSupported = true;
     private volatile long statusAt;
     private String base;
@@ -65,7 +68,7 @@ public final class Cc2Session implements AutoCloseable {
     }
     Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets, MqttFactory clients, IdentityResolver identity) {
         http = new PrinterHttp(host, accessCode, connections); this.connections = connections; this.sockets = sockets;
-        this.clients = clients; this.listener = listener; this.identity = identity;
+        this.clients = clients; this.listener = listener; this.identity = identity; sessionToken = http.token();
     }
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
@@ -78,6 +81,8 @@ public final class Cc2Session implements AutoCloseable {
             String serial = identity.resolve(http);
             if (!Cc2Discovery.validSerial(serial)) throw new PrinterErrors.IdentityUnavailable();
             if (closed) return;
+            if (!identity.summary().isEmpty()) emitResult(identity.summary());
+            sessionToken = identity.password(http);
             base = "elegoo/" + serial + "/";
             stage = "MQTT (port 1883)";
             MqttClient client = clients.create("tcp://" + http.host() + ":1883", clientId);
@@ -100,7 +105,8 @@ public final class Cc2Session implements AutoCloseable {
                 }
             });
             MqttConnectOptions options = new MqttConnectOptions();
-            options.setUserName("elegoo"); options.setPassword(http.token().toCharArray());
+            options.setUserName("elegoo"); options.setPassword(sessionToken.toCharArray());
+            options.setMqttVersion(MqttConnectOptions.MQTT_VERSION_3_1_1);
             options.setCleanSession(true); options.setAutomaticReconnect(false);
             options.setConnectionTimeout(5); options.setKeepAliveInterval(20);
             if (sockets != null) options.setSocketFactory(sockets);
@@ -129,7 +135,7 @@ public final class Cc2Session implements AutoCloseable {
             worker.scheduleWithFixedDelay(() -> { if (ready() && canvasSupported && pending.values().stream().noneMatch(p -> p.method == Cc2Codec.CANVAS)) send(Cc2Codec.CANVAS); }, 30, 30, TimeUnit.SECONDS);
             worker.scheduleWithFixedDelay(this::expireRequests, 1, 1, TimeUnit.SECONDS);
         } catch (Exception exception) {
-            if (!closed) fail(PrinterErrors.describe(exception, stage), PrinterErrors.retryable(exception));
+            if (!closed) fail(PrinterErrors.describe(exception, stage) + (exception instanceof MqttException && !identity.summary().isEmpty() ? "\n" + identity.summary() : ""), PrinterErrors.retryable(exception));
         } finally { if (closed) disposeMqtt(); }
     }
     public void refresh() { execute(() -> { if (ready()) { send(Cc2Codec.STATUS); if (canvasSupported) send(Cc2Codec.CANVAS); } }); }
@@ -228,7 +234,7 @@ public final class Cc2Session implements AutoCloseable {
     public synchronized void upload(File file, String name) {
         if (!ready() || uploading) return;
         uploading = true;
-        PrinterHttp uploader = new PrinterHttp(http.host(), http.token(), connections); uploadHttp = uploader;
+        PrinterHttp uploader = new PrinterHttp(http.host(), sessionToken, connections); uploadHttp = uploader;
         transfer.execute(() -> {
             try {
                 uploader.upload(file, name, percent -> { Listener current = listener; if (current != null && !closed) current.uploadProgress(percent); });

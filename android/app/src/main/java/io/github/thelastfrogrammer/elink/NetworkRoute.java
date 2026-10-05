@@ -57,15 +57,25 @@ public final class NetworkRoute {
         StringBuilder text = new StringBuilder(details()).append("Printer IP: ").append(host).append("\n\n");
         boolean web = probe(host, 80, text), mqtt = probe(host, 1883, text);
         boolean identity = !manualSerial.isEmpty();
-        if (identity) text.append("MQTT identity: manual serial supplied; Connect verifies registration.\n");
-        else try (Cc2Discovery discovery = discovery()) {
-            discovery.discover(host); identity = true; text.append("UDP 52700 discovery: printer identity received.\n");
-        } catch (IOException error) { text.append("UDP 52700 discovery: no printer identity received.\n"); }
+        Cc2Discovery.Info info = null;
+        try (Cc2Discovery discovery = discovery()) {
+            info = discovery.discoverInfo(host); identity = true;
+            text.append("UDP 52700 discovery: printer identity received.\n").append(info.summary()).append('\n');
+            if (!manualSerial.isEmpty() && !manualSerial.equals(info.serial)) text.append("Manual serial differs from discovery. Connect will use the discovered serial.\n");
+        } catch (IOException error) {
+            text.append("UDP 52700 discovery: no printer identity received; LAN mode and code protection unknown.\n");
+            if (identity) text.append("MQTT identity: manual serial supplied; Connect verifies registration.\n");
+        }
         if (web) {
-            try { http.systemInfo(); identity = true; text.append("HTTP system info: accepted; printer identity returned.\n"); }
+            try {
+                PrinterHttp effective = info != null && Boolean.FALSE.equals(info.codeProtected) ? new PrinterHttp(host, "", http()) : http;
+                try { effective.systemInfo(); } finally { effective.cancel(); }
+                identity = true; text.append("HTTP system info: accepted; printer identity returned.\n");
+            }
             catch (Exception error) { text.append("HTTP system info: ").append(PrinterErrors.describe(error, "HTTP authentication")).append('\n'); }
         }
-        if (!web && !mqtt) text.append("\nNeither TCP port is reachable. Confirm the current printer IP, LAN Only, same Wi-Fi, and that the router does not isolate guest devices.");
+        if (info != null && Boolean.FALSE.equals(info.lanOnly)) text.append("\nThe printer reports cloud / WAN mode. Enable LAN Only for this app's supported authentication path. Cloud pairing uses a different credential path.");
+        else if (!web && !mqtt) text.append("\nNeither TCP port is reachable. Confirm the current printer IP, LAN Only, same Wi-Fi, and that the router does not isolate guest devices.");
         else if (!mqtt) text.append("\nHTTP is reachable but MQTT is not. Confirm LAN Only is enabled and local port 1883 is not blocked.");
         else if (!web) text.append(identity ? "\nMQTT is reachable and identity is available. Connect can use MQTT without HTTP. HTTP file uploads remain unavailable." : "\nMQTT is reachable. Enter the exact Serial Number from Settings → Device in the optional serial field to connect without HTTP or UDP discovery. HTTP file uploads remain unavailable.");
         else text.append("\nBoth ports are reachable. TCP checks alone do not prove MQTT authentication or client registration; Connect tests those next.");

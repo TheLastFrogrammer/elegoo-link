@@ -1,3 +1,19 @@
+# v0.2.2 validation
+
+Validated on 2026-10-05. The user's v0.2.1 screenshot establishes that the HTTP prerequisite is bypassed and the MQTT broker responds with authorization refusal code 5. It does not establish that the access code itself is incorrect. Authentication/registration after this update remains physically unverified.
+
+- Clean Gradle build with build cache disabled: testDebugUnitTest, lintDebug, assembleDebug passed. JDK 17, Gradle 8.13, AGP 8.11.1, SDK 36/build tools 35.0.0.
+- 43 JVM tests passed with zero failures/errors. Eight added checks cover boolean/numeric authentication flags and invalid/absent unknown values; disabled protection selecting default credentials; enabled/unknown protection preserving the entered credential; authoritative selected-IP serial mismatch handling; production-session MQTT default credential selection; cloud mode stopping before MQTT; and code 5 described without claiming a wrong password. Existing tests cover discovery cancellation/other-IP rejection, registration/status/command correlation, HTTP upload and no command replay.
+- MQTT session tests require explicit version 3.1.1. Manual-serial fallback still avoids HTTP when UDP is unavailable.
+- Lint: 0 errors, 12 warnings (English string construction and newer test-only JSON dependency).
+- Final APK manifest/DEX verified: v0.2.2/code 4, min SDK 26, target/compile 36; updated discovery authentication summary and UI present.
+- APK signature verified; certificate SHA-256 unchanged: 9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3. Normal update over v0.2.0/v0.2.1 is supported.
+- APK SHA-256: b4d72e52bcab6802cddf3e5ac2a27b0dd6a265cc8a6a8e6d29bc9a95c087a3fa.
+
+No physical CC2/S24+ or emulator is attached. Next device check: install update, run Check connection, observe advertised mode/protection flags, then connect. Reported cloud/WAN mode requests LAN Only for the current supported path; protection off selects the upstream default; protection on/unknown retains the user's entered code. No password/client-format guessing or auth bypass is attempted. HTTP uploads remain unavailable when port 80 is unreachable. Android lifecycle/routing/Keystore behavior still needs device testing as described below.
+
+Previous release validation follows.
+
 # v0.2.1 validation
 
 Validated on 2026-10-05. The user's v0.2.0 diagnostic confirms phone 192.168.1.69/24 can reach printer 192.168.1.84 on MQTT 1883 while HTTP 80 is refused/unreachable. Physical connection on v0.2.1 still requires verification.

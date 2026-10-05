@@ -15,12 +15,24 @@ public final class Cc2Discovery implements AutoCloseable {
     private final int port, timeoutMillis;
     private volatile DatagramSocket current;
     private volatile boolean closed;
+    public static final class Info {
+        public final String serial;
+        public final Boolean lanOnly, codeProtected;
+        Info(String serial, Boolean lanOnly, Boolean codeProtected) { this.serial = serial; this.lanOnly = lanOnly; this.codeProtected = codeProtected; }
+        public String summary() {
+            return "Printer mode: " + (lanOnly == null ? "not reported" : lanOnly ? "LAN Only" : "cloud / WAN")
+                + "; access-code protection: " + (codeProtected == null ? "not reported" : codeProtected ? "enabled" : "disabled") + ".";
+        }
+    }
     public Cc2Discovery() { this(DatagramSocket::new, Collections.emptyList()); }
     Cc2Discovery(SocketFactory factory, List<InetAddress> broadcasts) { this(factory, broadcasts, 52700, 4000); }
     Cc2Discovery(SocketFactory factory, List<InetAddress> broadcasts, int port, int timeoutMillis) {
         this.factory = factory; this.broadcasts = new ArrayList<>(broadcasts); this.port = port; this.timeoutMillis = timeoutMillis;
     }
     public String discover(String host) throws IOException {
+        return discoverInfo(host).serial;
+    }
+    public Info discoverInfo(String host) throws IOException {
         if (closed) throw new IOException("Discovery cancelled");
         InetAddress target = InetAddress.getByName(host);
         byte[] request = "{\"id\":0,\"method\":7000}".getBytes(StandardCharsets.UTF_8);
@@ -45,13 +57,16 @@ public final class Cc2Discovery implements AutoCloseable {
                 try { socket.receive(packet); }
                 catch (SocketTimeoutException ignored) { continue; }
                 if (!packet.getAddress().equals(target) || packet.getLength() == buffer.length) continue;
-                String serial = serial(new String(packet.getData(), packet.getOffset(), packet.getLength(), StandardCharsets.UTF_8));
-                if (serial != null) return serial;
+                Info info = parse(new String(packet.getData(), packet.getOffset(), packet.getLength(), StandardCharsets.UTF_8));
+                if (info != null) return info;
             }
             throw new SocketTimeoutException("No CC2 discovery identity received");
         } finally { current = null; }
     }
     static String serial(String payload) {
+        Info info = parse(payload); return info == null ? null : info.serial;
+    }
+    static Info parse(String payload) {
         try {
             JSONObject message = new JSONObject(payload);
             if (!(message.opt("id") instanceof Number) || message.getInt("id") != 0
@@ -59,8 +74,16 @@ public final class Cc2Discovery implements AutoCloseable {
             JSONObject result = message.optJSONObject("result");
             if (result == null || (result.has("error_code") && result.optInt("error_code", -1) != 0) || !(result.opt("sn") instanceof String)) return null;
             String serial = result.getString("sn");
-            return validSerial(serial) ? serial : null;
+            return validSerial(serial) ? new Info(serial, flag(result.opt("lan_status")), flag(result.opt("token_status"))) : null;
         } catch (Exception ignored) { return null; }
+    }
+    private static Boolean flag(Object value) {
+        if (value instanceof Boolean) return (Boolean) value;
+        if (value instanceof Number) {
+            double number = ((Number) value).doubleValue();
+            if (number == 0) return false; if (number == 1) return true;
+        }
+        return null;
     }
     public static boolean validSerial(String serial) { return serial != null && serial.matches("[A-Za-z0-9_-]{1,64}"); }
     @Override public void close() { closed = true; DatagramSocket socket = current; if (socket != null) socket.close(); }

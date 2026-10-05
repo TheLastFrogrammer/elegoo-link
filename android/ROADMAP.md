@@ -25,3 +25,7 @@ Stage 2 now includes foreground service ownership, retained session across Activ
 ## v0.2.1 delivered
 
 Selected-IP UDP identity discovery and optional manual serial remove the HTTP prerequisite for MQTT monitoring. A full discovery picker and an alternative upload transport remain pending. Verify on the CC2 V02.01.00.00 that refused HTTP does not block MQTT registration/status.
+
+## v0.2.2 delivered
+
+Discovery authentication flags now select the default credential when protection is off and identify unsupported cloud-mode pairing. MQTT code 5 is reported accurately as not authorized. On-device next gate: obtain the reported mode/protection flags, then verify authentication and registration on V02.01.00.00.

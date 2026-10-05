@@ -12,6 +12,12 @@ public class Cc2DiscoveryTest {
         assertEquals("F014J0D52ELR818", Cc2Discovery.serial("{\"id\":0,\"result\":{\"sn\":\"F014J0D52ELR818\",\"lan_status\":true}}"));
         assertEquals("TEST-CC2", Cc2Discovery.serial("{\"id\":0,\"method\":7000,\"result\":{\"sn\":\"TEST-CC2\"}}"));
     }
+    @Test public void flagsAcceptOnlyBooleansOrNumericZeroAndOne() {
+        Cc2Discovery.Info info = Cc2Discovery.parse("{\"id\":0,\"result\":{\"sn\":\"TEST\",\"lan_status\":1,\"token_status\":false}}");
+        assertEquals(Boolean.TRUE, info.lanOnly); assertEquals(Boolean.FALSE, info.codeProtected);
+        info = Cc2Discovery.parse("{\"id\":0,\"result\":{\"sn\":\"TEST\",\"lan_status\":\"0\",\"token_status\":2}}");
+        assertNull(info.lanOnly); assertNull(info.codeProtected); assertTrue(info.summary().contains("not reported"));
+    }
     @Test public void rejectsEchoWrongMethodMissingOrUnsafeIdentity() {
         for (String payload : Arrays.asList("{}", "{\"id\":0,\"method\":7000}", "{\"id\":1,\"result\":{\"sn\":\"TEST\"}}",
             "{\"id\":0,\"method\":1002,\"result\":{\"sn\":\"TEST\"}}", "{\"id\":0,\"result\":{\"sn\":123}}",

@@ -20,6 +20,7 @@ public final class PrinterErrors {
     }
     public static final class MissingIdentity extends IOException { }
     public static final class IdentityUnavailable extends IOException { }
+    public static final class CloudMode extends IOException { }
     public static String code(int code) {
         String reason;
         switch (code) {
@@ -39,6 +40,7 @@ public final class PrinterErrors {
         return reason + " (code " + code + ").";
     }
     public static String describe(Throwable error, String stage) {
+        if (error instanceof CloudMode) return "The printer reports cloud / WAN mode. This build supports LAN authentication. Enable LAN Only in printer Settings, then use its LAN access code. The Account pairing PIN belongs to the separate cloud path.";
         if (error instanceof IdentityUnavailable) return "Could not obtain the printer serial through UDP discovery or HTTP. Enter the exact Serial Number from Settings → Device in the optional serial field, then connect over MQTT.";
         if (error instanceof Rejected) return error.getMessage();
         if (error instanceof HttpStatus) return stage + " replied with HTTP " + ((HttpStatus) error).status + ". Verify that this IP belongs to the CC2 and that its firmware exposes /system/info.";
@@ -46,7 +48,8 @@ public final class PrinterErrors {
         if (error instanceof org.json.JSONException) return stage + " returned unexpected data. Verify that the IP belongs to the CC2, rather than another local device.";
         if (error instanceof MqttException) {
             int code = ((MqttException) error).getReasonCode();
-            if (code == 4 || code == 5) return "MQTT access code rejected (code " + code + "). Check Settings → LAN Only → Access Code.";
+            if (code == 4) return "MQTT username or password was not accepted (code 4). Check the current LAN access code and code-protection setting.";
+            if (code == 5) return stage + " was not authorized (MQTT code 5). The printer does not specify which authorization rule failed. Verify LAN Only and its current access code; code protection off uses the default credential.";
             return "MQTT connection failed (code " + code + "). Run Check connection; verify LAN Only and MQTT port 1883.";
         }
         Throwable cause = error;
@@ -61,7 +64,7 @@ public final class PrinterErrors {
     }
     public static boolean retryable(Throwable error) {
         if (error instanceof Rejected || error instanceof IllegalArgumentException || error instanceof IllegalStateException) return false;
-        if (error instanceof MissingIdentity || error instanceof IdentityUnavailable || error instanceof org.json.JSONException) return false;
+        if (error instanceof MissingIdentity || error instanceof IdentityUnavailable || error instanceof CloudMode || error instanceof org.json.JSONException) return false;
         if (error instanceof HttpStatus) return ((HttpStatus) error).status >= 500;
         if (error instanceof MqttException) {
             int code = ((MqttException) error).getReasonCode();
