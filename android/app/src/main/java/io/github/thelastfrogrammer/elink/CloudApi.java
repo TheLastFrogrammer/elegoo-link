@@ -41,11 +41,19 @@ public final class CloudApi {
     private final String base, userAgent;
     private final Transport transport;
     private CloudLogin.Account account;
+    private final List<String> trace = new ArrayList<>();
 
     public CloudApi(boolean china, CloudLogin.Account account, String userAgent, Transport transport) {
         this.base = china ? CHINA : GLOBAL; this.account = account; this.userAgent = userAgent; this.transport = transport;
     }
     public CloudLogin.Account account() { return account; }
+    /** Secret-free record of requests since the last call: paths, HTTP status, server code and message, refresh reasons. */
+    public synchronized List<String> takeTrace() { List<String> copy = new ArrayList<>(trace); trace.clear(); return copy; }
+    private synchronized void note(String line) { if (trace.size() < 40) trace.add(line); }
+    static String when(long time) {
+        if (time <= 0) return "not reported";
+        return new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()).format(new Date(seconds(time) * 1000));
+    }
 
     static long seconds(long time) { return time > 100_000_000_000L ? time / 1000 : time; }
     boolean needsRefresh(long nowSeconds) { return account.accessExpires > 0 && seconds(account.accessExpires) - nowSeconds < REFRESH_MARGIN_SECONDS; }
@@ -58,7 +66,8 @@ public final class CloudApi {
             data = call("POST", "/api/v1/account-center-server/account-auth/token/refresh",
                 new JSONObject().put("refreshToken", account.refreshToken).put("clientId", "Slicer").toString()).optJSONObject("data");
         } catch (CloudException error) {
-            throw error.unauthorized ? new CloudException("Elegoo sign-in has expired. Sign in again.", true) : error;
+            // Any refusal here means the saved sign-in cannot be renewed; only a new sign-in helps.
+            throw new CloudException("Renewing the Elegoo sign-in failed (" + error.getMessage() + "). Sign out and sign in again in Settings.", true);
         } catch (org.json.JSONException impossible) { throw new IOException(impossible); }
         if (data == null || data.optString("accessToken", "").isEmpty()) throw new CloudException("Elegoo returned no new sign-in token. Sign in again.", true);
         String userId = data.optString("accountId", "");
@@ -93,10 +102,14 @@ public final class CloudApi {
     }
 
     private JSONObject authorized(String method, String path, String body) throws IOException {
-        if (needsRefresh(System.currentTimeMillis() / 1000)) refresh();
+        if (needsRefresh(System.currentTimeMillis() / 1000)) {
+            note("Access token expires " + when(account.accessExpires) + "; renewing before the request");
+            refresh();
+        }
         try { return call(method, path, body); }
         catch (CloudException error) {
             if (!error.unauthorized) throw error;
+            note("Request refused; renewing the sign-in once and retrying");
             refresh(); return call(method, path, body);
         }
     }
@@ -108,6 +121,11 @@ public final class CloudApi {
         headers.put("Accept", "application/json");
         if (body != null) headers.put("Content-Type", "application/json");
         Response response = transport.send(method, base + path, headers, body);
+        String endpoint = method + " " + (path.contains("?") ? path.substring(0, path.indexOf('?')) : path).replaceFirst("^/api/v1/[^/]+/", "");
+        String result = endpoint + " → HTTP " + response.status;
+        try { JSONObject json = new JSONObject(response.body); result += ", code " + json.opt("code") + " " + StatusPresentation.clean(json.optString("message", json.optString("msg", ""))); }
+        catch (Exception ignored) { }
+        note(result.trim());
         if (response.status == 401 || response.status == 403) throw new CloudException("Elegoo refused the sign-in (HTTP " + response.status + ").", true);
         if (response.status < 200 || response.status >= 300) throw new CloudException("Elegoo cloud returned HTTP " + response.status + ".", false);
         JSONObject json;

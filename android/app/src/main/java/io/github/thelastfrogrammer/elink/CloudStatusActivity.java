@@ -69,7 +69,11 @@ public final class CloudStatusActivity extends Activity {
             } catch (Exception error) { text = "Could not reach the Elegoo cloud. Check the phone's internet connection."; }
             // Keep tokens the server rotated, unless the user signed out meanwhile.
             if (api.account() != before) try { if (store.load() != null) store.save(api.account()); } catch (Exception ignored) { }
-            String result = text;
+            CloudLogin.Account now = api.account();
+            StringBuilder details = new StringBuilder("\n\nDetails (no secrets)\nAccess token valid until ").append(CloudApi.when(now.accessExpires))
+                .append("\nRefresh token valid until ").append(CloudApi.when(now.refreshExpires)).append(now.refreshToken.isEmpty() ? " (none received)" : "");
+            for (String line : api.takeTrace()) details.append("\n• ").append(line);
+            String result = text + details;
             main.post(() -> { busy = false; if (!isDestroyed()) body.setText(result); });
         });
     }

@@ -107,9 +107,36 @@ public class CloudApiTest {
         FakeCloud cloud = new FakeCloud().reply(401, "").reply(401, "");
         try { new CloudApi(false, account(inAnHour()), "a", cloud).devices(); fail(); }
         catch (CloudApi.CloudException error) {
-            assertTrue(error.unauthorized); assertTrue(error.getMessage().contains("Sign in again"));
+            assertTrue(error.unauthorized); assertTrue(error.getMessage().contains("sign in again"));
             assertFalse(error.getMessage().contains("old-")); assertEquals(2, cloud.calls.size());
         }
+    }
+
+    @Test public void rejectedRefreshTokenExplainsAndTraceShowsEachStepWithoutSecrets() throws Exception {
+        // The failure seen on the phone: the request was refused, then the refresh answered code 400 "invalid refresh token".
+        FakeCloud cloud = new FakeCloud().reply(200, "{\"code\":401,\"msg\":\"not logged in\"}")
+            .reply(200, "{\"code\":400,\"msg\":\"\u65e0\u6548\u7684\u5237\u65b0\u4ee4\u724c\"}");
+        CloudApi api = new CloudApi(false, account(inAnHour()), "a", cloud);
+        try { api.devices(); fail(); }
+        catch (CloudApi.CloudException error) {
+            assertTrue(error.unauthorized);
+            assertTrue(error.getMessage(), error.getMessage().startsWith("Renewing the Elegoo sign-in failed (Elegoo cloud error 400"));
+        }
+        List<String> trace = api.takeTrace();
+        assertEquals(3, trace.size());
+        assertEquals("GET device/list → HTTP 200, code 401 not logged in", trace.get(0));
+        assertEquals("Request refused; renewing the sign-in once and retrying", trace.get(1));
+        assertTrue(trace.get(2), trace.get(2).startsWith("POST account-auth/token/refresh → HTTP 200, code 400"));
+        for (String line : trace) assertFalse(line, line.contains("old-access") || line.contains("old-refresh"));
+        assertTrue(api.takeTrace().isEmpty());
+    }
+
+    @Test public void expiryRefreshReasonIsTraced() throws Exception {
+        FakeCloud cloud = new FakeCloud().ok(new JSONObject().put("accessToken", "n").put("expiresTime", inAnHour())).ok(new JSONArray());
+        CloudApi api = new CloudApi(false, account(System.currentTimeMillis() / 1000 - 5), "a", cloud);
+        api.devices();
+        assertTrue(api.takeTrace().get(0).startsWith("Access token expires "));
+        assertEquals("not reported", CloudApi.when(0));
     }
 
     @Test public void serverErrorsAreReportedWithCleanMessages() throws Exception {
