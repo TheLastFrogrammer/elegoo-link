@@ -33,12 +33,27 @@ Settings → **Elegoo account (experimental)** → **Sign in with Elegoo…** (`
 - `window.wx` is provided with `WebViewCompat.addWebMessageListener`, limited to those two origins and the main frame. Replies go back with `HandleStudio(...)`, and only while the page is still on an allowed origin.
 - Handles `report.ready` (replies with a random per-install device ID), `report.userInfo`, `report.loginFailed`, `report.notLogged` and `report.websiteOpen` (https links only, opened in the browser). Anything else gets a 404 reply.
 - Tokens are stored encrypted with their own Android Keystore key (`CloudAccountStore`). The Settings card shows only the nickname, the last four digits of the user ID and the token expiry. **Sign out on this phone** deletes the tokens and the web view's cookies and storage; it does not sign out other apps.
-- Nothing else uses the tokens yet: no refresh, no device list, no cloud MQTT.
+- The Cloud printers screen uses them for read-only HTTPS requests (see below). Nothing uses cloud MQTT or Agora yet.
+
+## Reaching the printer through the cloud
+
+In the SDK, a cloud printer is reached over three separate channels (`src/cloud/cloud_service.cpp`):
+
+| Channel | Used for | Status in the app |
+| --- | --- | --- |
+| HTTPS to `matrix.elegoo.com` (`.cn` for China), `Authorization: Bearer <accessToken>` | Bound printers (`device/list`), online state (`device-register/online-status`), last reported status (`device/report-data/list?deviceCode=<SN>`), token refresh | **Read-only screen added:** Settings → Elegoo account → Cloud printers |
+| Cloud MQTT, credentials from `mqtt-link/mqtt-client` | Live status pushes on `app/v1/<clientId>/device/data`, where `reportValue` uses the LAN status format | Not started; needs the client ID decision |
+| Agora RTM, tokens from `device/list/agora-token?source=slicer` | Commands: start/pause/stop print, printer attributes (`m_rtmService->executeRequest`) | Not started; needs the Agora RTM Android SDK |
+
+The HTTPS status is rebuilt from per-field reports (`reportLinkKey`, `reportValue`, `updateTime`) with the SDK's typing rules (`CloudApi.assemble`), so the same status presentation as the Monitor tab works on it. Without a token, `device/list` answers HTTP 200 with `{"code":401,"msg":"账号未登录"}`, so the client treats body code 401/403 like HTTP 401: refresh the token once, then retry.
+
+The HTTPS reads are the same kind of requests Matrix and ElegooSlicer make, with no session of their own, so they should not disturb those apps. Live MQTT and RTM do create sessions, which is where the client ID and same-user kick-off questions matter.
 
 ## Open questions to test first
 
-1. Does the sign-in page hand off tokens to the Android `WebView`? The page code requires `ElegooSlicer` in the user agent, which the app adds; untested on a phone.
-2. Does the MQTT credential endpoint accept an `android` client ID?
-3. Does a cloud MQTT session from the app keep Matrix and ElegooSlicer connected?
+1. ~~Does the sign-in page hand off tokens to the Android `WebView`?~~ Yes, confirmed on the user's phone.
+2. Does the Cloud printers screen show the right status and stay current during a print?
+3. Does the MQTT credential endpoint accept an `android` client ID?
+4. Does a cloud MQTT or RTM session from the app keep Matrix and ElegooSlicer connected?
 
 This uses Elegoo's servers and the user's own account in a way Elegoo did not design for, so it can break when they change their service.

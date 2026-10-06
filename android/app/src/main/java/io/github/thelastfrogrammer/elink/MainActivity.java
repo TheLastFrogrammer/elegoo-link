@@ -35,7 +35,7 @@ public final class MainActivity extends Activity {
     private ProfileStore profiles;
     private EditText profileName, cameraAddress, pairingPin;
     private TextView pinProbeHelp, cloudStatus;
-    private Button cloudSignOut;
+    private Button cloudSignOut, cloudPrinters;
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
@@ -189,8 +189,9 @@ public final class MainActivity extends Activity {
         LinearLayout account = card("Elegoo account (experimental)");
         cloudStatus = label(account, "", 14, INK, false);
         button(account, "Sign in with Elegoo…", this::cloudSignIn);
+        cloudPrinters = button(account, "Cloud printers (read-only)…", () -> startActivity(new Intent(this, CloudStatusActivity.class)));
         cloudSignOut = button(account, "Sign out on this phone", this::cloudSignOut);
-        label(account, "Opens Elegoo's own sign-in page, the one ElegooSlicer uses; your password goes only to Elegoo. This step only tests that sign-in works. The app does not reach your printer through the cloud yet, and printer access stays on LAN Only for now.", 13, MUTED, false);
+        label(account, "Opens Elegoo's own sign-in page, the one ElegooSlicer uses; your password goes only to Elegoo. Cloud printers shows the status your printers last sent to the Elegoo cloud, without LAN Only. It is read-only: controls still need LAN Only for now.", 13, MUTED, false);
         renderCloudAccount();
         LinearLayout preferences = card("App preferences");
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
@@ -298,7 +299,7 @@ public final class MainActivity extends Activity {
         try { account = cloudAccounts.load(); }
         catch (Exception error) { cloudAccounts.forget(); account = null; message("Saved Elegoo sign-in could not be decrypted. Sign in again."); }
         cloudStatus.setText(account == null ? "Not signed in." : "Signed in as " + account.summary() + ".");
-        cloudSignOut.setEnabled(account != null);
+        cloudSignOut.setEnabled(account != null); cloudPrinters.setEnabled(account != null);
     }
     private void appearanceDialog() {
         new AlertDialog.Builder(this).setTitle("Appearance").setSingleChoiceItems(new String[] {"Follow system", "Light", "Dark"}, settings.getInt("theme", 0), (dialog, which) -> {

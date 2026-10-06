@@ -67,5 +67,26 @@ public final class StatusPresentation {
         }
         return text.toString();
     }
+    /** State, temperatures and current job in a few lines, from the same fields the Monitor tab shows. */
+    public static String overview(JSONObject status) {
+        JSONObject machine = status.optJSONObject("machine_status"), print = status.optJSONObject("print_status");
+        boolean printing = machine != null && machine.optInt("status", -1) == 2;
+        StringBuilder text = new StringBuilder(state(status));
+        if (printing) text.append(" · ").append(Math.max(0, Math.min(100, machine.optInt("progress", 0)))).append("%");
+        text.append("\nNozzle ").append(temperature(status, "extruder")).append(" · Bed ").append(temperature(status, "heater_bed"))
+            .append(" · Chamber ").append(temperature(status, "ztemperature_sensor"));
+        if (printing && print != null) {
+            long remaining = print.optLong("remaining_time_sec", -1);
+            text.append("\n").append(clean(print.optString("filename", "Current print"))).append("\nLayer ").append(print.optInt("current_layer", 0))
+                .append(" / ").append(print.optInt("total_layer", 0)).append(" · ")
+                .append(remaining < 0 ? "Time unavailable" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m remaining");
+        }
+        return text.toString();
+    }
+    static String temperature(JSONObject status, String key) {
+        JSONObject value = status.optJSONObject(key); if (value == null || !value.has("temperature")) return "—";
+        String text = String.format(java.util.Locale.ROOT, "%.1f°C", value.optDouble("temperature", 0));
+        return value.has("target") ? text + String.format(java.util.Locale.ROOT, " / %.0f°C", value.optDouble("target", 0)) : text;
+    }
     public static String clean(String value) { return value.replaceAll("[\\p{Cntrl}]", " ").substring(0, Math.min(value.length(), 160)); }
 }
