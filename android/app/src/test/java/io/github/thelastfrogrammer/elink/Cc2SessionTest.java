@@ -14,6 +14,8 @@ import java.util.concurrent.*;
 /** Runs the production session through fake HTTP/MQTT transports, not a duplicated session model. */
 public class Cc2SessionTest {
     private static final class Listener implements Cc2Session.Listener {
+        final BlockingQueue<File> downloads = new LinkedBlockingQueue<>();
+        public void downloaded(File file, String name) { downloads.add(file); }
         final BlockingQueue<JSONObject> statuses = new LinkedBlockingQueue<>(), canvases = new LinkedBlockingQueue<>(), attrs = new LinkedBlockingQueue<>();
         final BlockingQueue<String> results = new LinkedBlockingQueue<>(), failures = new LinkedBlockingQueue<>();
         final BlockingQueue<JSONObject> queries = new LinkedBlockingQueue<>();
@@ -250,7 +252,7 @@ public class Cc2SessionTest {
             new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
         File upload=File.createTempFile("pin-probe-", ".gcode");
         try {s.connect();take(l.statuses);take(l.canvases);s.command(Cc2Codec.PAUSE);s.command(Cc2Codec.RESUME);s.command(Cc2Codec.STOP);
-            s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());s.delete("local","test.gcode");s.light(true);s.temperatures(100,40);s.fan("fan",50);s.speed(0);s.autoRefill(true);s.upload(upload,"test.gcode");
+            s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());s.delete("local","test.gcode");s.light(true);s.temperatures(100,40);s.fan("fan",50);s.speed(0);s.autoRefill(true);s.upload(upload,"test.gcode");assertFalse(s.download(upload,"local","test.gcode"));assertFalse(s.downloading());
             s.files("local",0);assertEquals(Cc2Codec.FILES,take(l.queries).getInt("method"));
             assertTrue(clients.get(0).writes.isEmpty());assertTrue(clients.get(0).requests.stream().noneMatch(r -> Cc2Codec.changing(r.optInt("method"))));assertFalse(s.uploading());assertTrue(s.ready());
             assertTrue(l.results.stream().anyMatch(r -> r.contains("uploads are disabled")));assertTrue(l.results.stream().anyMatch(r -> r.contains("printer-changing commands are disabled")));
@@ -276,4 +278,41 @@ public class Cc2SessionTest {
         finally{s.close();}
     }
 
+    @Test public void downloadUsesEffectiveSessionTokenAndDoesNotPublishChangingRequest() throws Exception {
+        Listener l = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>(); List<PrinterDownloadTest.Connection> connections = new CopyOnWriteArrayList<>();
+        Cc2Session s = new Cc2Session("192.168.1.84", "OLD-TYPED-CODE", l, url -> { PrinterDownloadTest.Connection c = new PrinterDownloadTest.Connection(url); connections.add(c); return c; }, null,
+            (uri,id) -> { FakeMqtt f = new FakeMqtt(uri,id); clients.add(f); return f; }, new PrinterIdentity("MANUAL", PrinterIdentityTest.reply(true,false)));
+        File file = File.createTempFile("session-download-", ".gcode");
+        try {
+            s.connect(); take(l.statuses); assertEquals("123456", clients.get(0).password); assertTrue(s.download(file,"u-disk","two words.gcode"));
+            assertEquals(file, take(l.downloads)); assertArrayEquals(connections.get(0).body, java.nio.file.Files.readAllBytes(file.toPath()));
+            assertEquals("123456", connections.get(0).getRequestProperty("X-Token")); assertEquals("X-Token=123456&file_name=two+words.gcode",connections.get(0).getURL().getQuery());
+            assertTrue(clients.get(0).writes.isEmpty()); assertTrue(s.ready());
+        } finally { s.close(); file.delete(); }
+    }
+    @Test public void closingSessionCancelsDownloadAndRemovesPartialFileWithoutReplay() throws Exception {
+        Listener l = new Listener(); CountDownLatch reading = new CountDownLatch(1), released = new CountDownLatch(1); List<PrinterDownloadTest.Connection> connections = new CopyOnWriteArrayList<>();
+        Cc2Session s = new Cc2Session("192.168.1.84", "code", l, url -> {
+            PrinterDownloadTest.Connection c = new PrinterDownloadTest.Connection(url) {
+                public void disconnect() { super.disconnect(); released.countDown(); }
+                public InputStream getInputStream() { return new InputStream() {
+                    boolean first = true;
+                    public int read() throws IOException { throw new IOException("Use buffered read"); }
+                    public int read(byte[] bytes,int off,int len) throws IOException {
+                        if (first) { first = false; bytes[off] = 'G'; reading.countDown(); return 1; }
+                        try { if (!released.await(5,TimeUnit.SECONDS)) throw new IOException("Timed out"); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                        throw new IOException("Connection closed");
+                    }
+                }; }
+            }; c.length = 100; connections.add(c); return c;
+        }, null, (uri,id) -> new FakeMqtt(uri,id), http -> "SERIAL");
+        File file = File.createTempFile("session-download-", ".gcode");
+        try {
+            s.connect(); take(l.statuses); assertTrue(s.download(file,"local","test.gcode")); assertTrue(reading.await(3,TimeUnit.SECONDS)); assertTrue(s.downloading());
+            File other = File.createTempFile("rejected-", ".gcode"); try { assertFalse(s.download(other,"local","test.gcode")); } finally { other.delete(); }
+            s.close(); assertTrue(released.await(2,TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3); while(file.exists() && System.nanoTime() < deadline) Thread.sleep(10);
+            assertFalse(file.exists()); assertTrue(connections.get(0).disconnected); assertEquals(1, connections.size()); assertTrue(l.downloads.isEmpty());
+        } finally { s.close(); file.delete(); }
+    }
 }

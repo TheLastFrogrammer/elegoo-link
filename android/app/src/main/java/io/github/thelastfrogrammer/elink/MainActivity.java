@@ -21,7 +21,11 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, SAVE_GCODE = 4;
+    private String pendingExportHash = "";
+    private android.net.Uri pendingExportUri;
+    private TextView inspection;
+    private Button saveCopy, shareInspection, clearCopy, cancelDownload;
     private int INK = 0xff142c3b, MUTED = 0xff536976, TEAL = 0xff006b65, BACKGROUND = 0xffedf3f4, SURFACE = Color.WHITE, BUTTON = 0xffe0efec;
     private boolean dark;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -62,6 +66,7 @@ public final class MainActivity extends Activity {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
+            finishPendingExport();
             if (printer.connecting()) { routePicker.setSelection(printer.remote() ? 1 : 0); authPicker.setSelection(printer.pinProbe() ? 1 : 0); host.setText(printer.host()); if (printer.pinProbe()) pairingPin.setText(printer.accessCode()); else access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) printer.observe(MainActivity.this::render);
             render();
@@ -78,6 +83,7 @@ public final class MainActivity extends Activity {
         if (dark) { INK = 0xffe4eff2; MUTED = 0xffa7bec6; TEAL = 0xff63d5c7; BACKGROUND = 0xff10191d; SURFACE = 0xff1b292f; BUTTON = 0xff223b3b; }
         setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
         super.onCreate(saved);
+        if (saved != null) { pendingExportHash = saved.getString("exportHash", ""); String uri = saved.getString("exportUri", ""); if (!uri.isEmpty()) pendingExportUri = android.net.Uri.parse(uri); }
         credentials = new CredentialStore(this);
         profiles = new ProfileStore(this);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BACKGROUND);
@@ -91,7 +97,7 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 25, INK, true);
-        label(content, "Centauri Carbon 2 · local / VPN · v0.3.2", 14, MUTED, false);
+        label(content, "Centauri Carbon 2 · local / VPN · v0.3.3", 14, MUTED, false);
         summary = label(content, "Disconnected · open Settings to connect", 14, TEAL, true);
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); content.addView(navigation);
         String[] titles = {"Monitor", "Files", "Camera", "Settings"};
@@ -165,11 +171,24 @@ public final class MainActivity extends Activity {
         speed = button(tuning, "Print speed mode…", this::speedDialog);
         label(tuning, "Temperature targets are available while idle. Firmware can reject an unavailable setting; acknowledgements and updated status are shown separately.", 13, MUTED, false);
         currentSection = pages[1];
-        LinearLayout files = card("Send a sliced file");
+        LinearLayout files = card("Phone G-code workspace");
         selected = label(files, "Choose a .gcode file sliced for this printer.", 14, MUTED, false);
         pick = button(files, "Choose G-code", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
         });
+        inspection = label(files, "Select a G-code file to inspect it offline. Printer connection is not required.", 13, INK, false); inspection.setTextIsSelectable(true);
+        shareInspection = button(files, "Share inspection report…", () -> {
+            if (printer == null || printer.selectedReport == null) return;
+            Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, StatusPresentation.clean(printer.selectedName) + "\n" + printer.selectedReport.text());
+            startActivity(Intent.createChooser(send, "Share G-code inspection"));
+        });
+        saveCopy = button(files, "Save phone copy…", () -> {
+            if (printer == null || printer.selectedReport == null || printer.fileBusy()) return;
+            pendingExportHash = printer.selectedReport.sha256;
+            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.selectedName);
+            startActivityForResult(save, SAVE_GCODE);
+        });
+        clearCopy = button(files, "Remove phone cache copy", () -> { if (printer != null) printer.clearPhoneCopy(); });
         upload = button(files, "Upload to printer", () -> {
             if (printer == null || printer.selectedName == null) return;
             new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
@@ -177,6 +196,8 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         });
         cancelUpload = button(files, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); });
+        cancelDownload = button(files, "Cancel download", () -> { if (printer != null) printer.cancelDownload(); });
+        label(files, "Downloaded files become phone cache copies here; use Save phone copy to keep a document. Downloads require LAN authentication and printer HTTP port 80. Offline reports read slicer comments and explicit T selections; they do not simulate a print or assign trays.", 13, MUTED, false);
         label(files, "Connection and uploads continue while choosing a file, rotating, or switching apps. Use Disconnect in the app or notification to stop the session. Android may still stop the app under memory or battery restrictions.", 13, MUTED, false);
         label(files, "File uploads require HTTP port 80. If HTTP is unavailable, you can still monitor and use supported MQTT controls.", 13, MUTED, false);
         buildFileBrowser();
@@ -356,6 +377,8 @@ public final class MainActivity extends Activity {
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
         if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: print start and deletion are disabled.", 14, MUTED, false); dialog.show(); return; }
+        Button download = button(body, "Download to phone workspace", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
+        download.setEnabled(printer != null && printer.filesFresh() && !printer.fileBusy());
         button(body, "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); });
         button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, which) -> { if (printer != null) printer.delete(storage, name); }).show(); });
@@ -492,13 +515,17 @@ public final class MainActivity extends Activity {
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
         lightOn.setEnabled(writable); lightOff.setEnabled(writable); heater.setEnabled(writable && Cc2Codec.idle(snapshot)); fan.setEnabled(writable); speed.setEnabled(writable && Cc2Codec.canPause(snapshot));
-        cancelUpload.setEnabled(busy);
+        cancelUpload.setEnabled(busy); cancelDownload.setEnabled(printer != null && printer.downloading());
         renderFeatures(ready, fresh);
         refill.setEnabled(writable && printer.canvasFresh() && printer.canvas.has("auto_refill"));
         if (printer != null && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText("Automatic refill unavailable");
-        upload.setEnabled(ready && !printer.pinProbe() && printer.selectedFile != null && !busy && !printer.importing); pick.setEnabled(printer != null && !busy && !printer.importing);
-        if (printer != null && printer.selectedFile != null) selected.setText(printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB");
+        boolean fileBusy = printer != null && printer.fileBusy();
+        upload.setEnabled(ready && !printer.pinProbe() && printer.selectedFile != null && !fileBusy); pick.setEnabled(printer != null && !fileBusy);
+        boolean hasReport = printer != null && printer.selectedFile != null && printer.selectedReport != null;
+        saveCopy.setEnabled(hasReport && !fileBusy); shareInspection.setEnabled(hasReport && !fileBusy); clearCopy.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
+        inspection.setText(hasReport ? printer.selectedReport.text() : printer != null && printer.importing ? "Importing and inspecting G-code…" : "Select a G-code file to inspect it offline. Printer connection is not required.");
+        selected.setText(printer != null && printer.selectedFile != null ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Choose a .gcode file sliced for this printer.");
         state.setText(!fresh && snapshot.length() > 0 ? "Status stale · controls disabled" : StatusPresentation.state(snapshot));
         JSONObject machine = snapshot.optJSONObject("machine_status"), print = snapshot.optJSONObject("print_status");
         int percent = machine == null ? 0 : machine.optInt("progress", 0); progress.setProgress(Math.max(0, Math.min(100, percent)));
@@ -528,6 +555,10 @@ public final class MainActivity extends Activity {
     private void message(String text) { if (printer != null) printer.feedback = text; else pendingFeedback = text; if (feedback != null) feedback.setText(text); }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == SAVE_GCODE) {
+            if (result == RESULT_OK && data != null && data.getData() != null) { pendingExportUri = data.getData(); finishPendingExport(); }
+            else { pendingExportHash = ""; pendingExportUri = null; }
+        }
         if (request == PICK_FILE && result == RESULT_OK && data != null && data.getData() != null && printer != null) printer.select(data.getData());
         if (request == PICK_SNAPSHOT && result != RESULT_OK) pendingSnapshot = null;
         if (request == PICK_SNAPSHOT && result == RESULT_OK && data != null && data.getData() != null && pendingSnapshot != null) {
@@ -535,15 +566,19 @@ public final class MainActivity extends Activity {
             checks.execute(() -> { String text; try (OutputStream output = getContentResolver().openOutputStream(uri)) { if (output == null || !image.compress(Bitmap.CompressFormat.JPEG, 92, output)) throw new IOException(); text = "Camera snapshot saved."; } catch (Exception error) { text = "Snapshot could not be saved. Capture it again."; } String done = text; main.post(() -> { if (!isDestroyed()) message(done); }); });
         }
     }
+    private void finishPendingExport() {
+        if (printer == null || pendingExportUri == null) return;
+        printer.exportPhoneCopy(pendingExportUri, pendingExportHash); pendingExportUri = null; pendingExportHash = "";
+    }
     @Override protected void onStart() { super.onStart(); active = true; if (printer != null) printer.observe(this::render); main.post(clock); }
     @Override protected void onStop() { active = false; stopCamera(); main.removeCallbacks(clock); if (printer != null) printer.observe(null); super.onStop(); }
     @Override protected void onDestroy() { if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
-    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("page", page); }
+    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("page", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
         try {
-            StringBuilder text = new StringBuilder("Link Workshop v0.3.2\nIndependent Android app derived from Elegoo Link.\n\n");
+            StringBuilder text = new StringBuilder("Link Workshop v0.3.3\nIndependent Android app derived from Elegoo Link.\n\n");
             for (String name : new String[] {"THIRD_PARTY_NOTICES.md", "Apache-2.0.txt", "Paho-NOTICE.txt", "Paho-EDL-1.0.txt", "Paho-EPL-2.0.txt"}) {
                 try (InputStream input = getAssets().open("licenses/" + name); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");

@@ -1,3 +1,23 @@
+# v0.3.3 validation
+
+Validated 2026-10-06. Offline file inspection, HTTP downloading/cancellation and session guards are implemented and covered with JVM fixtures. No physical CC2, S24+ or emulator is attached. The printer's earlier HTTP refusal remains unresolved; this implementation does not make that service available. Cloud-mode PIN authorization and Matrix coexistence remain unverified.
+
+- Empty app/build directory and build cache disabled: testDebugUnitTest, lintDebug and assembleDebug passed in one full Gradle run, 46 tasks executed. JDK 17, Gradle 8.13, AGP 8.11.1, SDK 36/build tools 35.0.0.
+- **101 tests, zero failures/errors**. Fifteen new tests cover inspector header/footer estimates, exact-byte SHA-256/line endings, final-line/BOM handling, commented/macro/special selectors, overlong lines, binary/control bytes, bounded metadata, empty/interrupted inspection; internal/USB encoded query and token handling; non-200/redirect/JSON/HTML/compressed responses; oversized/empty/truncated payloads; unknown-length progress; cancellation before/mid-transfer and unsafe paths; effective session credentials and no changing MQTT requests; session closure cancelling a blocked download and removing its partial file without replay.
+- The existing production PIN guard test was extended to invoke download and verify refusal without any HTTP connection, alongside all changing-command/upload blocks.
+- Lint: **0 errors, 20 warnings**, all SetTextI18n English UI text construction.
+- Final APK manifest verified: **v0.3.3/code 8**, min 26, target/compile 36. ZIP integrity and DEX markers for GcodeInspector, phone workspace, download action, PIN download guard and retained coexistence picker verified.
+- Signature Scheme v2 verified, one unchanged signer; certificate SHA-256 **9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3**. Compatible normal update over v0.2.0–v0.3.2.
+- APK: **244923 bytes**, SHA-256 **40855d8710a422653da5dbc9cc4ac8b0bbc15e9aa228382aa337850a4b669138**. Source archive checksum accompanies the release. No account/printer credentials or signing keys are packaged with the source.
+
+Hardware acceptance: import representative single/multi-material G-code on the phone while disconnected, compare supported comments/explicit selections with the file, and confirm no automatic tray/start/temperature change. Test large-file performance, unknown metadata, binary/overlong input, share chooser, cache clearing and document export. Cancel the document picker, rotate/change theme while it is open, and change the selected file: fingerprint mismatch must refuse a different copy. Process death/cache eviction must not revive a missing copy or repeat an upload/download. A failed document write may leave a partial destination file.
+
+On a working LAN session with HTTP available, download listed internal/USB G-code, compare the saved exact-byte hash with a trusted copy if available, test cancellation/network loss/HTTP rejection/truncation and preservation of the previous completed phone copy. Try downloads during monitoring; uploads and downloads must not overlap. Test profile/default credential handling. On the Pi/VPN route, interrupt the VPN during download: close the old transfer and remove its partial cache copy without replay. No remote firmware test was performed here.
+
+Unknown-length HTTP responses have no independent expected-size/checksum guarantee. Slicer metadata and T selections are observational; no simulation, complete tool count, mapping inference or print-compatibility certification is made. Existing local/remote routing, native theme/service/document-provider behavior and Matrix coexistence still require device acceptance. [FILE_WORKSPACE.md](FILE_WORKSPACE.md) documents scope and [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md) retains the read-only Matrix test.
+
+Earlier release validation records follow.
+
 # v0.3.2 validation
 
 Validated 2026-10-06. Physical cloud-mode PIN authorization, Matrix coexistence and Pi/VPN acceptance remain unverified. The latest supplied physical result is the earlier MQTT code 5. No account login, binding/unbinding or credential extraction was performed.

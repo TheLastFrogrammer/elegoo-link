@@ -43,7 +43,8 @@ public final class PrinterService extends Service {
     private PrintAlerts alerts = new PrintAlerts();
     public File selectedFile;
     public String selectedName;
-    public boolean importing;
+    public GcodeInspector.Report selectedReport;
+    public boolean importing, exporting;
     private long canvasAt, lastNotification;
     private final Runnable reconnect = this::attempt;
     private final Runnable freshness = new Runnable() {
@@ -51,6 +52,8 @@ public final class PrinterService extends Service {
     };
     @Override public void onCreate() {
         super.onCreate();
+        File[] oldCopies = getCacheDir().listFiles();
+        if (oldCopies != null) for (File file : oldCopies) if (file.isFile() && (file.getName().startsWith("upload-") || file.getName().startsWith("download-")) && file.getName().endsWith(".gcode")) file.delete();
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Printer connection", NotificationManager.IMPORTANCE_LOW));
         main.post(freshness);
@@ -71,6 +74,8 @@ public final class PrinterService extends Service {
     public boolean ready() { return session != null && session.ready() && (!remote || route != null && route.available()); }
     public boolean fresh() { return ready() && session.fresh(); }
     public boolean uploading() { return session != null && session.uploading(); }
+    public boolean downloading() { return session != null && session.downloading(); }
+    public boolean fileBusy() { return importing || exporting || uploading() || downloading(); }
     public boolean canvasFresh() { return fresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
     public void connect(String host, String code, String serial) { connect(host, code, serial, false); }
     public void connect(String host, String code, String serial, boolean remote) {
@@ -116,6 +121,17 @@ public final class PrinterService extends Service {
             }); }
             public void queryError(int method, String text) { deliver(() -> { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }); }
             public void uploaded(String name) { deliver(() -> { feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0); }); }
+            public void downloadProgress(int percent) { deliver(() -> feedback = percent < 0 ? "Downloading G-code… size not reported" : "Downloading G-code: " + percent + "%"); }
+            public void downloaded(File file, String name) { main.post(() -> {
+                if (destroyed || generation != current) { file.delete(); return; }
+                importing = true; feedback = "Download received. Inspecting phone copy…"; changed();
+                files.execute(() -> {
+                    GcodeInspector.Report report = null;
+                    try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
+                    GcodeInspector.Report result = report;
+                    main.post(() -> finishFile(file, name, result, "Downloaded phone copy ready. Save it with Save phone copy…; printer files are unchanged."));
+                });
+            }); }
         }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery(), new PrinterAuthentication(pinProbe, code)));
         connection = "Identifying printer for MQTT…"; changed(); session.connect();
     }
@@ -141,8 +157,18 @@ public final class PrinterService extends Service {
     public void refresh() { if (ready()) session.refresh(); }
     public void command(int method) { if (fresh()) session.command(method); }
     public void autoRefill(boolean enabled) { if (canvasFresh() && session != null) session.autoRefill(enabled); }
-    public void upload() { if (ready() && selectedFile != null && !importing) { session.upload(selectedFile, selectedName); changed(); } }
+    public void upload() { if (ready() && selectedFile != null && !fileBusy()) { session.upload(selectedFile, selectedName); changed(); } }
     public void cancelUpload() { if (session != null) session.cancelUpload(); }
+    public void cancelDownload() { if (session != null) session.cancelDownload(); }
+    public void download(String storage, String filename) {
+        if (!ready() || pinProbe || fileBusy() || !knownFile(storage, filename)) { feedback = "Refresh files and use LAN authentication before downloading. Wait for other file work to finish."; changed(); return; }
+        File local = null;
+        try {
+            local = File.createTempFile("download-", ".gcode", getCacheDir());
+            if (!session.download(local, storage, filename)) { local.delete(); return; }
+            feedback = "Downloading " + StatusPresentation.clean(filename) + "… HTTP port 80 is required."; changed();
+        } catch (Exception error) { if (local != null) local.delete(); feedback = "Could not begin download. Use a listed .gcode file and check phone storage."; changed(); }
+    }
     public boolean busy(int method) { return queryBusy.contains(method); }
     public boolean filesFresh() { return ready() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
     public void browse(String storage, int offset) { if (!ready() || busy(Cc2Codec.FILES)) return; Cc2Codec.storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid offset"); queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files…"; session.files(storage, offset); changed(); }
@@ -178,7 +204,7 @@ public final class PrinterService extends Service {
         connection = "Disconnected"; stopMonitoring(); changed();
     }
     public void select(Uri uri) {
-        if (importing || uploading()) return;
+        if (fileBusy()) return;
         importing = true; feedback = "Importing selected G-code…"; changed();
         boolean persisted;
         try { getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); persisted = true; }
@@ -204,18 +230,39 @@ public final class PrinterService extends Service {
                     }
                 }
                 if (local.length() == 0) throw new IOException("File is empty");
-                File readyFile = local; String readyName = name;
-                main.post(() -> {
-                    if (destroyed) { readyFile.delete(); return; }
-                    if (selectedFile != null) selectedFile.delete(); selectedFile = readyFile; selectedName = readyName;
-                    importing = false; feedback = "File ready to upload. Uploading does not start a print."; changed();
-                });
+                File readyFile = local; String readyName = name; GcodeInspector.Report report = GcodeInspector.inspect(local);
+                main.post(() -> finishFile(readyFile, readyName, report, "Phone copy inspected. Uploading does not start a print."));
             } catch (Exception error) {
                 if (local != null) local.delete();
                 main.post(() -> { if (!destroyed) { importing = false; feedback = "File import failed. Choose a nonempty .gcode file (up to 512 MiB) with a simple filename."; changed(); } });
             } finally {
                 if (releasePermission) try { getContentResolver().releasePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION); } catch (SecurityException ignored) { }
             }
+        });
+    }
+    private void finishFile(File file, String name, GcodeInspector.Report report, String text) {
+        if (destroyed) { file.delete(); return; }
+        if (selectedFile != null) selectedFile.delete(); selectedFile = file; selectedName = name; selectedReport = report;
+        importing = false; feedback = text; changed();
+    }
+    public void clearPhoneCopy() {
+        if (fileBusy()) return;
+        if (selectedFile != null) selectedFile.delete(); selectedFile = null; selectedName = null; selectedReport = null;
+        feedback = "Phone cache copy removed. Original documents and printer files are unchanged."; changed();
+    }
+    public void exportPhoneCopy(Uri uri, String expectedHash) {
+        if (fileBusy() || selectedFile == null || selectedReport == null || !selectedReport.sha256.equals(expectedHash)) { feedback = "Phone copy changed or is unavailable. Choose Save phone copy again."; changed(); return; }
+        File file = selectedFile; exporting = true; feedback = "Saving phone copy…"; changed();
+        files.execute(() -> {
+            String text;
+            try (InputStream input = new FileInputStream(file); OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
+                if (output == null) throw new IOException("Document unavailable");
+                byte[] buffer = new byte[65536]; int count; long copied = 0;
+                while ((count = input.read(buffer)) != -1) { if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException(); output.write(buffer, 0, count); copied += count; }
+                if (copied != file.length()) throw new IOException("Phone copy changed");
+                text = "Phone copy saved. Printer files are unchanged.";
+            } catch (Exception error) { text = "Phone copy could not be saved. A partial destination document may remain; choose Save again."; }
+            String done = text; main.post(() -> { if (!destroyed) { exporting = false; feedback = done; changed(); } });
         });
     }
     private void changed() { if (observer != null && !destroyed) observer.changed(); }

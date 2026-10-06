@@ -24,6 +24,8 @@ public final class Cc2Session implements AutoCloseable {
         default void query(int method, JSONObject params, JSONObject result) { }
         default void queryError(int method, String message) { }
         default void uploaded(String filename) { }
+        default void downloadProgress(int percent) { }
+        default void downloaded(File file, String filename) { }
     }
     interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
     public interface IdentityResolver extends AutoCloseable {
@@ -53,8 +55,8 @@ public final class Cc2Session implements AutoCloseable {
     private volatile boolean uploadCancelled;
     private final CompletableFuture<JSONObject> registration = new CompletableFuture<>();
     private volatile MqttClient mqtt;
-    private volatile PrinterHttp uploadHttp;
-    private volatile boolean closed, ready, uploading;
+    private volatile PrinterHttp uploadHttp, downloadHttp;
+    private volatile boolean closed, ready, uploading, downloading, downloadCancelled;
     private volatile String sessionToken;
     private boolean canvasSupported = true;
     private volatile long statusAt;
@@ -83,6 +85,7 @@ public final class Cc2Session implements AutoCloseable {
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
+    public boolean downloading() { return downloading; }
     public boolean readOnly() { return identity.readOnly(); }
     public void connect() { execute(this::connectOnWorker); }
     private void connectOnWorker() {
@@ -325,7 +328,7 @@ public final class Cc2Session implements AutoCloseable {
     }
     public synchronized void upload(File file, String name) {
         if (readOnly()) { emitResult("Read-only PIN probe: uploads are disabled; PINs are never used as HTTP tokens."); return; }
-        if (!ready() || uploading) return;
+        if (!ready() || uploading || downloading) return;
         uploading = true; uploadCancelled = false;
         PrinterHttp uploader = new PrinterHttp(http.host(), sessionToken, connections); uploadHttp = uploader;
         transfer.execute(() -> {
@@ -338,6 +341,26 @@ public final class Cc2Session implements AutoCloseable {
         });
     }
     public void cancelUpload() { PrinterHttp uploader = uploadHttp; if (uploader != null) { uploadCancelled = true; uploader.cancel(); emitResult("Upload cancelled. A partial file may remain on the printer; refresh files before trying again."); } }
+    public synchronized boolean download(File destination, String storage, String name) {
+        if (readOnly()) { emitResult("PIN probe cannot download files: PINs are not HTTP tokens."); return false; }
+        if (!ready() || uploading || downloading) return false;
+        Cc2Codec.storage(storage); Cc2Codec.filename(name);
+        downloading = true; downloadCancelled = false;
+        PrinterHttp downloader = new PrinterHttp(http.host(), sessionToken, connections); downloadHttp = downloader;
+        try {
+            transfer.execute(() -> {
+                boolean delivered = false;
+                try {
+                    downloader.download(destination, storage, name, percent -> { Listener current = listener; if (current != null && !closed && !downloadCancelled) current.downloadProgress(percent); });
+                    Listener current = listener;
+                    if (current != null && !closed && !downloadCancelled) { current.downloaded(destination, name); delivered = true; }
+                } catch (Exception exception) { if (!closed && !downloadCancelled) emitResult(PrinterErrors.describe(exception, "File download")); }
+                finally { if (!delivered) destination.delete(); downloading = false; downloadHttp = null; }
+            });
+            return true;
+        } catch (RejectedExecutionException stopped) { downloading = false; downloadHttp = null; destination.delete(); return false; }
+    }
+    public void cancelDownload() { PrinterHttp downloader = downloadHttp; if (downloader != null) { downloadCancelled = true; downloader.cancel(); emitResult("Download cancelled. Partial phone copy will be removed; printer files are unchanged."); } }
     private void execute(Runnable task) { if (!closed) try { worker.execute(() -> { if (!closed) task.run(); }); } catch (RejectedExecutionException ignored) { } }
     private void emitConnection(String message, boolean connected) { Listener current = listener; if (current != null && !closed) current.connection(message, connected); }
     private void emitResult(String message) { Listener current = listener; if (current != null && !closed) current.result(message); }
@@ -371,6 +394,7 @@ public final class Cc2Session implements AutoCloseable {
         registration.completeExceptionally(new IllegalStateException("Session closed"));
         try { identity.close(); } catch (Exception ignored) { }
         http.cancel(); PrinterHttp uploader = uploadHttp; if (uploader != null) uploader.cancel();
+        PrinterHttp downloader = downloadHttp; if (downloader != null) downloader.cancel();
         worker.shutdownNow(); transfer.shutdownNow();
         Thread cleanup = new Thread(this::disposeMqtt, "mqtt-cleanup"); cleanup.setDaemon(true); cleanup.start();
     }
