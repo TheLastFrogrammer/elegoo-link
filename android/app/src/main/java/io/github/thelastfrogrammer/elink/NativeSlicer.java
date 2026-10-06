@@ -57,14 +57,27 @@ final class NativeSlicer implements AutoCloseable {
 
     String[] presets(int kind, String printer) { return presets(handle, kind, printer == null ? "" : printer); }
 
-    /** Slices the models onto one plate. Throws IOException with the engine's message on failure or cancellation. */
+    /** Slices the models onto one plate with one filament. */
     Result slice(List<File> models, String printer, String process, List<String> filaments, List<String[]> overrides, File output, Listener listener) throws IOException {
+        return slice(models, printer, process, filaments, null, null, overrides, output, listener);
+    }
+
+    /**
+     * Slices the models onto one plate. Throws IOException with the engine's message on failure or cancellation.
+     * colours: optional "#RRGGBB" per filament slot (null entries keep the preset's colour).
+     * modelFilaments: optional 1-based slot per model (0 keeps the file's own assignment, e.g. a painted 3MF).
+     */
+    Result slice(List<File> models, String printer, String process, List<String> filaments, List<String> colours, int[] modelFilaments,
+                 List<String[]> overrides, File output, Listener listener) throws IOException {
+        String[] colourArray = new String[colours == null ? 0 : colours.size()];
+        for (int i = 0; i < colourArray.length; i++) colourArray[i] = colours.get(i) == null ? "" : colours.get(i);
         String[] paths = new String[models.size()];
         for (int i = 0; i < paths.length; i++) paths[i] = models.get(i).getAbsolutePath();
         String[] keys = new String[overrides.size()], values = new String[overrides.size()];
         for (int i = 0; i < keys.length; i++) { keys[i] = overrides.get(i)[0]; values[i] = overrides.get(i)[1]; }
         try {
-            String json = slice(handle, paths, printer, process, filaments.toArray(new String[0]), keys, values, output.getAbsolutePath(), listener);
+            String json = slice(handle, paths, printer, process, filaments.toArray(new String[0]), colourArray,
+                modelFilaments == null ? new int[0] : modelFilaments, keys, values, output.getAbsolutePath(), listener);
             return new Result(new JSONObject(json));
         } catch (RuntimeException error) {
             throw new IOException(error.getMessage(), error);
@@ -115,5 +128,5 @@ final class NativeSlicer implements AutoCloseable {
     private static native void destroy(long handle);
     private static native String[] presets(long handle, int kind, String printer);
     private static native String slice(long handle, String[] models, String printer, String process, String[] filaments,
-                                       String[] keys, String[] values, String output, Listener listener);
+                                       String[] colours, int[] modelFilaments, String[] keys, String[] values, String output, Listener listener);
 }

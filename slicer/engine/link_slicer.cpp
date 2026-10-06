@@ -5,6 +5,10 @@
 #include "thumbnail.hpp"
 
 #include <algorithm>
+#include <cctype>
+#include <cmath>
+#include <optional>
+#include <set>
 #include <stdexcept>
 
 #include <boost/filesystem.hpp>
@@ -14,6 +18,8 @@
 
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/Arrange.hpp"
+#include "libslic3r/FlushVolCalc.hpp"
+#include "libslic3r/GCode/WipeTower.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
 #include "libslic3r/Model.hpp"
@@ -149,13 +155,181 @@ std::vector<std::string> Engine::export_presets(const Selection& selection, cons
         out << json.dump(4);
     }
     files.push_back(write_preset(find(bundle.prints, selection.process, "process"), "process", (fs::path(directory) / "process.json").string()));
-    for (size_t i = 0; i < selection.filaments.size(); ++i)
+    for (size_t i = 0; i < selection.filaments.size(); ++i) {
         files.push_back(write_preset(find(bundle.filaments, selection.filaments[i], "filament"), "filament",
             (fs::path(directory) / ("filament_" + std::to_string(i + 1) + ".json")).string()));
+        if (i < selection.filament_colours.size() && !selection.filament_colours[i].empty()) {
+            nlohmann::json json;
+            { boost::nowide::ifstream in(files.back()); in >> json; }
+            json["filament_colour"] = nlohmann::json::array({selection.filament_colours[i]});
+            boost::nowide::ofstream out(files.back());
+            out << json.dump(4);
+        }
+    }
     return files;
 }
 
-static void place_on_bed(Model& model, const DynamicPrintConfig& config)
+
+// "#RRGGBB" or "#RRGGBBAA" -> RGBA (BitmapCache::parse_color4 in ElegooSlicer's GUI).
+static bool parse_colour(const std::string& text, unsigned char rgba[4])
+{
+    if ((text.size() != 7 && text.size() != 9) || text[0] != '#')
+        return false;
+    for (size_t i = 1; i < text.size(); ++i)
+        if (!std::isxdigit(static_cast<unsigned char>(text[i])))
+            return false;
+    for (int c = 0; c < 4; ++c)
+        rgba[c] = c < 3 || text.size() == 9 ? (unsigned char) std::stoi(text.substr(1 + 2 * c, 2), nullptr, 16) : 255;
+    return true;
+}
+
+// get_min_flush_volumes() from ElegooSlicer's GUI (Plater.cpp): the nozzle volume less any long retraction on cut.
+static std::vector<int> min_flush_volumes(const DynamicPrintConfig& config, size_t nozzle_id)
+{
+    const auto* nozzle_volume_opt = config.option<ConfigOptionFloatsNullable>("nozzle_volume");
+    const int nozzle_volume = nozzle_volume_opt ? (int) nozzle_volume_opt->get_at(nozzle_id) : 0;
+    const auto* machine_level_opt = config.option<ConfigOptionInt>("enable_long_retraction_when_cut");
+    const int machine_level = machine_level_opt ? machine_level_opt->value : 0;
+    const auto* machine_on_opt = config.option<ConfigOptionBools>("long_retractions_when_cut");
+    const bool machine_on = machine_on_opt && machine_on_opt->values.size() > nozzle_id && machine_on_opt->values[nozzle_id] == 1;
+    const size_t count = config.option<ConfigOptionFloats>("filament_diameter")->values.size();
+    std::vector<double> filament_distance(count, 18.0), printer_distance(count, 18.0);
+    std::vector<unsigned char> filament_on(count, 0);
+    if (const auto* opt = config.option<ConfigOptionFloats>("filament_retraction_distances_when_cut")) filament_distance = opt->values;
+    if (const auto* opt = config.option<ConfigOptionFloats>("retraction_distances_when_cut")) printer_distance = opt->values;
+    if (const auto* opt = config.option<ConfigOptionBools>("filament_long_retractions_when_cut")) filament_on = opt->values;
+    std::vector<int> volumes;
+    for (size_t i = 0; i < count; ++i) {
+        int retract = machine_level && machine_on ? (int) printer_distance[nozzle_id] : 0;
+        const unsigned char on = i < filament_on.size() ? filament_on[i] : 0;
+        const double distance = i < filament_distance.size() ? filament_distance[i] : 18.0;
+        if (on == 0)
+            retract = 0;
+        else if (on == 1 && machine_level == LongRectrationLevel::EnableFilament)
+            retract = !std::isnan(distance) ? (int) distance : (int) printer_distance[nozzle_id];
+        volumes.push_back(int(nozzle_volume - PI * 1.75 * 1.75 / 4 * retract));
+    }
+    return volumes;
+}
+
+// The flushing volume between each pair of filaments from their colours, as ElegooSlicer's CLI computes it for a
+// single-nozzle printer (FlushVolCalculator with the printer's flush dataset and per-printer override table).
+static void compute_flush_volumes(DynamicPrintConfig& config)
+{
+    const std::vector<std::string> colours = config.option<ConfigOptionStrings>("filament_colour", true)->values;
+    const size_t count = colours.size();
+    const auto* is_support = config.option<ConfigOptionBools>("filament_is_support", true);
+    const std::vector<int> minimum = min_flush_volumes(config, 0);
+    int dataset = 0;
+    if (const auto* opt = config.option<ConfigOptionIntsNullable>("nozzle_flush_dataset"); opt != nullptr && !opt->values.empty() && opt->values.front() != ConfigOptionIntsNullable::nil_value())
+        dataset = opt->values.front();
+    const std::string printer_settings_id = config.opt_string("printer_settings_id");
+    std::vector<double> matrix(count * count, 0.0);
+    for (size_t from = 0; from < count; ++from) {
+        unsigned char from_rgba[4] = {255, 255, 255, 255};
+        parse_colour(colours[from], from_rgba);
+        const bool from_support = is_support->get_at(from);
+        for (size_t to = 0; to < count; ++to) {
+            if (from == to) continue;
+            int volume;
+            if (is_support->get_at(to)) {
+                volume = g_flush_volume_to_support;
+            } else {
+                unsigned char to_rgba[4] = {255, 255, 255, 255};
+                parse_colour(colours[to], to_rgba);
+                FlushVolCalculator calculator(minimum[from], g_max_flush_volume, dataset);
+                volume = calculator.calc_flush_vol(from_rgba[3], from_rgba[0], from_rgba[1], from_rgba[2], to_rgba[3], to_rgba[0], to_rgba[1], to_rgba[2], printer_settings_id);
+                if (from_support) volume = std::max(g_min_flush_volume_from_support, volume);
+            }
+            matrix[count * from + to] = volume;
+        }
+    }
+    config.option<ConfigOptionFloats>("flush_volumes_matrix", true)->values = matrix;
+    config.option<ConfigOptionFloats>("flush_multiplier", true)->values.resize(1, 1.0);
+}
+
+// Filaments the model uses: object and part assignments, and painted regions.
+static std::set<int> used_filaments(const Model& model)
+{
+    std::set<int> used;
+    for (const ModelObject* object : model.objects)
+        for (const ModelVolume* volume : object->volumes)
+            if (volume->is_model_part())
+                for (int id : volume->get_extruders())
+                    if (id > 0) used.insert(id);
+    return used;
+}
+
+// With more than one filament on the plate, places the prime tower as ElegooSlicer's CLI does when it arranges
+// model files (ElegooSlicer.cpp with PartPlate::estimate_wipe_tower_polygon): the default back-of-bed position, kept
+// inside the bed, sized from the filaments used and the tallest part. Returns its outline so arranging keeps parts
+// clear of it.
+static std::optional<arrangement::ArrangePolygon> place_prime_tower(DynamicPrintConfig& config, const Model& model, size_t filaments_used)
+{
+    if (filaments_used <= 1 || !config.opt_bool("enable_prime_tower"))
+        return std::nullopt;
+    if (config.has("print_sequence") && config.opt_enum<PrintSequence>("print_sequence") == PrintSequence::ByObject)
+        return std::nullopt;
+    auto* x_opt = config.option<ConfigOptionFloats>("wipe_tower_x", true);
+    auto* y_opt = config.option<ConfigOptionFloats>("wipe_tower_y", true);
+    // WIPE_TOWER_DEFAULT_X_POS / _Y_POS in ElegooSlicer's PartPlate.cpp (bed-slingers start at the left).
+    const auto* structure = config.option<ConfigOptionEnum<PrinterStructure>>("printer_structure");
+    float x = structure && structure->value == PrinterStructure::psI3 ? 0.f : 165.f, y = 250.f;
+    const float width = float(config.opt_float("prime_tower_width"));
+    const float prime_volume = float(config.opt_float("prime_volume"));
+
+    // PartPlate::estimate_wipe_tower_size() for a single extruder.
+    double max_height = 0;
+    for (const ModelObject* object : model.objects)
+        max_height = std::max(max_height, object->bounding_box_exact().size().z());
+    const double layer_height = config.opt_float("layer_height");
+    const double extra_spacing = config.option("prime_tower_infill_gap")->getFloat() / 100.;
+    const auto* wall_type = config.option<ConfigOptionEnum<WipeTowerWallType>>("wipe_tower_wall_type");
+    const bool rib_wall = wall_type && wall_type->value == WipeTowerWallType::wtwRib;
+    double rib_width = config.option("wipe_tower_rib_width")->getFloat();
+    const double volume = prime_volume * double(filaments_used - 1);
+    double depth;
+    if (rib_wall) {
+        depth = std::sqrt(volume / layer_height * extra_spacing);
+        const double volume_depth = depth;
+        depth = std::max(double(WipeTower::get_limit_depth_by_height(float(max_height))), depth);
+        rib_width = std::min(rib_width, depth / 2);
+        depth = rib_width / std::sqrt(2.0) + std::max(depth + config.opt_float("wipe_tower_extra_rib_length"), volume_depth);
+    } else {
+        depth = volume / (layer_height * width) * extra_spacing;
+        if (depth > EPSILON) depth = std::max(double(WipeTower::get_limit_depth_by_height(float(max_height))), depth);
+    }
+
+    BoundingBoxf bed;
+    for (const Vec2d& p : config.option<ConfigOptionPoints>("printable_area")->values) bed.merge(p);
+    const float bed_width = float(bed.size().x()), bed_depth = float(bed.size().y());
+    const float tower_brim_width = float(config.opt_float("prime_tower_brim_width"));
+    const float margin = float(WIPE_TOWER_MARGIN) + tower_brim_width;
+    x = std::max(x, margin);
+    y = std::max(y, margin);
+    float brim = tower_brim_width;
+    if (brim < 0) brim = WipeTower::get_auto_brim_by_height(float(max_height));
+    // The polygon keeps the configured tower width even for rib walls, as the desktop's does.
+    x = std::clamp(x, margin, bed_width - width - margin - brim);
+    y = std::clamp(y, margin, float(bed_depth - depth - margin - brim));
+    ConfigOptionFloat x_value(x), y_value(y);
+    x_opt->set_at(&x_value, 0, 0);
+    y_opt->set_at(&y_value, 0, 0);
+
+    arrangement::ArrangePolygon tower;
+    tower.poly.contour = Polygon({ {scaled(x - brim), scaled(y - brim)}, {scaled(x + width + brim), scaled(y - brim)},
+                                   {scaled(x + width + brim), scaled(y + depth + brim)}, {scaled(x - brim), scaled(y + depth + brim)} });
+    tower.bed_idx = 0;
+    tower.setter = nullptr;
+    tower.translation = {0, 0};
+    tower.rotation = config.opt_float("wipe_tower_rotation_angle");
+    tower.name = "WipeTower";
+    tower.is_virt_object = true;
+    tower.is_wipe_tower = true;
+    return tower;
+}
+
+static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrangement::ArrangePolygons unselected)
 {
     using namespace arrangement;
     ArrangePolygons selected, excluded_regions;
@@ -192,7 +366,6 @@ static void place_on_bed(Model& model, const DynamicPrintConfig& config)
     }
     params.excluded_regions = excluded_regions;
 
-    ArrangePolygons unselected;
     update_arrange_params(params, &config, selected);
     update_selected_items_inflation(selected, &config, params);
     update_unselected_items_inflation(unselected, &config, params);
@@ -224,6 +397,8 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     select(bundle.printers, selection.printer, "printer");
     bundle.update_compatible(PresetSelectCompatibleType::Never);
     select(bundle.prints, selection.process, "process");
+    // set_filament_preset() ignores slots beyond the current list, so size it first.
+    bundle.filament_presets.resize(selection.filaments.size());
     for (size_t i = 0; i < selection.filaments.size(); ++i) {
         if (bundle.filaments.find_preset(selection.filaments[i], false) == nullptr)
             throw std::runtime_error("Unknown filament preset: " + selection.filaments[i]);
@@ -231,7 +406,6 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
             bundle.filaments.select_preset_by_name(selection.filaments[i], true);
         bundle.set_filament_preset(i, selection.filaments[i]);
     }
-    bundle.filament_presets.resize(selection.filaments.size());
     DynamicPrintConfig config = bundle.full_config();
     // The plate type is project state in the desktop app, which starts it at the printer's default_bed_type.
     config.set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(default_bed_type(bundle, bundle.printers.get_edited_preset())));
@@ -245,6 +419,20 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     config.normalize_fdm();
 
     const size_t filament_count = selection.filaments.size();
+    if (!selection.filament_colours.empty()) {
+        std::vector<std::string>& colours = config.option<ConfigOptionStrings>("filament_colour", true)->values;
+        colours.resize(filament_count, colours.empty() ? "#F2754E" : colours.back());
+        for (size_t i = 0; i < filament_count && i < selection.filament_colours.size(); ++i) {
+            const std::string& colour = selection.filament_colours[i];
+            if (colour.empty()) continue;
+            unsigned char rgba[4];
+            if (!parse_colour(colour, rgba))
+                throw std::runtime_error("Filament colour " + std::to_string(i + 1) + " is not #RRGGBB: " + colour);
+            colours[i] = colour;
+        }
+    }
+    if (filament_count > 1)
+        compute_flush_volumes(config);
     std::vector<int>& filament_map = config.option<ConfigOptionInts>("filament_map", true)->values;
     filament_map.assign(filament_count, 1);
     if (!config.has("nozzle_volume_type"))
@@ -253,26 +441,38 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     // 2. Models.
     report(0, "Loading model");
     Model model;
-    for (const std::string& path : models) {
+    for (size_t file = 0; file < models.size(); ++file) {
         DynamicPrintConfig ignored;
         ConfigSubstitutionContext ignored_substitutions(ForwardCompatibilitySubstitutionRule::EnableSilent);
-        Model part = Model::read_from_file(path, &ignored, &ignored_substitutions, LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances);
-        for (ModelObject* object : part.objects) {
-            model.add_object(*object);
+        Model part = Model::read_from_file(models[file], &ignored, &ignored_substitutions, LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances);
+        const int assigned = file < selection.model_filaments.size() ? selection.model_filaments[file] : 0;
+        if (assigned < 0 || assigned > int(filament_count))
+            throw std::runtime_error("Model " + std::to_string(file + 1) + " is assigned filament " + std::to_string(assigned) + ", but only " + std::to_string(filament_count) + " are set up");
+        for (ModelObject* source : part.objects) {
+            ModelObject* object = model.add_object(*source);
+            if (assigned > 0) {
+                // The whole file prints with this filament: the object's setting, with its parts' own ones cleared.
+                object->config.set_key_value("extruder", new ConfigOptionInt(assigned));
+                for (ModelVolume* volume : object->volumes) volume->config.erase("extruder");
+            } else if (!object->config.has("extruder")) {
+                object->config.set_key_value("extruder", new ConfigOptionInt(1));
+            }
         }
     }
     if (model.objects.empty())
         throw std::runtime_error("The model files contain no objects");
-    for (ModelObject* object : model.objects) {
-        // Single-filament plates print everything with filament 1; extra filaments are assigned by the caller later.
-        if (!object->config.has("extruder"))
-            object->config.set_key_value("extruder", new ConfigOptionInt(1));
+    for (ModelObject* object : model.objects)
         object->ensure_on_bed();
-    }
+    const std::set<int> used = used_filaments(model);
+    if (!used.empty() && *used.rbegin() > int(filament_count))
+        throw std::runtime_error("The model uses filament " + std::to_string(*used.rbegin()) + "; set up at least that many filaments");
 
     // 3. Placement, as ElegooSlicer's arrange does it for one plate: footprints aligned to the axes, the bed's
     // excluded areas kept clear, then nested from the bed center.
-    place_on_bed(model, config);
+    arrangement::ArrangePolygons keep_clear;
+    if (auto tower = place_prime_tower(config, model, used.size()))
+        keep_clear.push_back(*tower);
+    place_on_bed(model, config, keep_clear);
 
     // 4. Slice.
     Print print;

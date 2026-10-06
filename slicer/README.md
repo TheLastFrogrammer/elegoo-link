@@ -86,6 +86,16 @@ link-slicer --resources $R \
     --output cube.gcode model.stl
 ```
 
+Several filaments: repeat `--filament` per slot, optionally with `--colour #RRGGBB` per slot, and give each model
+file its slot with `--assign` (1-based, `0` keeps a 3MF's own assignment):
+
+```sh
+link-slicer --resources $R --printer "Elegoo Centauri Carbon 2 0.4 nozzle" \
+    --process "0.20mm Standard @Elegoo CC2 0.4 nozzle" \
+    --filament "Elegoo PLA @ECC2" --colour "#D02828" --filament "Elegoo PLA Matte @ECC2" --colour "#F0F0F0" \
+    --assign 1,2 --output plate.gcode body.stl lid.stl
+```
+
 It prints one JSON line (`gcode`, `print_time_s`, `filament_mm`, `filament_g`, `filament_cm3`, `warnings`, or
 `error`) and progress on stderr. A single object is centered on the bed; several are arranged. `--set` takes any
 ElegooSlicer setting key with its serialized value. `--export-presets DIR` writes the resolved presets as JSON.

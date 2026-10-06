@@ -27,13 +27,14 @@ const Vec3d LIGHT_FRONT_DIR(0.6985074, 0.1397015, 0.6985074);
 constexpr double INTENSITY_AMBIENT = 0.3, LIGHT_TOP_DIFFUSE = 0.8 * 0.6, LIGHT_TOP_SPECULAR = 0.125 * 0.6,
                  LIGHT_TOP_SHININESS = 20.0, LIGHT_FRONT_DIFFUSE = 0.3 * 0.6;
 
-struct Triangle { Vec3d a, b, c; };
+struct Triangle { Vec3d a, b, c; ColorRGB color; };
 
-ColorRGB filament_color(const DynamicPrintConfig& config)
+// The colour of filament `id` (1-based), as the desktop colours each part by its extruder.
+ColorRGB filament_color(const DynamicPrintConfig& config, int id)
 {
     ColorRGB color(0xF2 / 255.f, 0x75 / 255.f, 0x4E / 255.f); // ElegooSlicer's default filament colour
     if (const auto* colours = config.option<ConfigOptionStrings>("filament_colour"); colours != nullptr && !colours->values.empty())
-        decode_color(colours->values.front(), color);
+        decode_color(colours->values[std::clamp(id - 1, 0, int(colours->values.size()) - 1)], color);
     return color;
 }
 
@@ -56,9 +57,10 @@ ThumbnailsList render_thumbnails(const Model& model, const DynamicPrintConfig& c
                 if (params.parts_only && !volume->is_model_part())
                     continue;
                 const Transform3d matrix = instance->get_matrix() * volume->get_matrix();
+                const ColorRGB color = filament_color(config, volume->extruder_id());
                 const indexed_triangle_set& its = volume->mesh().its;
                 for (const stl_triangle_vertex_indices& face : its.indices) {
-                    Triangle t{matrix * its.vertices[face[0]].cast<double>(), matrix * its.vertices[face[1]].cast<double>(), matrix * its.vertices[face[2]].cast<double>()};
+                    Triangle t{matrix * its.vertices[face[0]].cast<double>(), matrix * its.vertices[face[1]].cast<double>(), matrix * its.vertices[face[2]].cast<double>(), color};
                     box.merge(t.a); box.merge(t.b); box.merge(t.c);
                     triangles.push_back(t);
                 }
@@ -81,7 +83,6 @@ ThumbnailsList render_thumbnails(const Model& model, const DynamicPrintConfig& c
         const Vec3d e = view * p;
         left = std::min(left, e.x()); right = std::max(right, e.x()); bottom = std::min(bottom, e.y()); top = std::max(top, e.y());
     }
-    const ColorRGB base = filament_color(config);
 
     for (const Vec2d& requested : params.sizes) {
         const int width = int(std::lround(requested.x())), height = int(std::lround(requested.y()));
@@ -109,6 +110,7 @@ ThumbnailsList render_thumbnails(const Model& model, const DynamicPrintConfig& c
                              + LIGHT_FRONT_DIFFUSE * std::max(normal.dot(LIGHT_FRONT_DIR), 0.0);
             const Vec3d reflected = 2 * normal.dot(LIGHT_TOP_DIR) * normal - LIGHT_TOP_DIR;
             const double specular = LIGHT_TOP_SPECULAR * std::pow(std::max(reflected.z(), 0.0), LIGHT_TOP_SHININESS);
+            const ColorRGB& base = t.color;
             const float shade[3] = {float(std::min(1.0, base.r() * intensity + specular)), float(std::min(1.0, base.g() * intensity + specular)),
                                     float(std::min(1.0, base.b() * intensity + specular))};
 

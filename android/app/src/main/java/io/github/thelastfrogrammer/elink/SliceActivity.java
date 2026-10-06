@@ -2,7 +2,9 @@ package io.github.thelastfrogrammer.elink;
 
 import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ComponentName;
 import android.content.Intent;
+import android.content.ServiceConnection;
 import android.content.SharedPreferences;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
@@ -14,6 +16,7 @@ import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.IBinder;
 import android.os.Looper;
 import android.provider.OpenableColumns;
 import android.text.InputType;
@@ -26,10 +29,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Slices STL/3MF/OBJ/Draco/STEP models on the phone with ElegooSlicer's engine (NativeSlicer) and the Elegoo presets,
- * then hands the G-code to the Files tab (RESULT_FILE/RESULT_NAME) or saves it.
+ * then hands the G-code to the Files tab (RESULT_FILE/RESULT_NAME) or saves it. Several filament slots can be filled from
+ * the printer's CANVAS trays; the slot-to-tray plan is kept per file name (TRAY_PLANS) for the print setup dialog.
  */
 public final class SliceActivity extends Activity {
-    static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName";
+    static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", TRAY_PLANS = "tray-plans";
     private static final int PICK_MODELS = 1, SAVE = 2;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
     private static final Set<String> MODEL_TYPES = new HashSet<>(Arrays.asList("stl", "3mf", "obj", "drc", "step", "stp", "amf"));
@@ -46,7 +50,25 @@ public final class SliceActivity extends Activity {
     private int ink, muted, teal, background, surface, buttonColor, error;
     private LinearLayout content;
     private TextView modelsLabel, status, resultText;
-    private Spinner printerSpinner, processSpinner, filamentSpinner, supportSpinner, brimSpinner;
+    private Spinner printerSpinner, processSpinner, supportSpinner, brimSpinner;
+    private LinearLayout slotList, modelAssign;
+    private Button addSlot, removeSlot, fillTrays;
+    private TextView traysNote;
+    private String[] filamentPresets = new String[0];
+    private final List<Slot> slots = new ArrayList<>();
+    private final List<Integer> modelSlots = new ArrayList<>(); // per model: 1-based slot, 0 = as in the 3MF
+    private PrinterService printer;
+    private boolean bound;
+    private final ServiceConnection connection = new ServiceConnection() {
+        @Override public void onServiceConnected(ComponentName name, IBinder binder) { if (binder instanceof PrinterService.LocalBinder) { printer = ((PrinterService.LocalBinder) binder).service(); refreshTrays(); } }
+        @Override public void onServiceDisconnected(ComponentName name) { printer = null; }
+    };
+
+    /** One filament slot: preset, optional CANVAS tray and colour. Slot k is G-code tool k - 1. */
+    private final class Slot {
+        LinearLayout row; TextView title, swatch; Spinner preset, tray;
+        String colour; TrayPlan.Tray source; List<TrayPlan.Tray> trayChoices = new ArrayList<>();
+    }
     private EditText infill;
     private Button chooseModels, slice, cancel, useInFiles, saveCopy;
     private ProgressBar progress;
@@ -76,6 +98,7 @@ public final class SliceActivity extends Activity {
             return;
         }
         build();
+        bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         if (saved != null) {
             for (String path : saved.getStringArrayList("models") != null ? saved.getStringArrayList("models") : new ArrayList<String>()) { File file = new File(path); if (file.isFile()) models.add(file); }
             showModels();
@@ -91,12 +114,14 @@ public final class SliceActivity extends Activity {
 
     @Override protected void onDestroy() {
         if (isFinishing()) cancelRequested.set(true);
+        if (bound) unbindService(connection);
         super.onDestroy();
     }
 
     private void build() {
         LinearLayout modelCard = card("Model");
         modelsLabel = label(modelCard, "Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged on one plate.", 14, muted, false);
+        modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); modelCard.addView(modelAssign);
         chooseModels = button(modelCard, "Choose model files", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
@@ -105,11 +130,20 @@ public final class SliceActivity extends Activity {
         LinearLayout presetCard = card("Presets");
         label(presetCard, "Printer", 12, muted, false); printerSpinner = spinner(presetCard);
         label(presetCard, "Process", 12, muted, false); processSpinner = spinner(presetCard);
-        label(presetCard, "Filament", 12, muted, false); filamentSpinner = spinner(presetCard);
         printerSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { loadCompatible(selected(printerSpinner)); }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
+
+        LinearLayout filamentCard = card("Filaments");
+        label(filamentCard, "One slot per filament. Slot 1 prints as tool T0, slot 2 as T1, and so on. Pick a CANVAS tray to take its material and colour; the tray plan is offered again when you start the print.", 13, muted, false);
+        slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
+        traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
+        fillTrays = button(filamentCard, "Fill from CANVAS trays", this::fillFromTrays, false);
+        LinearLayout slotButtons = new LinearLayout(this); slotButtons.setOrientation(LinearLayout.HORIZONTAL); filamentCard.addView(slotButtons);
+        addSlot = rowButton(slotButtons, "Add filament", () -> { addSlot(null); showModels(); updateButtons(); }, false);
+        removeSlot = rowButton(slotButtons, "Remove last", () -> { removeLastSlot(); showModels(); updateButtons(); }, false);
+        addSlot(null);
 
         LinearLayout settingsCard = card("Quick settings");
         label(settingsCard, "Leave a setting on “Preset” to use the process preset's value.", 13, muted, false);
@@ -176,15 +210,26 @@ public final class SliceActivity extends Activity {
                 if (isDestroyed()) return;
                 busy = false;
                 fill(processSpinner, Arrays.asList(p), remembered(p, "sliceProcess", "0.20mm Standard"));
-                fill(filamentSpinner, Arrays.asList(f), remembered(f, "sliceFilament", "Elegoo PLA @"));
+                filamentPresets = f;
+                for (int i = 0; i < slots.size(); i++) {
+                    Slot slot = slots.get(i); String current = selected(slot.preset);
+                    String preferred = slot.source != null ? TrayPlan.preset(slot.source, Arrays.asList(f), null) : null;
+                    if (preferred == null) preferred = current != null && Arrays.asList(f).contains(current) ? current : remembered(f, i == 0 ? "sliceFilament" : "sliceFilament" + (i + 1), "Elegoo PLA @");
+                    fill(slot.preset, Arrays.asList(f), preferred);
+                }
                 updateButtons();
             });
         });
     }
 
     private void startSlice() {
-        String printer = selected(printerSpinner), process = selected(processSpinner), filament = selected(filamentSpinner);
-        if (models.isEmpty() || printer == null || process == null || filament == null) return;
+        String printer = selected(printerSpinner), process = selected(processSpinner);
+        List<String> filaments = new ArrayList<>(), colours = new ArrayList<>();
+        for (Slot slot : slots) { filaments.add(selected(slot.preset)); colours.add(slot.colour); }
+        if (models.isEmpty() || printer == null || process == null || filaments.contains(null)) return;
+        int[] assignment = new int[models.size()];
+        for (int i = 0; i < assignment.length; i++) assignment[i] = slots.size() > 1 && i < modelSlots.size() ? modelSlots.get(i) : 0;
+        TrayPlan plan = plan();
         List<String[]> overrides = new ArrayList<>();
         String density = infill.getText().toString().trim();
         if (!density.isEmpty()) {
@@ -204,7 +249,9 @@ public final class SliceActivity extends Activity {
             case 3: overrides.add(new String[] {"brim_type", "outer_only"}); break;
             default: break;
         }
-        settings.edit().putString("slicePrinter", printer).putString("sliceProcess", process).putString("sliceFilament", filament).apply();
+        SharedPreferences.Editor remember = settings.edit().putString("slicePrinter", printer).putString("sliceProcess", process);
+        for (int i = 0; i < filaments.size(); i++) remember.putString(i == 0 ? "sliceFilament" : "sliceFilament" + (i + 1), filaments.get(i));
+        remember.apply();
         String base = models.get(0).getName().replaceFirst("\\.[^.]+$", "");
         slicedName = (models.size() > 1 ? base + "_plate" : base) + ".gcode";
         File outputDir = new File(getCacheDir(), "sliced"); outputDir.mkdirs();
@@ -215,12 +262,12 @@ public final class SliceActivity extends Activity {
         long started = System.currentTimeMillis();
         worker.execute(() -> {
             try {
-                NativeSlicer.Result result = engine.slice(input, printer, process, Collections.singletonList(filament), overrides, output, (percent, text) -> {
+                NativeSlicer.Result result = engine.slice(input, printer, process, filaments, colours, assignment, overrides, output, (percent, text) -> {
                     main.post(() -> { if (!isDestroyed()) { progress.setProgress(percent); if (!cancelRequested.get()) status.setText(percent + "% · " + text); } });
                     return !cancelRequested.get();
                 });
                 long elapsed = System.currentTimeMillis() - started;
-                main.post(() -> { if (!isDestroyed()) finished(result, elapsed, printer, process, filament); });
+                main.post(() -> { if (!isDestroyed()) finished(result, elapsed, printer, process, filaments, plan); });
             } catch (IOException failure) {
                 main.post(() -> {
                     if (isDestroyed()) return;
@@ -232,14 +279,22 @@ public final class SliceActivity extends Activity {
         });
     }
 
-    private void finished(NativeSlicer.Result result, long elapsedMs, String printer, String process, String filament) {
+    private void finished(NativeSlicer.Result result, long elapsedMs, String printer, String process, List<String> filaments, TrayPlan plan) {
         busy = false; progress.setVisibility(View.GONE); sliced = result.gcode;
+        // The print setup dialog offers this plan for a printer file of the same name.
+        getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit().putString(GcodeLibrary.safeName(slicedName), plan.toJson()).apply();
         status.setText(String.format(Locale.getDefault(), "Sliced in %.1f s.", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();
         text.append(slicedName).append("\n");
         text.append("Estimated print time: ").append(duration(result.printSeconds)).append("\n");
         text.append(String.format(Locale.getDefault(), "Filament: %.1f g (%.2f m)\n", result.filamentGrams, result.filamentMm / 1000.0));
-        text.append(printer).append("\n").append(process).append("\n").append(filament);
+        text.append(printer).append("\n").append(process);
+        for (int i = 0; i < filaments.size(); i++) {
+            TrayPlan.Tool tool = plan.tool(i);
+            text.append("\n").append(filaments.size() > 1 ? "T" + i + ": " : "").append(filaments.get(i));
+            if (slots.size() > i && slots.get(i).colour != null) text.append(" · ").append(slots.get(i).colour);
+            if (tool != null) text.append(" · CANVAS ").append(tool.canvasId).append(" tray ").append(tool.trayId);
+        }
         for (String warning : result.warnings) text.append("\n\nWarning: ").append(warning);
         resultText.setText(text.toString());
         resultCard.setVisibility(View.VISIBLE);
@@ -310,19 +365,179 @@ public final class SliceActivity extends Activity {
     }
 
     private void showModels() {
+        modelAssign.removeAllViews();
+        while (modelSlots.size() > models.size()) modelSlots.remove(modelSlots.size() - 1);
+        // New models: 3MF files keep their own assignment; others take the next slot in turn.
+        while (modelSlots.size() < models.size()) { int i = modelSlots.size(); modelSlots.add(is3mf(models.get(i)) ? 0 : i % Math.max(1, slots.size()) + 1); }
         if (models.isEmpty()) { modelsLabel.setText("Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged on one plate."); modelsLabel.setTextColor(muted); return; }
         StringBuilder names = new StringBuilder();
         for (File file : models) names.append(names.length() > 0 ? "\n" : "").append(file.getName()).append(" (").append(size(file.length())).append(")");
         modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
+        if (slots.size() < 2) return;
+        label(modelAssign, "Filament for each model", 12, muted, false);
+        for (int i = 0; i < models.size(); i++) {
+            File model = models.get(i); int index = i;
+            List<String> choices = new ArrayList<>();
+            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Slot 1");
+            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) choices.add("Slot " + k + slotSummary(k));
+            if (!is3mf(model)) choices.set(0, "Slot 1" + slotSummary(1));
+            label(modelAssign, model.getName(), 13, ink, false);
+            Spinner spinner = spinner(modelAssign);
+            int slot = Math.min(modelSlots.get(i), slots.size());
+            fill(spinner, choices, choices.get(is3mf(model) ? slot : Math.max(slot, 1) - 1));
+            spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { modelSlots.set(index, is3mf(model) ? position : position + 1); }
+                @Override public void onNothingSelected(AdapterView<?> p) { }
+            });
+        }
+    }
+
+    private static boolean is3mf(File file) { return file.getName().toLowerCase(Locale.ROOT).endsWith(".3mf"); }
+    private String slotSummary(int k) {
+        Slot slot = slots.get(k - 1); String preset = selected(slot.preset);
+        return (preset == null ? "" : " · " + preset.replaceFirst(" @.*$", "")) + (slot.colour == null ? "" : " " + slot.colour);
+    }
+
+    private void addSlot(TrayPlan.Tray tray) {
+        if (slots.size() >= TrayPlan.MAX_TOOLS) return;
+        Slot slot = new Slot(); int number = slots.size() + 1;
+        slot.row = new LinearLayout(this); slot.row.setOrientation(LinearLayout.VERTICAL); slot.row.setPadding(0, dp(6), 0, dp(6));
+        LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        slot.title = new TextView(this); slot.title.setText("Slot " + number + " · T" + (number - 1)); slot.title.setTextColor(ink); slot.title.setTextSize(14); slot.title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        header.addView(slot.title, new LinearLayout.LayoutParams(0, -2, 1));
+        slot.swatch = new TextView(this); slot.swatch.setTextSize(12); slot.swatch.setGravity(android.view.Gravity.CENTER); slot.swatch.setMinHeight(dp(36)); slot.swatch.setPadding(dp(10), 0, dp(10), 0);
+        slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament colour for slot " + number);
+        header.addView(slot.swatch, new LinearLayout.LayoutParams(-2, dp(36)));
+        slot.row.addView(header);
+        label(slot.row, "Preset", 12, muted, false); slot.preset = spinner(slot.row);
+        slot.preset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { if (slots.size() > 1 && !models.isEmpty()) showModels(); updateButtons(); }
+            @Override public void onNothingSelected(AdapterView<?> p) { }
+        });
+        label(slot.row, "CANVAS tray", 12, muted, false); slot.tray = spinner(slot.row);
+        slot.tray.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
+                TrayPlan.Tray chosen = position > 0 && position <= slot.trayChoices.size() ? slot.trayChoices.get(position - 1) : null;
+                if (chosen == slot.source) return; // set by code, or unchanged
+                if (chosen == null && slot.source != null && slot.trayChoices.isEmpty()) return; // trays not reported right now: keep the plan
+                applyTray(slot, chosen); showModels(); updateButtons();
+            }
+            @Override public void onNothingSelected(AdapterView<?> p) { }
+        });
+        slots.add(slot); slotList.addView(slot.row);
+        if (filamentPresets.length > 0)
+            fill(slot.preset, Arrays.asList(filamentPresets), remembered(filamentPresets, slots.size() == 1 ? "sliceFilament" : "sliceFilament" + slots.size(), "Elegoo PLA @"));
+        fillTrayChoices(slot);
+        applyTray(slot, tray);
+    }
+
+    private void removeLastSlot() {
+        if (slots.size() <= 1) return;
+        Slot slot = slots.remove(slots.size() - 1); slotList.removeView(slot.row);
+        for (int i = 0; i < modelSlots.size(); i++) if (modelSlots.get(i) > slots.size()) modelSlots.set(i, slots.size());
+    }
+
+    /** Takes a tray's material and colour (null clears the tray, keeping the preset and colour). */
+    private void applyTray(Slot slot, TrayPlan.Tray tray) {
+        TrayPlan.Tray match = null;
+        if (tray != null) for (TrayPlan.Tray choice : slot.trayChoices) if (choice.same(tray.canvasId, tray.trayId)) match = choice;
+        slot.source = match != null ? match : tray;
+        if (tray != null) {
+            slot.colour = tray.colour;
+            String preset = TrayPlan.preset(tray, Arrays.asList(filamentPresets), null);
+            if (preset != null) fill(slot.preset, Arrays.asList(filamentPresets), preset);
+        }
+        if (tray != null && match == null) fillTrayChoices(slot); // not among the reported trays: list it so the plan shows
+        else { int index = match == null ? 0 : slot.trayChoices.indexOf(match) + 1; if (slot.tray.getSelectedItemPosition() != index) slot.tray.setSelection(index); }
+        showSwatch(slot);
+    }
+
+    private void showSwatch(Slot slot) {
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(10));
+        if (slot.colour != null) {
+            int rgb = Color.parseColor(slot.colour); shape.setColor(rgb);
+            boolean light = (Color.red(rgb) * 299 + Color.green(rgb) * 587 + Color.blue(rgb) * 114) / 1000 > 140;
+            slot.swatch.setTextColor(light ? 0xff17252c : Color.WHITE); slot.swatch.setText(slot.colour);
+            shape.setStroke(dp(1), muted);
+        } else {
+            shape.setColor(buttonColor); slot.swatch.setTextColor(teal); slot.swatch.setText("Preset colour");
+        }
+        slot.swatch.setBackground(shape);
+    }
+
+    private void chooseColour(Slot slot) {
+        if (busy) return;
+        EditText hex = new EditText(this); hex.setSingleLine(true); hex.setHint("#RRGGBB"); hex.setText(slot.colour == null ? "" : slot.colour);
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0); body.addView(hex);
+        new AlertDialog.Builder(this).setTitle("Slot " + (slots.indexOf(slot) + 1) + " colour")
+            .setMessage("Used for the preview image, the G-code's filament colours and the flushing volumes between colours.").setView(body)
+            .setNegativeButton("Cancel", null)
+            .setNeutralButton("Preset colour", (d, w) -> { slot.colour = null; showSwatch(slot); showModels(); })
+            .setPositiveButton("Use", (d, w) -> {
+                String colour = TrayPlan.colour(hex.getText().toString());
+                if (colour == null) { status.setText("Colours are six hex digits, like #D02828."); status.setTextColor(error); return; }
+                slot.colour = colour; showSwatch(slot); showModels();
+            }).show();
+    }
+
+    /** The trays the printer reported last (possibly stale), or an empty list. */
+    private List<TrayPlan.Tray> reportedTrays() { return printer == null ? new ArrayList<>() : TrayPlan.trays(printer.canvas); }
+
+    private void fillTrayChoices(Slot slot) {
+        slot.trayChoices = reportedTrays();
+        List<String> choices = new ArrayList<>(); choices.add(slot.trayChoices.isEmpty() && slot.source == null ? "No trays reported (choose at print start)" : "No tray (choose at print start)");
+        // Keep a planned tray when the printer has not reported trays (yet).
+        if (slot.source != null) {
+            TrayPlan.Tray match = null;
+            for (TrayPlan.Tray tray : slot.trayChoices) if (tray.same(slot.source.canvasId, slot.source.trayId)) match = tray;
+            if (match == null) slot.trayChoices.add(slot.source); else slot.source = match;
+        }
+        for (TrayPlan.Tray tray : slot.trayChoices) choices.add(tray.label());
+        fill(slot.tray, choices, slot.source == null ? choices.get(0) : slot.source.label());
+    }
+
+    private void refreshTrays() {
+        if (isDestroyed() || slotList == null) return;
+        for (Slot slot : slots) fillTrayChoices(slot);
+        List<TrayPlan.Tray> trays = reportedTrays();
+        boolean fresh = printer != null && printer.canvasFresh();
+        traysNote.setVisibility(View.VISIBLE);
+        traysNote.setText(trays.isEmpty() ? "No CANVAS trays reported. Connect to the printer (Status tab) to fill slots from its trays."
+            : trays.size() + " loaded tray(s) reported" + (fresh ? "." : "; refresh status on the printer tab for the latest."));
+        updateButtons();
+    }
+
+    private void fillFromTrays() {
+        if (printer != null) printer.refresh();
+        List<TrayPlan.Tray> trays = reportedTrays();
+        if (trays.isEmpty()) { refreshTrays(); status.setText("No loaded CANVAS trays reported yet. Connect to the printer, wait for its status, then try again."); status.setTextColor(error); return; }
+        while (slots.size() > 1) removeLastSlot();
+        for (Slot slot : slots) fillTrayChoices(slot);
+        applyTray(slots.get(0), trays.get(0));
+        for (int i = 1; i < trays.size() && i < TrayPlan.MAX_TOOLS; i++) addSlot(trays.get(i));
+        refreshTrays();
+        status.setText("Filled " + slots.size() + " slot(s) from the CANVAS trays. Check each slot's preset."); status.setTextColor(ink);
+        showModels(); updateButtons();
+    }
+
+    /** The slot-to-tray plan for the print setup dialog. */
+    private TrayPlan plan() {
+        List<TrayPlan.Tool> tools = new ArrayList<>();
+        for (int i = 0; i < slots.size(); i++) { TrayPlan.Tray tray = slots.get(i).source; if (tray != null) tools.add(new TrayPlan.Tool(i, tray.canvasId, tray.trayId)); }
+        return new TrayPlan(slots.size(), tools);
     }
 
     private void updateButtons() {
         if (slice == null) return;
-        boolean presetsReady = selected(printerSpinner) != null && selected(processSpinner) != null && selected(filamentSpinner) != null;
+        boolean presetsReady = selected(printerSpinner) != null && selected(processSpinner) != null;
+        for (Slot slot : slots) presetsReady &= selected(slot.preset) != null;
         slice.setEnabled(!busy && !models.isEmpty() && presetsReady);
         cancel.setEnabled(busy && progress.getVisibility() == View.VISIBLE);
         chooseModels.setEnabled(!busy);
-        printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy); filamentSpinner.setEnabled(!busy);
+        printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
+        for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
+        addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);
+        for (int i = 0; i < modelAssign.getChildCount(); i++) modelAssign.getChildAt(i).setEnabled(!busy);
     }
 
     private String displayName(Uri uri) {

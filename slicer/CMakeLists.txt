@@ -146,10 +146,10 @@ foreach (_lib ${_bundled})
 endforeach ()
 add_subdirectory("${ELEGOOSLICER_SRC}/src/libslic3r" "${LIBDIR_BIN}/libslic3r")
 
-# nanosvg's implementation lives in ElegooSlicer's GUI; give libslic3r its own so it links after libslic3r.
-add_library(nanosvg_impl STATIC engine/nanosvg_impl.cpp)
-target_include_directories(nanosvg_impl PRIVATE "${ELEGOOSLICER_SRC}/deps_src")
-target_link_libraries(libslic3r PUBLIC nanosvg_impl)
+# Functions libslic3r uses that ElegooSlicer compiles only into its GUI (nanosvg, RGB2HSV); linked after libslic3r.
+add_library(gui_utils_impl STATIC engine/gui_utils_impl.cpp)
+target_include_directories(gui_utils_impl PRIVATE "${ELEGOOSLICER_SRC}/deps_src")
+target_link_libraries(libslic3r PUBLIC gui_utils_impl)
 
 # --- Link Slicer ------------------------------------------------------------------------------------------------
 add_library(link_slicer STATIC engine/link_slicer.cpp engine/link_slicer.hpp engine/thumbnail.cpp engine/thumbnail.hpp)

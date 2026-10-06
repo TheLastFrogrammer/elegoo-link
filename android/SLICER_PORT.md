@@ -75,8 +75,9 @@ Run slicing in a foreground service (it can take minutes and lots of memory); re
 ### 4. Android UI (in this app or a sibling app — see licensing) — started
 Started, in Link Workshop itself (chosen over a separate app): `SliceActivity` (Files → Slice a model on this phone)
 picks models, printer, process and filament presets, infill, supports and brim, then slices with progress and cancel.
-The G-code goes to the Files tab for upload or is saved. Since added: the toolpath viewer and the embedded preview thumbnail. Not yet:
-multi-filament assignment, or a settings editor beyond the quick settings.
+The G-code goes to the Files tab for upload or is saved. Since added: the toolpath viewer, the embedded preview thumbnail
+and multi-filament slots filled from the CANVAS trays (per-model slot, colours, flushing volumes, prime tower; the
+tray plan prefills Print setup). Not yet: a settings editor beyond the quick settings, multi-plate 3MF projects.
 The notes below were the plan.
 
 - Import STL/3MF/OBJ from the Files picker or share sheet.

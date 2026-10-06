@@ -122,13 +122,20 @@ JNIEXPORT jobjectArray JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlic
 
 // listener: an object with "boolean progress(int percent, String text)"; returning false cancels the slice.
 JNIEXPORT jstring JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlicer_slice(JNIEnv* env, jclass, jlong handle,
-    jobjectArray models, jstring printer, jstring process, jobjectArray filaments, jobjectArray keys, jobjectArray values,
-    jstring output, jobject listener)
+    jobjectArray models, jstring printer, jstring process, jobjectArray filaments, jobjectArray colours, jintArray modelFilaments,
+    jobjectArray keys, jobjectArray values, jstring output, jobject listener)
 {
     linkslicer::Selection selection;
     selection.printer = string_of(env, printer);
     selection.process = string_of(env, process);
     selection.filaments = strings_of(env, filaments);
+    selection.filament_colours = strings_of(env, colours);
+    if (modelFilaments != nullptr) {
+        const jsize count = env->GetArrayLength(modelFilaments);
+        std::vector<jint> values(count);
+        env->GetIntArrayRegion(modelFilaments, 0, count, values.data());
+        selection.model_filaments.assign(values.begin(), values.end());
+    }
     const std::vector<std::string> overrideKeys = strings_of(env, keys), overrideValues = strings_of(env, values);
     for (size_t i = 0; i < overrideKeys.size() && i < overrideValues.size(); ++i)
         selection.overrides.emplace_back(overrideKeys[i], overrideValues[i]);

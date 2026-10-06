@@ -2,7 +2,7 @@
 //
 //   link-slicer --resources DIR --list printers|processes|filaments [--printer NAME]
 //   link-slicer --resources DIR --printer NAME --process NAME --filament NAME [--filament NAME ...]
-//               [--set key=value ...] --output out.gcode model.stl [model2.3mf ...]
+//               [--colour #RRGGBB ...] [--assign 1,2,...] [--set key=value ...] --output out.gcode model.stl [model2.3mf ...]
 //   link-slicer --resources DIR --printer NAME --process NAME --filament NAME --export-presets DIR
 //               (resolved presets as JSON, the form ElegooSlicer's own --load-settings/--load-filaments take)
 //
@@ -52,7 +52,9 @@ int usage()
         "Usage:\n"
         "  link-slicer --resources DIR --list printers|processes|filaments [--printer NAME]\n"
         "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME [--filament NAME ...]\n"
-        "              [--set key=value ...] [--vendor Elegoo] [--work DIR] --output out.gcode MODEL...\n"
+        "              [--colour #RRGGBB ...] [--assign N,N,...] [--set key=value ...] [--vendor Elegoo] [--work DIR]\n"
+        "              --output out.gcode MODEL...\n"
+        "    --filament and --colour repeat once per filament slot; --assign gives each MODEL file its slot.\n"
         "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --export-presets DIR\n";
     return 2;
 }
@@ -78,6 +80,14 @@ int main(int argc, char** argv)
         else if (arg == "--printer") selection.printer = value();
         else if (arg == "--process") selection.process = value();
         else if (arg == "--filament") selection.filaments.push_back(value());
+        else if (arg == "--colour" || arg == "--color") selection.filament_colours.push_back(value());
+        else if (arg == "--assign") {
+            std::stringstream list(value()); std::string item;
+            while (std::getline(list, item, ',')) {
+                try { selection.model_filaments.push_back(std::stoi(item)); }
+                catch (const std::exception&) { std::cerr << "--assign expects filament numbers like 1,2,1\n"; return usage(); }
+            }
+        }
         else if (arg == "--output") output = value();
         else if (arg == "--work") work = value();
         else if (arg == "--export-presets") export_dir = value();

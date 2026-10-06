@@ -1,6 +1,10 @@
 # Link Workshop for Android
 
-**v0.7.1 (development):** G-code sliced on the phone now carries the 144×144 preview image the printer shows in its file list, rendered by the engine like ElegooSlicer's desktop thumbnail.
+**v0.8.0 (development):** multi-filament slicing with CANVAS trays. The Slice screen has filament slots (slot 1 is tool T0, slot 2 T1, …), each with a preset, a colour and an optional CANVAS tray; **Fill from CANVAS trays** makes one slot per loaded tray with the matching Elegoo preset and the tray's colour, and each model file gets a slot (3MF files can keep their own painting and parts). The engine computes flushing volumes from the colours and adds the prime tower as ElegooSlicer does, and the preview image shows each part in its colour. The slot-to-tray plan is remembered for the sliced file, so Print setup opens with the tool count and trays filled in.
+
+<img src="docs/screenshots/slice-filaments-light.png" width="240" alt="Filament slots filled from CANVAS trays">
+
+**v0.7.1:** G-code sliced on the phone now carries the 144×144 preview image the printer shows in its file list, rendered by the engine like ElegooSlicer's desktop thumbnail.
 
 **v0.7.0:** 3D toolpath viewer (Files → Preview toolpath, or Preview after slicing) with layer and move scrubbing, playback, feature filters and travel moves; **Live toolpath** on the Monitor tab follows the running print, using the printer's layer and nozzle position, with printed moves in color, the rest of the layer ghosted and lower layers dimmed. The app keeps copies of G-code it uploads, slices or downloads so it can show the file being printed, and can download it from the printer otherwise.
 

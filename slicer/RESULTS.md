@@ -59,7 +59,8 @@ Also checked with link-slicer alone:
   (the cube still matches the official CLI exactly). Examples: [thumbnails.png](thumbnails.png).
 - Only the model geometry of a 3MF is used. Its saved print settings, plates and per-plate assignments are not
   applied yet.
-- One plate, and filament 1 for every object. Multi-filament (CANVAS) assignment comes with the Android UI.
+- ~~One plate, and filament 1 for every object.~~ Multi-filament done since (still one plate): see "Multi-filament"
+  below.
 - `DEP_GIT_ARCHIVES=ON` was used here, because this build machine could clone public GitHub repositories but not
   download their source archives. The tags fetched were:
 
@@ -79,6 +80,26 @@ Also checked with link-slicer alone:
   AcademySoftwareFoundation/openexr v2.5.5 4212416433a230334cef0ac122cb8d722746035d
   tamasmeszaros/openvdb a68fd58d0e2b85f01adeb8b13d7555183ab10aa5
   ```
+
+## Multi-filament
+
+The facade takes a preset and an optional colour per filament slot and a slot per model file (`--filament`,
+`--colour` and `--assign` in the CLI). Like the desktop app, it then computes the flushing volumes from the colours
+(ElegooSlicer's `FlushVolCalculator` and the GUI's minimum-flush rule), places the prime tower where the desktop
+would (its default spot, kept clear of the parts during arrange and clamped to the bed with the tower's estimated
+depth), and colours the thumbnail per part. Compared with the official CLI (`--load-filaments "a;b"
+--load-filament-ids 1,2`, same exported presets, with `COLOURS`, `MODELS` and `ASSIGN` in `compare-official.sh`):
+
+| Models (slot) | Filaments, colours | G-code commands (differing) | Estimate | Filament | Flush matrix | Prime tower |
+|---|---|---|---|---|---|---|
+| Elegoo cube (1) + tolerance test (2) | Elegoo PLA ×2, #D02828 / #F0F0F0 | 150,438 (343) | 1h 47m 41s | 34.35 g; 6,228.83 / 5,195.69 mm | 0, 586, 286, 0 | (165, 224.972) |
+
+All 343 differing commands are coordinates differing by 0.001 mm in the last printed digit (339) or two `M73`
+progress lines in swapped order (4 lines); extrusion per filament, per layer and in total, times and the
+configuration block are identical. The single-filament Benchy still matches with 0 differing commands.
+
+Mixed materials are checked as the desktop checks them: PLA with PETG is refused with ElegooSlicer's "Selected nozzle
+temperatures are incompatible" message.
 
 ## Implications for step 2 (Android cross-compile)
 

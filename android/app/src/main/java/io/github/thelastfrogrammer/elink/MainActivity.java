@@ -630,6 +630,18 @@ public final class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { for (int t = 0; t < 8; t++) { maps[t].setVisibility(t <= position ? View.VISIBLE : View.GONE); labels[t].setVisibility(t <= position ? View.VISIBLE : View.GONE); } }
         });
+        // A file sliced on this phone carries its slot-to-tray plan: G-code tool t prints from the tray chosen for slot t + 1.
+        TrayPlan plan = TrayPlan.parse(getSharedPreferences(SliceActivity.TRAY_PLANS, MODE_PRIVATE).getString(GcodeLibrary.safeName(name), null));
+        if (plan != null) {
+            toolCount.setSelection(plan.count - 1);
+            int matched = 0;
+            for (TrayPlan.Tool tool : plan.tools)
+                for (int i = 0; i < trays.size(); i++)
+                    if (trays.get(i).optInt("canvas_id") == tool.canvasId && trays.get(i).optInt("tray_id") == tool.trayId) { maps[tool.t].setSelection(i + 1); matched++; }
+            label(body, plan.tools.isEmpty() ? "Tool count from slicing this file on the phone (" + plan.count + ")."
+                : matched == plan.tools.size() ? "Tool count and trays prefilled from slicing this file on the phone."
+                : "Tool count prefilled from slicing this file on the phone; " + (plan.tools.size() - matched) + " planned tray(s) are not reported as loaded now. Refresh trays or choose them.", 13, TEAL, false);
+        }
         label(body, "Verify the tool count against your sliced file. Leave every tool at default to use the printer / G-code mapping, or explicitly map every tool to a reported tray. Timelapse records on the printer; export is not included yet.", 13, MUTED, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog setup = new AlertDialog.Builder(this).setTitle("Print setup").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Review start…", null).create();

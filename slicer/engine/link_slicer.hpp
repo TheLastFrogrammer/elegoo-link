@@ -15,6 +15,12 @@ struct Selection {
     std::string printer;                 // e.g. "Elegoo Centauri Carbon 2 0.4 nozzle"
     std::string process;                 // e.g. "0.20mm Standard @Elegoo CC2 0.4 nozzle"
     std::vector<std::string> filaments;  // one per filament slot, e.g. {"Elegoo PLA @ECC2"}
+    // Optional colour per slot ("#RRGGBB"), e.g. from the CANVAS trays. Used for flush volumes, the G-code's
+    // filament_colour and the thumbnail; slots without one keep the preset's colour.
+    std::vector<std::string> filament_colours;
+    // Optional slot per model file (1-based). 0 or missing keeps the file's own assignment (3MF parts and painting),
+    // or slot 1 when the file has none.
+    std::vector<int> model_filaments;
     std::vector<std::pair<std::string, std::string>> overrides; // config key -> serialized value
 };
 

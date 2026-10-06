@@ -97,6 +97,33 @@ public class SlicerIntegrationTest {
         assertFalse(gcode.matches("(?s).*\\nG1 X(-|2[6-9]\\d|[3-9]\\d\\d).*"));
     }
 
+    @Test public void slicesTwoFilamentsWithTrayColoursAndAssignment() throws Exception {
+        File output = new File(context().getCacheDir(), "two.gcode");
+        List<File> models = Arrays.asList(box(20, 20, 10), box(15, 15, 10));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Result result = slicer.slice(models, PRINTER, PROCESS, Arrays.asList(PLA, "Elegoo PLA Matte @ECC2"), Arrays.asList("#D02828", "#F0F0F0"),
+                new int[] {1, 2}, Collections.emptyList(), output, null);
+            assertTrue(result.gcode.isFile());
+            String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("; filament_colour = #D02828;#F0F0F0"));
+            assertTrue(gcode.contains("; filament_settings_id = \"Elegoo PLA @ECC2\";\"Elegoo PLA Matte @ECC2\""));
+            assertTrue("switches to the second filament", gcode.contains("\nM6211 T1 ") && gcode.contains("\nT1\n"));
+            // Flushing volumes from the two colours (white after red needs more than nothing), and a prime tower.
+            java.util.regex.Matcher flush = java.util.regex.Pattern.compile("; flush_volumes_matrix = 0,(\\d+),(\\d+),0").matcher(gcode);
+            assertTrue(flush.find()); assertTrue(Integer.parseInt(flush.group(1)) > 0);
+            assertTrue(gcode.contains("; enable_prime_tower = 1"));
+            // A slot the plate does not have.
+            try {
+                slicer.slice(models, PRINTER, PROCESS, Collections.singletonList(PLA), null, new int[] {1, 2}, Collections.emptyList(), output, null);
+                fail("expected an error for filament slot 2 of 1");
+            } catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("2")); }
+            try {
+                slicer.slice(models, PRINTER, PROCESS, Arrays.asList(PLA, PLA), Arrays.asList("red", ""), null, Collections.emptyList(), output, null);
+                fail("expected an error for a malformed colour");
+            } catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("#RRGGBB")); }
+        }
+    }
+
     @Test public void cancellingStopsTheSlice() throws Exception {
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
             slicer.slice(Collections.singletonList(box(20, 20, 10)), PRINTER, PROCESS, Collections.singletonList(PLA), Collections.emptyList(),
@@ -130,16 +157,30 @@ public class SlicerIntegrationTest {
         for (String theme : new String[] {"light", "dark"}) {
             context().getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
             SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
-            waitFor(() -> spinnerFilled(activity, "filamentSpinner"));
-            File imported = new File(context().getCacheDir(), "slice-input/calibration_box.stl"); imported.getParentFile().mkdirs();
-            Files.copy(model.toPath(), imported.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
-            @SuppressWarnings("unchecked") List<File> models = (List<File>) field(activity, "models"); models.clear(); models.add(imported);
+            waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+            @SuppressWarnings("unchecked") List<File> models = (List<File>) field(activity, "models"); models.clear();
+            for (String name : new String[] {"calibration_box.stl", "small_box.stl"}) {
+                File imported = new File(context().getCacheDir(), "slice-input/" + name); imported.getParentFile().mkdirs();
+                Files.copy(model.toPath(), imported.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); models.add(imported);
+            }
+            // Two slots from CANVAS trays, as "Fill from CANVAS trays" makes them (no printer in this test).
+            java.lang.reflect.Method addSlot = SliceActivity.class.getDeclaredMethod("addSlot", TrayPlan.Tray.class); addSlot.setAccessible(true);
+            java.lang.reflect.Method removeLast = SliceActivity.class.getDeclaredMethod("removeLastSlot"); removeLast.setAccessible(true);
+            removeLast.invoke(activity);
+            @SuppressWarnings("unchecked") List<Object> slots = (List<Object>) field(activity, "slots");
+            java.lang.reflect.Method applyTray = SliceActivity.class.getDeclaredMethod("applyTray", slots.get(0).getClass(), TrayPlan.Tray.class); applyTray.setAccessible(true);
+            applyTray.invoke(activity, slots.get(0), new TrayPlan.Tray(0, 0, "PLA", "PLA Matte", "ELEGOO", "#D02828"));
+            addSlot.invoke(activity, new TrayPlan.Tray(0, 1, "PLA", "", "ELEGOO", "#F0F0F0"));
             invoke(activity, "showModels"); invoke(activity, "updateButtons");
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            assertEquals("Elegoo PLA Matte @ECC2", ((Spinner) field(slots.get(0), "preset")).getSelectedItem());
             ((android.widget.EditText) field(activity, "infill")).setText("20");
             invoke(activity, "startSlice");
             waitFor(() -> ((View) field(activity, "resultCard")).getVisibility() == View.VISIBLE);
             View root = activity.getWindow().getDecorView();
-            int width = 1080, height = 4300;
+            String plan = context().getSharedPreferences(SliceActivity.TRAY_PLANS, 0).getString("calibration_box_plate.gcode", null);
+            assertEquals("{\"count\":2,\"tools\":[{\"t\":0,\"canvas_id\":0,\"tray_id\":0},{\"t\":1,\"canvas_id\":0,\"tray_id\":1}]}", plan);
+            int width = 1080, height = 6200;
             root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
             root.layout(0, 0, width, height);
             Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -161,6 +202,10 @@ public class SlicerIntegrationTest {
     }
     private static boolean spinnerFilled(Object activity, String name) throws Exception {
         Spinner spinner = (Spinner) field(activity, name); return spinner.getAdapter() != null && spinner.getAdapter().getCount() > 0;
+    }
+    private static boolean firstSlotFilled(Object activity) throws Exception {
+        @SuppressWarnings("unchecked") List<Object> slots = (List<Object>) field(activity, "slots");
+        Spinner spinner = (Spinner) field(slots.get(0), "preset"); return spinner.getAdapter() != null && spinner.getAdapter().getCount() > 0;
     }
     private static Object field(Object target, String name) throws Exception {
         java.lang.reflect.Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); return field.get(target);
