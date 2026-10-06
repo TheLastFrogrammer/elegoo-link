@@ -19,12 +19,12 @@ Elegoo Link is a C++17 SDK for controlling Elegoo 3D printers. It provides both 
 
 ### Major Components
 
-**1. Printer Adapter System** (`src/lan/core/printer_adapter.h`):
-- Plugin architecture via `IPrinterAdapter` interface
-- Registered adapters: `ElegooFdmCCAdapter`, `ElegooFdmCC2Adapter`, `GenericMoonrakerAdapter`
-- Each adapter provides: message parsing, discovery strategy, file transfer, protocol implementation
-- Registry pattern: `PrinterAdapterRegistry::getInstance().registerAdapter(adapter)`
-- Initialization happens in `LanServiceImpl::initializeAdapters()`
+**1. Printer Classes and Adapters** (`src/lan/core/`, `src/lan/adapters/`):
+- `PrinterFactory::createPrinter()` (`src/lan/core/printer_factory.cpp`) switches on `PrinterType` to create a `BasePrinter` subclass: `ElegooFdmCCPrinter`, `ElegooFdmCC2Printer`, or `GenericMoonrakerPrinter`
+- Each subclass builds its own components by overriding `createProtocol()`, `createMessageAdapter()` and `createFileUploader()`
+- Adapter classes live in `src/lan/adapters/<name>/`, declared in `src/lan/adapters/*_adapters.h`: an `IMessageAdapter` (via `BaseMessageAdapter`), an `IDiscoveryStrategy`, an `IHttpFileTransfer` (via `BaseHttpFileTransfer`), and a protocol
+- Discovery strategies are chosen in `PrinterDiscovery::getDiscoveryStrategy()` (`src/lan/discovery/printer_discovery.cpp`)
+- There is no adapter registry; `LanServiceImpl::initializeAdapters()` is a no-op
 
 **2. Protocol Layer** (`src/lan/protocols/`):
 - `IProtocol` interface with implementations: `MqttProtocol`, `WebSocketProtocol`
@@ -48,8 +48,8 @@ ElegooLink::uploadFile()
   → Impl::isLocalPrinter(printerId) checks cached printers
     → If local: LanService::uploadFile()
         → PrinterManager::getPrinter(printerId)
-          → Printer::uploadFile()
-            → BasePrinterAdapter::createFileUploader()
+          → BasePrinter::uploadFile()
+            → <PrinterSubclass>::createFileUploader()
               → ElegooFdmCC2HttpTransfer::upload() (adapter-specific)
                 → Progress callbacks → FileUploadProgressEvent
     → If cloud (#ifdef ENABLE_CLOUD_FEATURES): CloudService::uploadFile()
@@ -149,21 +149,20 @@ All `ElegooLink` methods use macros to ensure initialization:
 
 ### Adding a New Printer Adapter
 
-1. Create adapter directory: `src/lan/adapters/<adapter_name>/`
-2. Implement `IPrinterAdapter` interface (see `elegoo_fdm_cc2_adapter.cpp`)
-3. Implement `IMessageAdapter` for message parsing
+1. Add a value to `PrinterType` in `include/types/printer.h`
+2. Create adapter directory `src/lan/adapters/<adapter_name>/` and a header `src/lan/adapters/<adapter_name>_adapters.h` (see `elegoo_cc2_adapters.h`)
+3. Implement `IMessageAdapter` (usually via `BaseMessageAdapter`) for message parsing
 4. Implement `IDiscoveryStrategy` for UDP/network discovery
-5. Implement `IHttpFileTransfer` for file uploads
-6. Register in `LanServiceImpl::initializeAdapters()`:
-   ```cpp
-   auto adapter = std::make_shared<MyAdapter>();
-   registry.registerAdapter(adapter);
-   ```
+5. Implement `IHttpFileTransfer` (usually via `BaseHttpFileTransfer`) for file uploads
+6. Implement a protocol (`MqttProtocol` or `WebSocketBase` subclass)
+7. Add a `BasePrinter` subclass in `src/lan/core/` that overrides `createProtocol()`, `createMessageAdapter()` and `createFileUploader()`
+8. Add a case to `PrinterFactory::createPrinter()` and `PrinterDiscovery::getDiscoveryStrategy()`
+9. Add the new `.cpp` files to `LOCAL_CORE_SOURCES` in `CMakeLists.txt`
 
 ### Testing Changes
 
 - Primary example: [examples/printer_connection_test.cpp](../examples/printer_connection_test.cpp)
-- Build with `BUILD_EXAMPLES=ON` (enabled by default in presets)
+- Build with `-DBUILD_EXAMPLES=ON` (off by default; the presets do not set it)
 - Executables output to `build/bin/Debug/` or `build/bin/Release/`
 - See [examples/README.md](../examples/README.md) for detailed usage
 
@@ -202,6 +201,6 @@ Configuration is passed directly to `elegooLink.initialize(config)`. No JSON loa
 - Type definitions: [include/types/*.h](../include/types/)
 - Event types: [include/types/event.h](../include/types/event.h)
 - Main implementation: [src/elegoo_link.cpp](../src/elegoo_link.cpp)
-- Adapter registry: [src/lan/core/printer_adapter.h](../src/lan/core/printer_adapter.h)
+- Printer factory: [src/lan/core/printer_factory.cpp](../src/lan/core/printer_factory.cpp)
 - LAN service: [src/lan/lan_service.h](../src/lan/lan_service.h), [src/lan/lan_service_impl.h](../src/lan/lan_service_impl.h)
 - Cloud service: [src/cloud/cloud_service.h](../src/cloud/cloud_service.h) (when `ENABLE_CLOUD_FEATURES=ON`)

@@ -1,6 +1,6 @@
 # Elegoo Link SDK
 
-[![Version](https://img.shields.io/badge/version-1.3.6-blue.svg)](https://github.com/elegoo/elegoo-link)
+[![Version](https://img.shields.io/badge/version-1.0.6-blue.svg)](https://github.com/elegoo/elegoo-link)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](README.md)
 

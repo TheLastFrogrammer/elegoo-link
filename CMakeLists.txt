@@ -113,14 +113,6 @@ set(COMMON_SOURCES
     src/static_web_server.cpp
 )
 
-set(CLIENT_SERVICE_SOURCES
-    # WebSocket client
-    src/core/websocket_impl/websocket_client.cpp
-
-    src/core/websocket_impl/websocket_impl.cpp
-    src/core/websocket_impl/server_manager.cpp
-)
-
 # elegoolink core source file list (excluding service layer and web server)
 set(LOCAL_CORE_SOURCES
     
