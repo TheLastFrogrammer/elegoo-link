@@ -54,7 +54,7 @@ JDK 17, Android SDK platform 36/build tools 35.0.0, Gradle 8.13 and AGP 8.11.1:
 
 APK: `app/build/outputs/apk/debug/app-debug.apk`; app ID `io.github.thelastfrogrammer.elink`; v0.3.5/code 10 (source; signed update not yet published). Retain your signing key privately for compatible subsequent installs. No printer/cloud credentials are required to build.
 
-See [FILE_WORKSPACE.md](FILE_WORKSPACE.md), [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md), [PROTOCOL.md](PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md). Apache-2.0 applies to this repository; Eclipse Paho EPL-2.0/EDL-1.0 attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.
+See [FILE_WORKSPACE.md](FILE_WORKSPACE.md), [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md), [PROTOCOL.md](PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md), and the on-phone slicer plan in [SLICER_PORT.md](SLICER_PORT.md). Apache-2.0 applies to this repository; Eclipse Paho EPL-2.0/EDL-1.0 attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.
 
 ## Releases
 
