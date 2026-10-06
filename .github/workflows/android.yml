@@ -1,0 +1,83 @@
+name: Android app
+
+on:
+  push:
+    paths: ['android/**', '.github/workflows/android.yml']
+    tags: ['android-v*']
+  pull_request:
+    paths: ['android/**', '.github/workflows/android.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Test, lint and build a debug APK
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: link-workshop-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-and-lint-reports
+          path: |
+            android/app/build/reports/tests/
+            android/app/build/reports/lint-results-debug.html
+
+  release:
+    # Tag android-vX.Y.Z to publish a signed APK as a GitHub Release.
+    if: startsWith(github.ref, 'refs/tags/android-v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    defaults:
+      run:
+        working-directory: android
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+      - uses: android-actions/setup-android@v3
+      - name: Restore the signing key from secrets
+        env:
+          KEYSTORE_BASE64: ${{ secrets.LINK_WORKSHOP_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then echo "Add the LINK_WORKSHOP_* secrets to sign releases." >&2; exit 1; fi
+          echo "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.jks"
+      - name: Build the signed release APK
+        env:
+          LINK_WORKSHOP_KEYSTORE: ${{ runner.temp }}/release.jks
+          LINK_WORKSHOP_KEYSTORE_PASSWORD: ${{ secrets.LINK_WORKSHOP_KEYSTORE_PASSWORD }}
+          LINK_WORKSHOP_KEY_ALIAS: ${{ secrets.LINK_WORKSHOP_KEY_ALIAS }}
+          LINK_WORKSHOP_KEY_PASSWORD: ${{ secrets.LINK_WORKSHOP_KEY_PASSWORD }}
+        run: |
+          ./gradlew --no-daemon assembleRelease
+          version="${GITHUB_REF_NAME#android-v}"
+          cp app/build/outputs/apk/release/app-release.apk "Link-Workshop-v$version.apk"
+          sha256sum "Link-Workshop-v$version.apk" > SHA256SUMS
+          rm -f "$RUNNER_TEMP/release.jks"
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: Link Workshop ${{ github.ref_name }}
+          files: |
+            android/Link-Workshop-*.apk
+            android/SHA256SUMS
+          generate_release_notes: true

@@ -11,6 +11,25 @@ android {
         // Agora ships native code for four CPU types; keep only 64-bit ARM (modern phones) to limit APK size.
         ndk { abiFilters 'arm64-v8a' }
     }
+    // Release signing comes from the environment (CI secrets) or ~/.gradle/gradle.properties; never from the repository.
+    def signingValue = { String name -> System.getenv(name) ?: (project.findProperty(name) ?: '') }
+    def keystorePath = signingValue('LINK_WORKSHOP_KEYSTORE')
+    signingConfigs {
+        release {
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword signingValue('LINK_WORKSHOP_KEYSTORE_PASSWORD')
+                keyAlias signingValue('LINK_WORKSHOP_KEY_ALIAS')
+                keyPassword signingValue('LINK_WORKSHOP_KEY_PASSWORD')
+            }
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystorePath) signingConfig signingConfigs.release
+        }
+    }
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
     testOptions { unitTests { includeAndroidResources = true; all { systemProperty 'screenshots', System.getProperty('screenshots', '') } } }
 }

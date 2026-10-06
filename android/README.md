@@ -48,3 +48,14 @@ JDK 17, Android SDK platform 36/build tools 35.0.0, Gradle 8.13 and AGP 8.11.1:
 APK: `app/build/outputs/apk/debug/app-debug.apk`; app ID `io.github.thelastfrogrammer.elink`; v0.3.2/code 7. Retain your signing key privately for compatible subsequent installs. No printer/cloud credentials are required to build.
 
 See [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md), [PROTOCOL.md](PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md). Apache-2.0 applies to this repository; Eclipse Paho EPL-2.0/EDL-1.0 attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.
+
+## Releases
+
+`.github/workflows/android.yml` runs the unit tests and lint and builds a debug APK for every change under `android/` (download it from the workflow run's artifacts). Pushing a tag such as `android-v0.5.0` also builds a release APK signed with your key and publishes it as a GitHub Release with its SHA-256.
+
+One-time setup, in the repository's **Settings → Secrets and variables → Actions**:
+
+- `LINK_WORKSHOP_KEYSTORE_BASE64`: your signing keystore, base64-encoded (`base64 -w0 your-key.jks`)
+- `LINK_WORKSHOP_KEYSTORE_PASSWORD`, `LINK_WORKSHOP_KEY_ALIAS`, `LINK_WORKSHOP_KEY_PASSWORD`
+
+Use the same key as v0.2.0–v0.3.2 so releases install as updates. Local signed builds read the same four names from the environment or `~/.gradle/gradle.properties` (`LINK_WORKSHOP_KEYSTORE` is then the keystore's path). Keystores are git-ignored. New APKs are no longer committed to `android/releases/`; the older ones stay for their existing links.
