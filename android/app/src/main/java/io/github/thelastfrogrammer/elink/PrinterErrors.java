@@ -63,7 +63,9 @@ public final class PrinterErrors {
             if (cause instanceof SocketTimeoutException)
                 return stage + " timed out. Run Check connection to distinguish Wi-Fi reachability from printer authentication.";
         }
-        if (error instanceof TimeoutException) return "Printer registration timed out. HTTP and MQTT connected, but the printer did not register this client.";
+        if (error instanceof TimeoutException) return stage.equals("Printer registration")
+            ? "Printer registration timed out. MQTT connected, but no usable registration reply arrived for this client. This does not establish PIN validity or firmware support."
+            : stage + " timed out.";
         return stage + " failed. Run Check connection and compare the IP with the printer's Network screen.";
     }
     public static boolean retryable(Throwable error) {

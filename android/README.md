@@ -1,10 +1,14 @@
 # Link Workshop for Android
 
-Independent native Android client in the Elegoo Link fork. **v0.3.4** adds embedded PNG/JPEG previews and structured material evidence to the offline G-code workspace, retains the experimental read-only cloud-mode PIN probe and home-VPN remote routing and retains System/Light/Dark appearance with separate Monitor, Files, Camera and Settings tabs. First target: Centauri Carbon 2, including the user's firmware V02.01.00.00. Minimum Android 8/API 26; compile/target Android 16/API 36.
+Independent native Android client in the Elegoo Link fork. **v0.3.5 source (unreleased)** aligns registration QoS with the SDK and adds secret-free broker/reply diagnostics. It retains the offline G-code workspace with embedded previews/material evidence, retains the experimental read-only cloud-mode PIN probe and home-VPN remote routing and retains System/Light/Dark appearance with separate Monitor, Files, Camera and Settings tabs. First target: Centauri Carbon 2, including the user's firmware V02.01.00.00. Minimum Android 8/API 26; compile/target Android 16/API 36.
 
-The app ports the inspected LAN protocol to Java/Paho; it does not load the desktop C++ SDK. New features have automated transport/protocol coverage but have not been exercised on the user's physical printer. The previous MQTT authorization refusal is not evidence of successful registration; new features require the appropriate connection and firmware support.
+The app ports the inspected LAN protocol to Java/Paho; it does not load the desktop C++ SDK. New features have automated transport/protocol coverage but have not been exercised on the user's physical printer. The latest supplied v0.3.3 screenshot reaches MQTT CONNECT but times out waiting for application registration; it does not prove PIN validity or Matrix coexistence; new features require the appropriate connection and firmware support.
 
-## Included in v0.3.4
+v0.3.5 has no published APK yet: the local build workspace became unavailable during validation. The last verified download remains [v0.3.4](releases/0.3.4/README.md). GitHub Android CI validates source changes without publishing an installable APK or accessing the existing signing key.
+
+## Included in v0.3.5 source
+
+- **Registration diagnostics:** QoS 1 subscriptions and registration request match the SDK. Validate SUBACK before publishing and wait for PUBACK; distinguish malformed, wrong-client and retained replies from missing/rejected replies. Failure facts are bounded and redacted; the timeout no longer claims HTTP connected during the PIN probe. Long-press connection text to select/copy the report. Firmware support is not established.
 
 - **Embedded previews/materials:** extract bounded PNG/JPEG comment blocks without network access; native decoding on the file worker; Material details shows configured color swatches, source-array indices and reported length/mass. Mismatched/malformed vectors retain uncertainty and do not become CANVAS assignments. Colon-style metadata headers are recognized. See [THUMBNAILS.md](THUMBNAILS.md).
 - **Phone file workspace:** select a sliced .gcode file without connecting; bounded offline inspection of supported slicer comments, explicit T selections, exact size and SHA-256; share its report, save a phone copy through Android's document picker or clear the cache copy. No inferred tray mapping or automatic tool count.
@@ -44,6 +48,6 @@ JDK 17, Android SDK platform 36/build tools 35.0.0, Gradle 8.13 and AGP 8.11.1:
 ./gradlew --no-build-cache clean testDebugUnitTest lintDebug assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`; app ID `io.github.thelastfrogrammer.elink`; v0.3.4/code 9. Retain your signing key privately for compatible subsequent installs. No printer/cloud credentials are required to build.
+APK: `app/build/outputs/apk/debug/app-debug.apk`; app ID `io.github.thelastfrogrammer.elink`; v0.3.5/code 10 (source; signed update not yet published). Retain your signing key privately for compatible subsequent installs. No printer/cloud credentials are required to build.
 
 See [FILE_WORKSPACE.md](FILE_WORKSPACE.md), [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md), [PROTOCOL.md](PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md). Apache-2.0 applies to this repository; Eclipse Paho EPL-2.0/EDL-1.0 attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.

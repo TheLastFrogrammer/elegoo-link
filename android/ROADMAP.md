@@ -1,11 +1,11 @@
 # Android client progress
 
-v0.3.4 provides the CC2 client with explicit local and user-managed home-VPN routes plus a read-only cloud-mode local PIN probe, offline G-code inspection, embedded PNG/JPEG previews, structured material evidence and internal/USB file downloads/export. Implemented means present in code and covered where feasible by automated checks; physical CC2/S24+ validation remains pending.
+v0.3.5 source provides the CC2 client with explicit local and user-managed home-VPN routes plus a read-only cloud-mode local PIN probe, offline G-code inspection, embedded PNG/JPEG previews, structured material evidence and internal/USB file downloads/export. Implemented means present in code and covered where feasible by automated checks; physical CC2/S24+ validation remains pending.
 
 | Area | Implemented | Remaining |
 | --- | --- | --- |
 | Interface | Monitor/Files/Camera/Settings; System/Light/Dark | On-device layout, accessibility and landscape review |
-| Connection | UDP picker/manual identity; per-IP encrypted profiles; foreground monitoring; bounded reconnect; layered diagnosis | Successful physical authorization/registration on the user's CC2; device lifecycle/Keystore migration validation |
+| Connection | UDP picker/manual identity; per-IP encrypted profiles; foreground monitoring; bounded reconnect; layered diagnosis including registration QoS 1, SUBACK/PUBACK and redacted reply counters | Successful physical authorization/registration on the user's CC2; device lifecycle/Keystore migration validation |
 | Matrix preservation | Explicit current-PIN experiment, memory-only secret, no HTTP token use, no writes/uploads/retries, no account-binding changes, coexistence test guide | Hardware proof of simultaneous Matrix use; legitimate cloud account bootstrap and server-issued identity/collision handling if local PIN path fails |
 | Files/printing | Internal/USB pagination, metadata, upload/cancel, download/cancel/export, offline comment/T-selection/SHA-256 inspection, embedded previews and material/color/usage evidence, delete, start with checks/plate/timelapse/tool mappings, pause/resume/stop | Verified complete sliced-tool metadata for mapping, file export/recovery transport when HTTP is unavailable |
 | Printer settings | Light, bounded idle heater targets, fan channels, printing speed modes, automatic refill | Filament loading/unloading, calibration, homing/movement only after complete behavior verification |

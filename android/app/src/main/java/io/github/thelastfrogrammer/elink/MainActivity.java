@@ -101,7 +101,7 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 25, INK, true);
-        label(content, "Centauri Carbon 2 · local / VPN · v0.3.4", 14, MUTED, false);
+        label(content, "Centauri Carbon 2 · local / VPN · v0.3.5", 14, MUTED, false);
         summary = label(content, "Disconnected · open Settings to connect", 14, TEAL, true);
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); content.addView(navigation);
         String[] titles = {"Monitor", "Files", "Camera", "Settings"};
@@ -136,6 +136,7 @@ public final class MainActivity extends Activity {
         remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
         label(connectionCard, "IP: printer Settings → Network. LAN authentication uses Settings → LAN Only and its access code (blank if protection is off). The separate PIN probe tests local access while cloud mode stays enabled. Connection route independently selects home Wi-Fi or your home VPN/Pi gateway.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
+        connection.setTextIsSelectable(true);
         connect = button(connectionCard, "Connect", this::toggleConnection);
         check = button(connectionCard, "Check connection", this::checkConnection);
         diagnostics = label(connectionCard, "Check connection tests TCP reachability and UDP identity/mode. LAN authentication also checks HTTP system info. PIN probe never authenticates HTTP or includes its PIN in the report; Connect tests MQTT registration. HTTP uploads remain LAN-only and require port 80.", 13, MUTED, false);
@@ -601,7 +602,7 @@ public final class MainActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
         try {
-            StringBuilder text = new StringBuilder("Link Workshop v0.3.4\nIndependent Android app derived from Elegoo Link.\n\n");
+            StringBuilder text = new StringBuilder("Link Workshop v0.3.5\nIndependent Android app derived from Elegoo Link.\n\n");
             for (String name : new String[] {"THIRD_PARTY_NOTICES.md", "Apache-2.0.txt", "Paho-NOTICE.txt", "Paho-EDL-1.0.txt", "Paho-EPL-2.0.txt"}) {
                 try (InputStream input = getAssets().open("licenses/" + name); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");

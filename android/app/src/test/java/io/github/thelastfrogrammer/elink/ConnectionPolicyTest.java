@@ -5,6 +5,12 @@ import org.junit.Test;
 import static org.junit.Assert.*;
 
 public class ConnectionPolicyTest {
+    @Test public void registrationTimeoutNeverClaimsHttpWasConnected() {
+        String text = PrinterErrors.describe(new java.util.concurrent.TimeoutException("PRIVATE-PIN"), "Printer registration");
+        assertTrue(text.contains("no usable registration reply"));
+        assertFalse(text.contains("HTTP")); assertFalse(text.contains("PRIVATE-PIN"));
+        assertEquals("MQTT subscriptions timed out.", PrinterErrors.describe(new java.util.concurrent.TimeoutException(), "MQTT subscriptions"));
+    }
     @Test public void retriesAreBoundedAndResetOnlyAfterConnectionSuccess() {
         ReconnectPolicy policy = new ReconnectPolicy();
         for (int delay : new int[] {1, 2, 4, 8, 16}) assertEquals(delay, policy.nextDelaySeconds());

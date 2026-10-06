@@ -1,3 +1,13 @@
+# v0.3.5 source validation — pending
+
+2026-10-06. The latest supplied v0.3.3 screenshot progresses past the earlier MQTT code 5: broker CONNECT completes, UDP reports cloud/WAN with code protection enabled, but application registration times out. HTTP port 80 remains unreachable and was not used by the probe. No usable monitoring, PIN validity, or successful Matrix coexistence has been established.
+
+The local Gradle test/lint/APK build started, but the execution workspace stopped responding before final results could be retrieved. Source changes were reconstructed against the exact published v0.3.4 commit through GitHub and preserved there. No completed v0.3.5 test result, lint result, signed APK, source ZIP, native acceptance or physical connection success is claimed. MainActivity version labels and selectable connection text were also updated in the preserved source.
+
+Eight new JVM regression tests cover subscription grants (including rejected/incomplete/invalid/downgraded QoS), bounded/redacted facts, timeout text, no-PIN HTTP, missing/malformed/unmatched/retained/unexpected-topic replies, publication failure, no publication after denied subscription, terminal PIN failure and a valid reply following a wrong-client reply. Existing fake-transport sessions now assert QoS 1 subscriptions/registration and non-retained registration. These fixtures do not prove actual firmware support. Android CI runs testDebugUnitTest, lintDebug and assembleDebug with JDK 17/SDK 36; inspect its result for this commit. CI does not publish APKs or access the existing signing key. The last verified installer remains v0.3.4.
+
+On-device acceptance after a compatible signed APK is available: leave cloud mode/Matrix enabled; make one explicit current-PIN attempt on home Wi-Fi; share the new connection failure facts or verify fresh status and simultaneous Matrix updates. No credential, binding, client identity or alternate-topic guessing was added. PINs remain memory-only, read-only and excluded from HTTP; failures do not start automatic reconnects.
+
 # v0.3.4 validation
 
 Validated 2026-10-06. No physical CC2, S24+ or emulator is attached. The embedded-image parser and material summary were exercised with generated fixtures and a pinned full public Elegoo sample. Native Android BitmapFactory rendering, UI/lifecycle, user files and firmware mapping semantics still need device testing. Matrix coexistence/authorization remains unverified.

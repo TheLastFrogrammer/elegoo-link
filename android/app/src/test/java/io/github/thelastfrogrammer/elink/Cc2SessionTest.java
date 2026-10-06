@@ -56,7 +56,11 @@ public class Cc2SessionTest {
             assertEquals("elegoo", options.getUserName()); assertFalse(options.isAutomaticReconnect()); password = new String(options.getPassword()); connected = true;
             assertEquals(MqttConnectOptions.MQTT_VERSION_3_1_1, options.getMqttVersion());
         }
-        @Override public void subscribe(String[] topics, int[] qos) { subscriptions.addAll(Arrays.asList(topics)); responseTopic = topics[0]; }
+        @Override public IMqttToken subscribeWithResponse(String[] topics, int[] qos) {
+            assertArrayEquals(new int[] {1,1,1}, qos);
+            subscriptions.addAll(Arrays.asList(topics)); responseTopic = topics[0];
+            return new MqttToken() { @Override public int[] getGrantedQos() { return new int[] {1,1,1}; } };
+        }
         @Override public boolean isConnected() { return connected; }
         @Override public void disconnectForcibly(long quiesce, long timeout, boolean packet) { connected = false; }
         @Override public void close(boolean force) { connected = false; }
@@ -64,6 +68,7 @@ public class Cc2SessionTest {
             try {
                 JSONObject request = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
                 if (topic.endsWith("api_register")) {
+                    assertEquals(1, qos); assertFalse(retained);
                     callback.messageArrived(subscriptions.get(2), new MqttMessage(new JSONObject().put("client_id", request.getString("client_id")).put("error", "ok").toString().getBytes(StandardCharsets.UTF_8)));
                     return;
                 }
@@ -276,6 +281,74 @@ public class Cc2SessionTest {
             } },new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
         try{s.connect();String failure=take(l.failures);assertTrue(failure.contains("connection limit"));assertTrue(failure.contains("this app did not request other clients to disconnect"));assertFalse(failure.contains("secret"));assertFalse(failure.contains("close other"));assertFalse(l.retryable);}
         finally{s.close();}
+    }
+
+    @Test public void pinRegistrationTimeoutReportsBrokerStagesWithoutClaimingHttpOrPinValidity() throws Exception {
+        Listener l = new Listener(); java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP in PIN probe"); return null; }, null,
+            (uri,id) -> { attempts.incrementAndGet(); return new FakeMqtt(uri,id) {
+                @Override public void publish(String topic, byte[] bytes, int qos, boolean retained) throws MqttException {
+                    assertTrue(topic.endsWith("api_register")); assertEquals(1,qos); assertFalse(retained);
+                    try {
+                        JSONObject req = new JSONObject(new String(bytes,StandardCharsets.UTF_8));
+                        callback.messageArrived(subscriptions.get(2), new MqttMessage("PRIVATE-PIN".getBytes(StandardCharsets.UTF_8)));
+                        callback.messageArrived(subscriptions.get(2), new MqttMessage(new JSONObject().put("client_id","wrong-client").put("error","PRIVATE-PIN").toString().getBytes(StandardCharsets.UTF_8)));
+                        MqttMessage old = new MqttMessage(new JSONObject().put("client_id",req.getString("client_id")).put("error","ok").toString().getBytes(StandardCharsets.UTF_8)); old.setRetained(true);
+                        callback.messageArrived(subscriptions.get(2), old);
+                        callback.messageArrived(subscriptions.get(1), new MqttMessage("{}".getBytes(StandardCharsets.UTF_8)));
+                        callback.messageArrived(subscriptions.get(0), new MqttMessage("{}".getBytes(StandardCharsets.UTF_8)));
+                        callback.messageArrived("elegoo/OTHER-SERIAL/"+req.getString("request_id")+"/register_response", new MqttMessage("{}".getBytes(StandardCharsets.UTF_8)));
+                    } catch (Exception e) { throw new MqttException(e); }
+                }
+            }; }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try {
+            s.connect(); String text = take(l.failures);
+            assertTrue(text.contains("timed out")); assertFalse(text.contains("HTTP")); assertFalse(text.contains("PRIVATE-PIN"));
+            assertFalse(text.contains("wrong-client")); assertFalse(text.contains("OTHER-SERIAL"));
+            assertTrue(text.contains("3/3 accepted (SUBACK)")); assertTrue(text.contains("broker acknowledged (QoS 1 / PUBACK)"));
+            assertTrue(text.contains("Registration reply: none")); assertTrue(text.contains("malformed 1, wrong client 1, retained 1"));
+            assertTrue(text.contains("status 1, API replies 1, unexpected topic 1"));
+            assertFalse(s.ready()); assertFalse(l.retryable); assertEquals(1,attempts.get()); assertTrue(l.statuses.isEmpty());
+        } finally { s.close(); }
+    }
+    @Test public void deniedSubscriptionStopsBeforePublishingRegistration() throws Exception {
+        Listener l = new Listener(); java.util.concurrent.atomic.AtomicInteger publishes = new java.util.concurrent.atomic.AtomicInteger();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) {
+                @Override public IMqttToken subscribeWithResponse(String[] topics,int[] qos) {
+                    return new MqttToken() { @Override public int[] getGrantedQos() { return new int[] {1,1,128}; } };
+                }
+                @Override public void publish(String topic,byte[] bytes,int qos,boolean retained) { publishes.incrementAndGet(); }
+            }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try {
+            s.connect(); String text=take(l.failures); assertTrue(text.contains("rejected: registration replies"));
+            assertTrue(text.contains("Registration publish: not attempted")); assertEquals(0,publishes.get()); assertFalse(s.ready()); assertFalse(l.retryable);
+        } finally { s.close(); }
+    }
+    @Test public void publishFailureDoesNotClaimBrokerAcknowledgedRegistration() throws Exception {
+        Listener l = new Listener();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) {
+                @Override public void publish(String topic,byte[] bytes,int qos,boolean retained) throws MqttException { throw new MqttException(new IOException("PRIVATE-PIN")); }
+            }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try {
+            s.connect(); String text=take(l.failures); assertTrue(text.contains("PUBACK not completed"));
+            assertFalse(text.contains("broker acknowledged")); assertFalse(text.contains("PRIVATE-PIN")); assertFalse(s.ready()); assertFalse(l.retryable);
+        } finally { s.close(); }
+    }
+    @Test public void wrongClientReplyCannotPreventFollowingValidRegistration() throws Exception {
+        Listener l = new Listener();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) {
+                @Override public void publish(String topic,byte[] bytes,int qos,boolean retained) throws MqttException {
+                    if (topic.endsWith("api_register")) try {
+                        callback.messageArrived(subscriptions.get(2),new MqttMessage("{\"client_id\":\"wrong\",\"error\":\"ok\"}".getBytes(StandardCharsets.UTF_8)));
+                    } catch (Exception e) { throw new MqttException(e); }
+                    super.publish(topic,bytes,qos,retained);
+                }
+            }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try { s.connect(); take(l.statuses); assertTrue(s.ready()); assertTrue(l.failures.isEmpty()); }
+        finally { s.close(); }
     }
 
     @Test public void downloadUsesEffectiveSessionTokenAndDoesNotPublishChangingRequest() throws Exception {
