@@ -45,8 +45,7 @@ public final class CloudStatusActivity extends Activity {
         try {
             CloudLogin.Account account = store.load();
             if (account == null) { body.setText("Not signed in. Use Settings → Elegoo account → Sign in with Elegoo first."); return; }
-            String agent = CloudLogin.SLICER_AGENT + " (Android " + Build.VERSION.RELEASE + "; " + (Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown") + ") LinkWorkshop/" + version();
-            api = new CloudApi(store.china(), account, agent, CloudApi::https);
+            api = new CloudApi(store.china(), account, CloudApi.agent(this), CloudApi::https);
             api.language(java.util.Locale.getDefault().getLanguage());
         } catch (Exception error) { store.forget(); body.setText("Saved Elegoo sign-in could not be decrypted. Sign in again."); }
     }

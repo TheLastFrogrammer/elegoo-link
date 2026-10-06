@@ -83,12 +83,21 @@ Comparing the three runs: a sign-in stopped working right after the app's first 
 - **Shared identity.** `source=slicer` is ElegooSlicer's identity, so the app and an open ElegooSlicer can sign each other out of cloud control (`SAME_UID_LOGIN`). The app explains this before the first cloud command, never reconnects by itself, and Matrix is expected to be unaffected (untested).
 - **APK size.** Agora's native library is about 10 MB for 64-bit ARM; the app ships that CPU type only (`abiFilters 'arm64-v8a'`).
 
+## Full feature set and camera through the cloud (v0.4.1)
+
+What ElegooSlicer's own printer page does (`resources/web/elegoolink/lan_service_web/index.html`, the same web app the slicer shows for each printer):
+
+- **Any printer command over the cloud.** Its cloud transport wraps every printer request (`{id, method, params}`) and hands it to the slicer's `sendRtmMessage` bridge, which publishes it on Agora RTM exactly as `CloudControl` does. Its command list includes GetFileList 1044, DeleteFile 1047, GetCapacity 1048, history 1036/1037, TemperatureControl 1028, LightSwitch 1029, FanControl 1030, PrintSpeedControl 1031, StartPrint 1020, Feed/Retreat 1024/1025, home/move 1026/1027, AutoLeveling 1032, GetTimeLapseVideoList 1051, AI detection settings 1062/1063 and CANVAS 2003-2005. The app now sends the same requests it already sends locally (files, history, storage, start/delete, temperatures, fans, speed, light, CANVAS and auto-refill) through the cloud when there is no local session. Uploads and the local camera address stay local.
+- **Camera over Agora RTC.** `startWatching()` gets `rtcToken` and `userId` (the numeric `rtcUserId` from `agora-token`), creates `AgoraRTC.createClient({mode: "live", codec: "vp8"})` with the same Agora app ID, joins the channel named after the printer's serial, sets the client role to host and plays the first remote video track. The local build has this switched off (`useRTC: "false" === "true"`) and asks the printer for its MJPEG address instead (GetLivingVideoUrl 1042).
+- The app's **Cloud camera** (`CloudCameraActivity`, `assets/camera/index.html`) does the same with the Agora Web SDK 4.22.0 bundled from npm (MIT), served from `https://appassets.androidplatform.net` through `WebViewAssetLoader`. In headless Chromium the page loads, joins Agora's gateway and reports the rejection of a fake token (`CAN_NOT_GET_GATEWAY_SERVER`); joining with a real token is untested.
+- Cloud actions (controls, files, settings, camera) wait for a one-time agreement because they share ElegooSlicer's cloud identity. Monitoring does not.
+
 ## Open questions to test first
 
 1. ~~Does the sign-in page hand off tokens to the Android `WebView`?~~ Yes, confirmed on the user's phone.
 2. Does the Cloud printers screen stay current during a print? (Idle status and temperatures confirmed.)
 3. Does renewal with `clientId "account"` work? (Use Test sign-in renewal.)
 4. Does the MQTT credential endpoint accept an `android` client ID?
-5. Do cloud commands reach the printer, and does Matrix keep working while the app sends them?
+5. Do cloud commands, file browsing and the cloud camera work, and does Matrix keep working while the app uses them?
 
 This uses Elegoo's servers and the user's own account in a way Elegoo did not design for, so it can break when they change their service.

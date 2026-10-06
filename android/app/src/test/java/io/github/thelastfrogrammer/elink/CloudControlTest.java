@@ -59,6 +59,21 @@ public class CloudControlTest {
         take(link); assertEquals(1, links.size()); assertEquals(1, credentialRequests);
     }
 
+    @Test public void queryResultsAreDelivered() throws Exception {
+        CloudControl control = control(5000, 60000);
+        BlockingQueue<JSONObject> results = new LinkedBlockingQueue<>();
+        control.send("SN818", Cc2Codec.filesRequest(1, "local", 0), new CloudControl.Reply() {
+            public void done(boolean acknowledged, String message) { }
+            public void done(boolean acknowledged, String message, JSONObject result) { if (acknowledged) results.add(result); }
+        });
+        JSONObject request = new JSONObject(take(waitForLink())[1]);
+        assertEquals("local", request.getJSONObject("params").getString("storage_media"));
+        links.get(0).events.message("12345SN818", new JSONObject().put("id", request.getInt("id")).put("method", Cc2Codec.FILES)
+            .put("result", new JSONObject().put("file_list", new org.json.JSONArray().put(new JSONObject().put("filename", "a.gcode")))).toString());
+        JSONObject result = results.poll(5, TimeUnit.SECONDS);
+        assertNotNull(result); assertEquals("a.gcode", result.getJSONArray("file_list").getJSONObject(0).getString("filename"));
+    }
+
     @Test public void printerErrorCodeIsReported() throws Exception {
         CloudControl control = control(5000, 60000); Replies replies = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.STOP), replies);
@@ -102,7 +117,7 @@ public class CloudControlTest {
 
     @Test public void unsupportedCommandsAndBadSerialsNeverConnect() throws Exception {
         CloudControl control = control(5000, 60000); Replies replies = new Replies();
-        control.send("SN818", Cc2Codec.temperatureRequest(1, 200, 60), replies);
+        control.send("SN818", Cc2Codec.request(1, Cc2Codec.CAMERA), replies);
         assertEquals("fail: This command is not available through the cloud.", replies.take());
         control.send("SN 818\";", Cc2Codec.request(1, Cc2Codec.PAUSE), replies);
         assertEquals("fail: Unknown printer serial.", replies.take());

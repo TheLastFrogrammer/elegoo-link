@@ -8,3 +8,4 @@ Build and test tools are not app runtime dependencies. JUnit 4.13.2 is EPL-1.0; 
 
 - **Agora RTM SDK** (`io.agora:agora-rtm` 2.2.6, Maven Central), used for cloud printer commands. Proprietary software of Agora, Inc., included under Agora's SDK terms (https://www.agora.io/en/terms-of-service/); not covered by this repository's Apache-2.0 license.
 - **AndroidX WebKit** (`androidx.webkit:webkit`), Apache-2.0.
+- **Agora Web SDK** (`agora-rtc-sdk-ng` 4.22.0, npm), bundled in `assets/camera/` for the cloud camera. Distributed under the MIT license according to its package metadata; copyright Agora, Inc.

@@ -53,6 +53,11 @@ public final class CloudApi {
         this.base = china ? CHINA : GLOBAL; this.account = account; this.userAgent = userAgent; this.transport = transport;
     }
     public CloudLogin.Account account() { return account; }
+    /** User agent for cloud requests: ElegooSlicer's product token plus this app's own. */
+    public static String agent(android.content.Context context) {
+        String version; try { version = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName; } catch (Exception error) { version = "dev"; }
+        return CloudLogin.SLICER_AGENT + " (Android " + android.os.Build.VERSION.RELEASE + "; " + (android.os.Build.SUPPORTED_ABIS.length > 0 ? android.os.Build.SUPPORTED_ABIS[0] : "unknown") + ") LinkWorkshop/" + version;
+    }
     public void language(String language) { if (language != null && !language.isEmpty()) this.language = language; }
     /** Secret-free record of requests since the last call: paths, HTTP status, server code and message, refresh reasons. */
     public synchronized List<String> takeTrace() { List<String> copy = new ArrayList<>(trace); trace.clear(); return copy; }
@@ -110,8 +115,11 @@ public final class CloudApi {
 
     /** Agora identity Elegoo issues for live commands; the same one ElegooSlicer uses (source=slicer). */
     public static final class AgoraCredential {
-        public final String userId, rtmUserId, rtmToken;
-        AgoraCredential(String userId, String rtmUserId, String rtmToken) { this.userId = userId; this.rtmUserId = rtmUserId; this.rtmToken = rtmToken; }
+        public final String userId, rtmUserId, rtmToken, rtcUserId, rtcToken;
+        AgoraCredential(String userId, String rtmUserId, String rtmToken) { this(userId, rtmUserId, rtmToken, "", ""); }
+        AgoraCredential(String userId, String rtmUserId, String rtmToken, String rtcUserId, String rtcToken) {
+            this.userId = userId; this.rtmUserId = rtmUserId; this.rtmToken = rtmToken; this.rtcUserId = rtcUserId; this.rtcToken = rtcToken;
+        }
     }
     public AgoraCredential agoraCredential() throws IOException {
         JSONObject data = authorized("GET", "/api/v1/device-management-server/device/list/agora-token?source=slicer", null, true).optJSONObject("data");
@@ -120,7 +128,9 @@ public final class CloudApi {
         String userId = token == null ? "" : String.valueOf(token.optLong("userId", 0));
         String rtmUserId = token == null ? "" : token.optString("rtmUserId", ""), rtmToken = token == null ? "" : token.optString("rtmToken", "");
         if ("0".equals(userId) || rtmUserId.isEmpty() || rtmToken.isEmpty()) throw new CloudException("Elegoo did not issue cloud control credentials for this account.", false);
-        return new AgoraCredential(userId, rtmUserId, rtmToken);
+        // Camera (Agora RTC): numeric rtcUserId and rtcToken, as the SDK's getAgoraCredential parses them.
+        String rtcUserId = String.valueOf(token.optLong("rtcUserId", 0)), rtcToken = token.optString("rtcToken", "");
+        return new AgoraCredential(userId, rtmUserId, rtmToken, "0".equals(rtcUserId) ? "" : rtcUserId, rtcToken);
     }
 
     public List<Device> devices() throws IOException {

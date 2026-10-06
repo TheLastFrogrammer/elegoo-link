@@ -29,7 +29,11 @@ public final class CloudControl implements AutoCloseable {
     }
     public interface LinkFactory { Link create(); }
     public interface Credentials { CloudApi.AgoraCredential get() throws IOException; }
-    public interface Reply { void done(boolean acknowledged, String message); }
+    public interface Reply {
+        void done(boolean acknowledged, String message);
+        /** Full reply; result is the printer's "result" object (empty on failure). */
+        default void done(boolean acknowledged, String message, JSONObject result) { done(acknowledged, message); }
+    }
 
     private final Credentials credentials;
     private final LinkFactory factory;
@@ -51,10 +55,19 @@ public final class CloudControl implements AutoCloseable {
         this.credentials = credentials; this.factory = factory; this.worker = worker; this.replyTimeoutMs = replyTimeoutMs; this.idleCloseMs = idleCloseMs;
     }
 
-    /** Commands Elegoo's SDK or this app's LAN client already send to the CC2; anything else is refused before it leaves the phone. */
+    /**
+     * Commands this app already sends on the local network. Elegoo's own printer page sends any printer command through the
+     * same cloud channel (its "sendRtmMessage" bridge), so the cloud carries the same set; uploads and the camera address
+     * stay local. Anything else is refused before it leaves the phone.
+     */
     static boolean allowed(int method) {
-        return method == Cc2Codec.PAUSE || method == Cc2Codec.RESUME || method == Cc2Codec.STOP || method == Cc2Codec.LIGHT
-            || method == Cc2Codec.AUTO_REFILL || method == Cc2Codec.CANVAS || method == Cc2Codec.ATTRIBUTES;
+        switch (method) {
+            case Cc2Codec.ATTRIBUTES: case Cc2Codec.STATUS: case Cc2Codec.START: case Cc2Codec.PAUSE: case Cc2Codec.STOP: case Cc2Codec.RESUME:
+            case Cc2Codec.TEMPERATURE: case Cc2Codec.LIGHT: case Cc2Codec.FAN: case Cc2Codec.SPEED: case Cc2Codec.HISTORY:
+            case Cc2Codec.FILES: case Cc2Codec.DELETE: case Cc2Codec.DISK: case Cc2Codec.CANVAS: case Cc2Codec.AUTO_REFILL:
+                return true;
+            default: return false;
+        }
     }
 
     /** Last reason the session ended from outside, or "" if it did not. */
@@ -115,14 +128,15 @@ public final class CloudControl implements AutoCloseable {
         if (message.optInt("id", -1) != wait.id) return;
         JSONObject result = message.optJSONObject("result");
         int code = result == null ? -1 : result.optInt("error_code", 0);
-        if (code == 0) finish(wait, true, "Printer acknowledged through the cloud. Waiting for its status to update.");
+        if (code == 0) finish(wait, true, "Printer acknowledged through the cloud. Waiting for its status to update.", result);
         else finish(wait, false, PrinterErrors.code(code));
     }
 
-    private void finish(Pending wait, boolean acknowledged, String text) {
+    private void finish(Pending wait, boolean acknowledged, String text) { finish(wait, acknowledged, text, new JSONObject()); }
+    private void finish(Pending wait, boolean acknowledged, String text, JSONObject result) {
         synchronized (this) { if (pending != wait) return; pending = null; }
         if (wait.timeout != null) wait.timeout.cancel(false);
-        wait.reply.done(acknowledged, text);
+        wait.reply.done(acknowledged, text, result);
     }
 
     private void endedOutside(Link which, String reason) {

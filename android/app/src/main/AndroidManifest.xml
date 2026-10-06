@@ -16,6 +16,8 @@
         <activity android:name=".CloudLoginActivity" android:exported="false" android:label="Sign in with Elegoo"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".CloudStatusActivity" android:exported="false" android:label="Cloud printers" />
+        <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

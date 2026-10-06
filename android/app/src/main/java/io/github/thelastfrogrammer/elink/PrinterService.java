@@ -93,7 +93,7 @@ public final class PrinterService extends Service {
     public boolean ready() { return session != null && session.ready() && (!remote || route != null && route.available()); }
     public boolean fresh() { return ready() && session.fresh(); }
     public boolean uploading() { return session != null && session.uploading(); }
-    public boolean canvasFresh() { return fresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
+    public boolean canvasFresh() { return liveFresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
     public void connect(String host, String code, String serial) { connect(host, code, serial, false); }
     public void connect(String host, String code, String serial, boolean remote) {
         connect(host, code, serial, remote, false);
@@ -125,22 +125,34 @@ public final class PrinterService extends Service {
             public void result(String text) { deliver(() -> feedback = text); }
             public void uploadProgress(int percent) { deliver(() -> feedback = "Uploading " + selectedName + ": " + percent + "%"); }
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
-            public void query(int method, JSONObject params, JSONObject result) { deliver(() -> {
-                queryBusy.remove(method);
-                if (method == Cc2Codec.FILES) { filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer."; }
-                if (method == Cc2Codec.HISTORY) { history = result; historyMessage = "History received from printer."; }
-                if (method == Cc2Codec.DISK) disk = result;
-                if (method == Cc2Codec.CAMERA) {
-                    try { cameraUrl = FeatureData.cameraUrl(host, result.getString("url")); feedback = "Camera address received. Open Camera to view it."; }
-                    catch (Exception error) { cameraUrl = ""; feedback = "Printer returned a camera URL outside the selected printer address; it was not opened."; }
-                }
-                if (method == Cc2Codec.DELETE) browse(storage, 0);
-            }); }
-            public void queryError(int method, String text) { deliver(() -> { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }); }
+            public void query(int method, JSONObject params, JSONObject result) { deliver(() -> handleQuery(method, params, result)); }
+            public void queryError(int method, String text) { deliver(() -> handleQueryError(method, text)); }
             public void uploaded(String name) { deliver(() -> { feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0); }); }
         }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery(), new PrinterAuthentication(pinProbe, code)));
         connection = "Identifying printer for MQTT…"; changed(); session.connect();
     }
+    /** Query results from the local session or the cloud land here. */
+    private void handleQuery(int method, JSONObject params, JSONObject result) {
+        queryBusy.remove(method);
+        if (method == Cc2Codec.FILES) { filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer."; }
+        if (method == Cc2Codec.HISTORY) { history = result; historyMessage = "History received from printer."; }
+        if (method == Cc2Codec.DISK) disk = result;
+        if (method == Cc2Codec.CANVAS && result.optJSONObject("canvas_info") != null) { canvas = result.optJSONObject("canvas_info"); canvasAt = System.nanoTime(); }
+        if (method == Cc2Codec.CAMERA) {
+            try { cameraUrl = FeatureData.cameraUrl(host, result.getString("url")); feedback = "Camera address received. Open Camera to view it."; }
+            catch (Exception error) { cameraUrl = ""; feedback = "Printer returned a camera URL outside the selected printer address; it was not opened."; }
+        }
+        if (method == Cc2Codec.DELETE) browse(storage, 0);
+    }
+    private void handleQueryError(int method, String text) { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }
+
+    // Each feature uses the local session when connected, otherwise the cloud (same printer requests, see CloudControl).
+    /** Status from the local session, else from the cloud. */
+    public JSONObject liveStatus() { return ready() ? status : usingCloud() ? cloudStatus : new JSONObject(); }
+    public boolean liveFresh() { return fresh() || viaCloud(); }
+    /** Read requests (files, history, storage) can be made. */
+    public boolean canQuery() { return ready() || viaCloud(); }
+    private boolean viaCloud() { return !ready() && usingCloud() && cloudFresh(); }
     private void checkRoute() { if (wanted && remote && route != null && !route.available()) failed(new VpnRouteGuard.Unavailable().getMessage(), true); }
     private void clearRoute() { AutoCloseable watcher = routeWatch; routeWatch = null; route = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } }
     private void failed(String message, boolean retryable) {
@@ -161,16 +173,35 @@ public final class PrinterService extends Service {
         }
         changed();
     }
-    public void refresh() { if (ready()) session.refresh(); }
+    public void refresh() {
+        if (ready()) session.refresh();
+        else if (usingCloud()) { main.removeCallbacks(cloudPoll); main.post(cloudPoll); if (viaCloud()) cloudSafe(() -> Cc2Codec.request(0, Cc2Codec.CANVAS)); }
+    }
     public void command(int method) { if (fresh()) session.command(method); }
-    public void autoRefill(boolean enabled) { if (canvasFresh() && session != null) session.autoRefill(enabled); }
+    public void autoRefill(boolean enabled) {
+        if (!canvasFresh()) return;
+        if (ready() && session != null) session.autoRefill(enabled); else if (viaCloud()) cloudSafe(() -> Cc2Codec.autoRefillRequest(0, enabled));
+    }
     public void upload() { if (ready() && selectedFile != null && !importing) { session.upload(selectedFile, selectedName); changed(); } }
     public void cancelUpload() { if (session != null) session.cancelUpload(); }
     public boolean busy(int method) { return queryBusy.contains(method); }
-    public boolean filesFresh() { return ready() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
-    public void browse(String storage, int offset) { if (!ready() || busy(Cc2Codec.FILES)) return; Cc2Codec.storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid offset"); queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files…"; session.files(storage, offset); changed(); }
-    public void loadHistory() { if (ready() && !busy(Cc2Codec.HISTORY)) { queryBusy.add(Cc2Codec.HISTORY); historyMessage = "Loading history…"; session.history(); changed(); } }
-    public void loadDisk() { if (ready() && !busy(Cc2Codec.DISK)) { queryBusy.add(Cc2Codec.DISK); session.disk(); changed(); } }
+    public boolean filesFresh() { return canQuery() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
+    public void browse(String storage, int offset) {
+        if (!canQuery() || busy(Cc2Codec.FILES)) return; Cc2Codec.storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid offset");
+        queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files…";
+        if (ready()) session.files(storage, offset); else cloudSafe(() -> Cc2Codec.filesRequest(0, storage, offset));
+        changed();
+    }
+    public void loadHistory() {
+        if (!canQuery() || busy(Cc2Codec.HISTORY)) return; queryBusy.add(Cc2Codec.HISTORY); historyMessage = "Loading history…";
+        if (ready()) session.history(); else cloudSafe(() -> Cc2Codec.request(0, Cc2Codec.HISTORY));
+        changed();
+    }
+    public void loadDisk() {
+        if (!canQuery() || busy(Cc2Codec.DISK)) return; queryBusy.add(Cc2Codec.DISK);
+        if (ready()) session.disk(); else cloudSafe(() -> Cc2Codec.request(0, Cc2Codec.DISK));
+        changed();
+    }
     public void camera() { if (ready() && !busy(Cc2Codec.CAMERA)) { queryBusy.add(Cc2Codec.CAMERA); session.camera(); changed(); } }
     private boolean knownFile(String storage, String filename) {
         if (!filesFresh() || !this.storage.equals(storage)) return false;
@@ -179,16 +210,26 @@ public final class PrinterService extends Service {
         return false;
     }
     public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, JSONArray maps) {
-        if (!fresh() || !Cc2Codec.idle(status) || !knownFile(storage, filename) || maps.length() > 0 && (!canvasFresh() || !FeatureData.mappings(canvas, maps))) {
+        if (!liveFresh() || !Cc2Codec.idle(liveStatus()) || !knownFile(storage, filename) || maps.length() > 0 && (!canvasFresh() || !FeatureData.mappings(canvas, maps))) {
             feedback = "Refresh status, files and trays before starting. The printer must be idle and mappings must refer to reported trays."; changed(); return;
         }
-        session.start(storage, filename, leveling, force, timelapse, plate, maps);
+        if (ready()) session.start(storage, filename, leveling, force, timelapse, plate, maps);
+        else cloudSafe(() -> Cc2Codec.startRequest(0, storage, filename, leveling, force, timelapse, plate, maps));
     }
-    public void delete(String storage, String filename) { if (fresh() && Cc2Codec.idle(status) && knownFile(storage, filename)) session.delete(storage, filename); else { feedback = "Refresh files and wait for the printer to be idle before deleting."; changed(); } }
-    public void light(boolean on) { if (fresh()) session.light(on); }
-    public void temperatures(int nozzle, int bed) { if (fresh() && Cc2Codec.idle(status)) session.temperatures(nozzle, bed); }
-    public void fan(String name, int percent) { if (fresh()) session.fan(name, percent); }
-    public void speed(int mode) { if (fresh() && Cc2Codec.canPause(status)) session.speed(mode); }
+    public void delete(String storage, String filename) {
+        if (!liveFresh() || !Cc2Codec.idle(liveStatus()) || !knownFile(storage, filename)) { feedback = "Refresh files and wait for the printer to be idle before deleting."; changed(); return; }
+        if (ready()) session.delete(storage, filename); else cloudSafe(() -> Cc2Codec.deleteRequest(0, storage, filename));
+    }
+    public void light(boolean on) { if (fresh()) session.light(on); else if (viaCloud()) cloudSafe(() -> Cc2Codec.lightRequest(0, on)); }
+    public void temperatures(int nozzle, int bed) {
+        if (!Cc2Codec.idle(liveStatus())) return;
+        if (fresh()) session.temperatures(nozzle, bed); else if (viaCloud()) cloudSafe(() -> Cc2Codec.temperatureRequest(0, nozzle, bed));
+    }
+    public void fan(String name, int percent) { if (fresh()) session.fan(name, percent); else if (viaCloud()) cloudSafe(() -> Cc2Codec.fanRequest(0, name, percent)); }
+    public void speed(int mode) {
+        if (!Cc2Codec.canPause(liveStatus())) return;
+        if (fresh()) session.speed(mode); else if (viaCloud()) cloudSafe(() -> Cc2Codec.speedRequest(0, mode));
+    }
     private void resetData() {
         status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
         filePage = new JSONObject(); disk = new JSONObject(); history = new JSONObject(); filesAt = 0; fileOffset = 0; cameraUrl = "";
@@ -273,7 +314,7 @@ public final class PrinterService extends Service {
             if (account == null) { main.post(() -> { cloudSignedIn = false; cloudSerial = ""; cloudStatus = new JSONObject(); cloudMessage = "Sign in with Elegoo in Settings to monitor through the cloud."; changed(); }); return; }
             CloudApi api = cloudApi;
             if (api == null || !api.account().accessToken.equals(account.accessToken)) {
-                api = new CloudApi(cloudAccounts.china(), account, cloudAgent(), CloudApi::https); api.language(Locale.getDefault().getLanguage()); cloudApi = api;
+                api = new CloudApi(cloudAccounts.china(), account, CloudApi.agent(this), CloudApi::https); api.language(Locale.getDefault().getLanguage()); cloudApi = api;
             }
             String preferred = getSharedPreferences("workshop-settings", MODE_PRIVATE).getString("cloudSerial", "");
             CloudApi.Device device = null; int online = -1; CloudApi.Snapshot snapshot = null; String message = "";
@@ -304,32 +345,45 @@ public final class PrinterService extends Service {
             });
         });
     }
-    private String cloudAgent() {
-        String version; try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { version = "dev"; }
-        return CloudLogin.SLICER_AGENT + " (Android " + Build.VERSION.RELEASE + "; " + (Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown") + ") LinkWorkshop/" + version;
-    }
 
-    /** Sends one command through the cloud. Only commands CloudControl allows, with fresh cloud status. */
+    /** Sends one request through the cloud. Only requests CloudControl allows, with fresh cloud status; queries feed handleQuery. */
     public void cloudCommand(JSONObject request) {
-        if (!usingCloud() || !cloudFresh() || cloudCommandBusy) return;
-        CloudApi api = cloudApi; if (api == null) return;
+        int method = request.optInt("method", -1);
+        boolean query = Cc2Codec.isQuery(method) || method == Cc2Codec.CANVAS;
+        CloudApi api = cloudApi;
+        if (!usingCloud() || !cloudFresh() || api == null) { queryBusy.remove(method); return; }
+        if (cloudCommandBusy) {
+            queryBusy.remove(method);
+            if (method != Cc2Codec.CANVAS) { feedback = "Waiting for the previous cloud command to finish."; changed(); }
+            return;
+        }
         if (cloudControl == null) cloudControl = new CloudControl(() -> {
             CloudApi current = cloudApi; if (current == null) throw new IOException("Sign in with Elegoo again.");
             return current.agoraCredential();
         }, AgoraLink::new, cloudWorker);
-        cloudCommandBusy = true; feedback = "Sending through the Elegoo cloud…"; changed();
-        cloudControl.send(cloudSerial, request, (acknowledged, text) -> main.post(() -> {
-            cloudCommandBusy = false; feedback = text; changed();
-            // Refresh status soon so the result shows; nothing is retried.
-            main.removeCallbacks(cloudPoll); main.postDelayed(cloudPoll, 2000);
-        }));
+        cloudCommandBusy = true; if (!query) feedback = "Sending through the Elegoo cloud…"; changed();
+        JSONObject params = request.optJSONObject("params") == null ? new JSONObject() : request.optJSONObject("params");
+        cloudControl.send(cloudSerial, request, new CloudControl.Reply() {
+            public void done(boolean acknowledged, String text) { done(acknowledged, text, new JSONObject()); }
+            public void done(boolean acknowledged, String text, JSONObject result) {
+                main.post(() -> {
+                    cloudCommandBusy = false;
+                    if (query) { if (acknowledged) handleQuery(method, params, result); else handleQueryError(method, text); changed(); return; }
+                    feedback = text; changed();
+                    if (method == Cc2Codec.DELETE && acknowledged) handleQuery(method, params, result);
+                    // Refresh status soon so the result shows; nothing is retried.
+                    main.removeCallbacks(cloudPoll); main.postDelayed(cloudPoll, 2000);
+                });
+            }
+        });
     }
     public void cloudPause() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.PAUSE)); }
     public void cloudResume() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.RESUME)); }
     public void cloudStop() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.STOP)); }
     public void cloudLight(boolean on) { cloudCommandSafe(() -> Cc2Codec.lightRequest(0, on)); }
     private interface RequestBuilder { JSONObject build() throws Exception; }
-    private void cloudCommandSafe(RequestBuilder builder) { try { cloudCommand(builder.build()); } catch (Exception error) { feedback = "Could not prepare the cloud command."; changed(); } }
+    private void cloudCommandSafe(RequestBuilder builder) { cloudSafe(builder); }
+    private void cloudSafe(RequestBuilder builder) { try { cloudCommand(builder.build()); } catch (Exception error) { feedback = "Could not prepare the cloud command."; changed(); } }
     private void showAlert(String text) { showAlert(text, host); }
     private void showAlert(String text, String title) {
         if (text.isEmpty() || !getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alerts", true)) return;

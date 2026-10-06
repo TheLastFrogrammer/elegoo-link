@@ -1,0 +1,68 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; connect-src https: wss:;">
+<title>Printer camera</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; color: #e6eef1; font: 15px sans-serif; }
+  #video { position: absolute; inset: 0; }
+  #status { position: absolute; left: 16px; right: 16px; bottom: 16px; text-align: center; text-shadow: 0 1px 3px #000; }
+</style>
+<script src="AgoraRTC_N-production.js"></script>
+</head>
+<body>
+<div id="video"></div>
+<div id="status">Starting…</div>
+<script>
+// Cloud camera: joins the printer's Agora RTC channel the way Elegoo's printer page does
+// (ElegooSlicer resources/web/elegoolink/lan_service_web): live mode, VP8, channel = printer serial,
+// token and numeric uid issued by Elegoo, client role "host", then plays the printer's video track.
+let client = null, remote = null;
+function send(message) { try { Android.postMessage(JSON.stringify(message)); } catch (e) {} }
+function status(text) { document.getElementById('status').textContent = text; send({ type: 'status', text: text }); }
+function show(user) {
+  remote = user;
+  const box = document.getElementById('video'); box.innerHTML = '';
+  user.videoTrack.play(box, { fit: 'contain' });
+  status(''); send({ type: 'playing' });
+}
+async function start(appId, channel, token, uid) {
+  try {
+    AgoraRTC.setLogLevel(3);
+    try { AgoraRTC.disableLogUpload(); } catch (e) {}
+    client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+    client.on('user-published', async (user, type) => {
+      if (type !== 'video') return;
+      await client.subscribe(user, 'video'); show(user);
+    });
+    client.on('user-unpublished', (user, type) => { if (type === 'video' && remote === user) { remote = null; status('The printer stopped its camera stream.'); } });
+    client.on('user-left', (user) => { if (remote === user) { remote = null; status('The printer left the camera channel.'); } });
+    client.on('connection-state-change', (current, previous, reason) => {
+      if (current === 'DISCONNECTED' && reason && reason !== 'LEAVE') status('Disconnected from the camera service (' + reason + ').');
+    });
+    status('Connecting to the camera…');
+    await client.join(appId, channel, token, Number(uid));
+    await client.setClientRole('host');
+    for (const user of client.remoteUsers) {
+      if (user.hasVideo) { await client.subscribe(user, 'video'); show(user); break; }
+    }
+    if (!remote) status('Connected. Waiting for the printer to send video…');
+    setTimeout(() => { if (!remote) status('The printer is not sending video. It may be off, offline, or its camera may be disabled.'); }, 15000);
+  } catch (e) {
+    status('The camera could not start (' + ((e && (e.code || e.message)) || e) + ').');
+  }
+}
+async function stop() { try { if (client) await client.leave(); } catch (e) {} client = null; remote = null; }
+function snapshot() {
+  if (!remote || !remote.videoTrack) { send({ type: 'snapshot', data: '' }); return; }
+  const frame = remote.videoTrack.getCurrentFrameData();
+  const canvas = document.createElement('canvas'); canvas.width = frame.width; canvas.height = frame.height;
+  canvas.getContext('2d').putImageData(frame, 0, 0);
+  send({ type: 'snapshot', data: canvas.toDataURL('image/jpeg', 0.92) });
+}
+send({ type: 'ready' });
+</script>
+</body>
+</html>

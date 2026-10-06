@@ -1,6 +1,6 @@
 # Link Workshop for Android
 
-**v0.4.0 (development):** redesigned interface with bottom navigation, a progress ring and temperature tiles; monitoring, alerts and Pause/Resume/Stop/light through the Elegoo cloud when LAN Only is off (sign in under Settings → Elegoo account). See [CLOUD_LOGIN.md](CLOUD_LOGIN.md).
+**v0.4.1 (development):** redesigned interface with bottom navigation, a progress ring and temperature tiles; with LAN Only off, monitoring, alerts, controls, printer settings, file browsing/start/delete, history and the camera through the Elegoo cloud (sign in under Settings → Elegoo account). See [CLOUD_LOGIN.md](CLOUD_LOGIN.md).
 
 <img src="docs/screenshots/monitor-dark.png" width="240" alt="Monitor tab, dark theme"> <img src="docs/screenshots/monitor-light.png" width="240" alt="Monitor tab, light theme">
 

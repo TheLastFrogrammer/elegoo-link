@@ -38,6 +38,7 @@ public final class MainActivity extends Activity {
     private TextView pinProbeHelp, cloudStatus;
     private Button cloudSignOut, cloudPrinters;
     private CheckBox cloudBackground;
+    private Button cloudCamera;
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
@@ -62,7 +63,7 @@ public final class MainActivity extends Activity {
     private CredentialStore credentials;
     private PrinterService printer;
     private JSONObject snapshot = new JSONObject();
-    private boolean active, bound, checking;
+    private boolean active, bound, checking, cloudAsked;
     private String pendingFeedback;
     private final ServiceConnection binding = new ServiceConnection() {
         public void onServiceConnected(ComponentName name, IBinder binder) {
@@ -176,6 +177,7 @@ public final class MainActivity extends Activity {
         tileNozzle = tile(tiles, "Nozzle", 0); tileBed = tile(tiles, "Bed", dp(8)); tileChamber = tile(tiles, "Chamber", dp(8));
         LinearLayout controls = card("Controls");
         controlSource = label(controls, "", 13, MUTED, false);
+        controlSource.setOnClickListener(v -> { if (viaCloud() && !settings.getBoolean("cloudControlUnderstood", false)) cloudGate(true, this::render); });
         LinearLayout printRow = row(controls);
         pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
         resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume after checking why the printer paused?", Cc2Codec.RESUME), true);
@@ -188,7 +190,7 @@ public final class MainActivity extends Activity {
         trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 15, INK, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
         LinearLayout tuning = card("Printer settings");
-        label(tuning, "Available on a local connection.", 13, MUTED, false);
+        label(tuning, "Works locally or through the Elegoo cloud. Temperature targets need an idle printer; speed modes need an active print.", 13, MUTED, false);
         heater = button(tuning, "Temperature targets…", this::temperatureDialog);
         fan = button(tuning, "Fan setting…", this::fanDialog);
         speed = button(tuning, "Print speed mode…", this::speedDialog);
@@ -206,7 +208,7 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         }, true);
         cancelUpload = rowButton(uploadRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
-        label(files, "Files, uploads and print setup use the local connection (uploads need the printer's HTTP port 80). Uploads keep going if you switch apps.", 13, MUTED, false);
+        label(files, "Uploading needs the local connection (the printer's HTTP port 80). Browsing, starting and deleting printer files also work through the Elegoo cloud.", 13, MUTED, false);
         buildFileBrowser();
         currentSection = pages[2]; buildCamera();
         currentSection = pages[3];
@@ -304,10 +306,10 @@ public final class MainActivity extends Activity {
     /** First cloud command: explain that it shares ElegooSlicer's cloud control identity. */
     private void cloudGate(boolean cloud, Runnable action) {
         if (!cloud || settings.getBoolean("cloudControlUnderstood", false)) { action.run(); return; }
-        new AlertDialog.Builder(this).setTitle("Control through the Elegoo cloud")
-            .setMessage("Cloud commands use the same cloud control sign-in as ElegooSlicer on a computer. If ElegooSlicer is open with this account, one of the two may be signed out of cloud control; Matrix is expected to keep working, but this is untested.\n\nThe app connects only when you send a command and disconnects after two idle minutes.")
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Continue", (d, which) -> { settings.edit().putBoolean("cloudControlUnderstood", true).apply(); action.run(); }).show();
+        new AlertDialog.Builder(this).setTitle("Turn on cloud control?")
+            .setMessage("Without a local connection, controls, files, history and settings go through the Elegoo cloud. They use the same cloud control sign-in as ElegooSlicer on a computer: if ElegooSlicer is open with this account, one of the two may be signed out of cloud control. Matrix is expected to keep working, but this is untested.\n\nThe app connects only when you use one of these and disconnects after two idle minutes. Monitoring works either way.")
+            .setNegativeButton("Not now", null)
+            .setPositiveButton("Turn on", (d, which) -> { settings.edit().putBoolean("cloudControlUnderstood", true).apply(); action.run(); }).show();
     }
     private void confirmRefill() {
         if (printer == null || !printer.canvasFresh() || !printer.canvas.has("auto_refill")) return;
@@ -429,7 +431,7 @@ public final class MainActivity extends Activity {
         storagePicker = spinner(browser, new String[] {"Internal storage", "USB drive"});
         storagePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { if (printer != null && printer.ready() && !printer.busy(Cc2Codec.FILES)) printer.browse(position == 0 ? "local" : "u-disk", 0); }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { if (printer != null && printer.canQuery() && !printer.busy(Cc2Codec.FILES)) printer.browse(position == 0 ? "local" : "u-disk", 0); }
         });
         listFiles = button(browser, "Refresh files", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
         fileInfo = label(browser, "Connect, then refresh to browse printer files.", 14, MUTED, false);
@@ -462,7 +464,7 @@ public final class MainActivity extends Activity {
     }
     private void startDialog(JSONObject file, String storage) {
         if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: print start is disabled."); return; }
-        if (printer == null || !printer.fresh() || !Cc2Codec.idle(printer.status) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
+        if (printer == null || !printer.liveFresh() || !Cc2Codec.idle(printer.liveStatus()) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
         String name = file.optString("filename");
         LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name) + "\nCheck the build plate, material and sliced printer profile before starting.", 14, INK, false);
         CheckBox leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record timelapse on printer", false);
@@ -527,10 +529,17 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the current print's speed mode. Filament changes may reset the mode on some firmware.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
     }).setNegativeButton("Cancel", null).show(); }
     private void buildCamera() {
-        LinearLayout card = card("Live camera");
+        LinearLayout cloudCard = card("Cloud camera");
+        cloudCamera = button(cloudCard, "Watch through the Elegoo cloud", () -> {
+            if (printer == null || printer.cloudSerial.isEmpty()) return;
+            stopCamera();
+            startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, printer.cloudSerial).putExtra(CloudCameraActivity.EXTRA_NAME, printer.cloudName));
+        });
+        label(cloudCard, "Works without LAN Only, from anywhere, the way Elegoo's apps show the camera.", 13, MUTED, false);
+        LinearLayout card = card("Local camera");
         cameraAddress = input(card, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         cameraQuery = button(card, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
-        cameraInfo = label(card, "Printer JPEG stream through the selected connection route. Start is independent of MQTT authentication; the default CC2 endpoint uses port 8080.", 14, MUTED, false);
+        cameraInfo = label(card, "The printer's own video stream on your network (port 8080), or through your home VPN.", 14, MUTED, false);
         cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
         cameraStart = button(card, "Start camera", this::toggleCamera);
         cameraSnapshot = button(card, "Save snapshot…", () -> {
@@ -553,13 +562,13 @@ public final class MainActivity extends Activity {
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
     }
     private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); }
-    private void renderFeatures(boolean ready, boolean fresh) {
-        listFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES)); storagePicker.setEnabled(!ready || !printer.busy(Cc2Codec.FILES));
-        loadHistory.setEnabled(ready && !printer.busy(Cc2Codec.HISTORY)); loadDisk.setEnabled(ready && !printer.busy(Cc2Codec.DISK)); cameraQuery.setEnabled(ready && !printer.busy(Cc2Codec.CAMERA));
+    private void renderFeatures(boolean query, boolean ready) {
+        listFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES)); storagePicker.setEnabled(!query || !printer.busy(Cc2Codec.FILES));
+        loadHistory.setEnabled(query && !printer.busy(Cc2Codec.HISTORY)); loadDisk.setEnabled(query && !printer.busy(Cc2Codec.DISK)); cameraQuery.setEnabled(ready && !printer.busy(Cc2Codec.CAMERA));
         JSONObject files = printer == null ? new JSONObject() : printer.filePage;
         JSONArray rows = files.optJSONArray("file_list"); int count = rows == null ? 0 : rows.length(), offset = printer == null ? 0 : printer.fileOffset;
-        previousFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES) && offset > 0);
-        nextFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES) && count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total")));
+        previousFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES) && offset > 0);
+        nextFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES) && count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total")));
         fileInfo.setText(printer == null ? "Connect to browse printer files." : printer.fileMessage + (rows == null ? "" : "\n" + (printer.storage.equals("local") ? "Internal" : "USB") + " · " + count + " file(s) · offset " + offset + (printer.filesFresh() ? "" : " · list stale")));
         if (files != renderedFiles) {
             renderedFiles = files; fileRows.removeAllViews();
@@ -575,6 +584,9 @@ public final class MainActivity extends Activity {
         if (!cameraHost.equals(selectedHost)) { stopCamera(); cameraHost = selectedHost; cameraReported = ""; cameraAddress.setText(selectedHost.isEmpty() ? "" : "http://" + selectedHost + ":8080/?action=stream"); lastFrame = null; cameraImage.setImageDrawable(null); }
         if (ready && !printer.cameraUrl.isEmpty() && cameraPlayer == null && !printer.cameraUrl.equals(cameraReported)) { cameraAddress.setText(printer.cameraUrl); cameraReported = printer.cameraUrl; }
         cameraSnapshot.setEnabled(lastFrame != null);
+        boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false);
+        cloudCamera.setEnabled(printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1 && cloudOk);
+        cloudCamera.setText(printer != null && printer.cloudSignedIn && !cloudOk ? "Cloud camera (turn on cloud control first)" : "Watch through the Elegoo cloud");
     }
     private void render() {
         if (connect == null || isDestroyed()) return;
@@ -582,7 +594,10 @@ public final class MainActivity extends Activity {
         boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), writable = fresh && !printer.pinProbe(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
         // Local session first; otherwise what the Elegoo cloud last received.
         boolean cloud = !ready && !connecting && printer != null && printer.usingCloud(), cloudFresh = cloud && printer.cloudFresh();
-        boolean live = fresh || cloudFresh, canControl = writable || cloudFresh && !printer.cloudCommandBusy;
+        // Cloud actions share ElegooSlicer's cloud control identity, so they wait for a one-time agreement; monitoring does not.
+        boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false);
+        if (cloudFresh && !cloudOk && !cloudAsked) { cloudAsked = true; cloudGate(true, this::render); }
+        boolean live = fresh || cloudFresh, canControl = writable || cloudFresh && cloudOk && !printer.cloudCommandBusy;
         snapshot = printer == null ? new JSONObject() : ready ? printer.status : cloud ? printer.cloudStatus : new JSONObject();
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
         if (ready) chip(summary, printer.pinProbe() ? "Local · read-only" : "Local", TEAL);
@@ -601,12 +616,12 @@ public final class MainActivity extends Activity {
         lightOn.setEnabled(canControl); lightOff.setEnabled(canControl);
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
-        heater.setEnabled(writable && Cc2Codec.idle(snapshot)); fan.setEnabled(writable); speed.setEnabled(writable && Cc2Codec.canPause(snapshot));
+        heater.setEnabled(canControl && Cc2Codec.idle(snapshot)); fan.setEnabled(canControl); speed.setEnabled(canControl && Cc2Codec.canPause(snapshot));
         cancelUpload.setEnabled(busy);
-        renderFeatures(ready, fresh);
-        refill.setEnabled(writable && printer.canvasFresh() && printer.canvas.has("auto_refill"));
-        if (ready && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
-        else refill.setText(ready ? "Automatic refill unavailable" : "Automatic refill (local connection)");
+        renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
+        refill.setEnabled(canControl && printer.canvasFresh() && printer.canvas.has("auto_refill"));
+        if ((ready || cloud) && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
+        else refill.setText(ready ? "Automatic refill unavailable" : "Automatic refill (refresh trays first)");
         upload.setEnabled(ready && !printer.pinProbe() && printer.selectedFile != null && !busy && !printer.importing); pick.setEnabled(printer != null && !busy && !printer.importing);
         if (printer != null && printer.selectedFile != null) selected.setText(printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB");
         // Header.
@@ -644,10 +659,12 @@ public final class MainActivity extends Activity {
         setTile(tileNozzle, temperature("extruder")); setTile(tileBed, temperature("heater_bed")); setTile(tileChamber, temperature("ztemperature_sensor"));
         // Where controls go.
         if (ready) controlSource.setText(printer.pinProbe() ? "Read-only PIN probe: controls are disabled." : "Commands go over your local network.");
+        else if (cloud && cloudFresh && !cloudOk) controlSource.setText("Cloud control is off. Tap here to turn it on.");
         else if (cloud) controlSource.setText(printer.cloudCommandBusy ? "Sending through the Elegoo cloud…" : cloudFresh ? "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago."
             : printer.cloudOnline == 0 ? "The Elegoo cloud reports the printer offline." : printer.cloudMessage.isEmpty() ? "Waiting for the Elegoo cloud…" : printer.cloudMessage);
         else controlSource.setText(connecting ? "Connecting on your local network…" : "Connect in Settings, or sign in with Elegoo to control through the cloud.");
-        trays.setText(!ready ? (cloud ? "Tray details are shown on a local connection." : "Connect for CANVAS tray status.") : StatusPresentation.canvas(printer.canvas) + (printer.canvas != null && !printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : ""));
+        trays.setText((ready || cloud) && printer.canvas != null ? StatusPresentation.canvas(printer.canvas) + (!printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : "")
+            : cloud ? "Tap Refresh status to load trays through the cloud." : ready ? StatusPresentation.canvas(null) : "Connect for CANVAS tray status.");
         if (printer != null) feedback.setText(printer.feedback);
     }
     private void setTile(TextView view, String text) {
