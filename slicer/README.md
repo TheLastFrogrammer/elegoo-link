@@ -40,12 +40,14 @@ Needs the Android NDK (default r28c, `28.2.13676358`, under `$ANDROID_SDK/ndk/`;
 ```sh
 export ANDROID_SDK=$HOME/Android/Sdk
 slicer/scripts/build-deps-android.sh   # dependencies into work/deps-android-arm64-v8a (about an hour on 4 cores)
-slicer/scripts/build-android.sh        # libslic3r + a static link-slicer into work/build-android-arm64-v8a
+slicer/scripts/build-android.sh        # libslic3r + link-slicer (and link-slicer-static) into work/build-android-arm64-v8a
 slicer/scripts/package-android-cli.sh  # stripped binary + profiles + sample models as a tarball for a phone
 ```
 
-The Android `link-slicer` is linked fully statically (no Android system libraries), so it runs on a phone in Termux
-or `adb shell`, and under `qemu-aarch64-static` on a Linux PC. `scripts/compare-android.sh MODEL` slices a model with
+The Android `link-slicer` is a normal position-independent executable (libc++ linked in; it needs only Android's
+libc, libm, libdl and liblog), for a phone in Termux or `adb shell`. `link-slicer-static` is a fully static copy
+for testing under `qemu-aarch64-static` on a Linux PC. Phones can't run it: Android's loader, which Termux uses
+to start programs, rejects non-PIE executables. `scripts/compare-android.sh MODEL` slices a model with
 the Android build (qemu by default, or a device with `ADB=adb`) and with the Linux build and compares the G-code.
 
 Android-specific handling, all in this directory's CMake (ElegooSlicer's sources are used unmodified):

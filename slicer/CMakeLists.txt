@@ -158,12 +158,22 @@ target_link_libraries(link_slicer PUBLIC libslic3r boost_libs cereal::cereal noi
 
 add_executable(link-slicer cli/main.cpp)
 target_link_libraries(link-slicer PRIVATE link_slicer)
-# A fully static executable needs no Android system libraries, so it also runs under qemu-aarch64 for testing.
-option(LINK_SLICER_STATIC_EXE "Link the link-slicer executable statically" OFF)
+
+# A fully static copy needs no Android system libraries, so it runs under qemu-aarch64 for testing on a PC. Phones
+# need the normal (PIE, dynamically linked) link-slicer above: Android's loader, which Termux uses to start
+# programs, rejects non-PIE executables.
+option(LINK_SLICER_STATIC_EXE "Also build link-slicer-static, a fully static copy" OFF)
 if (LINK_SLICER_STATIC_EXE)
-    target_link_options(link-slicer PRIVATE -static)
+    add_executable(link-slicer-static cli/main.cpp)
+    target_link_libraries(link-slicer-static PRIVATE link_slicer)
+    target_link_options(link-slicer-static PRIVATE -static)
     if (ANDROID)
-        # OpenCV links "log"; the NDK has no static liblog, so this target stands in for it (messages to stderr).
-        add_library(log STATIC engine/android_log_stderr.c)
+        # OpenCV links "log", but the NDK has liblog only as a shared library. Give the static link a liblog.a of
+        # its own (messages to stderr), in a directory only this executable searches.
+        add_library(android_log_stderr STATIC engine/android_log_stderr.c)
+        set_target_properties(android_log_stderr PROPERTIES OUTPUT_NAME log
+            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/static-log")
+        add_dependencies(link-slicer-static android_log_stderr)
+        target_link_directories(link-slicer-static PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/static-log")
     endif ()
 endif ()

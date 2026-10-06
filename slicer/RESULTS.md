@@ -111,7 +111,8 @@ byte-identical (below).
 
 ## Comparison with the Linux build
 
-The Android binary ran under `qemu-aarch64-static`, so its times are emulation times, not phone performance.
+The fully static Android build (`link-slicer-static`, same objects as the phone executable) ran under
+`qemu-aarch64-static`, so its times are emulation times, not phone performance.
 Run with `scripts/compare-android.sh`.
 
 | Model | Preset | Commands (differing) | Estimate (Android / Linux) | Filament | Per layer |
