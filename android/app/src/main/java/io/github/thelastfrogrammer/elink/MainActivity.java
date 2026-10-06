@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4;
     private int INK = 0xff142c3b, MUTED = 0xff536976, TEAL = 0xff006b65, BACKGROUND = 0xffedf3f4, SURFACE = Color.WHITE, BUTTON = 0xffe0efec;
     private boolean dark;
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -34,7 +34,9 @@ public final class MainActivity extends Activity {
     private SharedPreferences settings;
     private ProfileStore profiles;
     private EditText profileName, cameraAddress, pairingPin;
-    private TextView pinProbeHelp;
+    private TextView pinProbeHelp, cloudStatus;
+    private Button cloudSignOut;
+    private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
     private NetworkRoute cameraRoute;
@@ -183,13 +185,20 @@ public final class MainActivity extends Activity {
         buildFileBrowser();
         currentSection = pages[2]; buildCamera();
         currentSection = pages[3];
+        cloudAccounts = new CloudAccountStore(this);
+        LinearLayout account = card("Elegoo account (experimental)");
+        cloudStatus = label(account, "", 14, INK, false);
+        button(account, "Sign in with Elegoo…", this::cloudSignIn);
+        cloudSignOut = button(account, "Sign out on this phone", this::cloudSignOut);
+        label(account, "Opens Elegoo's own sign-in page, the one ElegooSlicer uses; your password goes only to Elegoo. This step only tests that sign-in works. The app does not reach your printer through the cloud yet, and printer access stays on LAN Only for now.", 13, MUTED, false);
+        renderCloudAccount();
         LinearLayout preferences = card("App preferences");
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
         LinearLayout coming = card("Next in the workshop");
-        label(coming, "Official cloud login · timelapse export · filament loading · other printer models", 15, INK, false);
+        label(coming, "Cloud monitoring (sign-in test above) · timelapse export · filament loading · other printer models", 15, INK, false);
         label(coming, "These features remain pending. New controls, files and camera behavior still need testing with your printer; unsupported requests report their error or timeout.", 13, MUTED, false);
         button(coming, "About & licenses", this::showLicenses);
         currentSection = null; feedback = label(content, "Development build: printer behavior still needs hardware testing.", 14, MUTED, false);
@@ -272,6 +281,24 @@ public final class MainActivity extends Activity {
         label(body, "The app does not install or configure Tailscale, and it does not bypass printer authentication. HTTP unavailable at home stays unavailable remotely. Monitoring/control/upload/camera requests use the selected route; VPN loss closes the session and requires a fresh connection without command replay.", 14, MUTED, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         new AlertDialog.Builder(this).setTitle("Away-from-home access").setView(scroll).setPositiveButton("Close", null).show();
+    }
+    private void cloudSignIn() {
+        new AlertDialog.Builder(this).setTitle("Elegoo account region").setSingleChoiceItems(new String[] {"Global (account.elegoo.com)", "China mainland (account.elegoo.com.cn)"}, cloudAccounts.china() ? 1 : 0, (dialog, which) -> {
+            dialog.dismiss(); cloudAccounts.china(which == 1);
+            startActivityForResult(new Intent(this, CloudLoginActivity.class).putExtra(CloudLoginActivity.EXTRA_CHINA, which == 1), CLOUD_LOGIN);
+        }).setNegativeButton("Cancel", null).show();
+    }
+    private void cloudSignOut() {
+        cloudAccounts.forget();
+        android.webkit.CookieManager.getInstance().removeAllCookies(null); android.webkit.WebStorage.getInstance().deleteAllData();
+        renderCloudAccount(); message("Signed out of Elegoo on this phone. Other apps signed in to the same account are not affected.");
+    }
+    private void renderCloudAccount() {
+        CloudLogin.Account account;
+        try { account = cloudAccounts.load(); }
+        catch (Exception error) { cloudAccounts.forget(); account = null; message("Saved Elegoo sign-in could not be decrypted. Sign in again."); }
+        cloudStatus.setText(account == null ? "Not signed in." : "Signed in as " + account.summary() + ".");
+        cloudSignOut.setEnabled(account != null);
     }
     private void appearanceDialog() {
         new AlertDialog.Builder(this).setTitle("Appearance").setSingleChoiceItems(new String[] {"Follow system", "Light", "Dark"}, settings.getInt("theme", 0), (dialog, which) -> {
@@ -530,6 +557,7 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == PICK_FILE && result == RESULT_OK && data != null && data.getData() != null && printer != null) printer.select(data.getData());
+        if (request == CLOUD_LOGIN) { renderCloudAccount(); if (result == RESULT_OK) message("Elegoo sign-in received and stored encrypted. Cloud monitoring is the next step."); }
         if (request == PICK_SNAPSHOT && result != RESULT_OK) pendingSnapshot = null;
         if (request == PICK_SNAPSHOT && result == RESULT_OK && data != null && data.getData() != null && pendingSnapshot != null) {
             Bitmap image = pendingSnapshot; pendingSnapshot = null; android.net.Uri uri = data.getData();

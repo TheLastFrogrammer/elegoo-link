@@ -25,9 +25,19 @@ Researched 2026-10-06 to scope a cloud route that works with the printer's LAN O
 - A client ID choice. The slicer only uses `win`, `mac` or `linux`. Reusing one of those could collide with a running ElegooSlicer session for the same account. Whether the server accepts `elegooslicer_android_<userId>` is untested.
 - Mapping the cloud MQTT messages to the existing status model. The SDK has a separate cloud parser, `src/cloud/adapters/elegoo_fdm_cc2_message_adapter.cpp`, which needs comparing with the LAN one.
 
+## Sign-in test in the app
+
+Settings → **Elegoo account (experimental)** → **Sign in with Elegoo…** (`CloudLoginActivity`, protocol in `CloudLogin`):
+
+- Opens `account.elegoo.com` (or `account.elegoo.com.cn`) in a `WebView`. The user agent adds `ElegooSlicer/1.5.3.5` because the page only uses its `window.wx` bridge for that client, plus `LinkWorkshop/<version>`.
+- `window.wx` is provided with `WebViewCompat.addWebMessageListener`, limited to those two origins and the main frame. Replies go back with `HandleStudio(...)`, and only while the page is still on an allowed origin.
+- Handles `report.ready` (replies with a random per-install device ID), `report.userInfo`, `report.loginFailed`, `report.notLogged` and `report.websiteOpen` (https links only, opened in the browser). Anything else gets a 404 reply.
+- Tokens are stored encrypted with their own Android Keystore key (`CloudAccountStore`). The Settings card shows only the nickname, the last four digits of the user ID and the token expiry. **Sign out on this phone** deletes the tokens and the web view's cookies and storage; it does not sign out other apps.
+- Nothing else uses the tokens yet: no refresh, no device list, no cloud MQTT.
+
 ## Open questions to test first
 
-1. Does the sign-in page hand off tokens in an Android `WebView`, or does it require the ElegooSlicer user agent?
+1. Does the sign-in page hand off tokens to the Android `WebView`? The page code requires `ElegooSlicer` in the user agent, which the app adds; untested on a phone.
 2. Does the MQTT credential endpoint accept an `android` client ID?
 3. Does a cloud MQTT session from the app keep Matrix and ElegooSlicer connected?
 
