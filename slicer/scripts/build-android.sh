@@ -11,5 +11,5 @@ cmake -S "$SLICER_ROOT" -B "$BUILD" -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_FIND_ROOT_PATH="$DEPS_ANDROID_PREFIX" -DCMAKE_PREFIX_PATH="$DEPS_ANDROID_PREFIX" \
     -DOpenCV_DIR="$DEPS_ANDROID_PREFIX/sdk/native/jni" \
     -DELEGOOSLICER_SRC="$ELEGOOSLICER_SRC" -DLINK_SLICER_STATIC_EXE=ON
-cmake --build "$BUILD" --target link-slicer link-slicer-static -j "$JOBS"
+cmake --build "$BUILD" --target link-slicer link-slicer-static linkslicer -j "$JOBS"
 echo "Built $BUILD/link-slicer"

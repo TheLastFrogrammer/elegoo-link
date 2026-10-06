@@ -338,6 +338,27 @@ public final class PrinterService extends Service {
             }
         });
     }
+    /** Takes G-code sliced on this phone into the workspace, as select() does for a chosen file. */
+    public void selectSliced(File source, String name) {
+        if (fileBusy()) return;
+        importing = true; feedback = "Inspecting sliced G-code…"; changed();
+        files.execute(() -> {
+            File local = null;
+            try {
+                local = File.createTempFile("upload-", ".gcode", getCacheDir());
+                try (InputStream input = new FileInputStream(source); OutputStream output = new FileOutputStream(local)) {
+                    byte[] buffer = new byte[65536]; int count;
+                    while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                }
+                File readyFile = local; GcodeInspector.Report report = GcodeInspector.inspect(local);
+                android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
+                main.post(() -> finishFile(readyFile, name, report, preview, "Sliced on this phone. Uploading does not start a print."));
+            } catch (Exception error) {
+                if (local != null) local.delete();
+                main.post(() -> { if (!destroyed) { importing = false; feedback = "The sliced G-code could not be read."; changed(); } });
+            }
+        });
+    }
     private void finishFile(File file, String name, GcodeInspector.Report report, android.graphics.Bitmap preview, String text) {
         if (destroyed) { file.delete(); return; }
         if (selectedFile != null) selectedFile.delete(); selectedFile = file; selectedName = name; selectedReport = report;

@@ -177,3 +177,23 @@ if (LINK_SLICER_STATIC_EXE)
         target_link_directories(link-slicer-static PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/static-log")
     endif ()
 endif ()
+
+# The library the Android app loads (System.loadLibrary("linkslicer")). Only the JNI entry points are exported;
+# libc++ and every dependency are linked in statically. On Linux the same library is built when a JDK is found, so
+# the app's JVM unit tests can drive the real engine through NativeSlicer (see SlicerIntegrationTest).
+if (NOT ANDROID)
+    find_package(JNI QUIET)
+endif ()
+if (ANDROID OR JAVA_INCLUDE_PATH)
+    add_library(linkslicer SHARED jni/link_slicer_jni.cpp)
+    if (ANDROID)
+        target_link_libraries(linkslicer PRIVATE link_slicer log)
+    else ()
+        # Only the JNI headers are needed (FindJNI's JNI_FOUND also demands AWT, absent from headless JDKs).
+        target_include_directories(linkslicer PRIVATE ${JAVA_INCLUDE_PATH} ${JAVA_INCLUDE_PATH2})
+        target_link_libraries(linkslicer PRIVATE link_slicer)
+    endif ()
+    target_link_options(linkslicer PRIVATE -Wl,--exclude-libs,ALL
+        "-Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/jni/exports.map")
+    set_target_properties(linkslicer PROPERTIES LINK_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/jni/exports.map")
+endif ()

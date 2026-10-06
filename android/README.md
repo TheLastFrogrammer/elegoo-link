@@ -1,6 +1,10 @@
 # Link Workshop for Android
 
-**v0.5.0 (development):** redesigned interface with bottom navigation, a progress ring and temperature tiles; with LAN Only off, monitoring, alerts, controls, printer settings, file browsing/start/delete, history, maintenance (filament, homing, leveling) and the camera through the Elegoo cloud; print recordings with graphs; live cloud updates (sign in under Settings → Elegoo account). See [CLOUD_LOGIN.md](CLOUD_LOGIN.md).
+**v0.6.0 (development):** slice STL, 3MF, OBJ, Draco and STEP models on the phone with ElegooSlicer's own engine and Elegoo presets (Files → Slice a model on this phone), then upload and print as usual. See [SLICER_PORT.md](SLICER_PORT.md) and [../slicer](../slicer/README.md); builds include the slicer only after `slicer/scripts/install-into-app.sh`.
+
+<img src="docs/screenshots/slice-light.png" width="240" alt="Slice screen with a sliced calibration box">
+
+**v0.5.0:** redesigned interface with bottom navigation, a progress ring and temperature tiles; with LAN Only off, monitoring, alerts, controls, printer settings, file browsing/start/delete, history, maintenance (filament, homing, leveling) and the camera through the Elegoo cloud; print recordings with graphs; live cloud updates (sign in under Settings → Elegoo account). See [CLOUD_LOGIN.md](CLOUD_LOGIN.md).
 
 <img src="docs/screenshots/monitor-dark.png" width="240" alt="Monitor tab, dark theme"> <img src="docs/screenshots/monitor-light.png" width="240" alt="Monitor tab, light theme">
 

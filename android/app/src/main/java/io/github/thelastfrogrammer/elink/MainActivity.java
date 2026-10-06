@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6;
     private String pendingExportHash = "";
     private android.net.Uri pendingExportUri;
     private TextView inspection;
@@ -56,6 +56,7 @@ public final class MainActivity extends Activity {
     private Spinner storagePicker, routePicker, authPicker;
     private NetworkRoute cameraRoute;
     private AutoCloseable cameraRouteWatch;
+    private Button sliceModel;
     private Button resume, discover, saveProfile, chooseProfile, removeProfile, cancelUpload, listFiles, previousFiles, nextFiles, loadHistory, loadDisk,
         cameraStart, cameraQuery, cameraSnapshot, heater, fan, speed, lightOn, lightOff;
     private ImageView cameraImage;
@@ -236,6 +237,7 @@ public final class MainActivity extends Activity {
         pick = button(files, "Choose G-code", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
         });
+        sliceModel = button(files, "Slice a model on this phone…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE));
         inspection = label(files, "Select a G-code file to inspect it offline. Printer connection is not required.", 13, INK, false); inspection.setTextIsSelectable(true);
         filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER); files.addView(filePreview, new LinearLayout.LayoutParams(-1,dp(200))); filePreview.setVisibility(View.GONE);
         previewInfo = label(files, "Embedded previews appear when a supported image is present in the selected G-code.", 13, MUTED, false);
@@ -843,6 +845,10 @@ public final class MainActivity extends Activity {
             else { pendingExportHash = ""; pendingExportUri = null; }
         }
         if (request == PICK_FILE && result == RESULT_OK && data != null && data.getData() != null && printer != null) printer.select(data.getData());
+        if (request == SLICE && result == RESULT_OK && data != null && printer != null) {
+            String path = data.getStringExtra(SliceActivity.RESULT_FILE), name = data.getStringExtra(SliceActivity.RESULT_NAME);
+            if (path != null && name != null) printer.selectSliced(new File(path), name);
+        }
         if (request == CLOUD_LOGIN) { renderCloudAccount(); if (result == RESULT_OK) { message("Signed in with Elegoo. Monitor now shows your printer through the cloud when there is no local connection."); selectPage(0); } }
         if (request == PICK_SNAPSHOT && result != RESULT_OK) pendingSnapshot = null;
         if (request == PICK_SNAPSHOT && result == RESULT_OK && data != null && data.getData() != null && pendingSnapshot != null) {
@@ -873,6 +879,11 @@ public final class MainActivity extends Activity {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");
                 }
             }
+            // Builds with the slicer carry its AGPL-3.0 license (slicer/scripts/install-into-app.sh).
+            try (InputStream input = getAssets().open("slicer/LICENSE-AGPL-3.0.txt"); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count);
+                text.append("Slicer (ElegooSlicer engine), AGPL-3.0. Source: https://github.com/TheLastFrogrammer/elegoo-link/tree/main/slicer\n\n").append(bytes.toString("UTF-8")).append("\n\n");
+            } catch (IOException notIncluded) { }
             ScrollView scroll = new ScrollView(this); TextView view = new TextView(this); view.setText(text.toString()); view.setTextColor(INK); view.setTextSize(13); view.setPadding(dp(20), dp(12), dp(20), dp(12)); scroll.addView(view);
             new AlertDialog.Builder(this).setTitle("About & licenses").setView(scroll).setPositiveButton("Close", null).show();
         } catch (IOException error) { feedback.setText("License information could not be opened."); }

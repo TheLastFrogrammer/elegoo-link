@@ -52,7 +52,12 @@ The bulk of the work. Most are CMake projects that cross-compile cleanly:
 
 Output: a prebuilt sysroot (`deps/android-arm64/`) produced by a script, cached in CI.
 
-### 3. libslic3r for Android + JNI facade
+### 3. libslic3r for Android + JNI facade — done
+Built: `slicer/jni/` wraps the engine facade as `liblinkslicer.so` (19 MB stripped, 16 KB page aligned). The app's
+`NativeSlicer` loads it, unpacks the presets from `assets/slicer`, and slices on its own thread with a 64 MB stack.
+`SlicerIntegrationTest` drives the same Java and JNI code against a Linux build of the library (opt-in, `-DslicerLib`).
+The notes below were the plan.
+
 A deliberately small C API so the Java side never touches libslic3r types:
 
 ```
@@ -67,7 +72,13 @@ slicer_close(handle)
 ```
 Run slicing in a foreground service (it can take minutes and lots of memory); report progress via the callback.
 
-### 4. Android UI (in this app or a sibling app — see licensing)
+### 4. Android UI (in this app or a sibling app — see licensing) — started
+Started, in Link Workshop itself (chosen over a separate app): `SliceActivity` (Files → Slice a model on this phone)
+picks models, printer, process and filament presets, infill, supports and brim, then slices with progress and cancel.
+The G-code goes to the Files tab for upload or is saved. Not yet: a 3D or layer preview, an embedded thumbnail,
+multi-filament assignment, or a settings editor beyond the quick settings.
+The notes below were the plan.
+
 - Import STL/3MF/OBJ from the Files picker or share sheet.
 - Preset pickers seeded from the CC2 profile JSON (printer, filament per tray, process), plus a short list of
   common overrides. Material-per-tray can reuse the CANVAS data Link Workshop already reads.

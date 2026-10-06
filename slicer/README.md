@@ -59,6 +59,18 @@ Android-specific handling, all in this directory's CMake (ElegooSlicer's sources
 - fontconfig, which libslic3r links but never calls, is an empty target; the static test executable gets a stand-in
   for liblog (OpenCV logs through it) that prints to stderr.
 
+## In the Android app
+
+`scripts/install-into-app.sh` puts the stripped `liblinkslicer.so` (the JNI library, built by `build-android.sh`) into
+`android/app/src/main/jniLibs/arm64-v8a/` and the presets into `android/app/src/main/assets/slicer/`. Both are
+git-ignored build outputs. Without them the app still builds, and its Slice screen says the slicer isn't included.
+`scripts/build-linux.sh` also builds a host `liblinkslicer.so` when a JDK is present. With it, the app's
+`SlicerIntegrationTest` runs the real engine through the app's `NativeSlicer` on the JVM:
+
+```sh
+cd android && ./gradlew testDebugUnitTest --tests '*SlicerIntegrationTest*' -DslicerLib=<SLICER_WORK>/build-linux
+```
+
 ## Use
 
 ```sh

@@ -3,3 +3,6 @@ local.properties
 **/build/
 *.jks
 *.keystore
+# Slicer build outputs (slicer/scripts/install-into-app.sh)
+app/src/main/jniLibs/arm64-v8a/liblinkslicer.so
+app/src/main/assets/slicer/

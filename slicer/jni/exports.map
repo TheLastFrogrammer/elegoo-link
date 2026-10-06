@@ -1,0 +1,7 @@
+{
+  global:
+    JNI_OnLoad;
+    Java_io_github_thelastfrogrammer_elink_NativeSlicer_*;
+  local:
+    *;
+};
