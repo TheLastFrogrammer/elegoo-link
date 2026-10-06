@@ -93,6 +93,11 @@ public class ScreenshotTest {
             service.cloudSignedIn = true; service.cloudSerial = "F01ABC0000R818"; service.cloudName = "Bedroom"; service.cloudModel = "Centauri Carbon 2";
             service.cloudOnline = 1; service.cloudCheckedAt = System.currentTimeMillis() - 4000; service.cloudStatus = printing();
             service.feedback = "Printer acknowledged through the cloud. Waiting for its status to update.";
+            service.canvas = new org.json.JSONObject("{\"auto_refill\":true,\"active_canvas_id\":0,\"active_tray_id\":1,\"canvas_list\":[{\"canvas_id\":0,\"connected\":1,\"tray_list\":["
+                + "{\"tray_id\":0,\"filament_type\":\"PLA\",\"filament_name\":\"PLA Matte\",\"filament_color\":\"#D02828\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230},"
+                + "{\"tray_id\":1,\"filament_type\":\"PLA\",\"filament_name\":\"PLA\",\"filament_color\":\"#F0F0F0\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230},"
+                + "{\"tray_id\":2,\"filament_type\":\"PETG\",\"filament_color\":\"#1E5AA8\",\"min_nozzle_temp\":230,\"max_nozzle_temp\":260},"
+                + "{\"tray_id\":3,\"filament_type\":\"\",\"filament_color\":\"\"}]}]}");
             Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
             Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
             String[] names = {"monitor", "files", "camera", "settings"};

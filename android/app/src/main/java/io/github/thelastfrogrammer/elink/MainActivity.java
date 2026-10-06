@@ -27,6 +27,8 @@ public final class MainActivity extends Activity {
     private TextView inspection;
     private ImageView filePreview;
     private TextView previewInfo;
+    private LinearLayout fileDetails, transferRow, trayList, pageRow;
+    private String dismissedFeedback = "", renderedCanvas;
     private GcodeInspector.Report renderedReport;
     private Button materialDetails;
     private Button saveCopy, shareInspection, clearCopy, cancelDownload;
@@ -120,6 +122,12 @@ public final class MainActivity extends Activity {
         title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4)); header.addView(summary);
         identity = label(content, "Centauri Carbon 2", 13, MUTED, false);
+        // Results of actions show here, on every tab, until tapped away or replaced.
+        feedback = new TextView(this); feedback.setTextSize(14); feedback.setTextColor(INK); feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
+        GradientDrawable banner = new GradientDrawable(); banner.setColor(TILE); banner.setCornerRadius(dp(14)); banner.setStroke(dp(1), (TEAL & 0x00ffffff) | 0x55000000); feedback.setBackground(banner);
+        feedback.setContentDescription("Latest message. Tap to dismiss."); feedback.setVisibility(View.GONE);
+        feedback.setOnClickListener(v -> { dismissedFeedback = feedback.getText().toString(); feedback.setVisibility(View.GONE); });
+        LinearLayout.LayoutParams bannerLayout = new LinearLayout.LayoutParams(-1, -2); bannerLayout.topMargin = dp(8); content.addView(feedback, bannerLayout);
         // Bottom navigation.
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); navigation.setBackgroundColor(NAV); navigation.setElevation(dp(8));
         String[] titles = {"Monitor", "Files", "Camera", "Settings"};
@@ -137,6 +145,35 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < 4; i++) { pages[i] = new LinearLayout(this); pages[i].setOrientation(LinearLayout.VERTICAL); content.addView(pages[i]); }
         currentSection = pages[3];
         LinearLayout connectionCard = card("Local connection (LAN Only)");
+        connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
+        connection.setTextIsSelectable(true);
+        LinearLayout findRow = row(connectionCard);
+        discover = rowButton(findRow, "Find on Wi-Fi", this::scanPrinters, false);
+        chooseProfile = rowButton(findRow, "Saved printers…", this::choosePrinter, false);
+        host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
+        host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
+        access = input(connectionCard, "LAN access code", true); access.setTypeface(Typeface.DEFAULT); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        pairingPin = input(connectionCard, "Current printer pairing PIN (probe only)", true); pairingPin.setTypeface(Typeface.DEFAULT); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        pinProbeHelp = label(connectionCard, "Experimental and read-only: use the pairing PIN the printer currently shows, not the LAN access code. The PIN is never saved.", 13, MUTED, false);
+        serial = input(connectionCard, "Serial number (optional)", false);
+        serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
+        remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
+        LinearLayout connectRow = row(connectionCard);
+        connect = rowButton(connectRow, "Connect", this::toggleConnection, true);
+        check = rowButton(connectRow, "Check connection", this::checkConnection, false);
+        diagnostics = label(connectionCard, "Check connection tests whether the printer is reachable and how it is set up.", 13, MUTED, false);
+        diagnostics.setTextIsSelectable(true);
+        button(connectionCard, "Connection help…", this::connectionHelp);
+        subheading(connectionCard, "Save this printer");
+        profileName = input(connectionCard, "Printer profile name", false);
+        serial.setText(profiles.find(host.getText().toString()).optString("serial"));
+        profileName.setText(profiles.find(host.getText().toString()).optString("name"));
+        LinearLayout profileRow = row(connectionCard);
+        saveProfile = rowButton(profileRow, "Save", this::savePrinter, false);
+        removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
+        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
+        subheading(connectionCard, "Advanced");
         label(connectionCard, "Connection route", 13, MUTED, false);
         routePicker = spinner(connectionCard, new String[] {"Local Wi-Fi / Ethernet", "Remote through home VPN"});
         routePicker.setSelection(settings.getBoolean("remoteVPN", false) ? 1 : 0);
@@ -153,32 +190,6 @@ public final class MainActivity extends Activity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("pinProbe", position == 1).apply(); if (connect != null) { diagnostics.setText("Authentication mode changed. Run Check connection; PIN probe preserves the printer's cloud setting."); render(); } }
         });
         button(connectionCard, "Matrix coexistence test…", this::coexistenceHelp);
-        host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
-        host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
-        access = input(connectionCard, "LAN access code", true); access.setTypeface(Typeface.DEFAULT); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        pairingPin = input(connectionCard, "Current printer pairing PIN (probe only)", true); pairingPin.setTypeface(Typeface.DEFAULT); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        pinProbeHelp = label(connectionCard, "Experimental and read-only: use the pairing PIN the printer currently shows, not the LAN access code. The PIN is never saved.", 13, MUTED, false);
-        serial = input(connectionCard, "Serial number (optional)", false);
-        serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
-        button(connectionCard, "Connection help…", this::connectionHelp);
-        connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
-        connection.setTextIsSelectable(true);
-        LinearLayout connectRow = row(connectionCard);
-        connect = rowButton(connectRow, "Connect", this::toggleConnection, true);
-        check = rowButton(connectRow, "Check connection", this::checkConnection, false);
-        diagnostics = label(connectionCard, "Check connection tests whether the printer is reachable and how it is set up.", 13, MUTED, false);
-        diagnostics.setTextIsSelectable(true);
-        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
-        remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
-        discover = button(connectionCard, "Find printers on Wi-Fi", this::scanPrinters);
-        profileName = input(connectionCard, "Printer profile name", false);
-        serial.setText(profiles.find(host.getText().toString()).optString("serial"));
-        profileName.setText(profiles.find(host.getText().toString()).optString("name"));
-        LinearLayout profileRow = row(connectionCard);
-        saveProfile = rowButton(profileRow, "Save", this::savePrinter, false);
-        chooseProfile = rowButton(profileRow, "Saved…", this::choosePrinter, false);
-        removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
         currentSection = pages[0];
         LinearLayout hero = card(null);
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
@@ -211,7 +222,8 @@ public final class MainActivity extends Activity {
         lightOff = rowButton(lightRow, "Light off", () -> light(false), false);
         refresh = button(controls, "Refresh status", () -> { if (printer == null) return; if (printer.ready()) printer.refresh(); else printer.cloudVisible(true); });
         LinearLayout canvas = card("CANVAS filament trays");
-        trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 15, INK, false);
+        trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList);
+        trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
         LinearLayout tuning = card("Printer settings");
         label(tuning, "Works locally or through the Elegoo cloud. Temperature targets need an idle printer; speed modes need an active print.", 13, MUTED, false);
@@ -234,20 +246,31 @@ public final class MainActivity extends Activity {
         urgentStop = button(upkeep, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
         urgentStop.setTextColor(ERROR);
         currentSection = pages[1];
-        LinearLayout files = card("Phone G-code workspace");
-        selected = label(files, "Choose a .gcode file sliced for this printer.", 14, MUTED, false);
-        pick = button(files, "Choose G-code", () -> {
+        LinearLayout files = card("G-code on this phone");
+        selected = label(files, "Slice a model, or choose a .gcode file sliced for this printer. No printer connection needed.", 14, MUTED, false);
+        LinearLayout startRow = row(files);
+        sliceModel = rowButton(startRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
+        pick = rowButton(startRow, "Choose G-code…", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
-        });
-        sliceModel = button(files, "Slice a model on this phone…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE));
-        inspection = label(files, "Select a G-code file to inspect it offline. Printer connection is not required.", 13, INK, false); inspection.setTextIsSelectable(true);
-        filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER); files.addView(filePreview, new LinearLayout.LayoutParams(-1,dp(200))); filePreview.setVisibility(View.GONE);
-        previewInfo = label(files, "Embedded previews appear when a supported image is present in the selected G-code.", 13, MUTED, false);
-        previewToolpath = button(files, "Preview toolpath…", () -> {
+        }, false);
+        // The chosen file: preview, actions and the offline report, shown once there is one.
+        fileDetails = new LinearLayout(this); fileDetails.setOrientation(LinearLayout.VERTICAL); files.addView(fileDetails);
+        filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        LinearLayout.LayoutParams previewLayout = new LinearLayout.LayoutParams(-1, dp(180)); previewLayout.topMargin = dp(10); fileDetails.addView(filePreview, previewLayout); filePreview.setVisibility(View.GONE);
+        previewInfo = label(fileDetails, "", 12, MUTED, false);
+        LinearLayout uploadRow = row(fileDetails);
+        upload = rowButton(uploadRow, "Upload to printer", () -> {
+            if (printer == null || printer.selectedName == null) return;
+            new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
+                .setMessage("This sends the file only. A file with the same name may be replaced. Refresh Files after upload and choose Print setup to start it.")
+                .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
+        }, true);
+        LinearLayout viewRow = row(fileDetails);
+        previewToolpath = rowButton(viewRow, "Preview toolpath", () -> {
             if (printer == null || printer.selectedFile == null) return;
             startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, printer.selectedFile.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, printer.selectedName));
-        });
-        materialDetails = button(files, "Material details…", () -> {
+        }, false);
+        materialDetails = rowButton(viewRow, "Materials…", () -> {
             if (printer == null || printer.selectedReport == null) return;
             SlicedMaterials materials = printer.selectedReport.materials; LinearLayout body = dialogBody();
             for (SlicedMaterials.Entry entry : materials.entries) {
@@ -258,29 +281,25 @@ public final class MainActivity extends Activity {
             for (String warning : materials.warnings) label(body, warning, 13, MUTED, false);
             label(body, "Comment indices are source-array positions, not confirmed tool or CANVAS tray IDs. No mapping is applied.", 13, MUTED, false);
             ScrollView detail = new ScrollView(this); detail.addView(body); new AlertDialog.Builder(this).setTitle("Sliced material evidence").setView(detail).setPositiveButton("Close",null).show();
-        });
-        shareInspection = button(files, "Share inspection report…", () -> {
+        }, false);
+        inspection = label(fileDetails, "", 13, INK, false); inspection.setTextIsSelectable(true);
+        LinearLayout keepRow = row(fileDetails);
+        shareInspection = rowButton(keepRow, "Share report…", () -> {
             if (printer == null || printer.selectedReport == null) return;
             Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, StatusPresentation.clean(printer.selectedName) + "\n" + printer.selectedReport.text());
             startActivity(Intent.createChooser(send, "Share G-code inspection"));
-        });
-        saveCopy = button(files, "Save phone copy…", () -> {
+        }, false);
+        saveCopy = rowButton(keepRow, "Save copy…", () -> {
             if (printer == null || printer.selectedReport == null || printer.fileBusy()) return;
             pendingExportHash = printer.selectedReport.sha256;
             Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.selectedName);
             startActivityForResult(save, SAVE_GCODE);
-        });
-        clearCopy = button(files, "Remove phone cache copy", () -> { if (printer != null) printer.clearPhoneCopy(); });
-        LinearLayout uploadRow = row(files);
-        upload = rowButton(uploadRow, "Upload", () -> {
-            if (printer == null || printer.selectedName == null) return;
-            new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
-                .setMessage("This sends the file only. A file with the same name may be replaced. Refresh Files after upload and choose Print setup to start it.")
-                .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
-        }, true);
-        cancelUpload = rowButton(uploadRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
-        cancelDownload = rowButton(uploadRow, "Cancel download", () -> { if (printer != null) printer.cancelDownload(); }, false);
-        label(files, "Uploading and downloading need the local connection (the printer's HTTP port 80). Downloads become phone cache copies; use Save phone copy to keep one. Offline reports read slicer comments and explicit T selections; they do not simulate a print or assign trays. Browsing, starting and deleting printer files also work through the Elegoo cloud.", 13, MUTED, false);
+        }, false);
+        clearCopy = rowButton(keepRow, "Remove", () -> { if (printer != null) printer.clearPhoneCopy(); }, false);
+        transferRow = row(files);
+        cancelUpload = rowButton(transferRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
+        cancelDownload = rowButton(transferRow, "Cancel download", () -> { if (printer != null) printer.cancelDownload(); }, false);
+        label(fileDetails, "Uploads and downloads need the local connection (the printer's HTTP port 80). Downloads become phone copies; Save copy keeps one. The report reads slicer comments only; it does not simulate a print.", 12, MUTED, false);
         buildFileBrowser();
         currentSection = pages[2]; buildCamera();
         currentSection = pages[3];
@@ -308,10 +327,10 @@ public final class MainActivity extends Activity {
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
-        LinearLayout coming = card("Coming next · v" + appVersion());
-        label(coming, "Cloud camera and files · live cloud updates · timelapse export · filament loading · other printer models", 15, INK, false);
-        button(coming, "About & licenses", this::showLicenses);
-        currentSection = null; feedback = label(content, "Development build: printer behavior still needs hardware testing.", 14, MUTED, false);
+        LinearLayout about = card("Link Workshop " + appVersion());
+        label(about, "Development build: printer behavior still needs hardware testing. Planned next: timelapse export, a fuller slicer settings editor and other printer models.", 13, MUTED, false);
+        button(about, "About & licenses", this::showLicenses);
+        currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
         try { access.setText(credentials.load(host.getText().toString().trim())); remember.setChecked(saved == null ? credentials.remembers(host.getText().toString().trim()) : saved.getBoolean("remember", false)); }
         catch (Exception error) { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); }
@@ -564,7 +583,7 @@ public final class MainActivity extends Activity {
         listFiles = button(browser, "Refresh files", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
         fileInfo = label(browser, "Connect, then refresh to browse printer files.", 14, MUTED, false);
         fileRows = new LinearLayout(this); fileRows.setOrientation(LinearLayout.VERTICAL); browser.addView(fileRows);
-        LinearLayout pageRow = row(browser);
+        pageRow = row(browser);
         previousFiles = rowButton(pageRow, "Previous 50", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); }, false);
         nextFiles = rowButton(pageRow, "Next 50", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); }, false);
         label(browser, "Tap a file for details, print setup or deletion. The printer must be idle.", 13, MUTED, false);
@@ -727,6 +746,8 @@ public final class MainActivity extends Activity {
         JSONArray rows = files.optJSONArray("file_list"); int count = rows == null ? 0 : rows.length(), offset = printer == null ? 0 : printer.fileOffset;
         previousFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES) && offset > 0);
         nextFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES) && count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total")));
+        boolean paged = offset > 0 || count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total"));
+        pageRow.setVisibility(paged ? View.VISIBLE : View.GONE); // only when there is another page
         fileInfo.setText(printer == null ? "Connect to browse printer files." : printer.fileMessage + (rows == null ? "" : "\n" + (printer.storage.equals("local") ? "Internal" : "USB") + " · " + count + " file(s) · offset " + offset + (printer.filesFresh() ? "" : " · list stale")));
         if (files != renderedFiles) {
             renderedFiles = files; fileRows.removeAllViews();
@@ -772,13 +793,14 @@ public final class MainActivity extends Activity {
         pause.setEnabled(canControl && Cc2Codec.canPause(snapshot)); resume.setEnabled(canControl && resumable); stop.setEnabled(canControl && Cc2Codec.canStop(snapshot));
         pause.setVisibility(resumable ? View.GONE : View.VISIBLE); resume.setVisibility(resumable ? View.VISIBLE : View.GONE);
         lightOn.setEnabled(canControl); lightOff.setEnabled(canControl);
-        discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
+        discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning…" : "Find on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
         heater.setEnabled(canControl && Cc2Codec.idle(snapshot)); fan.setEnabled(canControl); speed.setEnabled(canControl && Cc2Codec.canPause(snapshot));
         boolean upkeepOk = canControl && Cc2Codec.idle(snapshot) && StatusPresentation.faultCodes(snapshot).isEmpty();
         for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
         trayFilament.setEnabled(upkeepOk && printer.canvas != null); urgentStop.setEnabled(canControl);
-        cancelUpload.setEnabled(busy); cancelDownload.setEnabled(printer != null && printer.downloading());
+        cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
+        transferRow.setVisibility(cancelUpload.getVisibility() == View.VISIBLE || cancelDownload.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
         refill.setEnabled(canControl && printer.canvasFresh() && printer.canvas.has("auto_refill"));
         if ((ready || cloud) && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
@@ -788,13 +810,16 @@ public final class MainActivity extends Activity {
         boolean hasReport = printer != null && printer.selectedFile != null && printer.selectedReport != null;
         saveCopy.setEnabled(hasReport && !fileBusy); shareInspection.setEnabled(hasReport && !fileBusy); clearCopy.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
         GcodeInspector.Report report = hasReport ? printer.selectedReport : null;
-        if (renderedReport != report || !hasReport) { renderedReport = report; inspection.setText(hasReport ? report.text() : "Select a G-code file to inspect it offline. Printer connection is not required."); }
+        if (renderedReport != report || !hasReport) { renderedReport = report; inspection.setText(hasReport ? report.text() : ""); }
+        fileDetails.setVisibility(printer != null && (printer.selectedFile != null || printer.importing) ? View.VISIBLE : View.GONE);
         if (!hasReport && printer != null && printer.importing) inspection.setText("Importing and inspecting G-code…");
         filePreview.setImageBitmap(hasReport ? printer.selectedThumbnail : null); filePreview.setVisibility(hasReport && printer.selectedThumbnail != null ? View.VISIBLE : View.GONE);
-        previewInfo.setText(!hasReport ? "Embedded previews appear when a supported image is present in the selected G-code." : report.thumbnail == null ? report.thumbnailNote : printer.selectedThumbnail == null ? "Embedded image found but Android could not decode it. File inspection remains available." : report.thumbnailNote + " · slicer image, not a live camera or motion simulation");
+        previewInfo.setText(!hasReport ? "" : report.thumbnail == null ? report.thumbnailNote : printer.selectedThumbnail == null ? "Embedded image found but Android could not decode it. File inspection remains available." : report.thumbnailNote + " · slicer image, not a live camera or motion simulation");
         materialDetails.setEnabled(hasReport && !report.materials.entries.isEmpty());
         previewToolpath.setEnabled(printer != null && printer.selectedFile != null && !printer.importing);
-        selected.setText(printer != null && printer.selectedFile != null ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Choose a .gcode file sliced for this printer.");
+        boolean chosen = printer != null && printer.selectedFile != null;
+        selected.setText(chosen ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Slice a model, or choose a .gcode file sliced for this printer. No printer connection needed.");
+        selected.setTextColor(chosen ? INK : MUTED); selected.setTypeface(Typeface.DEFAULT, chosen ? Typeface.BOLD : Typeface.NORMAL);
         // Header.
         String name = "Link Workshop", model = "Centauri Carbon 2";
         if (ready) {
@@ -838,11 +863,52 @@ public final class MainActivity extends Activity {
         else if (cloud) controlSource.setText(printer.cloudCommandBusy ? "Sending through the Elegoo cloud…" : cloudFresh ? "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago" + (printer.cloudLiveOn ? " · live" : "") + "."
             : printer.cloudOnline == 0 ? "The Elegoo cloud reports the printer offline." : printer.cloudMessage.isEmpty() ? "Waiting for the Elegoo cloud…" : printer.cloudMessage);
         else controlSource.setText(connecting ? "Connecting on your local network…" : "Connect in Settings, or sign in with Elegoo to control through the cloud.");
-        trays.setText((ready || cloud) && printer.canvas != null ? StatusPresentation.canvas(printer.canvas) + (!printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : "")
-            : cloud ? "Tap Refresh status to load trays through the cloud." : ready ? StatusPresentation.canvas(null) : "Connect for CANVAS tray status.");
-        if (printer != null) feedback.setText(printer.feedback);
+        JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
+        renderTrays(canvasNow);
+        if (canvasNow != null) {
+            String refillText = "Automatic refill: " + (canvasNow.has("auto_refill") ? (canvasNow.optBoolean("auto_refill") ? "On" : "Off") : "Not reported");
+            trays.setText(trayList.getChildCount() == 0 ? StatusPresentation.canvas(canvasNow) : refillText + (!printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : ""));
+        } else trays.setText(cloud ? "Tap Refresh status to load trays through the cloud." : ready ? StatusPresentation.canvas(null) : "Connect for CANVAS tray status.");
+        showFeedback(printer == null ? null : printer.feedback);
         cloudLiveLabel.setText(printer == null ? "" : printer.cloudLiveState); cloudLiveLabel.setVisibility(cloudLiveLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
         showThumbnail();
+    }
+    /** One row per reported tray: colour swatch, material and the active-tray marker. Rebuilt only when the trays change. */
+    private void renderTrays(JSONObject canvas) {
+        String key = canvas == null ? null : canvas.toString();
+        if (java.util.Objects.equals(key, renderedCanvas)) return;
+        renderedCanvas = key; trayList.removeAllViews();
+        JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
+        if (units == null) return;
+        for (int u = 0; u < Math.min(units.length(), 8); u++) {
+            JSONObject unit = units.optJSONObject(u); if (unit == null) continue;
+            JSONArray list = unit.optJSONArray("tray_list"); if (list == null) continue;
+            int id = unit.optInt("canvas_id", -1);
+            Object connected = unit.opt("connected");
+            boolean online = connected == null || Boolean.TRUE.equals(connected) || unit.optInt("connected", 0) == 1;
+            if (units.length() > 1 || !online) label(trayList, "CANVAS " + id + (online ? "" : " · not connected"), 12, MUTED, true);
+            for (int t = 0; t < Math.min(list.length(), 16); t++) {
+                JSONObject tray = list.optJSONObject(t); if (tray == null) continue;
+                int trayId = tray.optInt("tray_id", -1);
+                boolean active = canvas.has("active_canvas_id") && canvas.has("active_tray_id") && id == canvas.optInt("active_canvas_id") && trayId == canvas.optInt("active_tray_id");
+                String type = StatusPresentation.clean(tray.optString("filament_type")).trim(), name = StatusPresentation.clean(tray.optString("filament_name")).trim();
+                String colour = TrayPlan.colour(tray.optString("filament_color"));
+                LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0, dp(6), 0, dp(6));
+                View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setShape(GradientDrawable.OVAL);
+                if (colour != null) dot.setColor(Color.parseColor(colour)); else dot.setColor(Color.TRANSPARENT);
+                dot.setStroke(dp(colour == null ? 2 : 1), MUTED); swatch.setBackground(dot);
+                LinearLayout.LayoutParams swatchSize = new LinearLayout.LayoutParams(dp(28), dp(28)); swatchSize.rightMargin = dp(12); row.addView(swatch, swatchSize);
+                LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+                TextView first = new TextView(this); first.setTextColor(INK); first.setTextSize(15); first.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL);
+                first.setText("Tray " + trayId + " · " + (type.isEmpty() ? "Empty" : name.isEmpty() || name.equalsIgnoreCase(type) ? type : name)); text.addView(first);
+                String second = (type.isEmpty() ? "" : type + (colour == null ? "" : " · " + colour));
+                if (tray.has("min_nozzle_temp") && tray.has("max_nozzle_temp")) second += (second.isEmpty() ? "" : " · ") + tray.optInt("min_nozzle_temp") + "–" + tray.optInt("max_nozzle_temp") + "°C";
+                if (!second.isEmpty()) { TextView detailLine = new TextView(this); detailLine.setText(second); detailLine.setTextColor(MUTED); detailLine.setTextSize(12); text.addView(detailLine); }
+                if (active) { TextView chip = new TextView(this); chip.setTextSize(12); chip.setTypeface(Typeface.DEFAULT, Typeface.BOLD); chip.setPadding(dp(10), dp(4), dp(10), dp(4)); chip(chip, "Active", TEAL); row.addView(chip); }
+                row.setContentDescription("Tray " + trayId + ", " + (type.isEmpty() ? "empty" : type + " " + name) + (colour == null ? "" : ", colour " + colour) + (active ? ", active" : ""));
+                trayList.addView(row);
+            }
+        }
     }
     private void setTile(TextView view, String text) {
         int split = text.indexOf('\n');
@@ -858,7 +924,13 @@ public final class MainActivity extends Activity {
         double target = value.optDouble("target", 0);
         return text + (value.has("target") ? (target > 0 ? String.format(Locale.ROOT, "\n→ %.0f°", target) : "\noff") : "");
     }
-    private void message(String text) { if (printer != null) printer.feedback = text; else pendingFeedback = text; if (feedback != null) feedback.setText(text); }
+    private void message(String text) { if (printer != null) printer.feedback = text; else pendingFeedback = text; showFeedback(text); }
+    private void showFeedback(String text) {
+        if (feedback == null) return;
+        boolean show = text != null && !text.isEmpty() && !text.equals(dismissedFeedback);
+        if (show) { feedback.setText(text); dismissedFeedback = ""; }
+        feedback.setVisibility(show ? View.VISIBLE : View.GONE);
+    }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == SAVE_GCODE) {
@@ -907,7 +979,7 @@ public final class MainActivity extends Activity {
             } catch (IOException notIncluded) { }
             ScrollView scroll = new ScrollView(this); TextView view = new TextView(this); view.setText(text.toString()); view.setTextColor(INK); view.setTextSize(13); view.setPadding(dp(20), dp(12), dp(20), dp(12)); scroll.addView(view);
             new AlertDialog.Builder(this).setTitle("About & licenses").setView(scroll).setPositiveButton("Close", null).show();
-        } catch (IOException error) { feedback.setText("License information could not be opened."); }
+        } catch (IOException error) { message("License information could not be opened."); }
     }
     private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { return "dev"; } }
     private LinearLayout card(String title) {
@@ -947,6 +1019,11 @@ public final class MainActivity extends Activity {
     private void chip(TextView view, String text, int color) {
         view.setText(text); view.setTextColor(color);
         GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12)); shape.setColor((color & 0x00ffffff) | 0x26000000); view.setBackground(shape);
+    }
+    /** A group heading inside a card, set apart from the controls above it. */
+    private void subheading(LinearLayout parent, String text) {
+        TextView view = label(parent, text, 14, INK, true);
+        ((LinearLayout.LayoutParams) view.getLayoutParams()).topMargin = dp(14);
     }
     private TextView label(LinearLayout parent, String text, int size, int color, boolean bold) {
         TextView view = new TextView(this); view.setText(text); view.setTextSize(size); view.setTextColor(color); if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);

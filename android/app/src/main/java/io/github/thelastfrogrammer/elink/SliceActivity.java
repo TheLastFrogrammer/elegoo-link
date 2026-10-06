@@ -48,7 +48,8 @@ public final class SliceActivity extends Activity {
     private SharedPreferences settings;
     private boolean dark, busy;
     private int ink, muted, teal, background, surface, buttonColor, error;
-    private LinearLayout content;
+    private LinearLayout content, actionBar;
+    private ScrollView scroll;
     private TextView modelsLabel, status, resultText;
     private Spinner printerSpinner, processSpinner, supportSpinner, brimSpinner;
     private LinearLayout slotList, modelAssign;
@@ -87,9 +88,15 @@ public final class SliceActivity extends Activity {
         ink = dark ? 0xffe6eef1 : 0xff17252c; muted = dark ? 0xff9fb3bb : 0xff5a6d76; teal = dark ? 0xff5fd4c4 : 0xff00796b;
         background = dark ? 0xff0e1417 : 0xfff2f5f6; surface = dark ? 0xff182227 : Color.WHITE; buttonColor = dark ? 0xff21343a : 0xffe2efed;
         error = dark ? 0xffffb4ab : 0xffba1a1a;
-        ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(background); scroll.setFitsSystemWindows(true);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(background); root.setFitsSystemWindows(true);
+        scroll = new ScrollView(this); scroll.setBackgroundColor(background);
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
-        setContentView(scroll);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        // The slice controls stay on screen below the form.
+        actionBar = new LinearLayout(this); actionBar.setOrientation(LinearLayout.VERTICAL); actionBar.setPadding(dp(16), dp(8), dp(16), dp(12));
+        actionBar.setBackgroundColor(surface); actionBar.setElevation(dp(8)); root.addView(actionBar, new LinearLayout.LayoutParams(-1, -2));
+        actionBar.setVisibility(View.GONE);
+        setContentView(root);
         label(content, "Slice a model", 22, ink, true);
         label(content, "ElegooSlicer's own slicing engine and Elegoo presets, running on this phone.", 13, muted, false);
         if (!NativeSlicer.available(this)) {
@@ -121,7 +128,6 @@ public final class SliceActivity extends Activity {
     private void build() {
         LinearLayout modelCard = card("Model");
         modelsLabel = label(modelCard, "Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged on one plate.", 14, muted, false);
-        modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); modelCard.addView(modelAssign);
         chooseModels = button(modelCard, "Choose model files", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
@@ -136,13 +142,14 @@ public final class SliceActivity extends Activity {
         });
 
         LinearLayout filamentCard = card("Filaments");
-        label(filamentCard, "One slot per filament. Slot 1 prints as tool T0, slot 2 as T1, and so on. Pick a CANVAS tray to take its material and colour; the tray plan is offered again when you start the print.", 13, muted, false);
-        slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
-        traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
+        label(filamentCard, "Slot 1 prints as tool T0, slot 2 as T1, and so on. A CANVAS tray gives a slot its material and colour, and Print setup offers the same trays later.", 13, muted, false);
         fillTrays = button(filamentCard, "Fill from CANVAS trays", this::fillFromTrays, false);
+        traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
+        slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
         LinearLayout slotButtons = new LinearLayout(this); slotButtons.setOrientation(LinearLayout.HORIZONTAL); filamentCard.addView(slotButtons);
         addSlot = rowButton(slotButtons, "Add filament", () -> { addSlot(null); showModels(); updateButtons(); }, false);
         removeSlot = rowButton(slotButtons, "Remove last", () -> { removeLastSlot(); showModels(); updateButtons(); }, false);
+        modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(modelAssign);
         addSlot(null);
 
         LinearLayout settingsCard = card("Quick settings");
@@ -155,8 +162,8 @@ public final class SliceActivity extends Activity {
         label(settingsCard, "Brim", 12, muted, false);
         brimSpinner = spinner(settingsCard); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
 
-        LinearLayout sliceCard = card(null);
-        status = label(sliceCard, "Loading Elegoo presets…", 14, ink, false);
+        LinearLayout sliceCard = actionBar; actionBar.setVisibility(View.VISIBLE);
+        status = label(sliceCard, "Loading Elegoo presets…", 14, ink, false); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(3);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgressTintList(ColorStateList.valueOf(teal));
         progress.setVisibility(View.GONE); sliceCard.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); sliceCard.addView(row);
@@ -299,6 +306,7 @@ public final class SliceActivity extends Activity {
         resultText.setText(text.toString());
         resultCard.setVisibility(View.VISIBLE);
         preview.setVisibility(View.GONE);
+        scroll.post(() -> scroll.smoothScrollTo(0, resultCard.getTop() - dp(12)));
         File gcode = result.gcode;
         // Show the preview image the engine embedded (the one the printer's file list will show).
         worker.execute(() -> {
@@ -374,7 +382,8 @@ public final class SliceActivity extends Activity {
         for (File file : models) names.append(names.length() > 0 ? "\n" : "").append(file.getName()).append(" (").append(size(file.length())).append(")");
         modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
         if (slots.size() < 2) return;
-        label(modelAssign, "Filament for each model", 12, muted, false);
+        TextView heading = label(modelAssign, "Filament for each model", 14, ink, true);
+        ((LinearLayout.LayoutParams) heading.getLayoutParams()).topMargin = dp(14);
         for (int i = 0; i < models.size(); i++) {
             File model = models.get(i); int index = i;
             List<String> choices = new ArrayList<>();
@@ -532,7 +541,8 @@ public final class SliceActivity extends Activity {
         boolean presetsReady = selected(printerSpinner) != null && selected(processSpinner) != null;
         for (Slot slot : slots) presetsReady &= selected(slot.preset) != null;
         slice.setEnabled(!busy && !models.isEmpty() && presetsReady);
-        cancel.setEnabled(busy && progress.getVisibility() == View.VISIBLE);
+        boolean slicing = busy && progress.getVisibility() == View.VISIBLE;
+        cancel.setEnabled(slicing); cancel.setVisibility(slicing ? View.VISIBLE : View.GONE); slice.setVisibility(slicing ? View.GONE : View.VISIBLE);
         chooseModels.setEnabled(!busy);
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
         for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
