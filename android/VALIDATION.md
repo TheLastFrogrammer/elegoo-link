@@ -1,3 +1,20 @@
+# v0.3.1 validation
+
+Validated 2026-10-06. Away-from-home operation has not been exercised on a physical Pi, CC2 or Galaxy S24+. The earlier MQTT authorization refusal remains the latest supplied printer connection result. This update adds VPN routing; it does not establish successful printer authentication or make the unavailable HTTP service work.
+
+- Gradle full unit suite passed: 73 tests, zero failures/errors. Eight new tests cover all VPN-presence/network/process-binding combinations; refusing socket creation without a valid route; rechecking after creation for both timed/ordinary connect; guarded successful and denied paths for all four connected SocketFactory overloads; wrapped MQTT VPN-error redaction; discovery VPN loss blocking manual/HTTP fallback; and HTTP VPN loss retaining the route error.
+- Final core route changes were rebuilt and the full 73-test reports verified again. The subsequent camera error wording was rebuilt with lintDebug/assembleDebug. Lint has zero errors and 22 warnings: 21 English UI translation warnings and one newer test-only JSON dependency notice. JDK 17, Gradle 8.13, AGP 8.11.1, SDK 36/build tools 35.0.0.
+- Final APK assembled with build cache disabled from an empty app/build directory: 31 tasks executed. ZIP integrity and DEX markers for VpnRouteGuard, GuardedSocketFactory, remote route picker and final camera wording verified. Actual APK manifest: v0.3.1/code 6, min 26, target/compile 36.
+- APK Signature Scheme v2 verified; certificate SHA-256 unchanged: 9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3. Compatible update over v0.2.0–v0.3.0.
+- APK: 230979 bytes; SHA-256 e2b9a8ae7e719951135fd686fd068956b720f76af5ab81176921c97bd9babf7d.
+- Pi-guide example policy parsed as valid JSON; single /32 destination and expected TCP/UDP ports checked. Official Android/Tailscale routing/security documentation reviewed; no gateway or tailnet policy was applied remotely.
+
+The JVM tests exercise route-policy logic, loopback sockets and simulated printer transports. They do not exercise Android ConnectivityManager, actual VPN route injection, native UI, service callbacks, Pi forwarding/firewalls, Tailscale policy enforcement or firmware behavior. VPN presence is a precondition, not proof of provider/destination/access policy. Connection setup can race route changes; Android Always-on VPN / Block connections without VPN gives stronger system enforcement.
+
+On-device acceptance: verify local MQTT registration first, then set up the Pi per [REMOTE_ACCESS.md](REMOTE_ACCESS.md). Enable the approved narrow route and phone-specific permissions; select Remote through home VPN, retain the printer home IP and check diagnostics over cellular with home Wi-Fi off. Compare monitoring and camera with the touchscreen. Disable/switch VPN during registration, monitoring, a test upload and camera playback: the old session/work must close; commands/uploads must not replay; a restored route must register anew. Test saved route preference and older-profile local defaults, rotation/theme changes, Wi-Fi/cellular handover, foreground/background and screen-off behavior. HTTP remains required for uploads. Test denied-route/denied-port and an excluded-app VPN configuration; these must fail clearly without suggesting an access-code change.
+
+No emulator or physical device is attached. No signing keys, access codes or cloud credentials are included in the source archive. Earlier release validation records follow.
+
 # v0.3.0 validation
 
 Validated 2026-10-05. New controls have not been exercised on a physical CC2 or S24+. The user's earlier broker authorization refusal remains the latest supplied connection result; this feature release does not establish that authentication is resolved.

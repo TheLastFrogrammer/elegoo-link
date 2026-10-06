@@ -27,6 +27,9 @@ public final class PrinterService extends Service {
     private final ReconnectPolicy retries = new ReconnectPolicy();
     private Observer observer;
     private Cc2Session session;
+    private NetworkRoute route;
+    private AutoCloseable routeWatch;
+    private boolean remote;
     private boolean wanted, foreground, destroyed;
     private long generation;
     private String host = "", code = "", serial = "";
@@ -44,7 +47,7 @@ public final class PrinterService extends Service {
     private long canvasAt, lastNotification;
     private final Runnable reconnect = this::attempt;
     private final Runnable freshness = new Runnable() {
-        public void run() { if (destroyed) return; if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
+        public void run() { if (destroyed) return; checkRoute(); if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
     };
     @Override public void onCreate() {
         super.onCreate();
@@ -63,27 +66,32 @@ public final class PrinterService extends Service {
     public String accessCode() { return code; }
     public String serial() { return serial; }
     public boolean connecting() { return wanted; }
-    public boolean ready() { return session != null && session.ready(); }
-    public boolean fresh() { return session != null && session.fresh(); }
+    public boolean remote() { return remote; }
+    public boolean ready() { return session != null && session.ready() && (!remote || route != null && route.available()); }
+    public boolean fresh() { return ready() && session.fresh(); }
     public boolean uploading() { return session != null && session.uploading(); }
     public boolean canvasFresh() { return fresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
-    public void connect(String host, String code, String serial) {
+    public void connect(String host, String code, String serial) { connect(host, code, serial, false); }
+    public void connect(String host, String code, String serial, boolean remote) {
         new PrinterHttp(host, code);
         if (!serial.isEmpty() && !Cc2Discovery.validSerial(serial)) throw new IllegalArgumentException("Invalid serial number");
-        generation++; main.removeCallbacks(reconnect); if (session != null) session.close(); session = null;
-        this.host = host; this.code = code; this.serial = serial; wanted = true; retries.connected(); alerts = new PrintAlerts();
+        generation++; main.removeCallbacks(reconnect); clearRoute(); if (session != null) session.close(); session = null;
+        this.host = host; this.code = code; this.serial = serial; this.remote = remote; wanted = true; retries.connected(); alerts = new PrintAlerts();
         startMonitoring(); attempt();
     }
     private void attempt() {
         if (!wanted || destroyed) return;
-        final NetworkRoute route;
-        try { route = NetworkRoute.local(this); }
+        final NetworkRoute selected;
+        try { selected = NetworkRoute.select(this, remote); }
         catch (IOException error) { failed(error.getMessage(), true); return; }
         long current = ++generation;
+        clearRoute(); route = selected;
+        try { routeWatch = selected.watch(() -> main.post(() -> { if (!destroyed && route == selected && wanted) failed(new VpnRouteGuard.Unavailable().getMessage(), true); })); }
+        catch (Exception error) { failed("Android could not monitor the VPN route. Enable your home VPN and reconnect.", true); return; }
         resetData();
         session = new Cc2Session(host, code, new Cc2Session.Listener() {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
-            public void connection(String text, boolean registered) { deliver(() -> { connection = text; if (registered) retries.connected(); }); }
+            public void connection(String text, boolean registered) { deliver(() -> { connection = registered && remote ? "Connected through VPN · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
             public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } showAlert(alerts.update(value)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
@@ -104,10 +112,13 @@ public final class PrinterService extends Service {
             }); }
             public void queryError(int method, String text) { deliver(() -> { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }); }
             public void uploaded(String name) { deliver(() -> { feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0); }); }
-        }, route.http(), route.sockets(), new PrinterIdentity(serial, route.discovery()));
+        }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery()));
         connection = "Identifying printer for MQTT…"; changed(); session.connect();
     }
+    private void checkRoute() { if (wanted && remote && route != null && !route.available()) failed(new VpnRouteGuard.Unavailable().getMessage(), true); }
+    private void clearRoute() { AutoCloseable watcher = routeWatch; routeWatch = null; route = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } }
     private void failed(String message, boolean retryable) {
+        clearRoute();
         alerts.disconnected();
         generation++; if (session != null) session.close(); session = null;
         resetData();
@@ -122,10 +133,10 @@ public final class PrinterService extends Service {
         }
         changed();
     }
-    public void refresh() { if (session != null) session.refresh(); }
-    public void command(int method) { if (session != null) session.command(method); }
+    public void refresh() { if (ready()) session.refresh(); }
+    public void command(int method) { if (fresh()) session.command(method); }
     public void autoRefill(boolean enabled) { if (canvasFresh() && session != null) session.autoRefill(enabled); }
-    public void upload() { if (session != null && selectedFile != null && !importing) { session.upload(selectedFile, selectedName); changed(); } }
+    public void upload() { if (ready() && selectedFile != null && !importing) { session.upload(selectedFile, selectedName); changed(); } }
     public void cancelUpload() { if (session != null) session.cancelUpload(); }
     public boolean busy(int method) { return queryBusy.contains(method); }
     public boolean filesFresh() { return ready() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
@@ -156,7 +167,7 @@ public final class PrinterService extends Service {
         queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
     }
     public void disconnect() {
-        wanted = false; generation++; main.removeCallbacks(reconnect);
+        wanted = false; generation++; main.removeCallbacks(reconnect); clearRoute();
         if (session != null) session.close(); session = null; code = "";
         resetData();
         connection = "Disconnected"; stopMonitoring(); changed();
@@ -236,7 +247,7 @@ public final class PrinterService extends Service {
         lastNotification = now; getSystemService(NotificationManager.class).notify(NOTIFICATION, notification());
     }
     @Override public void onDestroy() {
-        destroyed = true; observer = null; main.removeCallbacksAndMessages(null);
+        destroyed = true; observer = null; clearRoute(); main.removeCallbacksAndMessages(null);
         if (session != null) session.close(); session = null; code = "";
         files.shutdownNow(); if (selectedFile != null) selectedFile.delete();
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy();

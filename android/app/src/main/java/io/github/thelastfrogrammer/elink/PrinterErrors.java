@@ -40,6 +40,8 @@ public final class PrinterErrors {
         return reason + " (code " + code + ").";
     }
     public static String describe(Throwable error, String stage) {
+        Throwable routeError = error;
+        for (int i = 0; i < 8 && routeError != null; i++, routeError = routeError.getCause()) if (routeError instanceof VpnRouteGuard.Unavailable) return new VpnRouteGuard.Unavailable().getMessage();
         if (error instanceof CloudMode) return "The printer reports cloud / WAN mode. This build supports LAN authentication. Enable LAN Only in printer Settings, then use its LAN access code. The Account pairing PIN belongs to the separate cloud path.";
         if (error instanceof IdentityUnavailable) return "Could not obtain the printer serial through UDP discovery or HTTP. Enter the exact Serial Number from Settings → Device in the optional serial field, then connect over MQTT.";
         if (error instanceof Rejected) return error.getMessage();
@@ -55,7 +57,7 @@ public final class PrinterErrors {
         Throwable cause = error;
         for (int i = 0; i < 8 && cause != null; i++, cause = cause.getCause()) {
             if (cause instanceof ConnectException || cause instanceof NoRouteToHostException)
-                return stage + " could not reach the printer. Check its current IP, LAN Only, and the phone's Wi-Fi. Guest-network isolation or a VPN can block access.";
+                return stage + " could not reach the printer. Check its current IP, LAN Only, and the selected connection route. Local mode needs home Wi-Fi; remote mode needs a working home VPN/subnet route.";
             if (cause instanceof SocketTimeoutException)
                 return stage + " timed out. Run Check connection to distinguish Wi-Fi reachability from printer authentication.";
         }

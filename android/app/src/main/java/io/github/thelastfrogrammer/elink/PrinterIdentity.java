@@ -16,11 +16,12 @@ public final class PrinterIdentity implements Cc2Session.IdentityResolver {
             mismatch = !manual.isEmpty() && !manual.equals(info.serial);
             return info.serial;
         }
-        catch (java.io.IOException ignored) {
+        catch (java.io.IOException discoveryError) {
+            if (discoveryError instanceof VpnRouteGuard.Unavailable) throw discoveryError;
             if (!manual.isEmpty()) return manual;
             try { return http.systemInfo().getString("sn"); }
             catch (Exception error) {
-                if (error instanceof PrinterErrors.Rejected || (error instanceof PrinterErrors.HttpStatus
+                if (error instanceof VpnRouteGuard.Unavailable || error instanceof PrinterErrors.Rejected || (error instanceof PrinterErrors.HttpStatus
                     && (((PrinterErrors.HttpStatus) error).status == 401 || ((PrinterErrors.HttpStatus) error).status == 403))) throw error;
                 throw new PrinterErrors.IdentityUnavailable();
             }

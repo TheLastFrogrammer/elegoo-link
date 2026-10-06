@@ -35,7 +35,9 @@ public final class MainActivity extends Activity {
     private ProfileStore profiles;
     private EditText profileName, cameraAddress;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
-    private Spinner storagePicker;
+    private Spinner storagePicker, routePicker;
+    private NetworkRoute cameraRoute;
+    private AutoCloseable cameraRouteWatch;
     private Button resume, discover, saveProfile, chooseProfile, removeProfile, cancelUpload, listFiles, previousFiles, nextFiles, loadHistory, loadDisk,
         cameraStart, cameraQuery, cameraSnapshot, heater, fan, speed, lightOn, lightOff;
     private ImageView cameraImage;
@@ -60,7 +62,7 @@ public final class MainActivity extends Activity {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
-            if (printer.connecting()) { host.setText(printer.host()); access.setText(printer.accessCode()); serial.setText(printer.serial()); }
+            if (printer.connecting()) { routePicker.setSelection(printer.remote() ? 1 : 0); host.setText(printer.host()); access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) printer.observe(MainActivity.this::render);
             render();
         }
@@ -89,7 +91,7 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 25, INK, true);
-        label(content, "Centauri Carbon 2 · local Wi-Fi · v0.3.0", 14, MUTED, false);
+        label(content, "Centauri Carbon 2 · local / VPN · v0.3.1", 14, MUTED, false);
         summary = label(content, "Disconnected · open Settings to connect", 14, TEAL, true);
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); content.addView(navigation);
         String[] titles = {"Monitor", "Files", "Camera", "Settings"};
@@ -97,6 +99,14 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < 4; i++) { pages[i] = new LinearLayout(this); pages[i].setOrientation(LinearLayout.VERTICAL); content.addView(pages[i]); }
         currentSection = pages[3];
         LinearLayout connectionCard = card("Connection");
+        label(connectionCard, "Connection route", 13, MUTED, false);
+        routePicker = spinner(connectionCard, new String[] {"Local Wi-Fi / Ethernet", "Remote through home VPN"});
+        routePicker.setSelection(settings.getBoolean("remoteVPN", false) ? 1 : 0);
+        routePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("remoteVPN", position == 1).apply(); stopCamera(); if (connect != null) { diagnostics.setText("Connection route changed. Run Check connection before reconnecting."); render(); } }
+        });
+        button(connectionCard, "Remote access setup…", this::remoteHelp);
         host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "LAN access code", true); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
@@ -104,7 +114,7 @@ public final class MainActivity extends Activity {
         serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         label(connectionCard, "Leave serial blank for automatic identity discovery. A manual Serial Number from Settings → Device is used if discovery fails. Discovery also checks the printer's LAN mode and code-protection setting.", 13, MUTED, false);
         remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
-        label(connectionCard, "IP: printer Settings → Network. Access code: Settings → LAN Only. Enable LAN Only and use the same local Wi-Fi. Leave the code blank if code protection is off.", 13, MUTED, false);
+        label(connectionCard, "IP: printer Settings → Network. Access code: Settings → LAN Only. Enable LAN Only. Local mode uses home Wi-Fi; Remote mode requires a connected home VPN and a Pi/router gateway to this printer. Leave the code blank if code protection is off.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
         connect = button(connectionCard, "Connect", this::toggleConnection);
         check = button(connectionCard, "Check connection", this::checkConnection);
@@ -168,7 +178,7 @@ public final class MainActivity extends Activity {
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
         LinearLayout coming = card("Next in the workshop");
-        label(coming, "Official cloud login · remote access · timelapse export · filament loading · other printer models", 15, INK, false);
+        label(coming, "Official cloud login · timelapse export · filament loading · other printer models", 15, INK, false);
         label(coming, "These features remain pending. New controls, files and camera behavior still need testing with your printer; unsupported requests report their error or timeout.", 13, MUTED, false);
         button(coming, "About & licenses", this::showLicenses);
         currentSection = null; feedback = label(content, "Development build: printer behavior still needs hardware testing.", 14, MUTED, false);
@@ -198,7 +208,7 @@ public final class MainActivity extends Activity {
         }
         try {
             startForegroundService(new Intent(this, PrinterService.class));
-            printer.connect(address, code, serialNumber); render();
+            printer.connect(address, code, serialNumber, remoteMode()); render();
         } catch (Exception error) { printer.disconnect(); message("Android could not start printer monitoring. Keep the app open and check its permissions."); }
     }
     private void checkConnection() {
@@ -207,12 +217,12 @@ public final class MainActivity extends Activity {
         String serialNumber = serial.getText().toString().trim();
         if (!serialNumber.isEmpty() && !Cc2Discovery.validSerial(serialNumber)) { diagnostics.setText("Enter a valid serial number or leave it blank for discovery."); return; }
         try { new PrinterHttp(address, code); } catch (Exception error) { diagnostics.setText("Enter a valid private IPv4 address before checking."); return; }
-        checking = true; diagnostics.setText("Checking Wi-Fi, HTTP 80, MQTT 1883, and UDP discovery 52700…"); render();
-        Context context = getApplicationContext();
+        checking = true; diagnostics.setText(remoteMode() ? "Checking VPN, HTTP 80, MQTT 1883, camera 8080, and UDP identity 52700…" : "Checking Wi-Fi, HTTP 80, MQTT 1883, and UDP discovery 52700…"); render();
+        Context context = getApplicationContext(); boolean remote = remoteMode();
         checks.execute(() -> {
             String report;
-            try { report = NetworkRoute.local(context).check(address, code, serialNumber); }
-            catch (IOException error) { report = "No local Wi-Fi network is available. Connect the phone to the printer's Wi-Fi and check again."; }
+            try { report = NetworkRoute.select(context, remote).check(address, code, serialNumber); }
+            catch (IOException error) { report = remote ? "Home VPN is unavailable or changed. Enable Tailscale / your home VPN, verify this app uses it, and check again." : "No local Wi-Fi network is available. Connect the phone to the printer's Wi-Fi and check again."; }
             catch (Exception error) { report = "Connection check failed. Confirm the current printer IP and the phone's Wi-Fi."; }
             String result = report;
             main.post(() -> { if (!isDestroyed()) { checking = false; diagnostics.setText(result); render(); } });
@@ -235,6 +245,17 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < 4; i++) { pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE); tabs[i].setTypeface(Typeface.DEFAULT, i == page ? Typeface.BOLD : Typeface.NORMAL); tabs[i].setAlpha(i == page ? 1f : 0.7f); }
         settings.edit().putInt("page", page).apply();
     }
+    private boolean remoteMode() { return routePicker != null && routePicker.getSelectedItemPosition() == 1; }
+    private void remoteHelp() {
+        LinearLayout body = dialogBody();
+        label(body, "Use your always-on Pi as a Tailscale subnet router. Install Tailscale on the Pi and phone, then sign in to your own tailnet. The Pi needs access to the printer on your home network.", 14, INK, false);
+        label(body, "On the Pi: enable IPv4 forwarding and advertise only the printer's IP as a /32 route. Approve that route in the Tailscale admin console. Restrict the phone's access to printer TCP 1883 (monitor/control), 80 (uploads if available), 8080 (camera) and optionally UDP 52700 (identity). Broader existing access rules must also be reviewed.", 14, INK, false);
+        label(body, "In this app: choose Remote through home VPN, keep the printer's home IP (not the Pi's Tailscale IP), and use its LAN access code. Enable the VPN, then Check connection and Connect. A manual serial provides fallback if UDP identity does not reply. The printer stays in LAN Only mode.", 14, INK, false);
+        label(body, "The internet hop from phone to Pi is encrypted by the VPN. The Pi-to-printer hop retains the printer's LAN protocol. Do not publicly forward printer ports. Secure your account with MFA and keep the Pi updated. Android's always-on VPN/block-without-VPN setting provides stronger enforcement against connection-loss races. VPN presence alone does not prove the gateway/route or encryption configuration.", 14, MUTED, false);
+        label(body, "The app does not install or configure Tailscale, and it does not bypass printer authentication. HTTP unavailable at home stays unavailable remotely. Monitoring/control/upload/camera requests use the selected route; VPN loss closes the session and requires a fresh connection without command replay.", 14, MUTED, false);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        new AlertDialog.Builder(this).setTitle("Away-from-home access").setView(scroll).setPositiveButton("Close", null).show();
+    }
     private void appearanceDialog() {
         new AlertDialog.Builder(this).setTitle("Appearance").setSingleChoiceItems(new String[] {"Follow system", "Light", "Dark"}, settings.getInt("theme", 0), (dialog, which) -> {
             settings.edit().putInt("theme", which).apply(); dialog.dismiss(); recreate();
@@ -244,7 +265,7 @@ public final class MainActivity extends Activity {
         String address = host.getText().toString().trim(), code = access.getText().toString();
         try {
             new PrinterHttp(address, code);
-            profiles.save(profileName.getText().toString().trim(), address, serial.getText().toString().trim());
+            profiles.save(profileName.getText().toString().trim(), address, serial.getText().toString().trim(), remoteMode());
             credentials.save(address, code, remember.isChecked()); message("Printer profile saved. Access-code storage follows the Remember setting.");
         } catch (Exception error) { message("Profile could not be saved. Check the IP and serial, or uncheck Remember if credential storage is unavailable."); }
     }
@@ -253,7 +274,7 @@ public final class MainActivity extends Activity {
         String[] names = new String[rows.length()];
         for (int i = 0; i < names.length; i++) { JSONObject row = rows.optJSONObject(i); names[i] = row == null ? "Invalid profile" : row.optString("name") + " · " + row.optString("host"); }
         new AlertDialog.Builder(this).setTitle("Saved printers").setItems(names, (dialog, which) -> {
-            JSONObject row = rows.optJSONObject(which); if (row != null) selectPrinter(row.optString("host"), row.optString("serial"), row.optString("name"));
+            JSONObject row = rows.optJSONObject(which); if (row != null) { selectPrinter(row.optString("host"), row.optString("serial"), row.optString("name")); routePicker.setSelection(row.optBoolean("remote_vpn", false) ? 1 : 0); }
         }).setNegativeButton("Cancel", null).show();
     }
     private void selectPrinter(String address, String number, String name) {
@@ -268,6 +289,7 @@ public final class MainActivity extends Activity {
             .setNegativeButton("Cancel", null).setPositiveButton("Remove", (dialog, which) -> { profiles.remove(address); credentials.forget(address); access.setText(""); remember.setChecked(false); profileName.setText(""); message("Saved profile removed."); }).show();
     }
     private void scanPrinters() {
+        if (remoteMode()) { message("Wi-Fi broadcast scanning is unavailable over a routed VPN. Enter the home printer IP and serial, or use a saved profile."); return; }
         if (scanningNow) return;
         scanningNow = true; render();
         checks.execute(() -> {
@@ -391,7 +413,7 @@ public final class MainActivity extends Activity {
         LinearLayout card = card("Live camera");
         cameraAddress = input(card, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         cameraQuery = button(card, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
-        cameraInfo = label(card, "Local JPEG camera stream. Start is independent of MQTT authentication; the default CC2 endpoint uses port 8080.", 14, MUTED, false);
+        cameraInfo = label(card, "Printer JPEG stream through the selected connection route. Start is independent of MQTT authentication; the default CC2 endpoint uses port 8080.", 14, MUTED, false);
         cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
         cameraStart = button(card, "Start camera", this::toggleCamera);
         cameraSnapshot = button(card, "Save snapshot…", () -> {
@@ -405,14 +427,15 @@ public final class MainActivity extends Activity {
         if (cameraPlayer != null) { stopCamera(); return; }
         try {
             String address = host.getText().toString().trim(), url = FeatureData.cameraUrl(address, cameraAddress.getText().toString().trim());
-            NetworkRoute route = NetworkRoute.local(this); cameraInfo.setText("Opening camera…");
+            NetworkRoute route = NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
+            cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
                 public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true); }
                 public void error(String text) { stopCamera(); cameraInfo.setText(text); }
             }); cameraStart.setText("Stop camera");
-        } catch (Exception error) { cameraInfo.setText("Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
+        } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
     }
-    private void stopCamera() { MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); }
+    private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); }
     private void renderFeatures(boolean ready, boolean fresh) {
         listFiles.setEnabled(ready && !printer.busy(Cc2Codec.FILES)); storagePicker.setEnabled(!ready || !printer.busy(Cc2Codec.FILES));
         loadHistory.setEnabled(ready && !printer.busy(Cc2Codec.HISTORY)); loadDisk.setEnabled(ready && !printer.busy(Cc2Codec.DISK)); cameraQuery.setEnabled(ready && !printer.busy(Cc2Codec.CAMERA));
@@ -438,15 +461,16 @@ public final class MainActivity extends Activity {
     }
     private void render() {
         if (connect == null || isDestroyed()) return;
+        if (cameraPlayer != null && cameraRoute != null && !cameraRoute.available()) { stopCamera(); cameraInfo.setText("Home VPN is unavailable. Enable it and restart the camera."); }
         boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
         snapshot = printer == null ? new JSONObject() : printer.status;
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
         summary.setText(ready ? "Connected · " + printer.host() + " · " + (fresh ? StatusPresentation.state(snapshot) : "Status stale") : connecting ? "Connecting · " + printer.host() : "Disconnected · open Settings to connect");
         if (connecting && !printer.host().equals(host.getText().toString())) { host.setText(printer.host()); access.setText(""); }
-        host.setEnabled(!connecting); access.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting);
+        routePicker.setEnabled(!connecting); host.setEnabled(!connecting); access.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting);
         connect.setEnabled(printer != null); connect.setText(connecting ? "Disconnect" : "Connect"); check.setEnabled(!checking);
         refresh.setEnabled(ready); pause.setEnabled(fresh && Cc2Codec.canPause(snapshot)); resume.setEnabled(fresh && Cc2Codec.canResume(snapshot)); stop.setEnabled(fresh && Cc2Codec.canStop(snapshot));
-        discover.setEnabled(!connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
+        discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
         lightOn.setEnabled(fresh); lightOff.setEnabled(fresh); heater.setEnabled(fresh && Cc2Codec.idle(snapshot)); fan.setEnabled(fresh); speed.setEnabled(fresh && Cc2Codec.canPause(snapshot));
         cancelUpload.setEnabled(busy);
@@ -500,7 +524,7 @@ public final class MainActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
         try {
-            StringBuilder text = new StringBuilder("Link Workshop v0.3.0\nIndependent Android app derived from Elegoo Link.\n\n");
+            StringBuilder text = new StringBuilder("Link Workshop v0.3.1\nIndependent Android app derived from Elegoo Link.\n\n");
             for (String name : new String[] {"THIRD_PARTY_NOTICES.md", "Apache-2.0.txt", "Paho-NOTICE.txt", "Paho-EDL-1.0.txt", "Paho-EPL-2.0.txt"}) {
                 try (InputStream input = getAssets().open("licenses/" + name); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");

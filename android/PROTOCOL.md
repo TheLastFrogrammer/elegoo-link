@@ -1,3 +1,15 @@
+# v0.3.1 routing additions
+
+Inspected/built 2026-10-06. No CC2 wire methods or credentials change. Local mode retains Network-bound Wi-Fi/Ethernet sockets. Remote mode captures the app's active VPN network, refuses a process-bound network, and uses unbound/default sockets and direct HTTP connections so Android applies its VPN routing. TCP creation/connect, HTTP factory opening and UDP creation/send check the captured VPN. Selected-IP discovery uses unicast only; routed VPNs do not carry the local broadcast picker.
+
+The service watches default network loss/replacement/capability changes, checks route availability during its freshness timer and disables readiness when the captured VPN is no longer active. It closes the old session and cancels work before bounded fresh-registration retries. Camera has an independent route watcher and stops on invalidation. Pending commands/uploads are not replayed. Diagnostics add TCP 8080 in remote mode, and profiles retain local/remote choice (older profiles default local).
+
+These checks establish VPN presence for the app, not its provider, home gateway, approved destination route, access policy or encryption. Callback delivery and connection setup can race network changes; use Android Always-on VPN / Block connections without VPN for stronger system enforcement. Phone-to-Pi encryption depends on the configured VPN; Pi-to-printer still uses plaintext LAN MQTT/HTTP. Successful VPN routing does not correct CC2 authorization failures or a missing HTTP service. See [REMOTE_ACCESS.md](REMOTE_ACCESS.md) for narrow /32 route and phone-specific access-rule setup.
+
+Primary routing sources: [Android VPN](https://developer.android.com/develop/connectivity/vpn), [Android network state](https://developer.android.com/develop/connectivity/network-ops/reading-network-state), [Tailscale subnet routers](https://tailscale.com/docs/features/subnet-routers). Android/Pi/CC2 physical acceptance remains pending.
+
+Earlier release protocol records follow.
+
 # v0.3.0 protocol additions
 
 Inspected 2026-10-05. Start/config and paused/completed state mappings come from the official SDK baseline `46c7b814e055cf9675d58482d79f43d0bd2280da`. Previously commented-out methods are now backed by the primary author's packet captures and firmware probes in [bjan/pycentauri PROTOCOL.md](https://github.com/bjan/pycentauri/blob/2f6d9ed53922ea1d733394706ce2bafd875ae5b4/docs/PROTOCOL.md), pinned at `2f6d9ed53922ea1d733394706ce2bafd875ae5b4`. That source reports file/camera/deletion support on 02.01.00.00; it also documents older-firmware nonresponse. Wire-format facts were used for an independent implementation; no pycentauri source code is copied. This evidence is not a test of the user's printer.

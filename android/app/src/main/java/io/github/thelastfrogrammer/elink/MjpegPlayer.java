@@ -37,7 +37,7 @@ public final class MjpegPlayer implements AutoCloseable {
                         Thread.sleep(200);
                     }
                 }
-            } catch (Exception error) { if (!closed) main.post(() -> { if (!closed) listener.error("Camera unavailable. Check its current URL, local Wi-Fi, and camera port. Stop and retry to reconnect."); }); }
+            } catch (Exception error) { if (!closed) main.post(() -> { if (!closed) listener.error("Camera unavailable. Check its current URL, selected connection route, and camera port. Stop and retry to reconnect."); }); }
             finally { HttpURLConnection stream = connection; if (stream != null) stream.disconnect(); connection = null; }
         });
     }
