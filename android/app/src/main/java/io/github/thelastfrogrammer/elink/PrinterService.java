@@ -137,6 +137,10 @@ public final class PrinterService extends Service {
         if (method == Cc2Codec.FILES) { filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer."; }
         if (method == Cc2Codec.HISTORY) { history = result; historyMessage = "History received from printer."; }
         if (method == Cc2Codec.DISK) disk = result;
+        if (method == Cc2Codec.THUMBNAIL) {
+            String name = params.optString("file_name").replaceFirst("^/", "");
+            thumbnails.put(params.optString("storage_media", "local") + "/" + name, result.optString("thumbnail"));
+        }
         if (method == Cc2Codec.CANVAS && result.optJSONObject("canvas_info") != null) { canvas = result.optJSONObject("canvas_info"); canvasAt = System.nanoTime(); }
         if (method == Cc2Codec.CAMERA) {
             try { cameraUrl = FeatureData.cameraUrl(host, result.getString("url")); feedback = "Camera address received. Open Camera to view it."; }
@@ -221,6 +225,25 @@ public final class PrinterService extends Service {
         if (ready()) session.delete(storage, filename); else cloudSafe(() -> Cc2Codec.deleteRequest(0, storage, filename));
     }
     public void light(boolean on) { if (fresh()) session.light(on); else if (viaCloud()) cloudSafe(() -> Cc2Codec.lightRequest(0, on)); }
+    /** Maintenance and motion commands (see Cc2Codec), locally or through the cloud, with the same state checks as the local session. */
+    public void maintenance(JSONObject request) {
+        int method = request.optInt("method", -1);
+        JSONObject current = liveStatus();
+        if (!liveFresh() || !Cc2Codec.maintenance(method)) { feedback = "Refresh status first."; changed(); return; }
+        if (method != Cc2Codec.URGENT_STOP && (!Cc2Codec.idle(current) || !StatusPresentation.faultCodes(current).isEmpty())) { feedback = "The printer must be idle without faults."; changed(); return; }
+        if (method == Cc2Codec.MOVE && !Cc2Codec.homed(current, request.optJSONObject("params").optString("axes"))) { feedback = "Home that axis before moving it."; changed(); return; }
+        if (fresh()) session.request(request); else cloudSafe(() -> request);
+    }
+    /** Thumbnail of a printer file, delivered to thumbnails by name. */
+    public final Map<String, String> thumbnails = new HashMap<>();
+    public void thumbnail(String storage, String filename) {
+        if (!canQuery() || busy(Cc2Codec.THUMBNAIL) || thumbnails.containsKey(storage + "/" + filename)) return;
+        queryBusy.add(Cc2Codec.THUMBNAIL);
+        try {
+            JSONObject request = Cc2Codec.thumbnailRequest(0, storage, filename);
+            if (ready()) session.request(request); else cloudSafe(() -> request);
+        } catch (Exception error) { queryBusy.remove(Cc2Codec.THUMBNAIL); }
+    }
     public void temperatures(int nozzle, int bed) {
         if (!Cc2Codec.idle(liveStatus())) return;
         if (fresh()) session.temperatures(nozzle, bed); else if (viaCloud()) cloudSafe(() -> Cc2Codec.temperatureRequest(0, nozzle, bed));

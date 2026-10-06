@@ -64,9 +64,9 @@ public final class CloudControl implements AutoCloseable {
         switch (method) {
             case Cc2Codec.ATTRIBUTES: case Cc2Codec.STATUS: case Cc2Codec.START: case Cc2Codec.PAUSE: case Cc2Codec.STOP: case Cc2Codec.RESUME:
             case Cc2Codec.TEMPERATURE: case Cc2Codec.LIGHT: case Cc2Codec.FAN: case Cc2Codec.SPEED: case Cc2Codec.HISTORY:
-            case Cc2Codec.FILES: case Cc2Codec.DELETE: case Cc2Codec.DISK: case Cc2Codec.CANVAS: case Cc2Codec.AUTO_REFILL:
+            case Cc2Codec.FILES: case Cc2Codec.DELETE: case Cc2Codec.DISK: case Cc2Codec.CANVAS: case Cc2Codec.AUTO_REFILL: case Cc2Codec.THUMBNAIL:
                 return true;
-            default: return false;
+            default: return Cc2Codec.maintenance(method);
         }
     }
 
@@ -91,7 +91,9 @@ public final class CloudControl implements AutoCloseable {
                     wait.id = nextId++; wait.publisher = userId + serial; wait.reply = reply;
                     message.put("id", wait.id);
                     pending = wait;
-                    wait.timeout = worker.schedule(() -> finish(wait, false, "No reply through the cloud. Check the printer's status before trying again; the command was not repeated."), replyTimeoutMs, TimeUnit.MILLISECONDS);
+                    // Slow commands (filament changes, homing) reply only when finished.
+                    long timeout = Cc2Codec.timeoutSeconds(method) > 15 ? Math.max(replyTimeoutMs, Cc2Codec.timeoutSeconds(method) * 1000L) : replyTimeoutMs;
+                    wait.timeout = worker.schedule(() -> finish(wait, false, "No reply through the cloud. Check the printer's status before trying again; the command was not repeated."), timeout, TimeUnit.MILLISECONDS);
                 }
                 link.publish(wait.publisher, message.toString());
             } catch (Exception error) {

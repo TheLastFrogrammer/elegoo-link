@@ -38,6 +38,9 @@ public final class MainActivity extends Activity {
     private TextView pinProbeHelp, cloudStatus;
     private Button cloudSignOut, cloudPrinters;
     private CheckBox cloudBackground;
+    private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck, urgentStop;
+    private ImageView fileThumbnail;
+    private String fileThumbnailKey = "";
     private Button cloudCamera;
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
@@ -194,6 +197,21 @@ public final class MainActivity extends Activity {
         heater = button(tuning, "Temperature targets…", this::temperatureDialog);
         fan = button(tuning, "Fan setting…", this::fanDialog);
         speed = button(tuning, "Print speed mode…", this::speedDialog);
+        LinearLayout upkeep = card("Maintenance");
+        label(upkeep, "Needs an idle printer without faults. Commands follow Elegoo's own printer page and are never repeated automatically.", 13, MUTED, false);
+        LinearLayout filamentRow = row(upkeep);
+        loadFilament = rowButton(filamentRow, "Load filament", () -> maintenanceConfirm("Load filament?", "The printer heats the nozzle and feeds filament. This can take a few minutes.", Cc2Codec.FEED), false);
+        unloadFilament = rowButton(filamentRow, "Unload filament", () -> maintenanceConfirm("Unload filament?", "The printer heats the nozzle and retracts the filament. This can take a few minutes.", Cc2Codec.RETREAT), false);
+        trayFilament = button(upkeep, "Load or unload a CANVAS tray…", this::trayDialog);
+        LinearLayout motionRow = row(upkeep);
+        homeAll = rowButton(motionRow, "Home all axes", () -> confirmRequest("Home all axes?", "The print head and bed move to their home positions. Keep the printer clear.", () -> Cc2Codec.homeRequest(0, "xyz")), false);
+        jog = rowButton(motionRow, "Move axes…", this::jogDialog, false);
+        LinearLayout calibrationRow = row(upkeep);
+        autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Run auto bed leveling?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
+        vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration optimization?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
+        selfCheck = button(upkeep, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
+        urgentStop = button(upkeep, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
+        urgentStop.setTextColor(ERROR);
         currentSection = pages[1];
         LinearLayout files = card("Send a sliced file");
         selected = label(files, "Choose a .gcode file sliced for this printer.", 14, MUTED, false);
@@ -298,6 +316,59 @@ public final class MainActivity extends Activity {
             .setPositiveButton(method == Cc2Codec.PAUSE ? "Pause" : method == Cc2Codec.RESUME ? "Resume" : "Stop", (d, which) -> cloudGate(cloud, send));
         if (cloud) dialog.setMessage("Sent through the Elegoo cloud. It is sent once and never repeated automatically.");
         dialog.show();
+    }
+    private interface Built { JSONObject build() throws Exception; }
+    private void confirmRequest(String title, String text, Built builder) {
+        new AlertDialog.Builder(this).setTitle(title).setMessage(text + (viaCloud() ? "\n\nSent through the Elegoo cloud." : "")).setNegativeButton("Cancel", null)
+            .setPositiveButton("Continue", (d, which) -> {
+                if (printer == null) return;
+                try { JSONObject request = builder.build(); cloudGate(viaCloud(), () -> printer.maintenance(request)); }
+                catch (Exception error) { message("Could not prepare the command."); }
+            }).show();
+    }
+    private void maintenanceConfirm(String title, String text, int method) { confirmRequest(title, text, () -> Cc2Codec.maintenanceRequest(0, method)); }
+    private void trayDialog() {
+        if (printer == null || printer.canvas == null) { message("Refresh status to load CANVAS trays first."); return; }
+        List<int[]> slots = new ArrayList<>(); List<String> names = new ArrayList<>();
+        JSONArray units = printer.canvas.optJSONArray("canvas_list");
+        if (units != null) for (int u = 0; u < units.length(); u++) {
+            JSONObject unit = units.optJSONObject(u); if (unit == null) continue; JSONArray trays = unit.optJSONArray("tray_list"); if (trays == null) continue;
+            for (int t = 0; t < trays.length(); t++) {
+                JSONObject tray = trays.optJSONObject(t); if (tray == null) continue;
+                slots.add(new int[] {unit.optInt("canvas_id"), tray.optInt("tray_id")});
+                names.add("CANVAS " + unit.optInt("canvas_id") + " · Tray " + tray.optInt("tray_id") + " · " + StatusPresentation.clean(tray.optString("filament_type", "empty")) + " " + StatusPresentation.clean(tray.optString("filament_color")));
+            }
+        }
+        if (slots.isEmpty()) { message("No CANVAS trays reported."); return; }
+        new AlertDialog.Builder(this).setTitle("Choose a tray").setItems(names.toArray(new String[0]), (dialog, which) -> {
+            int[] slot = slots.get(which);
+            new AlertDialog.Builder(this).setTitle(names.get(which)).setNegativeButton("Cancel", null)
+                .setNeutralButton("Unload", (d, w) -> confirmRequest("Unload this tray?", "The printer cuts and retracts the filament for this tray.", () -> Cc2Codec.canvasFilamentRequest(0, false, slot[0], slot[1])))
+                .setPositiveButton("Load", (d, w) -> confirmRequest("Load this tray?", "The printer heats the nozzle and loads filament from this tray.", () -> Cc2Codec.canvasFilamentRequest(0, true, slot[0], slot[1]))).show();
+        }).setNegativeButton("Cancel", null).show();
+    }
+    /** Jog one homed axis by a chosen step, as Elegoo's page allows; each tap is one confirmed-once-per-dialog move. */
+    private void jogDialog() {
+        if (printer == null) return;
+        JSONObject current = printer.liveStatus();
+        LinearLayout body = dialogBody();
+        JSONObject position = current.optJSONObject("gcode_move");
+        label(body, "Homed: " + (current.optJSONObject("tool_head") == null ? "unknown" : current.optJSONObject("tool_head").optString("homed_axes", "none").toUpperCase(Locale.ROOT))
+            + (position == null ? "" : String.format(Locale.ROOT, "\nPosition X %.1f · Y %.1f · Z %.1f", position.optDouble("x", 0), position.optDouble("y", 0), position.optDouble("z", 0)))
+            + "\nAn axis must be homed before it can move. Each tap sends one move.", 14, INK, false);
+        Spinner axis = spinner(body, new String[] {"X axis", "Y axis", "Z axis"});
+        Spinner step = spinner(body, new String[] {"0.1 mm", "1 mm", "10 mm"});
+        double[] steps = {0.1, 1, 10}; String[] axes = {"x", "y", "z"};
+        LinearLayout moves = row(body);
+        rowButton(moves, "− Move", () -> jog(axes[axis.getSelectedItemPosition()], -steps[step.getSelectedItemPosition()]), false);
+        rowButton(moves, "+ Move", () -> jog(axes[axis.getSelectedItemPosition()], steps[step.getSelectedItemPosition()]), false);
+        rowButton(row(body), "Home this axis", () -> { if (printer != null) try { printer.maintenance(Cc2Codec.homeRequest(0, axes[axis.getSelectedItemPosition()])); } catch (Exception ignored) { } }, false);
+        new AlertDialog.Builder(this).setTitle("Move axes").setView(body).setPositiveButton("Done", null).show();
+    }
+    private void jog(String axis, double distance) {
+        if (printer == null) return;
+        try { JSONObject request = Cc2Codec.moveRequest(0, axis, distance); cloudGate(viaCloud(), () -> printer.maintenance(request)); }
+        catch (Exception error) { message("Invalid move."); }
     }
     private void light(boolean on) {
         if (printer == null) return;
@@ -453,7 +524,10 @@ public final class MainActivity extends Activity {
     private void fileActions(JSONObject file, String storage) {
         String name = file.optString("filename");
         try { Cc2Codec.filename(name); } catch (Exception error) { message("Only .gcode files can be started or deleted here."); return; }
-        LinearLayout body = dialogBody(); label(body, FeatureData.file(file), 14, INK, false);
+        LinearLayout body = dialogBody();
+        fileThumbnail = new ImageView(this); fileThumbnail.setAdjustViewBounds(true); fileThumbnail.setVisibility(View.GONE); body.addView(fileThumbnail, new LinearLayout.LayoutParams(-1, dp(180)));
+        fileThumbnailKey = storage + "/" + name; if (printer != null) printer.thumbnail(storage, name); showThumbnail();
+        label(body, FeatureData.file(file), 14, INK, false);
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
         if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: print start and deletion are disabled.", 14, MUTED, false); dialog.show(); return; }
@@ -511,6 +585,16 @@ public final class MainActivity extends Activity {
                 if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
             }).show();
         })); setup.show();
+    }
+    /** Shows the open file dialog's thumbnail once the printer has sent it (base64 PNG, with or without a data: prefix). */
+    private void showThumbnail() {
+        if (fileThumbnail == null || printer == null || fileThumbnail.getVisibility() == View.VISIBLE) return;
+        String data = printer.thumbnails.get(fileThumbnailKey); if (data == null || data.isEmpty()) return;
+        try {
+            byte[] bytes = android.util.Base64.decode(data.contains(",") ? data.substring(data.indexOf(',') + 1) : data, android.util.Base64.DEFAULT);
+            Bitmap image = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+            if (image != null) { fileThumbnail.setImageBitmap(image); fileThumbnail.setVisibility(View.VISIBLE); }
+        } catch (IllegalArgumentException ignored) { }
     }
     private void temperatureDialog() {
         LinearLayout body = dialogBody(); label(body, "While idle: nozzle 0–300°C, bed 0–100°C. Zero turns that heater off. Use the correct targets for your filament and build plate.", 14, INK, false);
@@ -617,6 +701,9 @@ public final class MainActivity extends Activity {
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
         heater.setEnabled(canControl && Cc2Codec.idle(snapshot)); fan.setEnabled(canControl); speed.setEnabled(canControl && Cc2Codec.canPause(snapshot));
+        boolean upkeepOk = canControl && Cc2Codec.idle(snapshot) && StatusPresentation.faultCodes(snapshot).isEmpty();
+        for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
+        trayFilament.setEnabled(upkeepOk && printer.canvas != null); urgentStop.setEnabled(canControl);
         cancelUpload.setEnabled(busy);
         renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
         refill.setEnabled(canControl && printer.canvasFresh() && printer.canvas.has("auto_refill"));
@@ -666,6 +753,7 @@ public final class MainActivity extends Activity {
         trays.setText((ready || cloud) && printer.canvas != null ? StatusPresentation.canvas(printer.canvas) + (!printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : "")
             : cloud ? "Tap Refresh status to load trays through the cloud." : ready ? StatusPresentation.canvas(null) : "Connect for CANVAS tray status.");
         if (printer != null) feedback.setText(printer.feedback);
+        showThumbnail();
     }
     private void setTile(TextView view, String text) {
         int split = text.indexOf('\n');

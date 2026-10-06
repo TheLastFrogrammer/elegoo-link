@@ -13,6 +13,9 @@ public final class Cc2Codec {
     public static final int ATTRIBUTES = 1001, STATUS = 1002, START = 1020, PAUSE = 1021, STOP = 1022, RESUME = 1023,
         TEMPERATURE = 1028, LIGHT = 1029, FAN = 1030, SPEED = 1031, HISTORY = 1036, CAMERA = 1042,
         FILES = 1044, DELETE = 1047, DISK = 1048, CANVAS = 2005, AUTO_REFILL = 2004;
+    /** Maintenance commands, with formats taken from Elegoo's printer page (ElegooSlicer lan_service_web). */
+    public static final int URGENT_STOP = 1007, FEED = 1024, RETREAT = 1025, HOME = 1026, MOVE = 1027, AUTO_LEVEL = 1032, VIBRATION = 1033,
+        SELF_CHECK = 1035, THUMBNAIL = 1045, CANVAS_LOAD = 2001, CANVAS_UNLOAD = 2002;
     private JSONObject snapshot;
     private int sequence = -1, gaps;
 
@@ -59,6 +62,45 @@ public final class Cc2Codec {
             .put("delay_video", timelapse).put("print_layout", plate).put("slot_map", new JSONArray(mappings.toString()));
         return envelope(id, START, new JSONObject().put("filename", filename).put("storage_media", storage).put("config", config));
     }
+    /** Commands without parameters: load/unload filament (single extruder), auto-leveling, vibration optimization, emergency stop. */
+    public static JSONObject maintenanceRequest(int id, int method) throws JSONException {
+        if (method != FEED && method != RETREAT && method != AUTO_LEVEL && method != VIBRATION && method != URGENT_STOP) throw new IllegalArgumentException("Unverified command");
+        return envelope(id, method, new JSONObject());
+    }
+    /** Full self-check as Elegoo's page sends it: vibration optimization, PID check and bed leveling. */
+    public static JSONObject selfCheckRequest(int id) throws JSONException {
+        return envelope(id, SELF_CHECK, new JSONObject().put("ringing_optimize", true).put("pid_check", true).put("auto_bed_leveling", true));
+    }
+    public static JSONObject homeRequest(int id, String axes) throws JSONException {
+        if (!"x".equals(axes) && !"y".equals(axes) && !"z".equals(axes) && !"xyz".equals(axes)) throw new IllegalArgumentException("Home x, y, z or all axes");
+        return envelope(id, HOME, new JSONObject().put("homed_axes", axes));
+    }
+    /** Relative move of one homed axis; up to 50 mm per step in the app. */
+    public static JSONObject moveRequest(int id, String axis, double distance) throws JSONException {
+        if (!"x".equals(axis) && !"y".equals(axis) && !"z".equals(axis)) throw new IllegalArgumentException("Move x, y or z");
+        if (distance == 0 || Math.abs(distance) > 50 || Double.isNaN(distance)) throw new IllegalArgumentException("Move up to 50 mm");
+        return envelope(id, MOVE, new JSONObject().put("axes", axis).put("distance", distance));
+    }
+    public static JSONObject canvasFilamentRequest(int id, boolean load, int canvas, int tray) throws JSONException {
+        if (canvas < 0 || canvas > 15 || tray < 0 || tray > 15) throw new IllegalArgumentException("Invalid tray");
+        return envelope(id, load ? CANVAS_LOAD : CANVAS_UNLOAD, new JSONObject().put("canvas_id", canvas).put("tray_id", tray));
+    }
+    public static JSONObject thumbnailRequest(int id, String storage, String filename) throws JSONException {
+        storage(storage); filename(filename);
+        return envelope(id, THUMBNAIL, new JSONObject().put("storage_media", storage).put("file_name", "u-disk".equals(storage) ? "/" + filename : filename));
+    }
+    /** Whether the printer reports the axis as homed (tool_head.homed_axes, for example "xyz"). */
+    public static boolean homed(JSONObject status, String axis) {
+        JSONObject head = status.optJSONObject("tool_head");
+        return head != null && head.optString("homed_axes", "").toLowerCase(Locale.ROOT).contains(axis);
+    }
+    /** Seconds to wait for the printer's reply; filament changes reply only when finished (Elegoo's page waits 5 minutes). */
+    public static int timeoutSeconds(int method) {
+        if (method == FEED || method == RETREAT || method == CANVAS_LOAD || method == CANVAS_UNLOAD) return 330;
+        if (method == HOME) return 60;
+        if (method == MOVE) return 30;
+        return isQuery(method) ? 15 : 8;
+    }
     public static JSONObject lightRequest(int id, boolean on) throws JSONException { return envelope(id, LIGHT, new JSONObject().put("power", on ? 1 : 0)); }
     public static JSONObject temperatureRequest(int id, int nozzle, int bed) throws JSONException {
         if (nozzle < 0 || nozzle > 300 || bed < 0 || bed > 100) throw new IllegalArgumentException("Supported targets: nozzle 0–300°C, bed 0–100°C");
@@ -72,17 +114,23 @@ public final class Cc2Codec {
         if (mode < 0 || mode > 3) throw new IllegalArgumentException("Invalid speed mode");
         return envelope(id, SPEED, new JSONObject().put("mode", mode));
     }
-    public static boolean isQuery(int method) { return method == FILES || method == HISTORY || method == DISK || method == CAMERA; }
+    public static boolean isQuery(int method) { return method == FILES || method == HISTORY || method == DISK || method == CAMERA || method == THUMBNAIL; }
     public static boolean queryShape(int method, JSONObject result) {
         if (method == FILES) return result.optJSONArray("file_list") != null;
         if (method == HISTORY) return result.optJSONArray("history_task_list") != null;
         if (method == DISK) return result.opt("total_bytes") instanceof Number && result.opt("used_bytes") instanceof Number;
         if (method == CAMERA) return result.opt("url") instanceof String;
+        if (method == THUMBNAIL) return result.opt("thumbnail") instanceof String;
         return false;
     }
     public static boolean changing(int method) {
         return method == START || method == PAUSE || method == STOP || method == RESUME || method == DELETE || method == AUTO_REFILL
-            || method == LIGHT || method == TEMPERATURE || method == FAN || method == SPEED;
+            || method == LIGHT || method == TEMPERATURE || method == FAN || method == SPEED || maintenance(method);
+    }
+    /** Printer-changing maintenance commands; they need an idle printer without faults (emergency stop excepted). */
+    public static boolean maintenance(int method) {
+        return method == URGENT_STOP || method == FEED || method == RETREAT || method == HOME || method == MOVE || method == AUTO_LEVEL
+            || method == VIBRATION || method == SELF_CHECK || method == CANVAS_LOAD || method == CANVAS_UNLOAD;
     }
 
     public static boolean validRegistration(JSONObject message, String clientId) {

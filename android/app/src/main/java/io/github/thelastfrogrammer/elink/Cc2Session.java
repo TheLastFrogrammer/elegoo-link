@@ -62,7 +62,7 @@ public final class Cc2Session implements AutoCloseable {
     private String base;
     private static final class Pending {
         final int method; final long deadline; final JSONObject params;
-        Pending(int method, JSONObject params) { this.method = method; this.params = params; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Cc2Codec.isQuery(method) ? 15 : 8); }
+        Pending(int method, JSONObject params) { this.method = method; this.params = params; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Cc2Codec.timeoutSeconds(method)); }
     }
     public Cc2Session(String host, String accessCode, Listener listener) {
         this(host, accessCode, listener, url -> (java.net.HttpURLConnection) url.openConnection(), null);
@@ -185,6 +185,8 @@ public final class Cc2Session implements AutoCloseable {
     public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, org.json.JSONArray maps) {
         execute(() -> prepare(() -> Cc2Codec.startRequest(ids.getAndIncrement(), storage, filename, leveling, force, timelapse, plate, maps)));
     }
+    /** Sends a request built by Cc2Codec; its id is assigned here. State checks happen in allowed() before transmission. */
+    public void request(JSONObject message) { execute(() -> prepare(() -> message.put("id", ids.getAndIncrement()))); }
     public void light(boolean on) { execute(() -> prepare(() -> Cc2Codec.lightRequest(ids.getAndIncrement(), on))); }
     public void temperatures(int nozzle, int bed) { execute(() -> prepare(() -> Cc2Codec.temperatureRequest(ids.getAndIncrement(), nozzle, bed))); }
     public void fan(String name, int percent) { execute(() -> prepare(() -> Cc2Codec.fanRequest(ids.getAndIncrement(), name, percent))); }
@@ -244,6 +246,12 @@ public final class Cc2Session implements AutoCloseable {
             if (method == Cc2Codec.DELETE || method == Cc2Codec.TEMPERATURE) return Cc2Codec.idle(status) && StatusPresentation.faultCodes(status).isEmpty();
             if (method == Cc2Codec.AUTO_REFILL) return canvasAt != 0 && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45);
             if (method == Cc2Codec.SPEED) return Cc2Codec.canPause(status);
+            if (method == Cc2Codec.URGENT_STOP) return true;
+            if (Cc2Codec.maintenance(method)) {
+                if (!Cc2Codec.idle(status) || !StatusPresentation.faultCodes(status).isEmpty()) return false;
+                if (method == Cc2Codec.MOVE) return Cc2Codec.homed(status, message.getJSONObject("params").optString("axes"));
+                return true;
+            }
             return true;
         } catch (Exception error) { return false; }
     }
@@ -353,6 +361,11 @@ public final class Cc2Session implements AutoCloseable {
     private static boolean changing(int method) { return Cc2Codec.changing(method); }
     static boolean background(int method) { return method == Cc2Codec.STATUS || method == Cc2Codec.CANVAS || method == Cc2Codec.ATTRIBUTES; }
     private static String methodName(int method) {
+        if (method == Cc2Codec.FEED) return "filament load"; if (method == Cc2Codec.RETREAT) return "filament unload";
+        if (method == Cc2Codec.CANVAS_LOAD) return "tray load"; if (method == Cc2Codec.CANVAS_UNLOAD) return "tray unload";
+        if (method == Cc2Codec.HOME) return "homing"; if (method == Cc2Codec.MOVE) return "axis move";
+        if (method == Cc2Codec.AUTO_LEVEL) return "auto-leveling"; if (method == Cc2Codec.VIBRATION) return "vibration optimization";
+        if (method == Cc2Codec.SELF_CHECK) return "self-check"; if (method == Cc2Codec.URGENT_STOP) return "emergency stop";
         if (method == Cc2Codec.START) return "print start"; if (method == Cc2Codec.PAUSE) return "pause";
         if (method == Cc2Codec.STOP) return "stop"; if (method == Cc2Codec.RESUME) return "resume";
         if (method == Cc2Codec.LIGHT) return "light setting"; if (method == Cc2Codec.TEMPERATURE) return "temperature targets";
