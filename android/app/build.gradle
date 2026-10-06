@@ -31,6 +31,9 @@ android {
         }
     }
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    // Compress native libraries in the APK (the slicer is 19 MB): a much smaller download for sideloading, unpacked
+    // once at install.
+    packaging { jniLibs { useLegacyPackaging = true } }
     testOptions { unitTests { includeAndroidResources = true; all {
         systemProperty 'screenshots', System.getProperty('screenshots', '')
         // Opt-in: -DslicerLib=<dir with a host liblinkslicer.so> runs SlicerIntegrationTest against the real engine.
