@@ -148,6 +148,7 @@ function(orcaslicer_add_cmake_project projectname)
             -DCMAKE_BUILD_TYPE:STRING=${CMAKE_BUILD_TYPE}
             ${DEP_CMAKE_OPTS}
             ${P_ARGS_CMAKE_ARGS}
+            ${DEP_CMAKE_OVERRIDES}
         ${P_ARGS_UNPARSED_ARGUMENTS}
         BUILD_COMMAND ${CMAKE_COMMAND} --build . --config Release -- ${_build_j}
         INSTALL_COMMAND ${CMAKE_COMMAND} --build . --target install --config Release
@@ -157,13 +158,54 @@ endfunction()
 set(DEP_CMAKE_OPTS "-DCMAKE_POSITION_INDEPENDENT_CODE=ON")
 set(TBB_MINGW_WORKAROUND "")
 
+if (ANDROID)
+    # The NDK toolchain file reads these from the cache, so each dependency's own configure needs them too.
+    list(APPEND DEP_CMAKE_OPTS -DANDROID_ABI=${ANDROID_ABI} -DANDROID_PLATFORM=${ANDROID_PLATFORM} -DANDROID_STL=${ANDROID_STL})
+    # Autotools recipes (GMP, MPFR) call the compiler directly: use the NDK's target-specific clang wrappers, and
+    # TOOLCHAIN_PREFIX, which those recipes pass to --host when cross-compiling.
+    if (ANDROID_ABI STREQUAL "arm64-v8a")
+        set(TOOLCHAIN_PREFIX aarch64-linux-android)
+    elseif (ANDROID_ABI STREQUAL "x86_64")
+        set(TOOLCHAIN_PREFIX x86_64-linux-android)
+    else ()
+        message(FATAL_ERROR "Unsupported ANDROID_ABI ${ANDROID_ABI}")
+    endif ()
+    set(_android_api ${ANDROID_PLATFORM_LEVEL})
+    set(ANDROID_AUTOTOOLS_CC "${ANDROID_TOOLCHAIN_ROOT}/bin/${TOOLCHAIN_PREFIX}${_android_api}-clang")
+    set(ANDROID_AUTOTOOLS_CXX "${ANDROID_TOOLCHAIN_ROOT}/bin/${TOOLCHAIN_PREFIX}${_android_api}-clang++")
+endif ()
+
+# Includes an autotools recipe with the compiler it should call (see ANDROID_AUTOTOOLS_CC above).
+macro(include_autotools_recipe recipe)
+    if (ANDROID)
+        set(_saved_cc "${CMAKE_C_COMPILER}")
+        set(_saved_cxx "${CMAKE_CXX_COMPILER}")
+        set(CMAKE_C_COMPILER "${ANDROID_AUTOTOOLS_CC}")
+        set(CMAKE_CXX_COMPILER "${ANDROID_AUTOTOOLS_CXX}")
+        include(${recipe})
+        set(CMAKE_C_COMPILER "${_saved_cc}")
+        set(CMAKE_CXX_COMPILER "${_saved_cxx}")
+    else ()
+        include(${recipe})
+    endif ()
+endmacro()
+
 # Always build zlib/png/jpeg/freetype from the pinned recipes so the Linux and Android builds use the same versions.
 include(${_recipes}/ZLIB/ZLIB.cmake)
 set(ZLIB_PKG dep_ZLIB)
 include(${_recipes}/PNG/PNG.cmake)
 set(PNG_PKG dep_PNG)
 include(${_recipes}/JPEG/JPEG.cmake)
+if (ANDROID)
+    # FreeType's recipe uses its internal zlib except on Linux; its symbols then collide with zlib's in a static
+    # Android link (lld rejects what macOS's linker tolerates). Use the pinned zlib instead.
+    set(DEP_CMAKE_OVERRIDES -DFT_DISABLE_ZLIB=FALSE -DFT_REQUIRE_ZLIB=TRUE)
+endif ()
 include(${_recipes}/FREETYPE/FREETYPE.cmake)
+set(DEP_CMAKE_OVERRIDES "")
+if (ANDROID)
+    ExternalProject_Add_StepDependencies(dep_FREETYPE configure dep_ZLIB)
+endif ()
 set(FREETYPE_PKG dep_FREETYPE)
 
 set(DEP_Boost_COMPONENTS system iostreams filesystem thread log locale regex date_time)
@@ -174,16 +216,53 @@ include(${_recipes}/TBB/TBB.cmake)
 include(${_recipes}/Blosc/Blosc.cmake)
 include(${_recipes}/OpenEXR/OpenEXR.cmake)
 include(${_recipes}/OpenVDB/OpenVDB.cmake)
-include(${_recipes}/GMP/GMP.cmake)
-include(${_recipes}/MPFR/MPFR.cmake)
+include_autotools_recipe(${_recipes}/GMP/GMP.cmake)
+include_autotools_recipe(${_recipes}/MPFR/MPFR.cmake)
 include(${_recipes}/Eigen/Eigen.cmake)
 include(${_recipes}/CGAL/CGAL.cmake)
 include(${_recipes}/NLopt/NLopt.cmake)
 include(${_recipes}/libnoise/libnoise.cmake)
 include(${_recipes}/Draco/Draco.cmake)
 include(${_recipes}/OCCT/OCCT.cmake)
+set(_saved_opts "${DEP_CMAKE_OPTS}")
+if (ANDROID)
+    # OpenCV's Android mode also builds its sample apps and Java bindings unless told not to.
+    list(APPEND DEP_CMAKE_OPTS -DBUILD_ANDROID_PROJECTS=OFF -DBUILD_ANDROID_EXAMPLES=OFF -DBUILD_ANDROID_SERVICE=OFF -DBUILD_FAT_JAVA_LIB=OFF)
+endif ()
 include(${_recipes}/OpenCV/OpenCV.cmake)
+set(DEP_CMAKE_OPTS "${_saved_opts}")
 
-add_custom_target(deps ALL DEPENDS
+# libslic3r uses OpenSSL only for MD5 (3MF checksums). Linux builds use the system library; Android has none, so
+# build libcrypto from the same OpenSSL release ElegooSlicer pins, with OpenSSL's own Android target.
+set(_extra_deps "")
+if (ANDROID)
+    set(_openssl_url "https://github.com/openssl/openssl/archive/refs/tags/openssl-3.1.8.zip")
+    _git_archive_for("${_openssl_url}" _openssl_tarball)
+    if (_openssl_tarball)
+        set(_openssl_source URL "${_openssl_tarball}")
+    else ()
+        set(_openssl_source URL "${_openssl_url}" URL_HASH SHA256=bbd5cbd8cc8ea852d31c001a9b767eadef0548b098e132b580a1f0c80d1778b7)
+    endif ()
+    if (ANDROID_ABI STREQUAL "arm64-v8a")
+        set(_openssl_target android-arm64)
+    else ()
+        set(_openssl_target android-x86_64)
+    endif ()
+    set(_openssl_env env "ANDROID_NDK_ROOT=${ANDROID_NDK}" "PATH=${ANDROID_TOOLCHAIN_ROOT}/bin:$ENV{PATH}")
+    ExternalProject_Add(dep_OpenSSL
+        EXCLUDE_FROM_ALL ON
+        ${_openssl_source}
+        DOWNLOAD_DIR ${DEP_DOWNLOAD_DIR}/OpenSSL
+        BUILD_IN_SOURCE ON
+        CONFIGURE_COMMAND ${_openssl_env} ./Configure ${_openssl_target} -D__ANDROID_API__=${ANDROID_PLATFORM_LEVEL}
+            "--prefix=${DESTDIR}" "--openssldir=${DESTDIR}" --libdir=lib
+            no-shared no-asm no-tests no-ssl3-method no-dynamic-engine no-engine
+        BUILD_COMMAND ${_openssl_env} make -j${NPROC} build_libs
+        INSTALL_COMMAND ${_openssl_env} make install_dev
+    )
+    list(APPEND _extra_deps dep_OpenSSL)
+endif ()
+
+add_custom_target(deps ALL DEPENDS ${_extra_deps}
     dep_ZLIB dep_PNG dep_JPEG dep_FREETYPE dep_Boost dep_TBB dep_Cereal dep_Qhull dep_GMP dep_MPFR dep_Eigen dep_CGAL
     dep_NLopt dep_libnoise dep_Draco dep_OCCT dep_OpenCV dep_Blosc dep_OpenEXR dep_OpenVDB)

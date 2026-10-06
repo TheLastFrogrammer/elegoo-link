@@ -84,3 +84,59 @@ Also checked with link-slicer alone:
   one. Expect work in the autotools builds (GMP, MPFR: `--host`, and `TOOLCHAIN_PREFIX` as the MPFR recipe expects),
   Boost (Android toolchain flags), OpenCV (its own Android options), OCCT (Android support exists), and OpenVDB.
 - Memory: 100–460 MB peak for these models, fine on a current phone; very large models will need a guard.
+
+# Step 2 results: Android arm64 build
+
+**Outcome:** all 17 dependencies and the engine cross-compile for Android arm64 (NDK r28c, API 26), and the Android
+`link-slicer` slices correctly. Its output is equivalent to the Linux build's layer by layer, though not
+byte-identical (below).
+
+## Build
+
+- Same ElegooSlicer commit and recipes as step 1, cross-compiled with `scripts/build-deps-android.sh` and
+  `scripts/build-android.sh`. ElegooSlicer's sources are unmodified; everything Android-specific is in this
+  directory's CMake (see the README).
+- Stripped static binary: **19 MB**. Profiles and data it needs (Elegoo, OrcaFilamentLibrary, nozzle info, flush
+  data): **4.8 MB**. With those trimmed resources the Linux build's G-code is byte-identical, comments included,
+  to its output with ElegooSlicer's full resources.
+- Problems found and handled:
+  - ElegooSlicer assumes `char` is signed: `BuildVolume_Type` is a `char` enum holding −1. That doesn't compile on
+    ARM Linux/Android, where `char` is unsigned. Built with `-fsigned-char`, matching desktop x86 and Apple arm64.
+  - FreeType's recipe uses its internal zlib on non-Linux platforms; the copies collide with zlib in a static
+    Android link. On Android it now uses the pinned zlib.
+  - OpenCV's Android mode builds its sample apps unless switched off. OpenCV also links Android's liblog, which
+    the NDK only ships shared; the static test executable gets a stand-in.
+  - OpenSSL (libslic3r's MD5 use) is built with OpenSSL's own Android target. ElegooSlicer's recipe can't
+    cross-compile for Android.
+
+## Comparison with the Linux build
+
+The Android binary ran under `qemu-aarch64-static`, so its times are emulation times, not phone performance.
+Run with `scripts/compare-android.sh`.
+
+| Model | Preset | Commands (differing) | Estimate (Android / Linux) | Filament | Per layer |
+|---|---|---|---|---|---|
+| Elegoo tolerance test | 0.4 / 0.20mm / PLA | 21,001 vs 20,997 (2,989) | 11m 48s / 11m 49s | 3.45 g both | 32 layers; extrusion within 0.02% |
+| Elegoo cube | 0.4 / 0.20mm / PLA | 118,548 vs 118,704 (32,413) | 34m 53s / 34m 52s | 12.10 g both | 150 layers; within 0.08% |
+| 3DBenchy | 0.4 / 0.20mm / PLA | 116,000 vs 116,074 (12,379) | 37m 54s / 37m 53s | 11.70 g both | 240 layers; within 0.06% |
+| 3DBenchy | 0.6 / 0.30mm / PETG | 51,878 vs 51,773 (7,700) | 37m 47s / 37m 50s | 13.39 g both | 160 layers; within 0.02% |
+
+Layer heights are identical. Outlines of the extruded area match exactly, except on the 0.6 mm Benchy's chimney
+top (layers 135–160). There the outer wall is split into G2/G3 arcs at different points (arc fitting is on in the
+CC2 profiles) and there are two extra short gap-fill moves. The extrusion per layer is the same to 0.01 mm.
+
+Why not byte-identical: the differences are floating-point and ordering effects of a different toolchain, not
+different slicing decisions. Building with `-ffp-contract=off` (no fused multiply-add, as on x86) cut the differing
+commands by about a fifth. The rest most likely comes from Android's C++ and maths libraries (libc++ and bionic
+rather than libstdc++ and glibc): sort algorithms and hash-container order differ, and some maths functions round
+differently in the last bit. The official desktop builds differ from each other in the same way (MSVC on Windows,
+libc++ on macOS, libstdc++ on Linux). The check for later steps is therefore per-layer equivalence (now part of
+`tools/compare_gcode.py`), with byte identity reserved for same-toolchain comparisons.
+
+## Not done yet
+
+- Speed on a real phone. qemu emulation is about 25–50× slower than native, so it says nothing about phone
+  performance. `scripts/package-android-cli.sh` builds a 10 MB test bundle to run in Termux; `elapsed_s` in the
+  JSON output reports the time.
+- The JNI library for the app (step 3). The engine and dependencies are ready to link into a shared library; that
+  library will link the real liblog and use the same static libc++.

@@ -31,7 +31,11 @@ Its G-code is identical to the official ElegooSlicer v1.5.3.5 for every model an
 - `slicer/scripts/compare-official.sh` (slice the same model with both, diff the G-code) is the regression check
   for every later step.
 
-### 2. Cross-compile the dependencies with the NDK (arm64-v8a, API 26+)
+### 2. Cross-compile the dependencies with the NDK (arm64-v8a, API 26+) — done
+All 17 dependencies and the engine build for Android arm64 with `slicer/scripts/build-deps-android.sh` and
+`build-android.sh`. The Android output is equivalent to the desktop build per layer ([results](../slicer/RESULTS.md)).
+The notes below were the plan.
+
 The bulk of the work. Most are CMake projects that cross-compile cleanly:
 
 | Dependency | Notes |

@@ -61,6 +61,15 @@ if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     endif ()
 endif ()
 
+if (ANDROID)
+    # Plain char is unsigned on ARM Linux/Android but signed on desktop x86 and Apple arm64, which ElegooSlicer is
+    # written for (BuildVolume_Type, a char enum, holds -1). Match the desktop ABI.
+    add_compile_options(-fsigned-char)
+    # Clang fuses a*b+c into FMA instructions on ARM by default; x86 desktop builds don't, and the rounding
+    # difference changes toolpath details. Keep arithmetic as written so phone and desktop output match.
+    add_compile_options(-ffp-contract=off)
+endif ()
+
 set(LIBDIR "${ELEGOOSLICER_SRC}/src")
 set(LIBDIR_BIN "${CMAKE_CURRENT_BINARY_DIR}/src")
 include_directories(SYSTEM ${LIBDIR})
@@ -97,9 +106,9 @@ find_package(Freetype REQUIRED)
 find_package(ZLIB REQUIRED)
 find_package(EXPAT)
 if (NOT EXPAT_FOUND)
-    add_library(expat STATIC ${LIBDIR}/expat/xmlparse.c ${LIBDIR}/expat/xmlrole.c ${LIBDIR}/expat/xmltok.c)
+    # No system expat (Android): use the copy bundled in deps_src, whose "expat" target is added below.
     set(EXPAT_FOUND 1)
-    set(EXPAT_INCLUDE_DIRS ${LIBDIR}/expat/)
+    set(EXPAT_INCLUDE_DIRS ${ELEGOOSLICER_SRC}/deps_src/expat)
     set(EXPAT_LIBRARIES expat)
 endif ()
 find_package(PNG REQUIRED)
@@ -116,6 +125,15 @@ find_package(libnoise REQUIRED)
 set(OPENVDB_USE_STATIC_LIBS ON)
 set(USE_BLOSC TRUE)
 find_package(OpenVDB 5.0 REQUIRED COMPONENTS openvdb)
+
+# libslic3r links fontconfig on every non-Apple Unix but never calls it; Android has no fontconfig.
+# OpenCV's exported targets link plain "z"; send that to the pinned zlib rather than the NDK's, so a static link
+# does not get two copies.
+if (ANDROID)
+    add_library(fontconfig INTERFACE)
+    add_library(z INTERFACE)
+    target_link_libraries(z INTERFACE ZLIB::ZLIB)
+endif ()
 
 # --- ElegooSlicer sources ---------------------------------------------------------------------------------------
 # Only the bundled libraries libslic3r uses; imgui, hidapi, mdns and the hints tool are GUI or network pieces.
@@ -140,3 +158,12 @@ target_link_libraries(link_slicer PUBLIC libslic3r boost_libs cereal::cereal noi
 
 add_executable(link-slicer cli/main.cpp)
 target_link_libraries(link-slicer PRIVATE link_slicer)
+# A fully static executable needs no Android system libraries, so it also runs under qemu-aarch64 for testing.
+option(LINK_SLICER_STATIC_EXE "Link the link-slicer executable statically" OFF)
+if (LINK_SLICER_STATIC_EXE)
+    target_link_options(link-slicer PRIVATE -static)
+    if (ANDROID)
+        # OpenCV links "log"; the NDK has no static liblog, so this target stands in for it (messages to stderr).
+        add_library(log STATIC engine/android_log_stderr.c)
+    endif ()
+endif ()

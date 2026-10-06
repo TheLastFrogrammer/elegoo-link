@@ -50,6 +50,64 @@ def totals(commands):
     return extruded, travel
 
 
+def layers(path):
+    """Per-layer (z, extruded mm, XY bounding box of extrusions), split at ;LAYER_CHANGE."""
+    result, z, extruded, box, e_abs, last_e = [], None, 0.0, None, True, 0.0
+    def close():
+        if z is not None:
+            result.append((z, extruded, box))
+    with open(path, encoding="utf-8", errors="replace") as handle:
+        for line in handle:
+            if line.startswith(";LAYER_CHANGE"):
+                close()
+                z, extruded, box = None, 0.0, None
+                continue
+            if line.startswith(";Z:") and z is None:
+                z = float(line[3:])
+                continue
+            words = line.split(";", 1)[0].split()
+            if not words:
+                continue
+            if words[0] == "M82":
+                e_abs = True
+            elif words[0] == "M83":
+                e_abs = False
+            elif words[0] == "G92":
+                for w in words[1:]:
+                    if w[0] == "E" and _number(w[1:]):
+                        last_e = float(w[1:])
+            elif words[0] in ("G1", "G2", "G3") and z is not None:
+                values = {w[0]: float(w[1:]) for w in words[1:] if len(w) > 1 and w[0] in "XYE" and _number(w[1:])}
+                if "E" in values:
+                    delta = values["E"] - last_e if e_abs else values["E"]
+                    if e_abs:
+                        last_e = values["E"]
+                    if delta > 0 and "X" in values and "Y" in values:
+                        extruded += delta
+                        x, y = values["X"], values["Y"]
+                        box = (x, y, x, y) if box is None else (min(box[0], x), min(box[1], y), max(box[2], x), max(box[3], y))
+    close()
+    return result
+
+
+def layer_report(ours_path, ref_path):
+    ours, ref = layers(ours_path), layers(ref_path)
+    if len(ours) != len(ref):
+        print(f"layers: ours {len(ours)}, reference {len(ref)} (differ)")
+        return
+    worst_z = max(abs(a[0] - b[0]) for a, b in zip(ours, ref)) if ours else 0
+    worst_e, worst_e_layer, worst_box = 0.0, 0, 0.0
+    for i, (a, b) in enumerate(zip(ours, ref)):
+        if b[1] > 0.5:
+            rel = abs(a[1] - b[1]) / b[1]
+            if rel > worst_e:
+                worst_e, worst_e_layer = rel, i + 1
+        if a[2] and b[2]:
+            worst_box = max(worst_box, max(abs(p - q) for p, q in zip(a[2], b[2])))
+    print(f"layers: {len(ours)} in both; heights differ by at most {worst_z:.3f} mm; extrusion per layer differs by at most "
+          f"{worst_e * 100:.2f}% (layer {worst_e_layer}); extrusion bounding boxes differ by at most {worst_box:.3f} mm")
+
+
 def _number(text):
     try:
         float(text)
@@ -73,6 +131,7 @@ def main():
         print(f"{label}: extruded {extruded:.2f} mm filament, travel {travel / 1000:.2f} m")
     for key in sorted(set(ours_est) | set(ref_est)):
         print(f"{key}: ours {ours_est.get(key, '-')} | reference {ref_est.get(key, '-')}")
+    layer_report(sys.argv[1], sys.argv[2])
     shown = 0
     for tag, i1, i2, j1, j2 in matcher.get_opcodes():
         if tag == "equal" or shown >= 5:

@@ -8,3 +8,11 @@ ELEGOOSLICER_SRC="${ELEGOOSLICER_SRC:-$SLICER_WORK/elegooslicer}"
 DEPS_BUILD="${DEPS_BUILD:-$SLICER_WORK/deps-linux}"
 DEPS_PREFIX="$DEPS_BUILD/ElegooSlicer_dep/usr/local"
 JOBS="${JOBS:-$(nproc)}"
+# Android cross-compilation (scripts/build-deps-android.sh, scripts/build-android.sh).
+ANDROID_SDK="${ANDROID_SDK:-${ANDROID_HOME:-$HOME/Android/Sdk}}"
+ANDROID_NDK_VERSION="${ANDROID_NDK_VERSION:-28.2.13676358}"
+ANDROID_NDK="${ANDROID_NDK:-$ANDROID_SDK/ndk/$ANDROID_NDK_VERSION}"
+ANDROID_ABI="${ANDROID_ABI:-arm64-v8a}"
+ANDROID_API="${ANDROID_API:-26}"   # the app's minSdk
+DEPS_ANDROID_BUILD="${DEPS_ANDROID_BUILD:-$SLICER_WORK/deps-android-$ANDROID_ABI}"
+DEPS_ANDROID_PREFIX="$DEPS_ANDROID_BUILD/ElegooSlicer_dep/usr/local"

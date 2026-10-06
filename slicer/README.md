@@ -32,6 +32,31 @@ Settings (environment variables, see `scripts/env.sh`): `SLICER_WORK` (default `
 `DEP_GIT_ARCHIVES=ON`: the dependency build then fetches those sources by git tag instead (the tag's commit is logged
 in `downloads/git-archives/git-sources.txt`, since the recipe's archive hash no longer applies).
 
+## Build (Android, cross-compiled on Linux)
+
+Needs the Android NDK (default r28c, `28.2.13676358`, under `$ANDROID_SDK/ndk/`; install with
+`sdkmanager "ndk;28.2.13676358"`). Defaults: `arm64-v8a`, API 26 (the app's minSdk), static libc++.
+
+```sh
+export ANDROID_SDK=$HOME/Android/Sdk
+slicer/scripts/build-deps-android.sh   # dependencies into work/deps-android-arm64-v8a (about an hour on 4 cores)
+slicer/scripts/build-android.sh        # libslic3r + a static link-slicer into work/build-android-arm64-v8a
+slicer/scripts/package-android-cli.sh  # stripped binary + profiles + sample models as a tarball for a phone
+```
+
+The Android `link-slicer` is linked fully statically (no Android system libraries), so it runs on a phone in Termux
+or `adb shell`, and under `qemu-aarch64-static` on a Linux PC. `scripts/compare-android.sh MODEL` slices a model with
+the Android build (qemu by default, or a device with `ADB=adb`) and with the Linux build and compares the G-code.
+
+Android-specific handling, all in this directory's CMake (ElegooSlicer's sources are used unmodified):
+- `-fsigned-char` and `-ffp-contract=off` for the engine, matching the desktop builds' `char` signedness and
+  floating-point rounding (see [RESULTS.md](RESULTS.md)).
+- OpenSSL's libcrypto is built for Android (libslic3r's MD5 use); Linux uses the system library.
+- FreeType uses the pinned zlib instead of its internal copy, which collides with zlib in a static link.
+- OpenCV's Android sample apps and Java bindings are switched off.
+- fontconfig, which libslic3r links but never calls, is an empty target; the static test executable gets a stand-in
+  for liblog (OpenCV logs through it) that prints to stderr.
+
 ## Use
 
 ```sh

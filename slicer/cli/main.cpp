@@ -7,6 +7,7 @@
 //               (resolved presets as JSON, the form ElegooSlicer's own --load-settings/--load-filaments take)
 //
 // Prints one JSON object with the result (or {"error": ...}) on stdout; progress goes to stderr.
+#include <chrono>
 #include <cstdlib>
 #include <iostream>
 #include <sstream>
@@ -60,6 +61,7 @@ int usage()
 
 int main(int argc, char** argv)
 {
+    const auto started = std::chrono::steady_clock::now(); // elapsed_s covers preset loading as well as slicing
     std::string resources, vendor = "Elegoo", list, output, work, export_dir;
     bool quiet = false;
     linkslicer::Selection selection;
@@ -123,11 +125,13 @@ int main(int argc, char** argv)
             std::cerr << "[" << percent << "%] " << text << std::endl;
         };
         linkslicer::Result result = engine.slice(models, selection, output, progress);
+        const double elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - started).count();
         std::cout << "{\"gcode\":" << json_string(result.gcode_path)
                   << ",\"print_time_s\":" << result.print_time_s
                   << ",\"filament_mm\":" << result.filament_mm
                   << ",\"filament_g\":" << result.filament_g
                   << ",\"filament_cm3\":" << result.filament_cm3
+                  << ",\"elapsed_s\":" << elapsed
                   << ",\"warnings\":[";
         for (size_t i = 0; i < result.warnings.size(); ++i)
             std::cout << (i ? "," : "") << json_string(result.warnings[i]);
