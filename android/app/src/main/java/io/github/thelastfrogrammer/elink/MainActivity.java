@@ -33,9 +33,9 @@ public final class MainActivity extends Activity {
     private int page = 3;
     private SharedPreferences settings;
     private ProfileStore profiles;
-    private EditText profileName, cameraAddress;
+    private EditText profileName, cameraAddress, pairingPin;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
-    private Spinner storagePicker, routePicker;
+    private Spinner storagePicker, routePicker, authPicker;
     private NetworkRoute cameraRoute;
     private AutoCloseable cameraRouteWatch;
     private Button resume, discover, saveProfile, chooseProfile, removeProfile, cancelUpload, listFiles, previousFiles, nextFiles, loadHistory, loadDisk,
@@ -62,7 +62,7 @@ public final class MainActivity extends Activity {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
-            if (printer.connecting()) { routePicker.setSelection(printer.remote() ? 1 : 0); host.setText(printer.host()); access.setText(printer.accessCode()); serial.setText(printer.serial()); }
+            if (printer.connecting()) { routePicker.setSelection(printer.remote() ? 1 : 0); authPicker.setSelection(printer.pinProbe() ? 1 : 0); host.setText(printer.host()); if (printer.pinProbe()) pairingPin.setText(printer.accessCode()); else access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) printer.observe(MainActivity.this::render);
             render();
         }
@@ -91,7 +91,7 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 25, INK, true);
-        label(content, "Centauri Carbon 2 · local / VPN · v0.3.1", 14, MUTED, false);
+        label(content, "Centauri Carbon 2 · local / VPN · v0.3.2", 14, MUTED, false);
         summary = label(content, "Disconnected · open Settings to connect", 14, TEAL, true);
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); content.addView(navigation);
         String[] titles = {"Monitor", "Files", "Camera", "Settings"};
@@ -107,20 +107,30 @@ public final class MainActivity extends Activity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("remoteVPN", position == 1).apply(); stopCamera(); if (connect != null) { diagnostics.setText("Connection route changed. Run Check connection before reconnecting."); render(); } }
         });
         button(connectionCard, "Remote access setup…", this::remoteHelp);
+        label(connectionCard, "Printer authentication", 13, MUTED, false);
+        authPicker = spinner(connectionCard, new String[] {"LAN access code", "Cloud-mode PIN probe (read-only)"});
+        authPicker.setSelection(settings.getBoolean("pinProbe", false) ? 1 : 0);
+        authPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("pinProbe", position == 1).apply(); if (connect != null) { diagnostics.setText("Authentication mode changed. Run Check connection; PIN probe preserves the printer's cloud setting."); render(); } }
+        });
+        button(connectionCard, "Matrix coexistence test…", this::coexistenceHelp);
         host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "LAN access code", true); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        pairingPin = input(connectionCard, "Current printer pairing PIN (probe only)", true); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        label(connectionCard, "PIN probe is experimental and read-only. Keep LAN Only off and Matrix working. Use the current printer-displayed pairing PIN, not the LAN access code. PINs are held only in memory; commands, uploads and automatic retries are disabled. Firmware may reject local PIN access.", 13, MUTED, false);
         serial = input(connectionCard, "Serial number (optional)", false);
         serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         label(connectionCard, "Leave serial blank for automatic identity discovery. A manual Serial Number from Settings → Device is used if discovery fails. Discovery also checks the printer's LAN mode and code-protection setting.", 13, MUTED, false);
         remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
-        label(connectionCard, "IP: printer Settings → Network. Access code: Settings → LAN Only. Enable LAN Only. Local mode uses home Wi-Fi; Remote mode requires a connected home VPN and a Pi/router gateway to this printer. Leave the code blank if code protection is off.", 13, MUTED, false);
+        label(connectionCard, "IP: printer Settings → Network. LAN authentication uses Settings → LAN Only and its access code (blank if protection is off). The separate PIN probe tests local access while cloud mode stays enabled. Connection route independently selects home Wi-Fi or your home VPN/Pi gateway.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
         connect = button(connectionCard, "Connect", this::toggleConnection);
         check = button(connectionCard, "Check connection", this::checkConnection);
-        diagnostics = label(connectionCard, "Check connection tests HTTP, MQTT and UDP discovery, including reported LAN mode and code protection. HTTP is optional for monitoring; file uploads still require it. No access code is included in the report.", 13, MUTED, false);
+        diagnostics = label(connectionCard, "Check connection tests TCP reachability and UDP identity/mode. LAN authentication also checks HTTP system info. PIN probe never authenticates HTTP or includes its PIN in the report; Connect tests MQTT registration. HTTP uploads remain LAN-only and require port 80.", 13, MUTED, false);
         diagnostics.setTextIsSelectable(true);
-        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); message("Saved access code removed. An existing connection keeps its in-memory code until disconnected."); });
+        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
         remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
         discover = button(connectionCard, "Find printers on Wi-Fi", this::scanPrinters);
         profileName = input(connectionCard, "Printer profile name", false);
@@ -194,12 +204,12 @@ public final class MainActivity extends Activity {
     private void toggleConnection() {
         if (printer == null) return;
         if (printer.connecting()) { printer.disconnect(); return; }
-        String address = host.getText().toString().trim(), code = access.getText().toString();
+        String address = host.getText().toString().trim(), code = pinProbe() ? pairingPin.getText().toString() : access.getText().toString();
         String serialNumber = serial.getText().toString().trim();
         if (!serialNumber.isEmpty() && !Cc2Discovery.validSerial(serialNumber)) { message("Enter the exact printer serial, using letters, numbers, hyphens or underscores, without spaces."); return; }
-        try { new PrinterHttp(address, code); }
-        catch (Exception error) { message("Enter a valid private IPv4 address and LAN access code."); return; }
-        try { credentials.save(address, code, remember.isChecked()); }
+        try { new PrinterAuthentication(pinProbe(), code); new PrinterHttp(address, pinProbe() ? "" : code); }
+        catch (Exception error) { message(pinProbe() ? "Enter a valid private printer IP and its current displayed pairing PIN." : "Enter a valid private IPv4 address and LAN access code."); return; }
+        try { if (!pinProbe()) credentials.save(address, code, remember.isChecked()); }
         catch (Exception error) { message("Could not save the code securely. Uncheck Remember to connect without saving."); return; }
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
             && !getPreferences(MODE_PRIVATE).getBoolean("notificationsAsked", false)) {
@@ -208,20 +218,20 @@ public final class MainActivity extends Activity {
         }
         try {
             startForegroundService(new Intent(this, PrinterService.class));
-            printer.connect(address, code, serialNumber, remoteMode()); render();
+            printer.connect(address, code, serialNumber, remoteMode(), pinProbe()); render();
         } catch (Exception error) { printer.disconnect(); message("Android could not start printer monitoring. Keep the app open and check its permissions."); }
     }
     private void checkConnection() {
         if (checking) return;
-        String address = host.getText().toString().trim(), code = access.getText().toString();
+        String address = host.getText().toString().trim(), code = pinProbe() ? "" : access.getText().toString();
         String serialNumber = serial.getText().toString().trim();
         if (!serialNumber.isEmpty() && !Cc2Discovery.validSerial(serialNumber)) { diagnostics.setText("Enter a valid serial number or leave it blank for discovery."); return; }
         try { new PrinterHttp(address, code); } catch (Exception error) { diagnostics.setText("Enter a valid private IPv4 address before checking."); return; }
         checking = true; diagnostics.setText(remoteMode() ? "Checking VPN, HTTP 80, MQTT 1883, camera 8080, and UDP identity 52700…" : "Checking Wi-Fi, HTTP 80, MQTT 1883, and UDP discovery 52700…"); render();
-        Context context = getApplicationContext(); boolean remote = remoteMode();
+        Context context = getApplicationContext(); boolean remote = remoteMode(), probe = pinProbe();
         checks.execute(() -> {
             String report;
-            try { report = NetworkRoute.select(context, remote).check(address, code, serialNumber); }
+            try { report = NetworkRoute.select(context, remote).check(address, code, serialNumber, probe); }
             catch (IOException error) { report = remote ? "Home VPN is unavailable or changed. Enable Tailscale / your home VPN, verify this app uses it, and check again." : "No local Wi-Fi network is available. Connect the phone to the printer's Wi-Fi and check again."; }
             catch (Exception error) { report = "Connection check failed. Confirm the current printer IP and the phone's Wi-Fi."; }
             String result = report;
@@ -245,12 +255,18 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < 4; i++) { pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE); tabs[i].setTypeface(Typeface.DEFAULT, i == page ? Typeface.BOLD : Typeface.NORMAL); tabs[i].setAlpha(i == page ? 1f : 0.7f); }
         settings.edit().putInt("page", page).apply();
     }
+    private boolean pinProbe() { return authPicker != null && authPicker.getSelectedItemPosition() == 1; }
     private boolean remoteMode() { return routePicker != null && routePicker.getSelectedItemPosition() == 1; }
+    private void coexistenceHelp() {
+        new AlertDialog.Builder(this).setTitle("Read-only Matrix coexistence test")
+            .setMessage("1. Leave the printer in normal cloud mode (LAN Only off). Confirm Matrix shows live status/camera. Do not unbind or re-pair the printer.\n\n2. Use home Wi-Fi first. Select Cloud-mode PIN probe and enter the current printer-displayed pairing PIN if available. Supply the exact serial if UDP discovery cannot identify it.\n\n3. Check connection, then Connect. This tries the SDK's local MQTT PIN path once. It does not sign into your Elegoo account, bind devices, copy cloud client identities, guess credentials or use a PIN in HTTP.\n\n4. Compare live status here and in Matrix, switch between apps, and confirm Matrix remains connected. Registration alone does not prove coexistence. If refused or disconnected, the probe stops; firmware may require the official cloud transport.\n\nPrinter-changing controls and uploads stay disabled in this probe. Camera/read queries depend on firmware. PINs are not saved, included in diagnostics or logged. If no monitoring session remains, reopening the app requires the PIN again.")
+            .setPositiveButton("Close", null).show();
+    }
     private void remoteHelp() {
         LinearLayout body = dialogBody();
         label(body, "Use your always-on Pi as a Tailscale subnet router. Install Tailscale on the Pi and phone, then sign in to your own tailnet. The Pi needs access to the printer on your home network.", 14, INK, false);
         label(body, "On the Pi: enable IPv4 forwarding and advertise only the printer's IP as a /32 route. Approve that route in the Tailscale admin console. Restrict the phone's access to printer TCP 1883 (monitor/control), 80 (uploads if available), 8080 (camera) and optionally UDP 52700 (identity). Broader existing access rules must also be reviewed.", 14, INK, false);
-        label(body, "In this app: choose Remote through home VPN, keep the printer's home IP (not the Pi's Tailscale IP), and use its LAN access code. Enable the VPN, then Check connection and Connect. A manual serial provides fallback if UDP identity does not reply. The printer stays in LAN Only mode.", 14, INK, false);
+        label(body, "Choose Remote through home VPN and keep the printer's home IP (not the Pi's Tailscale IP). Authentication is separate: LAN access code uses LAN Only; the experimental read-only PIN probe keeps cloud mode enabled to test Matrix coexistence. Establish the selected authentication locally first. A manual serial provides fallback if UDP identity does not reply.", 14, INK, false);
         label(body, "The internet hop from phone to Pi is encrypted by the VPN. The Pi-to-printer hop retains the printer's LAN protocol. Do not publicly forward printer ports. Secure your account with MFA and keep the Pi updated. Android's always-on VPN/block-without-VPN setting provides stronger enforcement against connection-loss races. VPN presence alone does not prove the gateway/route or encryption configuration.", 14, MUTED, false);
         label(body, "The app does not install or configure Tailscale, and it does not bypass printer authentication. HTTP unavailable at home stays unavailable remotely. Monitoring/control/upload/camera requests use the selected route; VPN loss closes the session and requires a fresh connection without command replay.", 14, MUTED, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
@@ -264,9 +280,9 @@ public final class MainActivity extends Activity {
     private void savePrinter() {
         String address = host.getText().toString().trim(), code = access.getText().toString();
         try {
-            new PrinterHttp(address, code);
-            profiles.save(profileName.getText().toString().trim(), address, serial.getText().toString().trim(), remoteMode());
-            credentials.save(address, code, remember.isChecked()); message("Printer profile saved. Access-code storage follows the Remember setting.");
+            new PrinterHttp(address, pinProbe() ? "" : code);
+            profiles.save(profileName.getText().toString().trim(), address, serial.getText().toString().trim(), remoteMode(), pinProbe());
+            if (!pinProbe()) credentials.save(address, code, remember.isChecked()); message(pinProbe() ? "Profile saved with PIN-probe mode. The PIN is not saved." : "Printer profile saved. Access-code storage follows the Remember setting.");
         } catch (Exception error) { message("Profile could not be saved. Check the IP and serial, or uncheck Remember if credential storage is unavailable."); }
     }
     private void choosePrinter() {
@@ -274,12 +290,12 @@ public final class MainActivity extends Activity {
         String[] names = new String[rows.length()];
         for (int i = 0; i < names.length; i++) { JSONObject row = rows.optJSONObject(i); names[i] = row == null ? "Invalid profile" : row.optString("name") + " · " + row.optString("host"); }
         new AlertDialog.Builder(this).setTitle("Saved printers").setItems(names, (dialog, which) -> {
-            JSONObject row = rows.optJSONObject(which); if (row != null) { selectPrinter(row.optString("host"), row.optString("serial"), row.optString("name")); routePicker.setSelection(row.optBoolean("remote_vpn", false) ? 1 : 0); }
+            JSONObject row = rows.optJSONObject(which); if (row != null) { selectPrinter(row.optString("host"), row.optString("serial"), row.optString("name")); routePicker.setSelection(row.optBoolean("remote_vpn", false) ? 1 : 0); authPicker.setSelection(row.optBoolean("pin_probe", false) ? 1 : 0); }
         }).setNegativeButton("Cancel", null).show();
     }
     private void selectPrinter(String address, String number, String name) {
         if (printer != null && printer.connecting()) { message("Disconnect before selecting another printer."); return; }
-        stopCamera(); host.setText(address); serial.setText(number); profileName.setText(name); access.setText(""); remember.setChecked(credentials.remembers(address));
+        stopCamera(); pairingPin.setText(""); host.setText(address); serial.setText(number); profileName.setText(name); access.setText(""); remember.setChecked(credentials.remembers(address));
         try { access.setText(credentials.load(address)); } catch (Exception error) { credentials.forget(address); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again."); }
         cameraHost = ""; diagnostics.setText("Run Check connection to inspect this printer."); render();
     }
@@ -339,12 +355,14 @@ public final class MainActivity extends Activity {
         LinearLayout body = dialogBody(); label(body, FeatureData.file(file), 14, INK, false);
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
+        if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: print start and deletion are disabled.", 14, MUTED, false); dialog.show(); return; }
         button(body, "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); });
         button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, which) -> { if (printer != null) printer.delete(storage, name); }).show(); });
         dialog.show();
     }
     private void startDialog(JSONObject file, String storage) {
+        if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: print start is disabled."); return; }
         if (printer == null || !printer.fresh() || !Cc2Codec.idle(printer.status) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
         String name = file.optString("filename");
         LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name) + "\nCheck the build plate, material and sliced printer profile before starting.", 14, INK, false);
@@ -462,23 +480,24 @@ public final class MainActivity extends Activity {
     private void render() {
         if (connect == null || isDestroyed()) return;
         if (cameraPlayer != null && cameraRoute != null && !cameraRoute.available()) { stopCamera(); cameraInfo.setText("Home VPN is unavailable. Enable it and restart the camera."); }
-        boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
+        boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), writable = fresh && !printer.pinProbe(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
         snapshot = printer == null ? new JSONObject() : printer.status;
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
-        summary.setText(ready ? "Connected · " + printer.host() + " · " + (fresh ? StatusPresentation.state(snapshot) : "Status stale") : connecting ? "Connecting · " + printer.host() : "Disconnected · open Settings to connect");
+        summary.setText(ready ? "Connected" + (printer.pinProbe() ? " · read-only PIN probe" : "") + " · " + printer.host() + " · " + (fresh ? StatusPresentation.state(snapshot) : "Status stale") : connecting ? "Connecting · " + printer.host() : "Disconnected · open Settings to connect");
         if (connecting && !printer.host().equals(host.getText().toString())) { host.setText(printer.host()); access.setText(""); }
-        routePicker.setEnabled(!connecting); host.setEnabled(!connecting); access.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting);
+        routePicker.setEnabled(!connecting); authPicker.setEnabled(!connecting); host.setEnabled(!connecting); access.setEnabled(!connecting); pairingPin.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting && !pinProbe());
+        access.setVisibility(pinProbe() ? View.GONE : View.VISIBLE); pairingPin.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); remember.setVisibility(pinProbe() ? View.GONE : View.VISIBLE);
         connect.setEnabled(printer != null); connect.setText(connecting ? "Disconnect" : "Connect"); check.setEnabled(!checking);
-        refresh.setEnabled(ready); pause.setEnabled(fresh && Cc2Codec.canPause(snapshot)); resume.setEnabled(fresh && Cc2Codec.canResume(snapshot)); stop.setEnabled(fresh && Cc2Codec.canStop(snapshot));
+        refresh.setEnabled(ready); pause.setEnabled(writable && Cc2Codec.canPause(snapshot)); resume.setEnabled(writable && Cc2Codec.canResume(snapshot)); stop.setEnabled(writable && Cc2Codec.canStop(snapshot));
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
-        lightOn.setEnabled(fresh); lightOff.setEnabled(fresh); heater.setEnabled(fresh && Cc2Codec.idle(snapshot)); fan.setEnabled(fresh); speed.setEnabled(fresh && Cc2Codec.canPause(snapshot));
+        lightOn.setEnabled(writable); lightOff.setEnabled(writable); heater.setEnabled(writable && Cc2Codec.idle(snapshot)); fan.setEnabled(writable); speed.setEnabled(writable && Cc2Codec.canPause(snapshot));
         cancelUpload.setEnabled(busy);
         renderFeatures(ready, fresh);
-        refill.setEnabled(printer != null && printer.canvasFresh() && printer.canvas.has("auto_refill"));
+        refill.setEnabled(writable && printer.canvasFresh() && printer.canvas.has("auto_refill"));
         if (printer != null && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText("Automatic refill unavailable");
-        upload.setEnabled(ready && printer.selectedFile != null && !busy && !printer.importing); pick.setEnabled(printer != null && !busy && !printer.importing);
+        upload.setEnabled(ready && !printer.pinProbe() && printer.selectedFile != null && !busy && !printer.importing); pick.setEnabled(printer != null && !busy && !printer.importing);
         if (printer != null && printer.selectedFile != null) selected.setText(printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB");
         state.setText(!fresh && snapshot.length() > 0 ? "Status stale · controls disabled" : StatusPresentation.state(snapshot));
         JSONObject machine = snapshot.optJSONObject("machine_status"), print = snapshot.optJSONObject("print_status");
@@ -524,7 +543,7 @@ public final class MainActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
         try {
-            StringBuilder text = new StringBuilder("Link Workshop v0.3.1\nIndependent Android app derived from Elegoo Link.\n\n");
+            StringBuilder text = new StringBuilder("Link Workshop v0.3.2\nIndependent Android app derived from Elegoo Link.\n\n");
             for (String name : new String[] {"THIRD_PARTY_NOTICES.md", "Apache-2.0.txt", "Paho-NOTICE.txt", "Paho-EDL-1.0.txt", "Paho-EPL-2.0.txt"}) {
                 try (InputStream input = getAssets().open("licenses/" + name); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");

@@ -4,10 +4,15 @@ package io.github.thelastfrogrammer.elink;
 public final class PrinterIdentity implements Cc2Session.IdentityResolver {
     private final String manual;
     private final Cc2Discovery discovery;
+    private final PrinterAuthentication auth;
     private Cc2Discovery.Info info;
     private boolean mismatch;
     public PrinterIdentity(String manual, Cc2Discovery discovery) {
+        this(manual, discovery, new PrinterAuthentication(false, ""));
+    }
+    public PrinterIdentity(String manual, Cc2Discovery discovery, PrinterAuthentication auth) {
         this.manual = manual == null ? "" : manual.trim(); this.discovery = discovery;
+        this.auth = auth;
         if (!this.manual.isEmpty() && !Cc2Discovery.validSerial(this.manual)) throw new IllegalArgumentException("Invalid serial number");
     }
     public String resolve(PrinterHttp http) throws Exception {
@@ -19,6 +24,7 @@ public final class PrinterIdentity implements Cc2Session.IdentityResolver {
         catch (java.io.IOException discoveryError) {
             if (discoveryError instanceof VpnRouteGuard.Unavailable) throw discoveryError;
             if (!manual.isEmpty()) return manual;
+            if (auth.pinProbe) throw new PrinterErrors.IdentityUnavailable(); // Never bootstrap with a PIN in HTTP.
             try { return http.systemInfo().getString("sn"); }
             catch (Exception error) {
                 if (error instanceof VpnRouteGuard.Unavailable || error instanceof PrinterErrors.Rejected || (error instanceof PrinterErrors.HttpStatus
@@ -28,12 +34,13 @@ public final class PrinterIdentity implements Cc2Session.IdentityResolver {
         }
     }
     public String password(PrinterHttp http) throws Exception {
-        if (info != null && Boolean.FALSE.equals(info.lanOnly)) throw new PrinterErrors.CloudMode();
-        return info != null && Boolean.FALSE.equals(info.codeProtected) ? "123456" : http.token();
+        return auth.password(info, http.token());
     }
     public String summary() {
-        if (info == null) return "Printer mode and code-protection state were not available from UDP discovery.";
-        return info.summary() + (mismatch ? " Manual serial differed; using the discovered printer serial." : "");
+        String mode = auth.pinProbe ? "Cloud-mode local PIN probe: read-only, no automatic retries. Matrix coexistence is unverified. " : "";
+        if (info == null) return mode + "Printer mode and code-protection state were not available from UDP discovery.";
+        return mode + info.summary() + (mismatch ? " Manual serial differed; using the discovered printer serial." : "");
     }
+    @Override public boolean readOnly() { return auth.pinProbe; }
     @Override public void close() { discovery.close(); }
 }

@@ -1,3 +1,21 @@
+# v0.3.2 validation
+
+Validated 2026-10-06. Physical cloud-mode PIN authorization, Matrix coexistence and Pi/VPN acceptance remain unverified. The latest supplied physical result is the earlier MQTT code 5. No account login, binding/unbinding or credential extraction was performed.
+
+- Empty app/build directory, build cache disabled: testDebugUnitTest, lintDebug and assembleDebug passed in one complete Gradle run (46 tasks executed). JDK 17, Gradle 8.13, AGP 8.11.1, SDK 36/build tools 35.0.0.
+- Full suite: **86 tests, zero failures/errors**. Thirteen added tests exercise exact PIN handling independently of LAN protection flags, missing/control/oversized PIN rejection, reported-mode mismatch, LAN intent remaining separate, protection-off LAN default, discovery/manual identity without HTTP, redacted summaries, production-session explicit PIN MQTT credentials, broker rejection without alternate/default credential, terminal connection loss, and registration-limit messaging.
+- Production session tests invoke pause/resume/stop/start/delete/light/heater/fan/speed/refill/upload in read-only mode and verify no changing MQTT request or HTTP connection is made, while file read queries and readiness still work. No real printer effects are exercised.
+- Lint: **0 errors, 22 warnings**, all SetTextI18n English UI text construction.
+- Final APK ZIP integrity, DEX markers for PrinterAuthentication, explicit cloud-mode PIN picker and terminal probe text verified. Manifest: **v0.3.2/code 7**, min 26, target/compile 36.
+- Signature Scheme v2 verified, one signer; certificate SHA-256 remains **9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3**. Compatible normal update over v0.2.0–v0.3.1.
+- APK: **234491 bytes**, SHA-256 **46522dda110fd87b7660b46d52c0170d7928ddc773c67e902fc878e4508c1fed**. Source archive checksum is published alongside the release.
+
+No emulator or physical device is attached. JVM transport fixtures validate our protocol/dispatcher behavior, not Android UI/lifecycle, ConnectivityManager/VPN callbacks, printer firmware support or Matrix coexistence. Read-only prevents changing printer commands; firmware registration could still consume/replace another client's slot. PINs are memory-only and excluded from authenticated HTTP, saved profiles/state, diagnostics and logs. UI masking/state suppression was reviewed in source; actual phone lifecycle remains a device check.
+
+Acceptance: follow [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md), preserving cloud mode and the existing Matrix binding. Test home Wi-Fi, explicit current displayed PIN, UDP or exact manual serial, one connection attempt, fresh status and simultaneous Matrix use. Confirm changing controls remain disabled, query errors do not imply capability, and a rejected/lost session does not retry. Rotate/change theme during an active probe; it may recover the PIN only from the live service. Disconnect/kill process and verify no saved PIN is restored. Test saved mode preference and old-profile LAN defaults. Check camera separately. Only then test the same working authentication over the configured Pi/VPN; route loss must stop the probe rather than restart it. No secrets need to be included in feedback.
+
+Earlier release validation records follow.
+
 # v0.3.1 validation
 
 Validated 2026-10-06. Away-from-home operation has not been exercised on a physical Pi, CC2 or Galaxy S24+. The earlier MQTT authorization refusal remains the latest supplied printer connection result. This update adds VPN routing; it does not establish successful printer authentication or make the unavailable HTTP service work.

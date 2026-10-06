@@ -1,6 +1,6 @@
 # Away-from-home access with your Pi
 
-Link Workshop v0.3.1 adds a **Remote through home VPN** route. Your always-on Raspberry Pi can be the gateway: phone → encrypted Tailscale tunnel → Pi → printer at `192.168.1.84`. The printer stays in LAN Only mode. This is a user-managed VPN connection, not Elegoo cloud login. A commercial privacy VPN alone does not provide a route into your home.
+Link Workshop v0.3.2 retains a **Remote through home VPN** route. Your always-on Raspberry Pi can be the gateway: phone → encrypted Tailscale tunnel → Pi → printer at `192.168.1.84`. Authentication is separate: full-control LAN mode requires LAN Only; the experimental read-only PIN probe tests normal cloud mode with Matrix retained. See [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md). A Pi cannot make a firmware-disabled local path available. This is a user-managed VPN connection, not Elegoo cloud login. A commercial privacy VPN alone does not provide a route into your home.
 
 The app is built and tested with simulated transports; the Pi has not been configured for you, and real CC2/S24+ remote operation remains unverified. First establish working local MQTT authentication and registration. Your earlier HTTP refusal and MQTT authorization error are independent of remote routing; a VPN cannot fix them.
 
@@ -62,12 +62,12 @@ The `/32` route targets one host. The policy limits that enrolled phone's access
 
 ## Connect from Android
 
-1. Install v0.3.1 over the earlier v0.2/v0.3 build. In Tailscale, connect to your tailnet. Android accepts approved subnet routes automatically. Ensure Link Workshop is not excluded by Tailscale's app split-tunneling settings.
+1. Install v0.3.2 over the earlier v0.2/v0.3 build. In Tailscale, connect to your tailnet. Android accepts approved subnet routes automatically. Ensure Link Workshop is not excluded by Tailscale's app split-tunneling settings.
 2. In Android VPN settings, enable **Always-on VPN** and **Block connections without VPN** when available. Blocking applies to the phone's networking beyond this app; review that effect. These system controls provide stronger enforcement during route changes than the app's checks alone. Only one VPN can run per Android user/profile at a time.
-3. In Link Workshop Settings, choose **Remote through home VPN**. Enter the **printer's home IP** `192.168.1.84`, not the Pi's `100.x` VPN address. Enter its LAN access code. If discovery fails, enter the exact Serial Number from printer Settings → Device. Save a profile if useful; its route preference is retained.
+3. In Link Workshop Settings, choose **Remote through home VPN**. Enter the **printer's home IP** `192.168.1.84`, not the Pi's `100.x` VPN address. Select the same authentication that already worked at home: LAN access code with LAN Only, or the explicit read-only cloud-mode PIN probe with cloud mode retained. Enter the corresponding credential in its separate field. If discovery fails, enter the exact Serial Number from printer Settings → Device. Save a profile if useful; its route preference is retained.
 4. Run **Check connection**, then **Connect**. Once the gateway is configured, test on cellular with home Wi-Fi off. Compare status and camera against the printer before relying on remote controls.
 
-Remote mode uses Android's default VPN-aware route for MQTT, HTTP and camera, rather than binding sockets to underlying Wi-Fi. It requires an active VPN for this app and refuses process-bound routing. New TCP connections and UDP sends recheck the captured VPN. VPN loss/replacement closes the session, cancels work and stops camera playback when detected; bounded reconnect starts a fresh registration. Changing commands and uploads are never replayed. Local mode retains explicit Wi-Fi/Ethernet routing.
+Remote mode uses Android's default VPN-aware route for MQTT, HTTP and camera, rather than binding sockets to underlying Wi-Fi. It requires an active VPN for this app and refuses process-bound routing. New TCP connections and UDP sends recheck the captured VPN. VPN loss/replacement closes the session, cancels work and stops camera playback when detected; LAN authentication uses bounded reconnect with fresh registration; the PIN probe stops without automatic retries. Changing commands and uploads are never replayed. Local mode retains explicit Wi-Fi/Ethernet routing.
 
 VPN presence does not prove that the VPN reaches your Pi, advertises this IP, has the intended access policy, or uses a particular encryption configuration. App checks/callbacks are not a kernel kill switch: route changes can race connection setup. Use Android's blocking setting for enforcement. Broadcast printer scanning is disabled remotely; selected-IP UDP discovery can work through the approved route.
 
@@ -75,8 +75,8 @@ VPN presence does not prove that the VPN reaches your Pi, advertises this IP, ha
 
 - **VPN unavailable:** connect Tailscale and include this app in its VPN. Disconnect other VPN apps. If the VPN changes, reconnect after the app stops its old session.
 - **All printer ports unreachable:** check Pi power/internet, route approval, source-phone policy, forwarding/firewall and the printer's current reserved IP. A working Pi VPN address alone does not establish a working printer route.
-- **MQTT reachable, code 5:** resolve the same LAN Only/code-protection/authorization issue as at home; route access does not authenticate the client. Code protection off uses the upstream default credential when discovery explicitly reports that setting.
-- **MQTT works, HTTP refused:** monitoring/controls can work with identity available. Uploads remain unavailable; the Pi does not create a missing printer HTTP service.
+- **MQTT reachable, code 5:** resolve the same selected-authentication issue as at home; route access does not authenticate the client. LAN protection off uses the upstream default only when discovery explicitly reports that setting. The explicit PIN probe has no default/fallback and stops if refused; keep Matrix/cloud mode enabled for that experiment.
+- **MQTT works, HTTP refused:** LAN monitoring/controls can work with identity available; the PIN probe still permits reads only. Uploads remain unavailable; the Pi does not create a missing printer HTTP service.
 - **Camera only fails:** verify the reported stream URL and allowed port. Bandwidth, latency and firmware stream support can limit playback.
 - **Remote Wi-Fi uses the same address range:** overlapping private networks can cause routing conflicts. Test on cellular; do not broaden exposure to solve a conflict.
 - **Pi or VPN outage / phone process death:** remote monitoring and alerts stop. This is not an emergency-stop channel; commands depend on fresh status and network delivery.

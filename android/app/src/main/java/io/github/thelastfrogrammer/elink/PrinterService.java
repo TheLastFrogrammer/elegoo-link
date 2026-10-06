@@ -29,7 +29,7 @@ public final class PrinterService extends Service {
     private Cc2Session session;
     private NetworkRoute route;
     private AutoCloseable routeWatch;
-    private boolean remote;
+    private boolean remote, pinProbe;
     private boolean wanted, foreground, destroyed;
     private long generation;
     private String host = "", code = "", serial = "";
@@ -67,16 +67,20 @@ public final class PrinterService extends Service {
     public String serial() { return serial; }
     public boolean connecting() { return wanted; }
     public boolean remote() { return remote; }
+    public boolean pinProbe() { return pinProbe; }
     public boolean ready() { return session != null && session.ready() && (!remote || route != null && route.available()); }
     public boolean fresh() { return ready() && session.fresh(); }
     public boolean uploading() { return session != null && session.uploading(); }
     public boolean canvasFresh() { return fresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
     public void connect(String host, String code, String serial) { connect(host, code, serial, false); }
     public void connect(String host, String code, String serial, boolean remote) {
-        new PrinterHttp(host, code);
+        connect(host, code, serial, remote, false);
+    }
+    public void connect(String host, String code, String serial, boolean remote, boolean pinProbe) {
+        new PrinterAuthentication(pinProbe, code); new PrinterHttp(host, pinProbe ? "" : code);
         if (!serial.isEmpty() && !Cc2Discovery.validSerial(serial)) throw new IllegalArgumentException("Invalid serial number");
         generation++; main.removeCallbacks(reconnect); clearRoute(); if (session != null) session.close(); session = null;
-        this.host = host; this.code = code; this.serial = serial; this.remote = remote; wanted = true; retries.connected(); alerts = new PrintAlerts();
+        this.host = host; this.code = code; this.serial = serial; this.remote = remote; this.pinProbe = pinProbe; wanted = true; retries.connected(); alerts = new PrintAlerts();
         startMonitoring(); attempt();
     }
     private void attempt() {
@@ -91,7 +95,7 @@ public final class PrinterService extends Service {
         resetData();
         session = new Cc2Session(host, code, new Cc2Session.Listener() {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
-            public void connection(String text, boolean registered) { deliver(() -> { connection = registered && remote ? "Connected through VPN · " + host : text; if (registered) retries.connected(); }); }
+            public void connection(String text, boolean registered) { deliver(() -> { connection = registered ? "Connected" + (remote ? " through VPN" : " locally") + (pinProbe ? " · read-only PIN probe" : "") + " · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
             public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } showAlert(alerts.update(value)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
@@ -112,12 +116,13 @@ public final class PrinterService extends Service {
             }); }
             public void queryError(int method, String text) { deliver(() -> { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }); }
             public void uploaded(String name) { deliver(() -> { feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0); }); }
-        }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery()));
+        }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery(), new PrinterAuthentication(pinProbe, code)));
         connection = "Identifying printer for MQTT…"; changed(); session.connect();
     }
     private void checkRoute() { if (wanted && remote && route != null && !route.available()) failed(new VpnRouteGuard.Unavailable().getMessage(), true); }
     private void clearRoute() { AutoCloseable watcher = routeWatch; routeWatch = null; route = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } }
     private void failed(String message, boolean retryable) {
+        retryable = retryable && !pinProbe;
         clearRoute();
         alerts.disconnected();
         generation++; if (session != null) session.close(); session = null;
@@ -128,7 +133,7 @@ public final class PrinterService extends Service {
             main.removeCallbacks(reconnect); main.postDelayed(reconnect, delay * 1000L);
         } else {
             wanted = false; code = "";
-            connection = message + (retryable ? "\nAutomatic retries stopped. Run Check connection, then reconnect." : "");
+            connection = message + (retryable ? "\nAutomatic retries stopped. Run Check connection, then reconnect." : pinProbe ? "\nPIN probe stopped; reconnect explicitly when ready. No automatic retries." : "");
             stopMonitoring();
         }
         changed();

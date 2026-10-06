@@ -21,6 +21,7 @@ public final class PrinterErrors {
     public static final class MissingIdentity extends IOException { }
     public static final class IdentityUnavailable extends IOException { }
     public static final class CloudMode extends IOException { }
+    public static final class ModeMismatch extends IOException { }
     public static String code(int code) {
         String reason;
         switch (code) {
@@ -42,7 +43,8 @@ public final class PrinterErrors {
     public static String describe(Throwable error, String stage) {
         Throwable routeError = error;
         for (int i = 0; i < 8 && routeError != null; i++, routeError = routeError.getCause()) if (routeError instanceof VpnRouteGuard.Unavailable) return new VpnRouteGuard.Unavailable().getMessage();
-        if (error instanceof CloudMode) return "The printer reports cloud / WAN mode. This build supports LAN authentication. Enable LAN Only in printer Settings, then use its LAN access code. The Account pairing PIN belongs to the separate cloud path.";
+        if (error instanceof ModeMismatch) return "Printer reports LAN Only, but Cloud-mode PIN probe was selected. To test Matrix coexistence, leave the printer in cloud mode; otherwise select LAN access code in this app.";
+        if (error instanceof CloudMode) return "The printer reports cloud / WAN mode, but LAN access code was selected. To preserve Matrix, try the separate Cloud-mode PIN probe (read-only, experimental). LAN Only remains an optional alternative; a LAN code is not a pairing PIN.";
         if (error instanceof IdentityUnavailable) return "Could not obtain the printer serial through UDP discovery or HTTP. Enter the exact Serial Number from Settings → Device in the optional serial field, then connect over MQTT.";
         if (error instanceof Rejected) return error.getMessage();
         if (error instanceof HttpStatus) return stage + " replied with HTTP " + ((HttpStatus) error).status + ". Verify that this IP belongs to the CC2 and that its firmware exposes /system/info.";
@@ -66,7 +68,7 @@ public final class PrinterErrors {
     }
     public static boolean retryable(Throwable error) {
         if (error instanceof Rejected || error instanceof IllegalArgumentException || error instanceof IllegalStateException) return false;
-        if (error instanceof MissingIdentity || error instanceof IdentityUnavailable || error instanceof CloudMode || error instanceof org.json.JSONException) return false;
+        if (error instanceof MissingIdentity || error instanceof IdentityUnavailable || error instanceof CloudMode || error instanceof ModeMismatch || error instanceof org.json.JSONException) return false;
         if (error instanceof HttpStatus) return ((HttpStatus) error).status >= 500;
         if (error instanceof MqttException) {
             int code = ((MqttException) error).getReasonCode();

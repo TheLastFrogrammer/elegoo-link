@@ -1,3 +1,15 @@
+# v0.3.2 authentication and read-only probe
+
+Inspected/validated 2026-10-06. The CC2 local MQTT SDK has an explicit `pinCode` branch and discovery marks cloud mode with PIN intent. The top-level SDK normally routes CLOUD to CloudService, so this branch alone does not establish local PIN support alongside Matrix. [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md) records the pinned primary sources and hardware acceptance stages.
+
+Route and credential intent are independent. LAN authentication retains discovery-based code/default selection and refuses reported cloud mode. Explicit PIN probe requires a supplied nonempty current PIN, refuses reported LAN Only and never uses a default, protection-off override or alternate credential. Unknown discovery mode permits the explicit experiment, with an uncertainty notice. Identity comes from UDP or manually supplied serial; no HTTP fallback is allowed in PIN mode. MQTT keeps the existing local username, client format, serial topics, registration and request spacing. It does not connect account cloud MQTT/Agora or bind/unbind devices.
+
+The probe never supplies the PIN to PrinterHttp, including connection checks. Read-only is enforced before enqueue and again at dispatch for all changing method IDs; upload is refused before creating its HTTP client/task. Read queries remain available, subject to firmware support. Every probe failure, authorization rejection or route loss is terminal for that attempt, including transport errors that would trigger bounded LAN retries. Raw registration errors are not displayed; known connection-limit rejection gets fixed secret-free wording. Firmware may still evict another client during registration; no other-client-disconnect request is sent. Registration is distinct from fresh status and Matrix coexistence.
+
+Profiles persist route and PIN-probe selection, never the PIN. The masked PIN field disables Activity state saving and autofill; only an active session/service retains its memory credential. No account login or official cloud implementation is included in this release.
+
+Earlier release protocol records follow.
+
 # v0.3.1 routing additions
 
 Inspected/built 2026-10-06. No CC2 wire methods or credentials change. Local mode retains Network-bound Wi-Fi/Ethernet sockets. Remote mode captures the app's active VPN network, refuses a process-bound network, and uses unbound/default sockets and direct HTTP connections so Android applies its VPN routing. TCP creation/connect, HTTP factory opening and UDP creation/send check the captured VPN. Selected-IP discovery uses unicast only; routed VPNs do not carry the local broadcast picker.

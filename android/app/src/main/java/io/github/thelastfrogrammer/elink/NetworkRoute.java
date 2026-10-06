@@ -80,8 +80,12 @@ public final class NetworkRoute {
         return text.toString();
     }
     public String check(String host, String code, String manualSerial) {
-        PrinterHttp http = new PrinterHttp(host, code, http());
+        return check(host, code, manualSerial, false);
+    }
+    public String check(String host, String code, String manualSerial, boolean pinProbe) {
+        PrinterHttp http = new PrinterHttp(host, pinProbe ? "" : code, http());
         StringBuilder text = new StringBuilder(details()).append("Printer IP: ").append(host).append("\n\n");
+        if (pinProbe) text.append("Cloud-mode local PIN probe selected: read-only, no automatic retries. Check connection does not authenticate MQTT or use the PIN. Connect tests the entered PIN once.\n\n");
         boolean web = probe(host, 80, text), mqtt = probe(host, 1883, text);
         if (vpn) probe(host, 8080, text);
         boolean identity = !manualSerial.isEmpty();
@@ -94,7 +98,7 @@ public final class NetworkRoute {
             text.append("UDP 52700 discovery: no printer identity received; LAN mode and code protection unknown.\n");
             if (identity) text.append("MQTT identity: manual serial supplied; Connect verifies registration.\n");
         }
-        if (web) {
+        if (web && !pinProbe) {
             try {
                 PrinterHttp effective = info != null && Boolean.FALSE.equals(info.codeProtected) ? new PrinterHttp(host, "", http()) : http;
                 try { effective.systemInfo(); } finally { effective.cancel(); }
@@ -102,12 +106,18 @@ public final class NetworkRoute {
             }
             catch (Exception error) { text.append("HTTP system info: ").append(PrinterErrors.describe(error, "HTTP authentication")).append('\n'); }
         }
-        if (info != null && Boolean.FALSE.equals(info.lanOnly)) text.append("\nThe printer reports cloud / WAN mode. Enable LAN Only for this app's supported authentication path. Cloud pairing uses a different credential path.");
+        if (pinProbe) {
+            text.append("\nHTTP identity/authentication was not attempted; PINs are not HTTP tokens and uploads are disabled in this probe.");
+            if (info != null && Boolean.TRUE.equals(info.lanOnly)) text.append("\nPrinter reports LAN Only. PIN probe expects cloud mode; choose LAN access code for the current printer setting, or leave cloud mode enabled to test Matrix coexistence.");
+            else text.append("\nKeep Matrix/cloud mode enabled. TCP reachability alone does not prove PIN authentication, registration or coexistence. Firmware may reject local PIN access.");
+            if (!identity) text.append("\nEnter the exact Serial Number from Settings → Device if UDP identity does not reply; PIN probe never falls back to HTTP identity.");
+        }
+        else if (info != null && Boolean.FALSE.equals(info.lanOnly)) text.append("\nThe printer reports cloud / WAN mode, but LAN access code was selected. To preserve Matrix, use the separate experimental read-only PIN probe. LAN Only is optional for LAN authentication.");
         else if (!web && !mqtt) text.append("\nNeither HTTP nor MQTT is reachable. Confirm the current printer IP and LAN Only. " + (vpn ? "Check the Pi/home gateway, approved printer route and VPN access rules." : "Use the same Wi-Fi and ensure the router does not isolate guest devices."));
         else if (!mqtt) text.append("\nHTTP is reachable but MQTT is not. Confirm LAN Only is enabled and local port 1883 is not blocked.");
         else if (!web) text.append(identity ? "\nMQTT is reachable and identity is available. Connect can use MQTT without HTTP. HTTP file uploads remain unavailable." : "\nMQTT is reachable. Enter the exact Serial Number from Settings → Device in the optional serial field to connect without HTTP or UDP discovery. HTTP file uploads remain unavailable.");
         else text.append("\nBoth ports are reachable. TCP checks alone do not prove MQTT authentication or client registration; Connect tests those next.");
-        if (vpn) text.append("\nRemote discovery uses selected-IP unicast only; Wi-Fi broadcast scanning is unavailable. A manual serial provides identity if discovery times out. The printer retains LAN authentication behind the VPN. HTTP or MQTT rejected at home will still be rejected remotely.");
+        if (vpn) text.append("\nRemote discovery uses selected-IP unicast only; Wi-Fi broadcast scanning is unavailable. A manual serial provides identity if discovery times out. Connection route does not change the printer's authentication mode. HTTP or MQTT rejected at home will still be rejected remotely.");
         http.cancel(); return text.toString();
     }
     private boolean probe(String host, int port, StringBuilder result) {

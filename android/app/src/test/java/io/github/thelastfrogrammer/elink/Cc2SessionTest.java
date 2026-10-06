@@ -225,4 +225,55 @@ public class Cc2SessionTest {
         }finally{s.close();}
     }
 
+    @Test public void cloudPinProbeUsesOnlyExplicitPinAndRegistersWithoutHttp() throws Exception {
+        Listener l = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
+        Cc2Session s = new Cc2Session("192.168.1.84", "UNRELATED-LAN-CODE", l,
+            url -> { fail("PIN must not open HTTP"); return null; }, null,
+            (uri,id) -> { FakeMqtt f=new FakeMqtt(uri,id);clients.add(f);return f; },
+            new PrinterIdentity("MANUAL", PrinterIdentityTest.reply(false,false), new PrinterAuthentication(true,"CURRENT-PIN")));
+        try { s.connect();take(l.statuses);assertTrue(s.ready());assertTrue(s.readOnly());assertEquals("CURRENT-PIN",clients.get(0).password);assertEquals(1,clients.size());assertTrue(clients.get(0).subscriptions.get(0).startsWith("elegoo/DISCOVERED/"));assertFalse(take(l.results).contains("CURRENT-PIN")); }
+        finally {s.close();}
+    }
+    @Test public void rejectedPinStopsWithoutLanFallbackOrAutomaticRetry() throws Exception {
+        Listener l = new Listener(); java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        Cc2Session s = new Cc2Session("192.168.1.84", "UNRELATED-LAN-CODE", l,
+            url -> { fail("HTTP must not open"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) { public void connect(MqttConnectOptions options) throws MqttException { attempts.incrementAndGet();assertEquals("CURRENT-PIN",new String(options.getPassword()));throw new MqttException(5); } },
+            new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
+        try {s.connect();String failure=take(l.failures);assertTrue(failure.contains("PIN was not authorized"));assertTrue(failure.contains("Keep Matrix"));assertFalse(failure.contains("CURRENT-PIN"));assertFalse(failure.contains("UNRELATED-LAN-CODE"));assertFalse(l.retryable);assertEquals(1,attempts.get());assertFalse(s.ready());}
+        finally {s.close();}
+    }
+    @Test public void pinProbeBlocksAllChangingMethodsAndUploadAtSessionBoundary() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();
+        Cc2Session s=new Cc2Session("192.168.1.84","IGNORED",l,url -> {fail("No PIN HTTP transport");return null;},null,
+            (uri,id) -> {FakeMqtt f=new FakeMqtt(uri,id);clients.add(f);return f;},
+            new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
+        File upload=File.createTempFile("pin-probe-", ".gcode");
+        try {s.connect();take(l.statuses);take(l.canvases);s.command(Cc2Codec.PAUSE);s.command(Cc2Codec.RESUME);s.command(Cc2Codec.STOP);
+            s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());s.delete("local","test.gcode");s.light(true);s.temperatures(100,40);s.fan("fan",50);s.speed(0);s.autoRefill(true);s.upload(upload,"test.gcode");
+            s.files("local",0);assertEquals(Cc2Codec.FILES,take(l.queries).getInt("method"));
+            assertTrue(clients.get(0).writes.isEmpty());assertTrue(clients.get(0).requests.stream().noneMatch(r -> Cc2Codec.changing(r.optInt("method"))));assertFalse(s.uploading());assertTrue(s.ready());
+            assertTrue(l.results.stream().anyMatch(r -> r.contains("uploads are disabled")));assertTrue(l.results.stream().anyMatch(r -> r.contains("printer-changing commands are disabled")));
+        }finally{s.close();upload.delete();}
+    }
+    @Test public void pinProbeConnectionLossIsTerminal() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();
+        Cc2Session s=new Cc2Session("192.168.1.84","",l,url -> {fail("HTTP must not open");return null;},null,
+            (uri,id) -> {FakeMqtt f=new FakeMqtt(uri,id);clients.add(f);return f;},
+            new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
+        try{s.connect();take(l.statuses);clients.get(0).callback.connectionLost(new IOException("gone"));take(l.failures);assertFalse(l.retryable);assertFalse(s.ready());assertEquals(1,clients.size());}
+        finally{s.close();}
+    }
+    @Test public void pinProbeRegistrationLimitDoesNotSuggestClosingMatrixOrExposeRawReply() throws Exception {
+        Listener l=new Listener();
+        Cc2Session s=new Cc2Session("192.168.1.84","",l,url -> {fail("HTTP must not open");return null;},null,
+            (uri,id) -> new FakeMqtt(uri,id) { public void publish(String topic,byte[] bytes,int qos,boolean retained) throws MqttException {
+                if (!topic.endsWith("api_register")) {super.publish(topic,bytes,qos,retained);return;}
+                try {JSONObject request=new JSONObject(new String(bytes,StandardCharsets.UTF_8));callback.messageArrived(subscriptions.get(2),new MqttMessage(new JSONObject().put("client_id",request.getString("client_id")).put("error","too many clients: secret").toString().getBytes(StandardCharsets.UTF_8)));}
+                catch(Exception error){throw new MqttException(error);}
+            } },new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
+        try{s.connect();String failure=take(l.failures);assertTrue(failure.contains("connection limit"));assertTrue(failure.contains("this app did not request other clients to disconnect"));assertFalse(failure.contains("secret"));assertFalse(failure.contains("close other"));assertFalse(l.retryable);}
+        finally{s.close();}
+    }
+
 }

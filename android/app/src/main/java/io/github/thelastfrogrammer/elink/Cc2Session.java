@@ -30,6 +30,7 @@ public final class Cc2Session implements AutoCloseable {
         String resolve(PrinterHttp http) throws Exception;
         default String password(PrinterHttp http) throws Exception { return http.token(); }
         default String summary() { return ""; }
+        default boolean readOnly() { return false; }
         default void close() { }
     }
     private volatile Listener listener;
@@ -76,12 +77,13 @@ public final class Cc2Session implements AutoCloseable {
         this(host, accessCode, listener, connections, sockets, clients, http -> http.systemInfo().getString("sn"));
     }
     Cc2Session(String host, String accessCode, Listener listener, PrinterHttp.ConnectionFactory connections, javax.net.SocketFactory sockets, MqttFactory clients, IdentityResolver identity) {
-        http = new PrinterHttp(host, accessCode, connections); this.connections = connections; this.sockets = sockets;
+        http = new PrinterHttp(host, identity.readOnly() ? "" : accessCode, connections); this.connections = connections; this.sockets = sockets;
         this.clients = clients; this.listener = listener; this.identity = identity; sessionToken = http.token();
     }
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
+    public boolean readOnly() { return identity.readOnly(); }
     public void connect() { execute(this::connectOnWorker); }
     private void connectOnWorker() {
         String stage = "Printer identity";
@@ -127,10 +129,13 @@ public final class Cc2Session implements AutoCloseable {
             client.subscribe(new String[] {base + clientId + "/api_response", base + "api_status", base + requestId + "/register_response"}, new int[] {0, 0, 0});
             publish(base + "api_register", new JSONObject().put("client_id", clientId).put("request_id", requestId));
             JSONObject reply = registration.get(8, TimeUnit.SECONDS);
-            if (!Cc2Codec.validRegistration(reply, clientId)) { fail("Printer registration rejected. Check LAN Only and close other printer clients before trying again.", false); return; }
+            if (!Cc2Codec.validRegistration(reply, clientId)) {
+                String reason = reply.optString("error", "").toLowerCase(Locale.ROOT).contains("too many clients") ? "Printer connection limit reached." : "Printer registration rejected.";
+                fail(reason + (readOnly() ? " PIN probe stopped; this app did not request other clients to disconnect. Keep Matrix/cloud mode enabled. Firmware may not support local PIN access." : " Check the selected authentication mode and other connected clients."), false); return;
+            }
             if (closed) return;
             ready = true;
-            emitConnection("Connected on local Wi-Fi", true);
+            emitConnection(readOnly() ? "Connected · read-only PIN probe; verify Matrix separately" : "Connected on local Wi-Fi", true);
             send(Cc2Codec.ATTRIBUTES); send(Cc2Codec.STATUS); send(Cc2Codec.CANVAS);
             worker.scheduleWithFixedDelay(() -> {
                 if (!ready()) return;
@@ -144,7 +149,9 @@ public final class Cc2Session implements AutoCloseable {
             worker.scheduleWithFixedDelay(() -> { if (ready() && canvasSupported && pending.values().stream().noneMatch(p -> p.method == Cc2Codec.CANVAS)) send(Cc2Codec.CANVAS); }, 30, 30, TimeUnit.SECONDS);
             worker.scheduleWithFixedDelay(this::expireRequests, 1, 1, TimeUnit.SECONDS);
         } catch (Exception exception) {
-            if (!closed) fail(PrinterErrors.describe(exception, stage) + (exception instanceof MqttException && !identity.summary().isEmpty() ? "\n" + identity.summary() : ""), PrinterErrors.retryable(exception));
+            String text = PrinterErrors.describe(exception, stage);
+            if (readOnly() && exception instanceof MqttException && (((MqttException) exception).getReasonCode() == 4 || ((MqttException) exception).getReasonCode() == 5)) text = "Cloud-mode local PIN was not authorized (MQTT code " + ((MqttException) exception).getReasonCode() + "). Verify the current printer-displayed PIN. Keep Matrix/cloud mode enabled; firmware may not permit this local path. No other credentials were tried.";
+            if (!closed) fail(text + (exception instanceof MqttException && !identity.summary().isEmpty() ? "\n" + identity.summary() : ""), !readOnly() && PrinterErrors.retryable(exception));
         } finally { if (closed) disposeMqtt(); }
     }
     public void refresh() { execute(() -> { if (ready()) { send(Cc2Codec.STATUS); if (canvasSupported) send(Cc2Codec.CANVAS); } }); }
@@ -193,6 +200,7 @@ public final class Cc2Session implements AutoCloseable {
     private void send(JSONObject message) {
         int id = message.optInt("id"), method = message.optInt("method");
         if (!ready()) return;
+        if (readOnly() && changing(method)) { emitResult("Read-only PIN probe: printer-changing commands are disabled."); return; }
         if (queued.contains(method) || pending.values().stream().anyMatch(p -> p.method == method)
             || changing(method) && (queued.stream().anyMatch(Cc2Session::changing) || pending.values().stream().anyMatch(p -> changing(p.method)))) {
             emitResult("Waiting for the previous request to finish."); return;
@@ -216,6 +224,7 @@ public final class Cc2Session implements AutoCloseable {
     }
     private boolean allowed(JSONObject message) {
         int method = message.optInt("method");
+        if (readOnly() && changing(method)) return false;
         if (!changing(method)) return true;
         if (!fresh()) return false;
         try {
@@ -264,7 +273,7 @@ public final class Cc2Session implements AutoCloseable {
                 if (result == null || result.has("error_code") && result.optInt("error_code", -1) != 0
                     || !result.has("error_code") && !(query && Cc2Codec.queryShape(method, result))) {
                     int code = result == null ? -1 : result.optInt("error_code", -1);
-                    if (code == 1000) { fail(PrinterErrors.code(code), false); return; }
+                    if (code == 1000) { fail(readOnly() ? "Printer rejected authorization for the PIN probe (code 1000). Keep Matrix/cloud mode enabled; this local path may be unsupported." : PrinterErrors.code(code), false); return; }
                     if (method == Cc2Codec.CANVAS && code == 1001) canvasSupported = false;
                     emitResult(PrinterErrors.code(code)); Listener current = listener;
                     if (query && current != null) current.queryError(method, PrinterErrors.code(code)); return;
@@ -315,6 +324,7 @@ public final class Cc2Session implements AutoCloseable {
         }
     }
     public synchronized void upload(File file, String name) {
+        if (readOnly()) { emitResult("Read-only PIN probe: uploads are disabled; PINs are never used as HTTP tokens."); return; }
         if (!ready() || uploading) return;
         uploading = true; uploadCancelled = false;
         PrinterHttp uploader = new PrinterHttp(http.host(), sessionToken, connections); uploadHttp = uploader;
@@ -334,7 +344,8 @@ public final class Cc2Session implements AutoCloseable {
     private void fail(String message, boolean retryable) {
         ready = false; statusAt = 0;
         if (pending.values().stream().anyMatch(p -> changing(p.method))) emitResult("Connection lost with a command pending. Outcome unknown; commands will not be replayed.");
-        Listener current = listener; close(); if (current != null) current.failure(message, retryable);
+        boolean canRetry = !readOnly() && retryable;
+        Listener current = listener; close(); if (current != null) current.failure(message, canRetry);
     }
     private static boolean changing(int method) { return Cc2Codec.changing(method); }
     private static String methodName(int method) {
