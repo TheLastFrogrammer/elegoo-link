@@ -35,7 +35,7 @@ public final class MainActivity extends Activity {
     private SharedPreferences settings;
     private ProfileStore profiles;
     private EditText profileName, cameraAddress, pairingPin;
-    private TextView pinProbeHelp, cloudStatus;
+    private TextView pinProbeHelp, cloudStatus, cloudLiveLabel;
     private Button cloudSignOut, cloudPrinters;
     private CheckBox cloudBackground;
     private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck, urgentStop;
@@ -240,6 +240,7 @@ public final class MainActivity extends Activity {
         cloudAccounts = new CloudAccountStore(this);
         LinearLayout account = card("Elegoo account (experimental)");
         cloudStatus = label(account, "", 14, INK, false);
+        cloudLiveLabel = label(account, "", 13, MUTED, false);
         button(account, "Sign in with Elegoo…", this::cloudSignIn);
         cloudBackground = checkbox(account, "Keep watching through the cloud in the background", settings.getBoolean("cloudBackground", false));
         cloudBackground.setOnCheckedChangeListener((view, enabled) -> {
@@ -761,12 +762,13 @@ public final class MainActivity extends Activity {
         // Where controls go.
         if (ready) controlSource.setText(printer.pinProbe() ? "Read-only PIN probe: controls are disabled." : "Commands go over your local network.");
         else if (cloud && cloudFresh && !cloudOk) controlSource.setText("Cloud control is off. Tap here to turn it on.");
-        else if (cloud) controlSource.setText(printer.cloudCommandBusy ? "Sending through the Elegoo cloud…" : cloudFresh ? "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago."
+        else if (cloud) controlSource.setText(printer.cloudCommandBusy ? "Sending through the Elegoo cloud…" : cloudFresh ? "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago" + (printer.cloudLiveOn ? " · live" : "") + "."
             : printer.cloudOnline == 0 ? "The Elegoo cloud reports the printer offline." : printer.cloudMessage.isEmpty() ? "Waiting for the Elegoo cloud…" : printer.cloudMessage);
         else controlSource.setText(connecting ? "Connecting on your local network…" : "Connect in Settings, or sign in with Elegoo to control through the cloud.");
         trays.setText((ready || cloud) && printer.canvas != null ? StatusPresentation.canvas(printer.canvas) + (!printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : "")
             : cloud ? "Tap Refresh status to load trays through the cloud." : ready ? StatusPresentation.canvas(null) : "Connect for CANVAS tray status.");
         if (printer != null) feedback.setText(printer.feedback);
+        cloudLiveLabel.setText(printer == null ? "" : printer.cloudLiveState); cloudLiveLabel.setVisibility(cloudLiveLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
         showThumbnail();
     }
     private void setTile(TextView view, String text) {

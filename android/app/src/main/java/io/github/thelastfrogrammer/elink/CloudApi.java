@@ -133,6 +133,18 @@ public final class CloudApi {
         return new AgoraCredential(userId, rtmUserId, rtmToken, "0".equals(rtcUserId) ? "" : rtcUserId, rtcToken);
     }
 
+    /** Login for Elegoo's cloud MQTT status pushes (SDK getMqttCredential). */
+    public static final class MqttCredential {
+        public final String host, clientId, username, password;
+        MqttCredential(String host, String clientId, String username, String password) { this.host = host; this.clientId = clientId; this.username = username; this.password = password; }
+    }
+    public MqttCredential mqttCredential(String clientId) throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/mqtt-link/mqtt-client?mqttClientId=" + URLEncoder.encode(clientId, "UTF-8"), null, true).optJSONObject("data");
+        if (data == null || data.optString("host").isEmpty() || data.optString("mqttUserName").isEmpty())
+            throw new CloudException("Elegoo did not issue live-update credentials for this app.", false);
+        return new MqttCredential(data.optString("host"), data.optString("mqttClientId", clientId), data.optString("mqttUserName"), data.optString("mqttPassword"));
+    }
+
     public List<Device> devices() throws IOException {
         JSONArray data = authorized("GET", "/api/v1/device-management-server/device/list", null, true).optJSONArray("data");
         List<Device> devices = new ArrayList<>();

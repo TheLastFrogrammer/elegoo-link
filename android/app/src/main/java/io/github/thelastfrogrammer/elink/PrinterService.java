@@ -335,9 +335,10 @@ public final class PrinterService extends Service {
         main.removeCallbacks(cloudPoll);
         if (destroyed) return;
         boolean background = cloudBackground();
-        if (wanted || !(cloudVisible || background)) { cloudPolling = false; return; }
+        if (wanted || !(cloudVisible || background)) { cloudPolling = false; stopLive(); return; }
         cloudPolling = true;
-        main.postDelayed(cloudPoll, cloudVisible ? CLOUD_VISIBLE_POLL_MS : CLOUD_BACKGROUND_POLL_MS);
+        // With live pushes, polling is only a consistency check.
+        main.postDelayed(cloudPoll, cloudLiveOn ? 60_000 : cloudVisible ? CLOUD_VISIBLE_POLL_MS : CLOUD_BACKGROUND_POLL_MS);
         cloudWorker.execute(() -> {
             CloudLogin.Account account;
             try { account = cloudAccounts.load(); } catch (Exception error) { account = null; }
@@ -354,7 +355,7 @@ public final class PrinterService extends Service {
                 for (CloudApi.Device candidate : devices) if (candidate.serial.equals(preferred)) device = candidate;
                 if (device == null && !devices.isEmpty()) device = devices.get(0);
                 if (device == null) message = "No printers are bound to this Elegoo account.";
-                else { online = api.online(device.serial); snapshot = api.status(device.serial); }
+                else { online = api.online(device.serial); snapshot = api.status(device.serial); startLive(api); }
             } catch (Exception error) { message = error.getMessage() == null ? "Could not reach the Elegoo cloud." : error.getMessage(); }
             api.takeTrace();
             if (api.account() != before) try { if (cloudAccounts.load() != null) cloudAccounts.save(api.account()); } catch (Exception ignored) { }
@@ -374,6 +375,36 @@ public final class PrinterService extends Service {
                 changed(); updateNotification(false);
             });
         });
+    }
+
+    // Live pushes over Elegoo's cloud MQTT (CloudLive); attempted at most every 5 minutes while the cloud is in use.
+    private CloudLive cloudLive;
+    public volatile boolean cloudLiveOn;
+    public String cloudLiveState = "";
+    private long cloudLiveAttempt;
+    /** Runs on cloudWorker after a successful poll. */
+    private void startLive(CloudApi api) {
+        if (cloudLive != null && cloudLive.connected()) return;
+        long now = System.currentTimeMillis(); if (now - cloudLiveAttempt < 5 * 60_000) return; cloudLiveAttempt = now;
+        if (cloudLive == null) cloudLive = new CloudLive(new CloudLive.Listener() {
+            public void delta(String serial, JSONObject partial) { main.post(() -> {
+                if (destroyed || wanted || !serial.equals(cloudSerial) || cloudStatus.length() == 0) return;
+                try {
+                    JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
+                    cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis();
+                    if (cloudOnline == 1) { showAlert(cloudAlerts.update(merged), cloudName); record(merged, "cloud", cloudName); }
+                    changed(); updateNotification(false);
+                } catch (Exception ignored) { }
+            }); }
+            public void online(String serial, boolean online) { main.post(() -> { if (serial.equals(cloudSerial)) { cloudOnline = online ? 1 : 0; changed(); } }); }
+            public void state(String text, boolean live) { main.post(() -> { cloudLiveOn = live; cloudLiveState = text; changed(); }); }
+        });
+        try { cloudLive.connect(api.mqttCredential(CloudLive.clientId(api.account().userId))); }
+        catch (Exception error) { main.post(() -> { cloudLiveOn = false; cloudLiveState = "Live updates unavailable (" + (error.getMessage() == null ? "no credentials" : error.getMessage()) + "); using periodic checks."; changed(); }); }
+    }
+    private void stopLive() {
+        CloudLive live = cloudLive; cloudLive = null; cloudLiveOn = false; cloudLiveAttempt = 0;
+        if (live != null) cloudWorker.execute(live::close);
     }
 
     /** Sends one request through the cloud. Only requests CloudControl allows, with fresh cloud status; queries feed handleQuery. */
@@ -455,7 +486,7 @@ public final class PrinterService extends Service {
     }
     @Override public void onDestroy() {
         destroyed = true; observer = null; clearRoute(); main.removeCallbacksAndMessages(null);
-        if (cloudControl != null) cloudControl.close(); cloudWorker.shutdown();
+        if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();
         if (session != null) session.close(); session = null; code = "";
         files.shutdownNow(); if (selectedFile != null) selectedFile.delete();
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy();

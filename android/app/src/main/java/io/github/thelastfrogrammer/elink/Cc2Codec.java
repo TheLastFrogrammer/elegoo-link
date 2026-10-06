@@ -175,7 +175,7 @@ public final class Cc2Codec {
     }
 
     private static JSONObject copy(JSONObject object) throws JSONException { return new JSONObject(object.toString()); }
-    private static void merge(JSONObject target, JSONObject source) throws JSONException {
+    static void merge(JSONObject target, JSONObject source) throws JSONException {
         Iterator<String> keys = source.keys();
         while (keys.hasNext()) {
             String key = keys.next();
