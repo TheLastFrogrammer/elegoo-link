@@ -16,8 +16,13 @@ import org.json.JSONObject;
  */
 public final class CloudApi {
     public static final String GLOBAL = "https://matrix.elegoo.com", CHINA = "https://matrix.elegoo.com.cn";
-    /** Refresh this long before expiry, like the SDK's threshold. */
-    static final long REFRESH_MARGIN_SECONDS = 300;
+    /**
+     * Renew only once the access token has expired, as Elegoo's account page does. A refused renewal appears to end the
+     * whole sign-in, so the app never renews speculatively.
+     */
+    static final long REFRESH_MARGIN_SECONDS = 0;
+    /** The account page renews its tokens with this client ID, even for slicer sign-ins; the SDK's "Slicer" is refused. */
+    static final String REFRESH_CLIENT_ID = "account";
 
     public static final class Response { final int status; final String body; public Response(int status, String body) { this.status = status; this.body = body; } }
     public interface Transport { Response send(String method, String url, Map<String, String> headers, String body) throws IOException; }
@@ -65,21 +70,25 @@ public final class CloudApi {
         if (account.refreshToken.isEmpty()) throw new CloudException("Elegoo sign-in has expired. Sign in again.", true);
         JSONObject data;
         try {
+            // Like the account page: no Authorization header on renewal.
             data = call("POST", "/api/v1/account-center-server/account-auth/token/refresh",
-                new JSONObject().put("refreshToken", account.refreshToken).put("clientId", "Slicer").toString()).optJSONObject("data");
+                new JSONObject().put("refreshToken", account.refreshToken).put("clientId", REFRESH_CLIENT_ID).toString(), false).optJSONObject("data");
         } catch (CloudException error) {
             // Any refusal here means the saved sign-in cannot be renewed; only a new sign-in helps.
             throw new CloudException("Renewing the Elegoo sign-in failed (" + error.getMessage() + "). Sign out and sign in again in Settings.", true);
         } catch (org.json.JSONException impossible) { throw new IOException(impossible); }
-        if (data == null || data.optString("accessToken", "").isEmpty()) throw new CloudException("Elegoo returned no new sign-in token. Sign in again.", true);
+        String access = data == null ? "" : data.optString("token", data.optString("accessToken", ""));
+        if (access.isEmpty()) throw new CloudException("Elegoo returned no new sign-in token. Sign in again.", true);
         String userId = data.optString("accountId", "");
-        account = account.withTokens(userId.isEmpty() ? account.userId : userId, data.optString("accessToken"),
-            data.optString("refreshToken", account.refreshToken), data.optLong("expiresTime", 0), data.optLong("refreshExpiresTime", account.refreshExpires));
+        // The page reads either naming for each field.
+        long accessExpires = data.optLong("accessTokenExpireTime", data.optLong("expiresTime", 0));
+        long refreshExpires = data.optLong("refreshTokenExpireTime", data.optLong("refreshExpiresTime", account.refreshExpires));
+        account = account.withTokens(userId.isEmpty() ? account.userId : userId, access, data.optString("refreshToken", account.refreshToken), accessExpires, refreshExpires);
     }
 
     /** Checks the token against the account service only, without renewing it; the result is recorded in the trace. */
     public void accountCheck() {
-        try { call("GET", "/api/v1/account-center-server/account-info/account", null); }
+        try { call("GET", "/api/v1/account-center-server/account-info/account", null, true); }
         catch (IOException error) { /* already traced */ }
     }
 
@@ -130,22 +139,23 @@ public final class CloudApi {
         return assemble(data == null ? new JSONObject() : data);
     }
 
-    private JSONObject authorized(String method, String path, String body, boolean renewOnRefusal) throws IOException {
+    private JSONObject authorized(String method, String path, String body, boolean essential) throws IOException {
         if (needsRefresh(System.currentTimeMillis() / 1000)) {
-            note("Access token expires " + when(account.accessExpires) + "; renewing before the request");
+            note("Access token expired " + when(account.accessExpires) + "; renewing before the request");
             refresh();
         }
-        try { return call(method, path, body); }
+        try { return call(method, path, body, true); }
         catch (CloudException error) {
-            if (!error.unauthorized || !renewOnRefusal) throw error;
-            note("Request refused; renewing the sign-in once and retrying");
-            refresh(); return call(method, path, body);
+            // No automatic renewal on refusal: a failed renewal ended the sign-in on the user's phone.
+            if (error.unauthorized && essential)
+                throw new CloudException("Elegoo no longer accepts this sign-in. Sign out and sign in again in Settings.", true);
+            throw error;
         }
     }
 
-    private JSONObject call(String method, String path, String body) throws IOException {
+    private JSONObject call(String method, String path, String body, boolean bearer) throws IOException {
         Map<String, String> headers = new LinkedHashMap<>();
-        headers.put("Authorization", "Bearer " + account.accessToken);
+        if (bearer) headers.put("Authorization", "Bearer " + account.accessToken);
         headers.put("User-Agent", userAgent);
         headers.put("Accept", "application/json");
         // Sent by Elegoo's own account page with every request.

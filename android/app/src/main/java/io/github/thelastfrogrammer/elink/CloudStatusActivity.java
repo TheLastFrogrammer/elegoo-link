@@ -38,6 +38,7 @@ public final class CloudStatusActivity extends Activity {
         header.setText("Shows what the Elegoo cloud last received from your printers, refreshed every 15 seconds while this screen is open. Nothing is sent to the printers.");
         root.addView(header);
         Button refresh = new Button(this); refresh.setText("Refresh now"); refresh.setAllCaps(false); refresh.setOnClickListener(v -> refresh()); root.addView(refresh);
+        Button renew = new Button(this); renew.setText("Test sign-in renewal…"); renew.setAllCaps(false); renew.setOnClickListener(v -> confirmRenewal()); root.addView(renew);
         body = new TextView(this); body.setTextSize(15); body.setTextColor(ink); body.setTextIsSelectable(true); body.setPadding(0, pad, 0, 0);
         body.setText("Loading…"); root.addView(body);
         setContentView(scroll);
@@ -68,7 +69,6 @@ public final class CloudStatusActivity extends Activity {
             try { text = describe(api); }
             catch (CloudApi.CloudException error) {
                 text = error.getMessage();
-                if (error.unauthorized) text += "\nIf this keeps happening, sign out and sign in again in Settings.";
             } catch (Exception error) { text = "Could not reach the Elegoo cloud. Check the phone's internet connection."; }
             // Keep tokens the server rotated, unless the user signed out meanwhile.
             if (api.account() != before) try { if (store.load() != null) store.save(api.account()); } catch (Exception ignored) { }
@@ -79,6 +79,29 @@ public final class CloudStatusActivity extends Activity {
                 .append(now.signInNote.isEmpty() ? "" : "\n" + now.signInNote);
             for (String line : api.takeTrace()) details.append("\n• ").append(line);
             String result = text + details;
+            main.post(() -> { busy = false; if (!isDestroyed()) body.setText(result); });
+        });
+    }
+
+    /** Renewal normally waits for expiry (days away); this lets it be tested now. A refusal may end the sign-in. */
+    private void confirmRenewal() {
+        if (api == null || busy) return;
+        new android.app.AlertDialog.Builder(this).setTitle("Test sign-in renewal?")
+            .setMessage("Asks Elegoo for new tokens now, the way Elegoo's account page does. If Elegoo refuses, this sign-in may stop working and you will need to sign in again.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Renew now", (dialog, which) -> renewNow()).show();
+    }
+    private void renewNow() {
+        busy = true;
+        worker.execute(() -> {
+            String text;
+            try {
+                api.refresh();
+                if (store.load() != null) store.save(api.account());
+                text = "Renewal worked. New access token valid until " + CloudApi.when(api.account().accessExpires) + ".";
+            } catch (Exception error) { text = error.getMessage() == null ? "Renewal failed." : error.getMessage(); }
+            StringBuilder details = new StringBuilder(text).append("\n\nDetails (no secrets)");
+            for (String line : api.takeTrace()) details.append("\n• ").append(line);
+            String result = details.toString();
             main.post(() -> { busy = false; if (!isDestroyed()) body.setText(result); });
         });
     }

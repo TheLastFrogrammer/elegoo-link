@@ -70,11 +70,18 @@ After signing out (which clears the page's web login) and signing in again, the 
 
 So refusals are per endpoint. The app now renews only when `device/list` itself is refused, treats online status as optional, and reports a status failure per printer instead of aborting. Renewal is still unexplained: until it works, a sign-in lasts until its access token expires (about 6 days here).
 
+## Third phone result: working (2026-10-06 10:47)
+
+After another fresh sign-in, every read succeeded: `account-info/account`, `device/list`, `device-register/online-status` and `device/report-data/list` all returned code 0. The CC2 showed online, idle, with live temperatures and "last report 0 s ago".
+
+Comparing the three runs: a sign-in stopped working right after the app's first renewal attempt (`clientId "Slicer"`, refused with 400). So a refused renewal appears to end the session. Elegoo's account page renews the same token with `clientId "account"`, without an `Authorization` header, and only after the access token has expired. The app now does the same and never renews just because a request was refused. Cloud printers has a **Test sign-in renewal…** button to try that renewal before the token expires.
+
 ## Open questions to test first
 
 1. ~~Does the sign-in page hand off tokens to the Android `WebView`?~~ Yes, confirmed on the user's phone.
-2. Does the Cloud printers screen show the right status and stay current during a print?
-3. Does the MQTT credential endpoint accept an `android` client ID?
-4. Does a cloud MQTT or RTM session from the app keep Matrix and ElegooSlicer connected?
+2. Does the Cloud printers screen stay current during a print? (Idle status and temperatures confirmed.)
+3. Does renewal with `clientId "account"` work? (Use Test sign-in renewal.)
+4. Does the MQTT credential endpoint accept an `android` client ID?
+5. Does a cloud MQTT or RTM session from the app keep Matrix and ElegooSlicer connected?
 
 This uses Elegoo's servers and the user's own account in a way Elegoo did not design for, so it can break when they change their service.

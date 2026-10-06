@@ -72,70 +72,61 @@ public class CloudApiTest {
         assertTrue(overview, overview.contains("1h 2m remaining"));
     }
 
-    @Test public void expiringTokenIsRefreshedFirstAndTheNewTokenIsUsed() throws Exception {
+    private static long expired() { return System.currentTimeMillis() / 1000 - 5; }
+
+    @Test public void expiredTokenIsRenewedLikeTheAccountPageAndTheNewTokenIsUsed() throws Exception {
         FakeCloud cloud = new FakeCloud()
-            .ok(new JSONObject().put("accessToken", "new-access").put("refreshToken", "new-refresh").put("expiresTime", inAnHour()).put("accountId", "42"))
+            .ok(new JSONObject().put("token", "new-access").put("refreshToken", "new-refresh").put("accessTokenExpireTime", inAnHour() * 1000)
+                .put("refreshTokenExpireTime", inAnHour() * 1000).put("accountId", "42"))
             .ok(new JSONArray());
-        CloudApi api = new CloudApi(false, account(System.currentTimeMillis() / 1000 + 10), "a", cloud);
+        CloudApi api = new CloudApi(false, account(expired()), "a", cloud);
         api.devices();
         Call refresh = cloud.calls.get(0);
         assertTrue(refresh.url.endsWith("/account-auth/token/refresh"));
-        assertEquals("old-refresh", new JSONObject(refresh.body).getString("refreshToken")); assertEquals("Slicer", new JSONObject(refresh.body).getString("clientId"));
+        assertEquals("old-refresh", new JSONObject(refresh.body).getString("refreshToken"));
+        assertEquals("account", new JSONObject(refresh.body).getString("clientId"));
+        assertNull("The account page renews without a bearer token", refresh.headers.get("Authorization"));
         assertEquals("Bearer new-access", cloud.calls.get(1).headers.get("Authorization"));
         assertEquals("new-refresh", api.account().refreshToken); assertEquals("Maker", api.account().nickname);
+        assertEquals(inAnHour() * 1000, api.account().accessExpires);
+        assertTrue(api.takeTrace().get(0).startsWith("Access token expired "));
     }
 
-    @Test public void rejectedTokenIsRefreshedOnceAndTheRequestRetried() throws Exception {
-        FakeCloud cloud = new FakeCloud().reply(401, "")
-            .ok(new JSONObject().put("accessToken", "new-access").put("expiresTime", inAnHour())).ok(new JSONArray());
-        CloudApi api = new CloudApi(false, account(inAnHour()), "a", cloud);
-        assertTrue(api.devices().isEmpty());
-        assertEquals(3, cloud.calls.size()); assertEquals("Bearer new-access", cloud.calls.get(2).headers.get("Authorization"));
+    @Test public void sdkFieldNamesFromRenewalAreAlsoAccepted() throws Exception {
+        FakeCloud cloud = new FakeCloud().ok(new JSONObject().put("accessToken", "n").put("expiresTime", inAnHour()).put("refreshExpiresTime", 7L));
+        CloudApi api = new CloudApi(false, account(expired()), "a", cloud);
+        api.refresh();
+        assertEquals("n", api.account().accessToken); assertEquals(inAnHour(), api.account().accessExpires); assertEquals(7L, api.account().refreshExpires);
         assertEquals("old-refresh", api.account().refreshToken);
     }
 
-    @Test public void bodyCode401WithHttp200IsTreatedAsAnExpiredSignIn() throws Exception {
-        // Shape observed from matrix.elegoo.com without a token.
-        String notLoggedIn = "{\"code\":401,\"data\":null,\"msg\":\"\u8d26\u53f7\u672a\u767b\u5f55\",\"traceId\":\"x\"}";
-        FakeCloud cloud = new FakeCloud().reply(200, notLoggedIn)
-            .ok(new JSONObject().put("accessToken", "new-access").put("expiresTime", inAnHour())).ok(new JSONArray());
-        assertTrue(new CloudApi(false, account(inAnHour()), "a", cloud).devices().isEmpty());
-        assertEquals("Bearer new-access", cloud.calls.get(2).headers.get("Authorization"));
-    }
-
-    @Test public void failedRefreshAsksToSignInAgainWithoutLoopingOrLeakingTokens() throws Exception {
-        FakeCloud cloud = new FakeCloud().reply(401, "").reply(401, "");
-        try { new CloudApi(false, account(inAnHour()), "a", cloud).devices(); fail(); }
-        catch (CloudApi.CloudException error) {
-            assertTrue(error.unauthorized); assertTrue(error.getMessage().contains("sign in again"));
-            assertFalse(error.getMessage().contains("old-")); assertEquals(2, cloud.calls.size());
+    @Test public void validTokenIsNeverRenewedEvenWhenRefused() throws Exception {
+        // A refused renewal ended the sign-in on the phone, so a refusal must not trigger one.
+        for (CloudApi.Response refusal : Arrays.asList(new CloudApi.Response(401, ""), new CloudApi.Response(200, "{\"code\":401,\"msg\":\"\u8d26\u53f7\u672a\u767b\u5f55\"}"))) {
+            FakeCloud cloud = new FakeCloud(); cloud.replies.add(refusal);
+            try { new CloudApi(false, account(inAnHour()), "a", cloud).devices(); fail(); }
+            catch (CloudApi.CloudException error) {
+                assertTrue(error.unauthorized); assertTrue(error.getMessage(), error.getMessage().contains("Sign out and sign in again"));
+                assertFalse(error.getMessage().contains("old-"));
+            }
+            assertEquals(1, cloud.calls.size());
         }
     }
 
-    @Test public void rejectedRefreshTokenExplainsAndTraceShowsEachStepWithoutSecrets() throws Exception {
-        // The failure seen on the phone: the request was refused, then the refresh answered code 400 "invalid refresh token".
-        FakeCloud cloud = new FakeCloud().reply(200, "{\"code\":401,\"msg\":\"not logged in\"}")
-            .reply(200, "{\"code\":400,\"msg\":\"\u65e0\u6548\u7684\u5237\u65b0\u4ee4\u724c\"}");
-        CloudApi api = new CloudApi(false, account(inAnHour()), "a", cloud);
+    @Test public void refusedRenewalExplainsAndTraceShowsEachStepWithoutSecrets() throws Exception {
+        FakeCloud cloud = new FakeCloud().reply(200, "{\"code\":400,\"msg\":\"\u65e0\u6548\u7684\u5237\u65b0\u4ee4\u724c\"}");
+        CloudApi api = new CloudApi(false, account(expired()), "a", cloud);
         try { api.devices(); fail(); }
         catch (CloudApi.CloudException error) {
             assertTrue(error.unauthorized);
             assertTrue(error.getMessage(), error.getMessage().startsWith("Renewing the Elegoo sign-in failed (Elegoo cloud error 400"));
         }
         List<String> trace = api.takeTrace();
-        assertEquals(3, trace.size());
-        assertEquals("GET device/list → HTTP 200, code 401 not logged in", trace.get(0));
-        assertEquals("Request refused; renewing the sign-in once and retrying", trace.get(1));
-        assertTrue(trace.get(2), trace.get(2).startsWith("POST account-auth/token/refresh → HTTP 200, code 400"));
+        assertEquals(2, trace.size());
+        assertTrue(trace.get(0), trace.get(0).startsWith("Access token expired "));
+        assertTrue(trace.get(1), trace.get(1).startsWith("POST account-auth/token/refresh → HTTP 200, code 400"));
         for (String line : trace) assertFalse(line, line.contains("old-access") || line.contains("old-refresh"));
         assertTrue(api.takeTrace().isEmpty());
-    }
-
-    @Test public void expiryRefreshReasonIsTraced() throws Exception {
-        FakeCloud cloud = new FakeCloud().ok(new JSONObject().put("accessToken", "n").put("expiresTime", inAnHour())).ok(new JSONArray());
-        CloudApi api = new CloudApi(false, account(System.currentTimeMillis() / 1000 - 5), "a", cloud);
-        api.devices();
-        assertTrue(api.takeTrace().get(0).startsWith("Access token expires "));
         assertEquals("not reported", CloudApi.when(0));
     }
 
@@ -172,8 +163,9 @@ public class CloudApiTest {
     @Test public void renewedTokensKeepTheSignInNote() throws Exception {
         CloudLogin.Account signedIn = CloudLogin.Account.fromReport(new JSONObject().put("userId", "42").put("accessToken", "a").put("refreshToken", "r").put("bindCode", "x"));
         assertEquals("Sign-in page reported: accessToken, bindCode, refreshToken, userId", signedIn.signInNote);
-        FakeCloud cloud = new FakeCloud().reply(401, "").ok(new JSONObject().put("accessToken", "n").put("expiresTime", inAnHour())).ok(new JSONArray());
-        CloudApi api = new CloudApi(false, signedIn, "a", cloud); api.devices();
+        CloudLogin.Account expiring = signedIn.withTokens("42", "a", "r", expired(), 0);
+        FakeCloud cloud = new FakeCloud().ok(new JSONObject().put("accessToken", "n").put("expiresTime", inAnHour())).ok(new JSONArray());
+        CloudApi api = new CloudApi(false, expiring, "a", cloud); api.devices();
         assertEquals(signedIn.signInNote, api.account().signInNote);
         assertEquals(signedIn.signInNote, CloudLogin.Account.fromJson(api.account().toJson()).signInNote);
         assertTrue(CloudLogin.Account.fromJson(new JSONObject().put("userId", "1").put("accessToken", "t")).signInNote.startsWith("Signed in with an earlier version"));
