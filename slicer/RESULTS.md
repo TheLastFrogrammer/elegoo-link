@@ -52,9 +52,11 @@ Also checked with link-slicer alone:
 
 ## Known gaps (for later steps)
 
-- **No embedded thumbnail.** The CC2 expects a 144×144 PNG preview in the G-code. The desktop app renders it with
-  OpenGL, which the engine doesn't have; neither CLI output above contains one. Options: a small software
-  rasterizer in the facade, or rendering on Android with GLES.
+- ~~No embedded thumbnail.~~ Done since: `engine/thumbnail.cpp` renders the preview in software with the
+  desktop's camera (orthographic, 45 degrees up from the front-left, zoomed to the parts), its gouraud lighting
+  constants and the filament colour, 4x supersampled on a transparent background. libslic3r encodes and writes it
+  in the format the printer profile asks for (`144x144/PNG` for the CC2), so G-code commands are unchanged
+  (the cube still matches the official CLI exactly). Examples: [thumbnails.png](thumbnails.png).
 - Only the model geometry of a 3MF is used. Its saved print settings, plates and per-plate assignments are not
   applied yet.
 - One plate, and filament 1 for every object. Multi-filament (CANVAS) assignment comes with the Android UI.

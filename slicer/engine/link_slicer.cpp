@@ -2,6 +2,7 @@
 // (src/ElegooSlicer.cpp: load presets -> full config -> load model -> place -> Print::apply/validate/process ->
 // export_gcode) without its GUI-only pieces (PartPlate, thumbnails rendered with OpenGL).
 #include "link_slicer.hpp"
+#include "thumbnail.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -311,7 +312,9 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     const boost::filesystem::path output_path = boost::filesystem::absolute(output);
     boost::filesystem::create_directories(output_path.parent_path());
     GCodeProcessorResult processed;
-    result.gcode_path = print.export_gcode(output_path.string(), &processed, nullptr);
+    // The preview image printers show in their file lists; the desktop renders it with OpenGL, the engine in software.
+    ThumbnailsGeneratorCallback thumbnails = [&model, &config](const ThumbnailsParams& params) { return render_thumbnails(model, config, params); };
+    result.gcode_path = print.export_gcode(output_path.string(), &processed, thumbnails);
     if (processed.gcode_check_result.error_code != 0)
         throw std::runtime_error("The G-code leaves the printable area (check code " + std::to_string(processed.gcode_check_result.error_code) + ")");
 

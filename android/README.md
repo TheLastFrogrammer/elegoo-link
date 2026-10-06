@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.7.0 (development):** 3D toolpath viewer (Files → Preview toolpath, or Preview after slicing) with layer and move scrubbing, playback, feature filters and travel moves; **Live toolpath** on the Monitor tab follows the running print, using the printer's layer and nozzle position, with printed moves in color, the rest of the layer ghosted and lower layers dimmed. The app keeps copies of G-code it uploads, slices or downloads so it can show the file being printed, and can download it from the printer otherwise.
+**v0.7.1 (development):** G-code sliced on the phone now carries the 144×144 preview image the printer shows in its file list, rendered by the engine like ElegooSlicer's desktop thumbnail.
+
+**v0.7.0:** 3D toolpath viewer (Files → Preview toolpath, or Preview after slicing) with layer and move scrubbing, playback, feature filters and travel moves; **Live toolpath** on the Monitor tab follows the running print, using the printer's layer and nozzle position, with printed moves in color, the rest of the layer ghosted and lower layers dimmed. The app keeps copies of G-code it uploads, slices or downloads so it can show the file being printed, and can download it from the printer otherwise.
 
 <img src="docs/screenshots/viewer-dark.png" width="240" alt="Toolpath viewer, mid-layer"> <img src="docs/screenshots/viewer-benchy.png" width="240" alt="3DBenchy toolpath">
 

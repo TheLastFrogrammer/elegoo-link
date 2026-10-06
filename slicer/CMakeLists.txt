@@ -152,7 +152,7 @@ target_include_directories(nanosvg_impl PRIVATE "${ELEGOOSLICER_SRC}/deps_src")
 target_link_libraries(libslic3r PUBLIC nanosvg_impl)
 
 # --- Link Slicer ------------------------------------------------------------------------------------------------
-add_library(link_slicer STATIC engine/link_slicer.cpp engine/link_slicer.hpp)
+add_library(link_slicer STATIC engine/link_slicer.cpp engine/link_slicer.hpp engine/thumbnail.cpp engine/thumbnail.hpp)
 target_include_directories(link_slicer PUBLIC engine)
 target_link_libraries(link_slicer PUBLIC libslic3r boost_libs cereal::cereal noise::noise Threads::Threads ${CMAKE_DL_LIBS})
 

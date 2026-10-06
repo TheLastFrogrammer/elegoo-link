@@ -86,6 +86,13 @@ public class SlicerIntegrationTest {
         assertTrue(gcode.contains("; total layers count = 50"));
         assertTrue(gcode.contains("; sparse_infill_density = 40%"));
         assertTrue(gcode.contains("; curr_bed_type = Textured PEI Plate"));
+        // The engine renders the 144x144 PNG preview the CC2 profile asks for, and the app's inspector finds it.
+        assertTrue(gcode.contains("; thumbnail begin 144x144 "));
+        GcodeInspector.Report report = GcodeInspector.inspect(output);
+        assertNotNull(report.thumbnail);
+        android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
+        assertNotNull(preview);
+        assertEquals(144, preview.getWidth());
         // Placed on the CC2's 256 mm bed: the first layer's moves stay inside it.
         assertFalse(gcode.matches("(?s).*\\nG1 X(-|2[6-9]\\d|[3-9]\\d\\d).*"));
     }

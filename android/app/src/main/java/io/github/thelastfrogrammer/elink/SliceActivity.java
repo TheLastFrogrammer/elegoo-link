@@ -50,6 +50,7 @@ public final class SliceActivity extends Activity {
     private EditText infill;
     private Button chooseModels, slice, cancel, useInFiles, saveCopy;
     private ProgressBar progress;
+    private ImageView preview;
     private LinearLayout resultCard;
     private final List<File> models = new ArrayList<>();
     private File sliced;
@@ -129,6 +130,8 @@ public final class SliceActivity extends Activity {
         cancel = rowButton(row, "Cancel", () -> { cancelRequested.set(true); status.setText("Cancelling…"); }, false);
 
         resultCard = card("Result"); resultCard.setVisibility(View.GONE);
+        preview = new ImageView(this); preview.setContentDescription("Preview image embedded in the G-code"); preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        preview.setVisibility(View.GONE); resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
         resultText = label(resultCard, "", 14, ink, false); resultText.setTextIsSelectable(true);
         useInFiles = button(resultCard, "Send to Files tab for upload", () -> {
             setResult(RESULT_OK, new Intent().putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName)); finish();
@@ -139,7 +142,7 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/octet-stream"); intent.putExtra(Intent.EXTRA_TITLE, slicedName); startActivityForResult(intent, SAVE);
         }, false);
-        label(resultCard, "No preview image is embedded yet, so the printer's file list shows a placeholder for phone-sliced files.", 12, muted, false);
+
         updateButtons();
     }
 
@@ -240,6 +243,15 @@ public final class SliceActivity extends Activity {
         for (String warning : result.warnings) text.append("\n\nWarning: ").append(warning);
         resultText.setText(text.toString());
         resultCard.setVisibility(View.VISIBLE);
+        preview.setVisibility(View.GONE);
+        File gcode = result.gcode;
+        // Show the preview image the engine embedded (the one the printer's file list will show).
+        worker.execute(() -> {
+            android.graphics.Bitmap image = null;
+            try { GcodeInspector.Report report = GcodeInspector.inspect(gcode); image = ThumbnailDecoder.decode(report.thumbnail); } catch (Exception ignored) { }
+            android.graphics.Bitmap shown = image;
+            main.post(() -> { if (!isDestroyed() && shown != null && gcode.equals(sliced)) { preview.setImageBitmap(shown); preview.setVisibility(View.VISIBLE); } });
+        });
         updateButtons();
     }
 
