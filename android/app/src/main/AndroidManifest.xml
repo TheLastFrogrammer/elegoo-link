@@ -19,7 +19,85 @@
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
-        <activity android:name=".SliceActivity" android:exported="false" android:label="Slice a model" />
+        <!-- "Open with" and "Share" for model files from other apps. -->
+        <activity android:name=".SliceActivity" android:exported="true" android:label="Slice a model"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="model/x.stl-binary" />
+                <data android:mimeType="model/x.stl-ascii" />
+                <data android:mimeType="application/sla" />
+                <data android:mimeType="application/vnd.ms-pki.stl" />
+                <data android:mimeType="application/x-navistyle" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="model/step" />
+                <data android:mimeType="application/step" />
+                <data android:mimeType="application/x-step" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:host="*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:pathPattern=".*\\.stl" />
+                <data android:pathPattern=".*\\.STL" />
+                <data android:pathPattern=".*\\.3mf" />
+                <data android:pathPattern=".*\\.3MF" />
+                <data android:pathPattern=".*\\.obj" />
+                <data android:pathPattern=".*\\.OBJ" />
+                <data android:pathPattern=".*\\.step" />
+                <data android:pathPattern=".*\\.STEP" />
+                <data android:pathPattern=".*\\.stp" />
+                <data android:pathPattern=".*\\.STP" />
+                <data android:pathPattern=".*\\..*\\.stl" />
+                <data android:pathPattern=".*\\..*\\.STL" />
+                <data android:pathPattern=".*\\..*\\.3mf" />
+                <data android:pathPattern=".*\\..*\\.3MF" />
+                <data android:pathPattern=".*\\..*\\.obj" />
+                <data android:pathPattern=".*\\..*\\.OBJ" />
+                <data android:pathPattern=".*\\..*\\.step" />
+                <data android:pathPattern=".*\\..*\\.STEP" />
+                <data android:pathPattern=".*\\..*\\.stp" />
+                <data android:pathPattern=".*\\..*\\.STP" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="model/x.stl-binary" />
+                <data android:mimeType="model/x.stl-ascii" />
+                <data android:mimeType="application/sla" />
+                <data android:mimeType="application/vnd.ms-pki.stl" />
+                <data android:mimeType="application/x-navistyle" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="model/step" />
+                <data android:mimeType="application/step" />
+                <data android:mimeType="application/x-step" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="model/stl" />
+                <data android:mimeType="model/x.stl-binary" />
+                <data android:mimeType="model/x.stl-ascii" />
+                <data android:mimeType="application/sla" />
+                <data android:mimeType="application/vnd.ms-pki.stl" />
+                <data android:mimeType="application/x-navistyle" />
+                <data android:mimeType="model/3mf" />
+                <data android:mimeType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />
+                <data android:mimeType="model/obj" />
+                <data android:mimeType="model/step" />
+                <data android:mimeType="application/step" />
+                <data android:mimeType="application/x-step" />
+            </intent-filter>
+        </activity>
         <activity android:name=".GcodeViewerActivity" android:exported="false" android:label="Toolpath" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>

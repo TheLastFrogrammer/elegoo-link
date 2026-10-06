@@ -44,7 +44,15 @@ public final class SliceActivity extends Activity {
         new Thread(null, runnable, "slicer", 64L * 1024 * 1024)); // libslic3r recurses deeply; give it a desktop-sized stack
 
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final AtomicBoolean cancelRequested = new AtomicBoolean();
+    // A slice outlives the screen that started it (rotation, theme change): its progress and result go to whichever
+    // Slice screen is current, and any of them can cancel it.
+    private static final AtomicBoolean cancelRequested = new AtomicBoolean();
+    private static SliceActivity current;
+    private static volatile boolean slicing;
+    private static int slicingPercent;
+    private static String slicingText = "Slicing…";
+    private Bundle restored;
+    private String restoredPrinter, restoredProcess;
     private SharedPreferences settings;
     private boolean dark, busy;
     private int ink, muted, teal, background, surface, buttonColor, error;
@@ -68,7 +76,7 @@ public final class SliceActivity extends Activity {
     /** One filament slot: preset, optional CANVAS tray and colour. Slot k is G-code tool k - 1. */
     private final class Slot {
         LinearLayout row; TextView title, swatch; Spinner preset, tray;
-        String colour; TrayPlan.Tray source; List<TrayPlan.Tray> trayChoices = new ArrayList<>();
+        String colour, wanted; TrayPlan.Tray source; List<TrayPlan.Tray> trayChoices = new ArrayList<>();
     }
     private EditText infill;
     private Button chooseModels, slice, cancel, useInFiles, saveCopy;
@@ -99,6 +107,8 @@ public final class SliceActivity extends Activity {
         setContentView(root);
         label(content, "Slice a model", 22, ink, true);
         label(content, "ElegooSlicer's own slicing engine and Elegoo presets, running on this phone.", 13, muted, false);
+        Diagnostics.init(getFilesDir());
+        current = this;
         if (!NativeSlicer.available(this)) {
             LinearLayout card = card("Slicer not included");
             label(card, "This build of Link Workshop was made without the slicer library. Builds that include it are made with slicer/scripts/install-into-app.sh before building the app.", 14, ink, false);
@@ -106,21 +116,105 @@ public final class SliceActivity extends Activity {
         }
         build();
         bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
-        if (saved != null) {
-            for (String path : saved.getStringArrayList("models") != null ? saved.getStringArrayList("models") : new ArrayList<String>()) { File file = new File(path); if (file.isFile()) models.add(file); }
-            showModels();
-        }
+        if (saved != null) restore(saved);
+        else { List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) importModels(incoming); }
+        if (slicing) { busy = true; progress.setVisibility(View.VISIBLE); progress.setProgress(slicingPercent); status.setText(slicingText); updateButtons(); }
         loadPresets();
+    }
+
+    /** Models handed over by another app: "Open with" (VIEW) or "Share" (SEND, SEND_MULTIPLE). */
+    static List<Uri> incomingModels(Intent intent) {
+        List<Uri> uris = new ArrayList<>();
+        if (intent == null || intent.getAction() == null) return uris;
+        switch (intent.getAction()) {
+            case Intent.ACTION_VIEW: if (intent.getData() != null) uris.add(intent.getData()); break;
+            case Intent.ACTION_SEND: { Uri uri = intent.getParcelableExtra(Intent.EXTRA_STREAM); if (uri != null) uris.add(uri); break; }
+            case Intent.ACTION_SEND_MULTIPLE: { ArrayList<Uri> list = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM); if (list != null) for (Uri uri : list) if (uri != null) uris.add(uri); break; }
+            default: break;
+        }
+        if (uris.isEmpty() && intent.getClipData() != null)
+            for (int i = 0; i < intent.getClipData().getItemCount(); i++) if (intent.getClipData().getItemAt(i).getUri() != null) uris.add(intent.getClipData().getItemAt(i).getUri());
+        return uris;
+    }
+
+    /** The model file extension from its name, or else from its MIME type (apps often share without one); "" if neither. */
+    static String modelExtension(String name, String mime) {
+        String extension = name != null && name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "";
+        if (MODEL_TYPES.contains(extension)) return extension;
+        String type = mime == null ? "" : mime.toLowerCase(Locale.ROOT);
+        switch (type) {
+            case "model/stl": case "model/x.stl-binary": case "model/x.stl-ascii": case "application/sla": case "application/vnd.ms-pki.stl": case "application/x-navistyle": return "stl";
+            case "model/3mf": case "application/vnd.ms-package.3dmanufacturing-3dmodel+xml": return "3mf";
+            case "model/obj": return "obj";
+            case "model/step": case "application/step": case "application/x-step": case "model/x.step": return "step";
+            case "model/amf": case "application/x-amf": return "amf";
+            default: return "";
+        }
     }
 
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
+        if (slotList == null) return; // slicer not included
         ArrayList<String> paths = new ArrayList<>(); for (File file : models) paths.add(file.getAbsolutePath());
         state.putStringArrayList("models", paths);
+        int[] assigned = new int[modelSlots.size()]; for (int i = 0; i < assigned.length; i++) assigned[i] = modelSlots.get(i);
+        state.putIntArray("modelSlots", assigned);
+        org.json.JSONArray list = new org.json.JSONArray();
+        try {
+            for (Slot slot : slots) {
+                org.json.JSONObject item = new org.json.JSONObject().put("preset", selected(slot.preset) != null ? selected(slot.preset) : slot.wanted == null ? "" : slot.wanted)
+                    .put("colour", slot.colour == null ? "" : slot.colour);
+                if (slot.source != null) item.put("tray", new org.json.JSONObject().put("canvas_id", slot.source.canvasId).put("tray_id", slot.source.trayId)
+                    .put("type", slot.source.type).put("name", slot.source.name).put("brand", slot.source.brand).put("colour", slot.source.colour == null ? "" : slot.source.colour));
+                list.put(item);
+            }
+        } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
+        state.putString("slots", list.toString());
+        state.putString("printer", selected(printerSpinner) != null ? selected(printerSpinner) : restoredPrinter);
+        state.putString("process", selected(processSpinner) != null ? selected(processSpinner) : restoredProcess);
+        state.putString("infill", infill.getText().toString());
+        state.putInt("support", supportSpinner.getSelectedItemPosition()); state.putInt("brim", brimSpinner.getSelectedItemPosition());
+        if (sliced != null && resultCard.getVisibility() == View.VISIBLE) {
+            state.putString("sliced", sliced.getAbsolutePath()); state.putString("resultText", resultText.getText().toString());
+        }
+        state.putString("slicedName", slicedName);
+        if (!slicing && !busy) state.putString("status", status.getText().toString());
+    }
+
+    /** Puts back what onSaveInstanceState kept: models, filament slots, quick settings and the last result. */
+    private void restore(Bundle saved) {
+        restored = saved;
+        ArrayList<String> paths = saved.getStringArrayList("models");
+        if (paths != null) for (String path : paths) { File file = new File(path); if (file.isFile()) models.add(file); }
+        int[] assigned = saved.getIntArray("modelSlots");
+        if (assigned != null && assigned.length == models.size()) for (int value : assigned) modelSlots.add(value);
+        try {
+            org.json.JSONArray list = new org.json.JSONArray(saved.getString("slots", "[]"));
+            if (list.length() > 0) while (slots.size() > 0) { Slot slot = slots.remove(slots.size() - 1); slotList.removeView(slot.row); }
+            for (int i = 0; i < list.length() && i < TrayPlan.MAX_TOOLS; i++) {
+                org.json.JSONObject item = list.getJSONObject(i), tray = item.optJSONObject("tray");
+                addSlot(tray == null ? null : new TrayPlan.Tray(tray.getInt("canvas_id"), tray.getInt("tray_id"), tray.optString("type"), tray.optString("name"),
+                    tray.optString("brand"), TrayPlan.colour(tray.optString("colour"))));
+                Slot slot = slots.get(slots.size() - 1);
+                slot.wanted = item.optString("preset").isEmpty() ? null : item.optString("preset");
+                slot.colour = TrayPlan.colour(item.optString("colour")); showSwatch(slot);
+            }
+        } catch (org.json.JSONException ignored) { }
+        restoredPrinter = saved.getString("printer"); restoredProcess = saved.getString("process");
+        infill.setText(saved.getString("infill", ""));
+        supportSpinner.setSelection(saved.getInt("support", 0)); brimSpinner.setSelection(saved.getInt("brim", 0));
+        slicedName = saved.getString("slicedName");
+        String path = saved.getString("sliced");
+        if (path != null && new File(path).isFile()) {
+            sliced = new File(path); resultText.setText(saved.getString("resultText", "")); resultCard.setVisibility(View.VISIBLE); showPreview(sliced);
+        }
+        showModels();
+        if (saved.getString("status") != null) status.setText(saved.getString("status"));
     }
 
     @Override protected void onDestroy() {
-        if (isFinishing()) cancelRequested.set(true);
+        if (current == this) current = null;
+        if (isFinishing() && !isChangingConfigurations()) cancelRequested.set(true);
         if (bound) unbindService(connection);
         super.onDestroy();
     }
@@ -175,7 +269,10 @@ public final class SliceActivity extends Activity {
         preview.setVisibility(View.GONE); resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
         resultText = label(resultCard, "", 14, ink, false); resultText.setTextIsSelectable(true);
         useInFiles = button(resultCard, "Send to Files tab for upload", () -> {
-            setResult(RESULT_OK, new Intent().putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName)); finish();
+            Intent handOver = new Intent().putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName);
+            if (getCallingActivity() != null) setResult(RESULT_OK, handOver);
+            else startActivity(handOver.setClass(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)); // opened from another app
+            finish();
         }, true);
         button(resultCard, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
             .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
@@ -191,15 +288,21 @@ public final class SliceActivity extends Activity {
         busy = true; updateButtons();
         worker.execute(() -> {
             try {
-                if (engine == null) engine = NativeSlicer.open(getApplicationContext(), "Elegoo");
+                if (engine == null) {
+                    long started = System.currentTimeMillis();
+                    engine = NativeSlicer.open(getApplicationContext(), "Elegoo");
+                    Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "presets loaded in %.1f s · %s", (System.currentTimeMillis() - started) / 1000.0, Diagnostics.memory()));
+                }
                 String[] printers = engine.presets(NativeSlicer.PRINTER, null);
                 main.post(() -> {
                     if (isDestroyed()) return;
-                    busy = false; status.setText("Ready.");
-                    fill(printerSpinner, Arrays.asList(printers), settings.getString("slicePrinter", DEFAULT_PRINTER));
+                    busy = slicing;
+                    if (!slicing && (restored == null || restored.getString("status") == null)) status.setText("Ready.");
+                    fill(printerSpinner, Arrays.asList(printers), restoredPrinter != null && Arrays.asList(printers).contains(restoredPrinter) ? restoredPrinter : settings.getString("slicePrinter", DEFAULT_PRINTER));
                     updateButtons();
                 });
             } catch (Exception failure) {
+                Diagnostics.note(Diagnostics.SLICER, "presets failed to load: " + failure.getMessage());
                 main.post(() -> { if (!isDestroyed()) { busy = false; status.setText("The slicer could not start: " + failure.getMessage()); status.setTextColor(error); updateButtons(); } });
             }
         });
@@ -215,12 +318,15 @@ public final class SliceActivity extends Activity {
             String[] p = processes, f = filaments;
             main.post(() -> {
                 if (isDestroyed()) return;
-                busy = false;
-                fill(processSpinner, Arrays.asList(p), remembered(p, "sliceProcess", "0.20mm Standard"));
+                busy = slicing;
+                String process = restoredProcess != null && Arrays.asList(p).contains(restoredProcess) ? restoredProcess : remembered(p, "sliceProcess", "0.20mm Standard");
+                restoredProcess = null;
+                fill(processSpinner, Arrays.asList(p), process);
                 filamentPresets = f;
                 for (int i = 0; i < slots.size(); i++) {
                     Slot slot = slots.get(i); String current = selected(slot.preset);
-                    String preferred = slot.source != null ? TrayPlan.preset(slot.source, Arrays.asList(f), null) : null;
+                    String preferred = slot.wanted != null && Arrays.asList(f).contains(slot.wanted) ? slot.wanted : slot.source != null ? TrayPlan.preset(slot.source, Arrays.asList(f), null) : null;
+                    slot.wanted = null;
                     if (preferred == null) preferred = current != null && Arrays.asList(f).contains(current) ? current : remembered(f, i == 0 ? "sliceFilament" : "sliceFilament" + (i + 1), "Elegoo PLA @");
                     fill(slot.preset, Arrays.asList(f), preferred);
                 }
@@ -266,28 +372,44 @@ public final class SliceActivity extends Activity {
         List<File> input = new ArrayList<>(models);
         busy = true; cancelRequested.set(false); resultCard.setVisibility(View.GONE); progress.setProgress(0); progress.setVisibility(View.VISIBLE);
         status.setTextColor(ink); status.setText("Slicing…"); updateButtons();
+        slicing = true; slicingPercent = 0; slicingText = "Slicing…";
+        String name = slicedName;
+        StringBuilder inputs = new StringBuilder();
+        for (File model : input) inputs.append(inputs.length() > 0 ? ", " : "").append(model.getName()).append(" (").append(size(model.length())).append(")");
+        String setup = inputs + " · " + process + " · " + filaments.size() + " filament(s)" + (overrides.isEmpty() ? "" : " · " + overrides.size() + " override(s)");
         long started = System.currentTimeMillis();
         worker.execute(() -> {
             try {
                 NativeSlicer.Result result = engine.slice(input, printer, process, filaments, colours, assignment, overrides, output, (percent, text) -> {
-                    main.post(() -> { if (!isDestroyed()) { progress.setProgress(percent); if (!cancelRequested.get()) status.setText(percent + "% · " + text); } });
+                    main.post(() -> {
+                        slicingPercent = percent; if (!cancelRequested.get()) slicingText = percent + "% · " + text;
+                        SliceActivity screen = current;
+                        if (screen != null && !screen.isDestroyed()) { screen.progress.setProgress(percent); if (!cancelRequested.get()) screen.status.setText(slicingText); }
+                    });
                     return !cancelRequested.get();
                 });
                 long elapsed = System.currentTimeMillis() - started;
-                main.post(() -> { if (!isDestroyed()) finished(result, elapsed, printer, process, filaments, plan); });
+                Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "sliced in %.1f s · %s · estimate %s, %.1f g · %s",
+                    elapsed / 1000.0, setup, duration(result.printSeconds), result.filamentGrams, Diagnostics.memory()));
+                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(result, elapsed, printer, process, filaments, colours, plan, name); });
             } catch (IOException failure) {
+                long elapsed = System.currentTimeMillis() - started;
+                boolean cancelled = cancelRequested.get();
+                Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "%s after %.1f s · %s · %s", cancelled ? "cancelled" : "failed: " + failure.getMessage(), elapsed / 1000.0, setup, Diagnostics.memory()));
                 main.post(() -> {
-                    if (isDestroyed()) return;
-                    busy = false; progress.setVisibility(View.GONE);
-                    status.setText(cancelRequested.get() ? "Slicing cancelled." : "Slicing failed: " + failure.getMessage());
-                    status.setTextColor(cancelRequested.get() ? ink : error); updateButtons();
+                    slicing = false;
+                    SliceActivity screen = current;
+                    if (screen == null || screen.isDestroyed()) return;
+                    screen.busy = false; screen.progress.setVisibility(View.GONE);
+                    screen.status.setText(cancelled ? "Slicing cancelled." : "Slicing failed: " + failure.getMessage());
+                    screen.status.setTextColor(cancelled ? screen.ink : screen.error); screen.updateButtons();
                 });
             }
         });
     }
 
-    private void finished(NativeSlicer.Result result, long elapsedMs, String printer, String process, List<String> filaments, TrayPlan plan) {
-        busy = false; progress.setVisibility(View.GONE); sliced = result.gcode;
+    private void finished(NativeSlicer.Result result, long elapsedMs, String printer, String process, List<String> filaments, List<String> colours, TrayPlan plan, String name) {
+        busy = false; progress.setVisibility(View.GONE); sliced = result.gcode; slicedName = name;
         // The print setup dialog offers this plan for a printer file of the same name.
         getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit().putString(GcodeLibrary.safeName(slicedName), plan.toJson()).apply();
         status.setText(String.format(Locale.getDefault(), "Sliced in %.1f s.", elapsedMs / 1000.0));
@@ -299,7 +421,7 @@ public final class SliceActivity extends Activity {
         for (int i = 0; i < filaments.size(); i++) {
             TrayPlan.Tool tool = plan.tool(i);
             text.append("\n").append(filaments.size() > 1 ? "T" + i + ": " : "").append(filaments.get(i));
-            if (slots.size() > i && slots.get(i).colour != null) text.append(" · ").append(slots.get(i).colour);
+            if (colours.get(i) != null) text.append(" · ").append(colours.get(i));
             if (tool != null) text.append(" · CANVAS ").append(tool.canvasId).append(" tray ").append(tool.trayId);
         }
         for (String warning : result.warnings) text.append("\n\nWarning: ").append(warning);
@@ -307,15 +429,18 @@ public final class SliceActivity extends Activity {
         resultCard.setVisibility(View.VISIBLE);
         preview.setVisibility(View.GONE);
         scroll.post(() -> scroll.smoothScrollTo(0, resultCard.getTop() - dp(12)));
-        File gcode = result.gcode;
-        // Show the preview image the engine embedded (the one the printer's file list will show).
+        showPreview(result.gcode);
+        updateButtons();
+    }
+
+    /** Shows the preview image the engine embedded (the one the printer's file list will show). */
+    private void showPreview(File gcode) {
         worker.execute(() -> {
             android.graphics.Bitmap image = null;
             try { GcodeInspector.Report report = GcodeInspector.inspect(gcode); image = ThumbnailDecoder.decode(report.thumbnail); } catch (Exception ignored) { }
             android.graphics.Bitmap shown = image;
             main.post(() -> { if (!isDestroyed() && shown != null && gcode.equals(sliced)) { preview.setImageBitmap(shown); preview.setVisibility(View.VISIBLE); } });
         });
-        updateButtons();
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
@@ -347,11 +472,13 @@ public final class SliceActivity extends Activity {
             List<File> imported = new ArrayList<>(); String problem = null;
             deleteChildren(inputDir); inputDir.mkdirs();
             for (Uri uri : uris) {
-                String name = displayName(uri);
-                String extension = name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "";
-                if (!MODEL_TYPES.contains(extension)) { problem = name + " is not an STL, 3MF, OBJ, Draco or STEP file."; continue; }
+                String name = displayName(uri), type = null;
+                try { type = getContentResolver().getType(uri); } catch (RuntimeException ignored) { }
+                String extension = modelExtension(name, type);
+                if (extension.isEmpty()) { problem = name + " is not an STL, 3MF, OBJ, Draco or STEP file."; continue; }
                 // libslic3r picks the reader by extension; keep it, and a filename the printer accepts later.
-                String safe = name.substring(0, name.lastIndexOf('.')).replaceAll("[^A-Za-z0-9 _.-]", "_");
+                String stem = name.toLowerCase(Locale.ROOT).endsWith("." + extension) ? name.substring(0, name.length() - extension.length() - 1) : name;
+                String safe = stem.replaceAll("[^A-Za-z0-9 _.-]", "_");
                 if (safe.isEmpty()) safe = "model"; if (safe.length() > 80) safe = safe.substring(0, 80);
                 File file = new File(inputDir, safe + "." + extension);
                 for (int n = 2; file.exists(); n++) file = new File(inputDir, safe + "_" + n + "." + extension);
@@ -365,7 +492,7 @@ public final class SliceActivity extends Activity {
             String shownProblem = problem;
             main.post(() -> {
                 if (isDestroyed()) return;
-                busy = false; models.clear(); models.addAll(imported); showModels();
+                busy = slicing; models.clear(); modelSlots.clear(); models.addAll(imported); showModels();
                 status.setText(shownProblem != null ? shownProblem : "Ready."); status.setTextColor(shownProblem != null ? error : ink);
                 resultCard.setVisibility(View.GONE); updateButtons();
             });

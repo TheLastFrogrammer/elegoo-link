@@ -57,7 +57,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private GcodeToolpath path;
     private byte[] segments, travels, meta;
     private String loadedName, loadingName;
-    private int layer, move, hidden, lastLocated = -1;
+    private int layer, move, hidden, lastLocated = -1, loggedLayer = -1;
+    private long loggedAt;
     private PrinterService printer;
     private GcodeLibrary library;
 
@@ -85,6 +86,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         ink = dark ? 0xffe6eef1 : 0xff17252c; muted = dark ? 0xff9fb3bb : 0xff5a6d76; teal = dark ? 0xff5fd4c4 : 0xff00796b;
         background = dark ? 0xff0e1417 : 0xfff2f5f6; surface = dark ? 0xff182227 : Color.WHITE; buttonColor = dark ? 0xff21343a : 0xffe2efed;
         library = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
+        Diagnostics.init(getFilesDir());
         followMode = getIntent().getBooleanExtra(EXTRA_FOLLOW, false);
         following = followMode;
         build();
@@ -289,8 +291,32 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         double z = path.layerZ(layer);
         pushView(hasPosition ? new double[] {x, y, z} : null);
         int progress = live.optJSONObject("machine_status").optInt("progress", -1);
+        logFollow(print, position, hasPosition, currentLayer, located);
         status.setText(String.format(Locale.getDefault(), "Printing layer %d of %d%s%s", currentLayer, path.layerCount,
             progress >= 0 ? " · " + progress + "%" : "", hasPosition ? "" : " · nozzle position not reported, showing the layer start"));
+    }
+
+    /**
+     * Records what the printer reports against the file, once per layer change and at most every minute otherwise, so a
+     * field report shows whether current_layer counts from 1 and whether the nozzle position is in the file's frame.
+     */
+    private void logFollow(JSONObject print, JSONObject position, boolean hasPosition, int currentLayer, int located) {
+        long now = System.currentTimeMillis();
+        if (currentLayer == loggedLayer && now - loggedAt < 60_000) return;
+        loggedLayer = currentLayer; loggedAt = now;
+        StringBuilder line = new StringBuilder();
+        line.append(String.format(Locale.ROOT, "printer layer %d of %d (file has %d)", currentLayer, print.optInt("total_layer", -1), path.layerCount));
+        for (int candidate : new int[] {currentLayer - 1, currentLayer})
+            if (candidate >= 0 && candidate < path.layerCount) line.append(String.format(Locale.ROOT, " · file layer[%d] Z %.2f", candidate, path.layerZ(candidate)));
+        if (hasPosition) {
+            line.append(String.format(Locale.ROOT, " · nozzle X %.2f Y %.2f", position.optDouble("x"), position.optDouble("y")));
+            if (position.has("z")) line.append(String.format(Locale.ROOT, " Z %.2f", position.optDouble("z")));
+            if (position.has("e")) line.append(String.format(Locale.ROOT, " E %.2f", position.optDouble("e")));
+        } else line.append(" · no nozzle position");
+        if (located < path.count) {
+            line.append(String.format(Locale.ROOT, " · shown layer[%d] move %d/%d ends at X %.2f Y %.2f Z %.2f", layer, move, layerSize(layer), path.x1[located], path.y1[located], path.z1[located]));
+        } else line.append(" · shown: end of file");
+        Diagnostics.note(Diagnostics.FOLLOW, StatusPresentation.clean(print.optString("filename")) + ": " + line);
     }
 
     private void showMissing(String filename) {

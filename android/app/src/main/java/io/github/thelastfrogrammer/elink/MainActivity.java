@@ -79,12 +79,13 @@ public final class MainActivity extends Activity {
     private PrinterService printer;
     private JSONObject snapshot = new JSONObject();
     private boolean active, bound, checking, cloudAsked;
-    private String pendingFeedback;
+    private String pendingFeedback, pendingSlicedFile, pendingSlicedName;
     private final ServiceConnection binding = new ServiceConnection() {
         public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
             finishPendingExport();
+            takeSliced();
             if (printer.connecting()) { routePicker.setSelection(printer.remote() ? 1 : 0); authPicker.setSelection(printer.pinProbe() ? 1 : 0); host.setText(printer.host()); if (printer.pinProbe()) pairingPin.setText(printer.accessCode()); else access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) { printer.observe(MainActivity.this::render); printer.cloudVisible(true); }
             render();
@@ -103,6 +104,7 @@ public final class MainActivity extends Activity {
         setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
         super.onCreate(saved);
         if (saved != null) { pendingExportHash = saved.getString("exportHash", ""); String uri = saved.getString("exportUri", ""); if (!uri.isEmpty()) pendingExportUri = android.net.Uri.parse(uri); }
+        Diagnostics.init(getFilesDir());
         credentials = new CredentialStore(this);
         profiles = new ProfileStore(this);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND);
@@ -329,6 +331,7 @@ public final class MainActivity extends Activity {
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
         LinearLayout about = card("Link Workshop " + appVersion());
         label(about, "Development build: printer behavior still needs hardware testing. Planned next: timelapse export, a fuller slicer settings editor and other printer models.", 13, MUTED, false);
+        button(about, "Share diagnostics…", this::shareDiagnostics);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
@@ -337,9 +340,28 @@ public final class MainActivity extends Activity {
         TransientInputs transientInputs = (TransientInputs) getLastNonConfigurationInstance();
         if (transientInputs != null && host.getText().toString().equals(transientInputs.host)) { access.setText(transientInputs.code); pendingSnapshot = transientInputs.snapshot; }
         selectPage(saved == null ? settings.getInt("page", 0) : saved.getInt("page", 0));
+        if (saved == null) receiveSliced(getIntent());
         bound = bindService(new Intent(this, PrinterService.class), binding, BIND_AUTO_CREATE);
         render();
     }
+    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); receiveSliced(intent); }
+
+    /** G-code from a Slice screen that another app opened ("Open with"), handed over like a slice started from Files. */
+    private void receiveSliced(Intent intent) {
+        if (intent == null) return;
+        String path = intent.getStringExtra(SliceActivity.RESULT_FILE), name = intent.getStringExtra(SliceActivity.RESULT_NAME);
+        if (path == null || name == null) return;
+        // Only the app's own sliced output is accepted.
+        File file = new File(path), sliced = new File(getCacheDir(), "sliced");
+        try { if (!file.getCanonicalFile().getParentFile().equals(sliced.getCanonicalFile()) || !file.isFile()) return; } catch (IOException error) { return; }
+        pendingSlicedFile = path; pendingSlicedName = name; intent.removeExtra(SliceActivity.RESULT_FILE);
+        selectPage(1); takeSliced();
+    }
+    private void takeSliced() {
+        if (printer == null || pendingSlicedFile == null) return;
+        printer.selectSliced(new File(pendingSlicedFile), pendingSlicedName); pendingSlicedFile = null; pendingSlicedName = null;
+    }
+
     private void toggleConnection() {
         if (printer == null) return;
         if (printer.connecting()) { printer.disconnect(); return; }
@@ -657,6 +679,10 @@ public final class MainActivity extends Activity {
             for (TrayPlan.Tool tool : plan.tools)
                 for (int i = 0; i < trays.size(); i++)
                     if (trays.get(i).optInt("canvas_id") == tool.canvasId && trays.get(i).optInt("tray_id") == tool.trayId) { maps[tool.t].setSelection(i + 1); matched++; }
+            StringBuilder reported = new StringBuilder();
+            for (JSONObject tray : trays) reported.append(reported.length() > 0 ? ", " : "").append(tray.optInt("canvas_id")).append("/").append(tray.optInt("tray_id"));
+            Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": plan " + plan.toJson() + " · loaded trays (canvas/tray) [" + reported + "]"
+                + (printer.canvasFresh() ? "" : " · tray status not fresh") + " · prefilled " + matched + " of " + plan.tools.size());
             label(body, plan.tools.isEmpty() ? "Tool count from slicing this file on the phone (" + plan.count + ")."
                 : matched == plan.tools.size() ? "Tool count and trays prefilled from slicing this file on the phone."
                 : "Tool count prefilled from slicing this file on the phone; " + (plan.tools.size() - matched) + " planned tray(s) are not reported as loaded now. Refresh trays or choose them.", 13, TEAL, false);
@@ -675,6 +701,7 @@ public final class MainActivity extends Activity {
                 + " · Bed check " + (leveling.isChecked() ? "on" : "off") + " · Force leveling " + (force.isChecked() ? "on" : "off") + "\nTimelapse " + (timelapse.isChecked() ? "on" : "off")
                 + "\n" + count + " tool(s): " + (mapping.length() == 0 ? "printer / G-code default mapping" : "explicit reported tray mappings") + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
             new AlertDialog.Builder(this).setTitle("Start this print?").setMessage(text).setNegativeButton("Cancel", null).setPositiveButton("Start print", (confirm, which) -> {
+                if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " tool(s), mapping " + mapping);
                 if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
             }).show();
         })); setup.show();
@@ -980,6 +1007,25 @@ public final class MainActivity extends Activity {
             ScrollView scroll = new ScrollView(this); TextView view = new TextView(this); view.setText(text.toString()); view.setTextColor(INK); view.setTextSize(13); view.setPadding(dp(20), dp(12), dp(20), dp(12)); scroll.addView(view);
             new AlertDialog.Builder(this).setTitle("About & licenses").setView(scroll).setPositiveButton("Close", null).show();
         } catch (IOException error) { message("License information could not be opened."); }
+    }
+    /** The field-test log (slicing, Live toolpath, tray plans) with app and device details, through the share sheet. */
+    private void shareDiagnostics() {
+        android.app.ActivityManager.MemoryInfo memory = new android.app.ActivityManager.MemoryInfo();
+        ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
+        String slicer;
+        try (InputStream in = getAssets().open("slicer/VERSION"); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[256]; int count; while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count);
+            slicer = bytes.toString("UTF-8").trim();
+        }
+        catch (IOException notIncluded) { slicer = "not included"; }
+        String header = "App " + appVersion() + " · slicer " + slicer + "\nDevice " + Build.MANUFACTURER + " " + Build.MODEL + " · Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ") · "
+            + String.join("/", Build.SUPPORTED_ABIS) + " · " + memory.totalMem / (1024 * 1024) + " MB RAM, " + memory.availMem / (1024 * 1024) + " MB free";
+        String report = Diagnostics.report(header);
+        Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "Link Workshop diagnostics").putExtra(Intent.EXTRA_TEXT, report);
+        new AlertDialog.Builder(this).setTitle("Diagnostics").setMessage(report.length() > 4000 ? report.substring(0, 4000) + "\n…" : report)
+            .setNegativeButton("Clear log", (d, w) -> { Diagnostics.clear(); message("Diagnostics log cleared."); })
+            .setNeutralButton("Close", null)
+            .setPositiveButton("Share…", (d, w) -> startActivity(Intent.createChooser(send, "Share diagnostics"))).show();
     }
     private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { return "dev"; } }
     private LinearLayout card(String title) {

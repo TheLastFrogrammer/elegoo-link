@@ -149,6 +149,45 @@ public class SlicerIntegrationTest {
         }
     }
 
+    /** Recreating the Slice screen (theme change, process restore) keeps models, filament slots, settings and the result. */
+    @Test public void sliceScreenSurvivesRecreation() throws Exception {
+        org.robolectric.android.controller.ActivityController<SliceActivity> controller = Robolectric.buildActivity(SliceActivity.class).setup();
+        SliceActivity activity = controller.get();
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        File imported = new File(context().getCacheDir(), "slice-input/keep_box.stl"); imported.getParentFile().mkdirs();
+        Files.copy(box(20, 20, 10).toPath(), imported.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        @SuppressWarnings("unchecked") List<File> models = (List<File>) field(activity, "models"); models.clear(); models.add(imported);
+        java.lang.reflect.Method addSlot = SliceActivity.class.getDeclaredMethod("addSlot", TrayPlan.Tray.class); addSlot.setAccessible(true);
+        addSlot.invoke(activity, new TrayPlan.Tray(0, 2, "PLA", "PLA Matte", "ELEGOO", "#1E5AA8"));
+        @SuppressWarnings("unchecked") List<Object> slots = (List<Object>) field(activity, "slots");
+        java.lang.reflect.Field colour = slots.get(0).getClass().getDeclaredField("colour"); colour.setAccessible(true); colour.set(slots.get(0), "#D02828");
+        ((android.widget.EditText) field(activity, "infill")).setText("35");
+        ((Spinner) field(activity, "supportSpinner")).setSelection(3);
+        invoke(activity, "showModels"); invoke(activity, "updateButtons");
+        invoke(activity, "startSlice");
+        waitFor(() -> ((View) field(activity, "resultCard")).getVisibility() == View.VISIBLE);
+
+        controller.recreate();
+        SliceActivity again = controller.get();
+        assertNotSame(activity, again);
+        waitFor(() -> spinnerFilled(again, "processSpinner") && firstSlotFilled(again));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        @SuppressWarnings("unchecked") List<File> kept = (List<File>) field(again, "models");
+        assertEquals(Collections.singletonList(imported), kept);
+        @SuppressWarnings("unchecked") List<Object> keptSlots = (List<Object>) field(again, "slots");
+        assertEquals(2, keptSlots.size());
+        assertEquals("#D02828", colour.get(keptSlots.get(0)));
+        assertEquals("#1E5AA8", colour.get(keptSlots.get(1)));
+        assertEquals("Elegoo PLA Matte @ECC2", ((Spinner) field(keptSlots.get(1), "preset")).getSelectedItem());
+        java.lang.reflect.Field source = keptSlots.get(1).getClass().getDeclaredField("source"); source.setAccessible(true);
+        assertEquals(2, ((TrayPlan.Tray) source.get(keptSlots.get(1))).trayId);
+        assertEquals("35", ((android.widget.EditText) field(again, "infill")).getText().toString());
+        assertEquals(3, ((Spinner) field(again, "supportSpinner")).getSelectedItemPosition());
+        assertEquals(View.VISIBLE, ((View) field(again, "resultCard")).getVisibility());
+        assertTrue(((android.widget.TextView) field(again, "resultText")).getText().toString().contains("keep_box.gcode"));
+        assertEquals(PROCESS, ((Spinner) field(again, "processSpinner")).getSelectedItem());
+    }
+
     /** With -Dscreenshots=<dir> as well: the Slice screen after a real slice, light and dark. */
     @Test public void renderSliceScreen() throws Exception {
         String out = System.getProperty("screenshots", "");
