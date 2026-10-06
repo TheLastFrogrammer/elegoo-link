@@ -60,6 +60,16 @@ What the account page's code shows (`account.elegoo.com/assets/*.js`):
 
 Working theory: the app received a web-session (`account`) token rather than a `Slicer` one, for example because the page reused an existing web login. The Cloud printers details now describe the token (claim names and client-identifying claims, never the token itself), check it against `account-info/account`, and show which fields the page reported at sign-in.
 
+## Second phone result (fresh sign-in)
+
+After signing out (which clears the page's web login) and signing in again, the token is opaque (32 characters), and:
+
+- `GET device/list` → code 0. **The token works for the printer API**, so the earlier token most likely came from a reused web login.
+- `GET account-info/account` → code 401, and `POST device-register/online-status` → code 401, with the same token.
+- `POST token/refresh` with `clientId "Slicer"` → code 400 "invalid refresh token".
+
+So refusals are per endpoint. The app now renews only when `device/list` itself is refused, treats online status as optional, and reports a status failure per printer instead of aborting. Renewal is still unexplained: until it works, a sign-in lasts until its access token expires (about 6 days here).
+
 ## Open questions to test first
 
 1. ~~Does the sign-in page hand off tokens to the Android `WebView`?~~ Yes, confirmed on the user's phone.

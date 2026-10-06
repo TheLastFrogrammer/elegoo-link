@@ -94,7 +94,9 @@ public final class CloudStatusActivity extends Activity {
             text.append(device.name.isEmpty() ? "Printer" : StatusPresentation.clean(device.name)).append(" · ").append(StatusPresentation.clean(device.model)).append(" · SN ").append(serial);
             int online = api.online(device.serial);
             text.append("\nCloud connection: ").append(online == 1 ? "online" : online == 0 ? "offline" : "unknown (" + online + ")");
-            CloudApi.Snapshot snapshot = api.status(device.serial);
+            CloudApi.Snapshot snapshot;
+            try { snapshot = api.status(device.serial); }
+            catch (CloudApi.CloudException error) { text.append("\nStatus unavailable: ").append(error.getMessage()); continue; }
             if (snapshot.status.length() == 0) { text.append("\nNo status reported to the cloud yet."); continue; }
             text.append("\n").append(StatusPresentation.overview(snapshot.status));
             if (snapshot.reportedAt > 0) text.append("\nLast report ").append(age(now - CloudApi.seconds(snapshot.reportedAt) * 1000)).append(" ago");

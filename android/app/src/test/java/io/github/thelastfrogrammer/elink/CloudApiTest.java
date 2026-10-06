@@ -179,6 +179,19 @@ public class CloudApiTest {
         assertTrue(CloudLogin.Account.fromJson(new JSONObject().put("userId", "1").put("accessToken", "t")).signInNote.startsWith("Signed in with an earlier version"));
     }
 
+    @Test public void refusedOptionalEndpointsDoNotRenewOrAbort() throws Exception {
+        // Sequence seen on the phone after a fresh sign-in: device/list accepted, online-status refused.
+        String refused = "{\"code\":401,\"msg\":\"no\"}";
+        FakeCloud cloud = new FakeCloud().ok(new JSONArray().put(new JSONObject().put("serialNo", "SN1")))
+            .reply(200, refused).reply(200, refused);
+        CloudApi api = new CloudApi(false, account(inAnHour()), "a", cloud);
+        assertEquals(1, api.devices().size());
+        assertEquals(-1, api.online("SN1"));
+        try { api.status("SN1"); fail(); } catch (CloudApi.CloudException error) { assertTrue(error.unauthorized); }
+        assertEquals(3, cloud.calls.size());
+        for (Call call : cloud.calls) assertFalse(call.url.contains("token/refresh"));
+    }
+
     @Test public void transportRefusesPlainHttp() {
         try { CloudApi.https("GET", "http://matrix.elegoo.com/", new HashMap<>(), null); fail(); } catch (IOException expected) { }
     }

@@ -100,7 +100,7 @@ public final class CloudApi {
     }
 
     public List<Device> devices() throws IOException {
-        JSONArray data = authorized("GET", "/api/v1/device-management-server/device/list", null).optJSONArray("data");
+        JSONArray data = authorized("GET", "/api/v1/device-management-server/device/list", null, true).optJSONArray("data");
         List<Device> devices = new ArrayList<>();
         if (data == null) return devices;
         for (int i = 0; i < data.length(); i++) {
@@ -111,28 +111,33 @@ public final class CloudApi {
         return devices;
     }
 
-    /** The SDK's raw onlineStatus value; 1 is treated as online. */
+    /**
+     * The SDK's raw onlineStatus value; 1 is treated as online. Optional: on the user's account this endpoint refuses a token
+     * that device/list accepts, so a refusal returns -1 instead of renewing the sign-in or failing the whole refresh.
+     */
     public int online(String serial) throws IOException {
         try {
             JSONObject data = authorized("POST", "/api/v1/device-management-server/device-register/online-status",
-                new JSONObject().put("deviceCode", serial).toString()).optJSONObject("data");
+                new JSONObject().put("deviceCode", serial).toString(), false).optJSONObject("data");
             return data == null ? -1 : data.optInt("onlineStatus", -1);
-        } catch (org.json.JSONException impossible) { throw new IOException(impossible); }
+        } catch (CloudException error) { if (error.unauthorized) return -1; throw error; }
+        catch (org.json.JSONException impossible) { throw new IOException(impossible); }
     }
 
     public Snapshot status(String serial) throws IOException {
-        JSONObject data = authorized("GET", "/api/v1/device-management-server/device/report-data/list?deviceCode=" + URLEncoder.encode(serial, "UTF-8"), null).optJSONObject("data");
+        // No renewal on refusal: device/list already proved the token works, so renewing would not help.
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/device/report-data/list?deviceCode=" + URLEncoder.encode(serial, "UTF-8"), null, false).optJSONObject("data");
         return assemble(data == null ? new JSONObject() : data);
     }
 
-    private JSONObject authorized(String method, String path, String body) throws IOException {
+    private JSONObject authorized(String method, String path, String body, boolean renewOnRefusal) throws IOException {
         if (needsRefresh(System.currentTimeMillis() / 1000)) {
             note("Access token expires " + when(account.accessExpires) + "; renewing before the request");
             refresh();
         }
         try { return call(method, path, body); }
         catch (CloudException error) {
-            if (!error.unauthorized) throw error;
+            if (!error.unauthorized || !renewOnRefusal) throw error;
             note("Request refused; renewing the sign-in once and retrying");
             refresh(); return call(method, path, body);
         }
