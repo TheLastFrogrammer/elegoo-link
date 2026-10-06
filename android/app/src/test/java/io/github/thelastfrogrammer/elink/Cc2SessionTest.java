@@ -14,6 +14,8 @@ import java.util.concurrent.*;
 /** Runs the production session through fake HTTP/MQTT transports, not a duplicated session model. */
 public class Cc2SessionTest {
     private static final class Listener implements Cc2Session.Listener {
+        final BlockingQueue<File> downloads = new LinkedBlockingQueue<>();
+        public void downloaded(File file, String name) { downloads.add(file); }
         final BlockingQueue<JSONObject> statuses = new LinkedBlockingQueue<>(), canvases = new LinkedBlockingQueue<>(), attrs = new LinkedBlockingQueue<>();
         final BlockingQueue<String> results = new LinkedBlockingQueue<>(), failures = new LinkedBlockingQueue<>();
         final BlockingQueue<JSONObject> queries = new LinkedBlockingQueue<>();
@@ -54,7 +56,11 @@ public class Cc2SessionTest {
             assertEquals("elegoo", options.getUserName()); assertFalse(options.isAutomaticReconnect()); password = new String(options.getPassword()); connected = true;
             assertEquals(MqttConnectOptions.MQTT_VERSION_3_1_1, options.getMqttVersion());
         }
-        @Override public void subscribe(String[] topics, int[] qos) { subscriptions.addAll(Arrays.asList(topics)); responseTopic = topics[0]; }
+        @Override public IMqttToken subscribeWithResponse(String[] topics, int[] qos) {
+            assertArrayEquals(new int[] {1,1,1}, qos);
+            subscriptions.addAll(Arrays.asList(topics)); responseTopic = topics[0];
+            return new MqttToken() { @Override public int[] getGrantedQos() { return new int[] {1,1,1}; } };
+        }
         @Override public boolean isConnected() { return connected; }
         @Override public void disconnectForcibly(long quiesce, long timeout, boolean packet) { connected = false; }
         @Override public void close(boolean force) { connected = false; }
@@ -62,6 +68,7 @@ public class Cc2SessionTest {
             try {
                 JSONObject request = new JSONObject(new String(bytes, StandardCharsets.UTF_8));
                 if (topic.endsWith("api_register")) {
+                    assertEquals(1, qos); assertFalse(retained);
                     callback.messageArrived(subscriptions.get(2), new MqttMessage(new JSONObject().put("client_id", request.getString("client_id")).put("error", "ok").toString().getBytes(StandardCharsets.UTF_8)));
                     return;
                 }
@@ -261,7 +268,7 @@ public class Cc2SessionTest {
             new PrinterIdentity("MANUAL",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"CURRENT-PIN")));
         File upload=File.createTempFile("pin-probe-", ".gcode");
         try {s.connect();take(l.statuses);take(l.canvases);s.command(Cc2Codec.PAUSE);s.command(Cc2Codec.RESUME);s.command(Cc2Codec.STOP);
-            s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());s.delete("local","test.gcode");s.light(true);s.temperatures(100,40);s.fan("fan",50);s.speed(0);s.autoRefill(true);s.upload(upload,"test.gcode");
+            s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());s.delete("local","test.gcode");s.light(true);s.temperatures(100,40);s.fan("fan",50);s.speed(0);s.autoRefill(true);s.upload(upload,"test.gcode");assertFalse(s.download(upload,"local","test.gcode"));assertFalse(s.downloading());
             s.files("local",0);assertEquals(Cc2Codec.FILES,take(l.queries).getInt("method"));
             assertTrue(clients.get(0).writes.isEmpty());assertTrue(clients.get(0).requests.stream().noneMatch(r -> Cc2Codec.changing(r.optInt("method"))));assertFalse(s.uploading());assertTrue(s.ready());
             assertTrue(l.results.stream().anyMatch(r -> r.contains("uploads are disabled")));assertTrue(l.results.stream().anyMatch(r -> r.contains("printer-changing commands are disabled")));
@@ -287,4 +294,109 @@ public class Cc2SessionTest {
         finally{s.close();}
     }
 
+    @Test public void pinRegistrationTimeoutReportsBrokerStagesWithoutClaimingHttpOrPinValidity() throws Exception {
+        Listener l = new Listener(); java.util.concurrent.atomic.AtomicInteger attempts = new java.util.concurrent.atomic.AtomicInteger();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP in PIN probe"); return null; }, null,
+            (uri,id) -> { attempts.incrementAndGet(); return new FakeMqtt(uri,id) {
+                @Override public void publish(String topic, byte[] bytes, int qos, boolean retained) throws MqttException {
+                    assertTrue(topic.endsWith("api_register")); assertEquals(1,qos); assertFalse(retained);
+                    try {
+                        JSONObject req = new JSONObject(new String(bytes,StandardCharsets.UTF_8));
+                        callback.messageArrived(subscriptions.get(2), new MqttMessage("PRIVATE-PIN".getBytes(StandardCharsets.UTF_8)));
+                        callback.messageArrived(subscriptions.get(2), new MqttMessage(new JSONObject().put("client_id","wrong-client").put("error","PRIVATE-PIN").toString().getBytes(StandardCharsets.UTF_8)));
+                        MqttMessage old = new MqttMessage(new JSONObject().put("client_id",req.getString("client_id")).put("error","ok").toString().getBytes(StandardCharsets.UTF_8)); old.setRetained(true);
+                        callback.messageArrived(subscriptions.get(2), old);
+                        callback.messageArrived(subscriptions.get(1), new MqttMessage("{}".getBytes(StandardCharsets.UTF_8)));
+                        callback.messageArrived(subscriptions.get(0), new MqttMessage("{}".getBytes(StandardCharsets.UTF_8)));
+                        callback.messageArrived("elegoo/OTHER-SERIAL/"+req.getString("request_id")+"/register_response", new MqttMessage("{}".getBytes(StandardCharsets.UTF_8)));
+                    } catch (Exception e) { throw new MqttException(e); }
+                }
+            }; }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try {
+            s.connect(); String text = take(l.failures);
+            assertTrue(text.contains("timed out")); assertFalse(text.contains("HTTP")); assertFalse(text.contains("PRIVATE-PIN"));
+            assertFalse(text.contains("wrong-client")); assertFalse(text.contains("OTHER-SERIAL"));
+            assertTrue(text.contains("3/3 accepted (SUBACK)")); assertTrue(text.contains("broker acknowledged (QoS 1 / PUBACK)"));
+            assertTrue(text.contains("Registration reply: none")); assertTrue(text.contains("malformed 1, wrong client 1, retained 1"));
+            assertTrue(text.contains("status 1, API replies 1, unexpected topic 1"));
+            assertFalse(s.ready()); assertFalse(l.retryable); assertEquals(1,attempts.get()); assertTrue(l.statuses.isEmpty());
+        } finally { s.close(); }
+    }
+    @Test public void deniedSubscriptionStopsBeforePublishingRegistration() throws Exception {
+        Listener l = new Listener(); java.util.concurrent.atomic.AtomicInteger publishes = new java.util.concurrent.atomic.AtomicInteger();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) {
+                @Override public IMqttToken subscribeWithResponse(String[] topics,int[] qos) {
+                    return new MqttToken() { @Override public int[] getGrantedQos() { return new int[] {1,1,128}; } };
+                }
+                @Override public void publish(String topic,byte[] bytes,int qos,boolean retained) { publishes.incrementAndGet(); }
+            }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try {
+            s.connect(); String text=take(l.failures); assertTrue(text.contains("rejected: registration replies"));
+            assertTrue(text.contains("Registration publish: not attempted")); assertEquals(0,publishes.get()); assertFalse(s.ready()); assertFalse(l.retryable);
+        } finally { s.close(); }
+    }
+    @Test public void publishFailureDoesNotClaimBrokerAcknowledgedRegistration() throws Exception {
+        Listener l = new Listener();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) {
+                @Override public void publish(String topic,byte[] bytes,int qos,boolean retained) throws MqttException { throw new MqttException(new IOException("PRIVATE-PIN")); }
+            }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try {
+            s.connect(); String text=take(l.failures); assertTrue(text.contains("PUBACK not completed"));
+            assertFalse(text.contains("broker acknowledged")); assertFalse(text.contains("PRIVATE-PIN")); assertFalse(s.ready()); assertFalse(l.retryable);
+        } finally { s.close(); }
+    }
+    @Test public void wrongClientReplyCannotPreventFollowingValidRegistration() throws Exception {
+        Listener l = new Listener();
+        Cc2Session s = new Cc2Session("192.168.1.84", "", l, url -> { fail("No HTTP"); return null; }, null,
+            (uri,id) -> new FakeMqtt(uri,id) {
+                @Override public void publish(String topic,byte[] bytes,int qos,boolean retained) throws MqttException {
+                    if (topic.endsWith("api_register")) try {
+                        callback.messageArrived(subscriptions.get(2),new MqttMessage("{\"client_id\":\"wrong\",\"error\":\"ok\"}".getBytes(StandardCharsets.UTF_8)));
+                    } catch (Exception e) { throw new MqttException(e); }
+                    super.publish(topic,bytes,qos,retained);
+                }
+            }, new PrinterIdentity("",PrinterIdentityTest.reply(false,true),new PrinterAuthentication(true,"PRIVATE-PIN")));
+        try { s.connect(); take(l.statuses); assertTrue(s.ready()); assertTrue(l.failures.isEmpty()); }
+        finally { s.close(); }
+    }
+
+    @Test public void downloadUsesEffectiveSessionTokenAndDoesNotPublishChangingRequest() throws Exception {
+        Listener l = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>(); List<PrinterDownloadTest.Connection> connections = new CopyOnWriteArrayList<>();
+        Cc2Session s = new Cc2Session("192.168.1.84", "OLD-TYPED-CODE", l, url -> { PrinterDownloadTest.Connection c = new PrinterDownloadTest.Connection(url); connections.add(c); return c; }, null,
+            (uri,id) -> { FakeMqtt f = new FakeMqtt(uri,id); clients.add(f); return f; }, new PrinterIdentity("MANUAL", PrinterIdentityTest.reply(true,false)));
+        File file = File.createTempFile("session-download-", ".gcode");
+        try {
+            s.connect(); take(l.statuses); assertEquals("123456", clients.get(0).password); assertTrue(s.download(file,"u-disk","two words.gcode"));
+            assertEquals(file, take(l.downloads)); assertArrayEquals(connections.get(0).body, java.nio.file.Files.readAllBytes(file.toPath()));
+            assertEquals("123456", connections.get(0).getRequestProperty("X-Token")); assertEquals("X-Token=123456&file_name=two+words.gcode",connections.get(0).getURL().getQuery());
+            assertTrue(clients.get(0).writes.isEmpty()); assertTrue(s.ready());
+        } finally { s.close(); file.delete(); }
+    }
+    @Test public void closingSessionCancelsDownloadAndRemovesPartialFileWithoutReplay() throws Exception {
+        Listener l = new Listener(); CountDownLatch reading = new CountDownLatch(1), released = new CountDownLatch(1); List<PrinterDownloadTest.Connection> connections = new CopyOnWriteArrayList<>();
+        Cc2Session s = new Cc2Session("192.168.1.84", "code", l, url -> {
+            PrinterDownloadTest.Connection c = new PrinterDownloadTest.Connection(url) {
+                public void disconnect() { super.disconnect(); released.countDown(); }
+                public InputStream getInputStream() { return new InputStream() {
+                    boolean first = true;
+                    public int read() throws IOException { throw new IOException("Use buffered read"); }
+                    public int read(byte[] bytes,int off,int len) throws IOException {
+                        if (first) { first = false; bytes[off] = 'G'; reading.countDown(); return 1; }
+                        try { if (!released.await(5,TimeUnit.SECONDS)) throw new IOException("Timed out"); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+                        throw new IOException("Connection closed");
+                    }
+                }; }
+            }; c.length = 100; connections.add(c); return c;
+        }, null, (uri,id) -> new FakeMqtt(uri,id), http -> "SERIAL");
+        File file = File.createTempFile("session-download-", ".gcode");
+        try {
+            s.connect(); take(l.statuses); assertTrue(s.download(file,"local","test.gcode")); assertTrue(reading.await(3,TimeUnit.SECONDS)); assertTrue(s.downloading());
+            File other = File.createTempFile("rejected-", ".gcode"); try { assertFalse(s.download(other,"local","test.gcode")); } finally { other.delete(); }
+            s.close(); assertTrue(released.await(2,TimeUnit.SECONDS));
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(3); while(file.exists() && System.nanoTime() < deadline) Thread.sleep(10);
+            assertFalse(file.exists()); assertTrue(connections.get(0).disconnected); assertEquals(1, connections.size()); assertTrue(l.downloads.isEmpty());
+        } finally { s.close(); file.delete(); }
+    }
 }

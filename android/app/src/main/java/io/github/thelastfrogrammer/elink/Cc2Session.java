@@ -24,6 +24,8 @@ public final class Cc2Session implements AutoCloseable {
         default void query(int method, JSONObject params, JSONObject result) { }
         default void queryError(int method, String message) { }
         default void uploaded(String filename) { }
+        default void downloadProgress(int percent) { }
+        default void downloaded(File file, String filename) { }
     }
     interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
     public interface IdentityResolver extends AutoCloseable {
@@ -52,9 +54,10 @@ public final class Cc2Session implements AutoCloseable {
     private ScheduledFuture<?> dispatch;
     private volatile boolean uploadCancelled;
     private final CompletableFuture<JSONObject> registration = new CompletableFuture<>();
+    private final RegistrationDiagnostics registrationFacts = new RegistrationDiagnostics();
     private volatile MqttClient mqtt;
-    private volatile PrinterHttp uploadHttp;
-    private volatile boolean closed, ready, uploading;
+    private volatile PrinterHttp uploadHttp, downloadHttp;
+    private volatile boolean closed, ready, uploading, downloading, downloadCancelled;
     private volatile String sessionToken;
     private boolean canvasSupported = true;
     private volatile long statusAt;
@@ -83,6 +86,7 @@ public final class Cc2Session implements AutoCloseable {
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
+    public boolean downloading() { return downloading; }
     public boolean readOnly() { return identity.readOnly(); }
     public void connect() { execute(this::connectOnWorker); }
     private void connectOnWorker() {
@@ -108,11 +112,25 @@ public final class Cc2Session implements AutoCloseable {
                 public void messageArrived(String topic, MqttMessage message) {
                     if (closed) return;
                     if (message.getPayload().length > 2 * 1024 * 1024) { execute(() -> fail("Printer message too large", false)); return; }
+                    boolean registerReply = topic.equals(base + requestId + "/register_response");
+                    boolean registering = !ready && !registration.isDone();
+                    if (registerReply && message.isRetained()) { if (registering) registrationFacts.retained(); return; }
                     try {
                         JSONObject payload = new JSONObject(new String(message.getPayload(), StandardCharsets.UTF_8));
-                        if (topic.equals(base + requestId + "/register_response")) registration.complete(payload);
-                        else execute(() -> handle(topic, payload));
-                    } catch (Exception ignored) { /* Ignore non-JSON events; do not log credentials or payloads. */ }
+                        if (registerReply) {
+                            if (registering && registrationFacts.response(payload, clientId)) registration.complete(payload);
+                        } else {
+                            if (registering) {
+                                if (topic.equals(base + "api_status")) registrationFacts.status();
+                                else if (topic.equals(base + clientId + "/api_response")) registrationFacts.api();
+                                else registrationFacts.other();
+                            }
+                            execute(() -> handle(topic, payload));
+                        }
+                    } catch (org.json.JSONException ignored) {
+                        if (registering && registerReply) registrationFacts.malformed();
+                        // Never log credentials, topics or payloads.
+                    }
                 }
             });
             MqttConnectOptions options = new MqttConnectOptions();
@@ -124,14 +142,23 @@ public final class Cc2Session implements AutoCloseable {
             emitConnection("Connecting…", false);
             client.connect(options);
             if (closed) return;
-            stage = "Printer registration";
+            registrationFacts.brokerAccepted();
+            stage = "MQTT subscriptions";
             emitConnection("Registering with printer…", false);
-            client.subscribe(new String[] {base + clientId + "/api_response", base + "api_status", base + requestId + "/register_response"}, new int[] {0, 0, 0});
-            publish(base + "api_register", new JSONObject().put("client_id", clientId).put("request_id", requestId));
+            registrationFacts.subscribing();
+            IMqttToken subscription = client.subscribeWithResponse(new String[] {base + clientId + "/api_response", base + "api_status", base + requestId + "/register_response"}, new int[] {1, 1, 1});
+            if (!registrationFacts.subscribed(subscription == null ? null : subscription.getGrantedQos())) {
+                fail("MQTT subscription acknowledgement was rejected or invalid. Registration was not sent.\n" + registrationFacts.report(), false); return;
+            }
+            stage = "MQTT registration publish";
+            // Match the SDK's QoS 1 registration. Synchronous Paho publish waits for PUBACK.
+            client.publish(base + "api_register", new JSONObject().put("client_id", clientId).put("request_id", requestId).toString().getBytes(StandardCharsets.UTF_8), 1, false);
+            registrationFacts.published();
+            stage = "Printer registration";
             JSONObject reply = registration.get(8, TimeUnit.SECONDS);
             if (!Cc2Codec.validRegistration(reply, clientId)) {
                 String reason = reply.optString("error", "").toLowerCase(Locale.ROOT).contains("too many clients") ? "Printer connection limit reached." : "Printer registration rejected.";
-                fail(reason + (readOnly() ? " PIN probe stopped; this app did not request other clients to disconnect. Keep Matrix/cloud mode enabled. Firmware may not support local PIN access." : " Check the selected authentication mode and other connected clients."), false); return;
+                fail(reason + (readOnly() ? " PIN probe stopped; this app did not request other clients to disconnect. Keep Matrix/cloud mode enabled. Firmware may not support local PIN access." : " Check the selected authentication mode and other connected clients.") + "\n" + registrationFacts.report(), false); return;
             }
             if (closed) return;
             ready = true;
@@ -151,7 +178,8 @@ public final class Cc2Session implements AutoCloseable {
         } catch (Exception exception) {
             String text = PrinterErrors.describe(exception, stage);
             if (readOnly() && exception instanceof MqttException && (((MqttException) exception).getReasonCode() == 4 || ((MqttException) exception).getReasonCode() == 5)) text = "Cloud-mode local PIN was not authorized (MQTT code " + ((MqttException) exception).getReasonCode() + "). Verify the current printer-displayed PIN. Keep Matrix/cloud mode enabled; firmware may not permit this local path. No other credentials were tried.";
-            if (!closed) fail(text + (exception instanceof MqttException && !identity.summary().isEmpty() ? "\n" + identity.summary() : ""), !readOnly() && PrinterErrors.retryable(exception));
+            if (!closed) fail(text + (exception instanceof MqttException && !identity.summary().isEmpty() ? "\n" + identity.summary() : "")
+                + (stage.equals("MQTT subscriptions") || stage.equals("MQTT registration publish") || stage.equals("Printer registration") ? "\n" + registrationFacts.report() : ""), !readOnly() && PrinterErrors.retryable(exception));
         } finally { if (closed) disposeMqtt(); }
     }
     public void refresh() { execute(() -> { if (ready()) { send(Cc2Codec.STATUS); if (canvasSupported) send(Cc2Codec.CANVAS); } }); }
@@ -336,7 +364,7 @@ public final class Cc2Session implements AutoCloseable {
     }
     public synchronized void upload(File file, String name) {
         if (readOnly()) { emitResult("Read-only PIN probe: uploads are disabled; PINs are never used as HTTP tokens."); return; }
-        if (!ready() || uploading) return;
+        if (!ready() || uploading || downloading) return;
         uploading = true; uploadCancelled = false;
         PrinterHttp uploader = new PrinterHttp(http.host(), sessionToken, connections); uploadHttp = uploader;
         transfer.execute(() -> {
@@ -349,6 +377,26 @@ public final class Cc2Session implements AutoCloseable {
         });
     }
     public void cancelUpload() { PrinterHttp uploader = uploadHttp; if (uploader != null) { uploadCancelled = true; uploader.cancel(); emitResult("Upload cancelled. A partial file may remain on the printer; refresh files before trying again."); } }
+    public synchronized boolean download(File destination, String storage, String name) {
+        if (readOnly()) { emitResult("PIN probe cannot download files: PINs are not HTTP tokens."); return false; }
+        if (!ready() || uploading || downloading) return false;
+        Cc2Codec.storage(storage); Cc2Codec.filename(name);
+        downloading = true; downloadCancelled = false;
+        PrinterHttp downloader = new PrinterHttp(http.host(), sessionToken, connections); downloadHttp = downloader;
+        try {
+            transfer.execute(() -> {
+                boolean delivered = false;
+                try {
+                    downloader.download(destination, storage, name, percent -> { Listener current = listener; if (current != null && !closed && !downloadCancelled) current.downloadProgress(percent); });
+                    Listener current = listener;
+                    if (current != null && !closed && !downloadCancelled) { current.downloaded(destination, name); delivered = true; }
+                } catch (Exception exception) { if (!closed && !downloadCancelled) emitResult(PrinterErrors.describe(exception, "File download")); }
+                finally { if (!delivered) destination.delete(); downloading = false; downloadHttp = null; }
+            });
+            return true;
+        } catch (RejectedExecutionException stopped) { downloading = false; downloadHttp = null; destination.delete(); return false; }
+    }
+    public void cancelDownload() { PrinterHttp downloader = downloadHttp; if (downloader != null) { downloadCancelled = true; downloader.cancel(); emitResult("Download cancelled. Partial phone copy will be removed; printer files are unchanged."); } }
     private void execute(Runnable task) { if (!closed) try { worker.execute(() -> { if (!closed) task.run(); }); } catch (RejectedExecutionException ignored) { } }
     private void emitConnection(String message, boolean connected) { Listener current = listener; if (current != null && !closed) current.connection(message, connected); }
     private void emitResult(String message) { Listener current = listener; if (current != null && !closed) current.result(message); }
@@ -388,6 +436,7 @@ public final class Cc2Session implements AutoCloseable {
         registration.completeExceptionally(new IllegalStateException("Session closed"));
         try { identity.close(); } catch (Exception ignored) { }
         http.cancel(); PrinterHttp uploader = uploadHttp; if (uploader != null) uploader.cancel();
+        PrinterHttp downloader = downloadHttp; if (downloader != null) downloader.cancel();
         worker.shutdownNow(); transfer.shutdownNow();
         Thread cleanup = new Thread(this::disposeMqtt, "mqtt-cleanup"); cleanup.setDaemon(true); cleanup.start();
     }

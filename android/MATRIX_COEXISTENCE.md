@@ -19,7 +19,7 @@ The upstream local PIN branch substitutes `123456` for an empty PIN. This probe 
 ## Test without changing the account binding
 
 1. Keep the printer in normal cloud mode with **LAN Only off**. Confirm Matrix already shows current printer status and its camera. Keep the existing account binding; do not unbind, re-pair or regenerate credentials merely to make this experiment pass.
-2. Install v0.3.2 as a normal update. Use home Wi-Fi first. In Settings choose **Local Wi-Fi / Ethernet**, then **Cloud-mode PIN probe (read-only)** under Printer authentication. Enter the printer IP. If the printer currently displays a pairing PIN, enter that exact PIN in the separate masked PIN field. If no current PIN is available, stop here; the LAN access code is not a substitute.
+2. Install v0.3.2 or newer as a normal update. Use home Wi-Fi first. In Settings choose **Local Wi-Fi / Ethernet**, then **Cloud-mode PIN probe (read-only)** under Printer authentication. Enter the printer IP. If the printer currently displays a pairing PIN, enter that exact PIN in the separate masked PIN field. If no current PIN is available, stop here; the LAN access code is not a substitute.
 3. Enter Serial Number from Settings → Device if UDP discovery cannot identify the printer. A supplied serial does not bypass authorization. Discovery's returned serial takes priority if it differs from the manually entered value.
 4. Tap **Check connection**. This tests ports and UDP identity/mode, without authenticating MQTT or making authenticated HTTP requests in probe mode. A reachable MQTT port is only a routing result.
 5. Tap **Connect** once. The app uses the normal local MQTT client format and explicitly entered PIN, then performs application registration. It does not sign into Elegoo, copy Matrix's cloud identities, bind/unbind devices or request other clients to disconnect. A failure or connection loss stops this probe without automatic retries.
@@ -37,12 +37,19 @@ PINs are held in memory only. They do not enter profiles, Keystore, Activity sav
 | UDP reports LAN Only during PIN probe | Selected credential intent does not match the reported mode; use LAN authentication for that setting, or normal cloud mode for this experiment |
 | No identity and no manual serial | Supply the exact serial; this probe does not fall back to HTTP identity |
 | MQTT code 4/5 | The explicit local PIN path was not authorized; this does not prove a mistyped PIN. Verify the current displayed PIN and stop if refused; cloud transport may be required |
+| Registration timeout | CONNECT completed, but no usable application registration reply arrived. PIN validity, topic permissions and cloud-mode firmware support remain unresolved; keep Matrix/cloud mode enabled |
 | Registration rejected / connection limit | Broker authorization is insufficient. Stop the probe and leave Matrix available; do not interpret this as permission to evict or close other clients |
 | Registered but status stale/missing | Session registration succeeded but usable monitoring did not; do not enable controls |
 | Fresh app status, Matrix remains live | Evidence for local coexistence on this firmware/setup, pending longer lifecycle and camera tests |
 | Fresh app status, Matrix drops | Coexistence failed; disconnect probe and investigate transport/session limits |
 
-For feedback, share the secret-free diagnostic text, exact failure stage, whether status actually refreshed, and whether Matrix stayed connected. Do not share PINs, LAN codes or account tokens. The latest supplied physical result remains the earlier MQTT code 5; no successful PIN registration has been observed in this workspace.
+For feedback, share the secret-free diagnostic text, exact failure stage, whether status actually refreshed, and whether Matrix stayed connected. Do not share PINs, LAN codes or account tokens. The latest supplied v0.3.3 screenshot progresses past the earlier MQTT code 5: broker CONNECT completes, UDP reports cloud/WAN with code protection enabled, but application registration times out. HTTP port 80 remains unreachable and was not used by the probe. No usable monitoring, PIN validity, or successful Matrix coexistence has been established.
+
+## v0.3.5 registration evidence
+
+The pinned SDK requests QoS 1 subscriptions and sends registration at QoS 1 with a broker acknowledgement wait ([MQTT transport](https://github.com/elegooofficial/elegoo-link/blob/46c7b814e055cf9675d58482d79f43d0bd2280da/src/lan/protocols/mqtt_protocol.cpp)). v0.3.3/0.3.4 used QoS 0. v0.3.5 source aligns registration with the SDK, retaining the exact serial topics, client/request ID format and envelope. Other query/control dispatch is unchanged. Rejected/incomplete SUBACK stops before publication. PUBACK acknowledges broker receipt, not topic authorization or printer processing. Paho may retransmit registration within the same MQTT session for QoS 1 delivery; this is distinct from starting another PIN connection attempt.
+
+Failure reports show CONNECT, SUBACK, PUBACK, matching reply outcome and bounded counters for malformed/wrong-client/retained replies and other pre-registration events. No credentials, serials, topics, payloads or raw exceptions enter these facts. Unexpected topics and unrelated/retained replies cannot establish readiness. Correctly correlated rejection remains terminal. Timeout remains eight seconds after PUBACK; PIN failures do not reconnect or try other credentials. Acknowledgements cannot prove Matrix coexistence. The APK is pending build/signing verification; do not expect these diagnostics in the published v0.3.4 APK.
 
 ## If local PIN access is unavailable
 
