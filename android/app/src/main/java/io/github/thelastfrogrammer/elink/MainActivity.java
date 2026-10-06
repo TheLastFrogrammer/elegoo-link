@@ -34,6 +34,7 @@ public final class MainActivity extends Activity {
     private SharedPreferences settings;
     private ProfileStore profiles;
     private EditText profileName, cameraAddress, pairingPin;
+    private TextView pinProbeHelp;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
     private NetworkRoute cameraRoute;
@@ -119,7 +120,7 @@ public final class MainActivity extends Activity {
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "LAN access code", true); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         pairingPin = input(connectionCard, "Current printer pairing PIN (probe only)", true); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        label(connectionCard, "PIN probe is experimental and read-only. Keep LAN Only off and Matrix working. Use the current printer-displayed pairing PIN, not the LAN access code. PINs are held only in memory; commands, uploads and automatic retries are disabled. Firmware may reject local PIN access.", 13, MUTED, false);
+        pinProbeHelp = label(connectionCard, "PIN probe is experimental and read-only. Keep LAN Only off and Matrix working. Use the current printer-displayed pairing PIN, not the LAN access code. PINs are held only in memory; commands, uploads and automatic retries are disabled. Firmware may reject local PIN access.", 13, MUTED, false);
         serial = input(connectionCard, "Serial number (optional)", false);
         serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         label(connectionCard, "Leave serial blank for automatic identity discovery. A manual Serial Number from Settings → Device is used if discovery fails. Discovery also checks the printer's LAN mode and code-protection setting.", 13, MUTED, false);
@@ -486,7 +487,7 @@ public final class MainActivity extends Activity {
         summary.setText(ready ? "Connected" + (printer.pinProbe() ? " · read-only PIN probe" : "") + " · " + printer.host() + " · " + (fresh ? StatusPresentation.state(snapshot) : "Status stale") : connecting ? "Connecting · " + printer.host() : "Disconnected · open Settings to connect");
         if (connecting && !printer.host().equals(host.getText().toString())) { host.setText(printer.host()); access.setText(""); }
         routePicker.setEnabled(!connecting); authPicker.setEnabled(!connecting); host.setEnabled(!connecting); access.setEnabled(!connecting); pairingPin.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting && !pinProbe());
-        access.setVisibility(pinProbe() ? View.GONE : View.VISIBLE); pairingPin.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); remember.setVisibility(pinProbe() ? View.GONE : View.VISIBLE);
+        access.setVisibility(pinProbe() ? View.GONE : View.VISIBLE); pairingPin.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); pinProbeHelp.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); remember.setVisibility(pinProbe() ? View.GONE : View.VISIBLE);
         connect.setEnabled(printer != null); connect.setText(connecting ? "Disconnect" : "Connect"); check.setEnabled(!checking);
         refresh.setEnabled(ready); pause.setEnabled(writable && Cc2Codec.canPause(snapshot)); resume.setEnabled(writable && Cc2Codec.canResume(snapshot)); stop.setEnabled(writable && Cc2Codec.canStop(snapshot));
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning local Wi-Fi…" : "Find printers on Wi-Fi");

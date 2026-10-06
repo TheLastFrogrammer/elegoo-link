@@ -194,6 +194,17 @@ public class Cc2SessionTest {
         return new Cc2Session("192.168.1.50","code",listener,url -> { throw new IOException("HTTP must remain optional"); },null,
             (uri,id) -> { FakeMqtt f=new FakeMqtt(uri,id); f.machine=machine;f.sub=sub;clients.add(f);return f; },http -> "TEST");
     }
+    @Test public void overlappingBackgroundReadsStaySilentButUserQueriesStillReport() throws Exception {
+        Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();Cc2Session s=session(l,clients,2,2075);
+        try {
+            // Connect queues attributes/status/trays behind the 2 s spacing; a refresh now overlaps them.
+            s.connect();s.refresh();s.refresh();take(l.statuses);take(l.canvases);
+            String collision=l.results.poll(1,TimeUnit.SECONDS);
+            assertTrue("Background read collision reported: "+collision, collision==null||!collision.startsWith("Waiting"));
+            s.files("local",0);s.files("local",0);
+            String result; do { result=take(l.results); } while (!result.startsWith("Waiting"));
+        } finally { s.close(); }
+    }
     @Test public void queryResultsKeepRequestContextAndFailuresLeaveMonitoringConnected() throws Exception {
         Listener l=new Listener();List<FakeMqtt> clients=new CopyOnWriteArrayList<>();Cc2Session s=session(l,clients,2,2075);
         try {

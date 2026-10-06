@@ -203,7 +203,10 @@ public final class Cc2Session implements AutoCloseable {
         if (readOnly() && changing(method)) { emitResult("Read-only PIN probe: printer-changing commands are disabled."); return; }
         if (queued.contains(method) || pending.values().stream().anyMatch(p -> p.method == method)
             || changing(method) && (queued.stream().anyMatch(Cc2Session::changing) || pending.values().stream().anyMatch(p -> changing(p.method)))) {
-            emitResult("Waiting for the previous request to finish."); return;
+            // Background polls and resyncs regularly overlap a queued status/tray/attribute read; the read already
+            // in flight answers them, so only report a collision for requests the user is waiting on.
+            if (!background(method)) emitResult("Waiting for the previous request to finish.");
+            return;
         }
         queued.add(method);
         // Stop takes the next available slot ahead of reads; all requests retain the firmware spacing.
@@ -348,6 +351,7 @@ public final class Cc2Session implements AutoCloseable {
         Listener current = listener; close(); if (current != null) current.failure(message, canRetry);
     }
     private static boolean changing(int method) { return Cc2Codec.changing(method); }
+    static boolean background(int method) { return method == Cc2Codec.STATUS || method == Cc2Codec.CANVAS || method == Cc2Codec.ATTRIBUTES; }
     private static String methodName(int method) {
         if (method == Cc2Codec.START) return "print start"; if (method == Cc2Codec.PAUSE) return "pause";
         if (method == Cc2Codec.STOP) return "stop"; if (method == Cc2Codec.RESUME) return "resume";
