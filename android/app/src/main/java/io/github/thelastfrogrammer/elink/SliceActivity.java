@@ -133,6 +133,8 @@ public final class SliceActivity extends Activity {
         useInFiles = button(resultCard, "Send to Files tab for upload", () -> {
             setResult(RESULT_OK, new Intent().putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName)); finish();
         }, true);
+        button(resultCard, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
+            .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
         saveCopy = button(resultCard, "Save G-code…", () -> {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/octet-stream"); intent.putExtra(Intent.EXTRA_TITLE, slicedName); startActivityForResult(intent, SAVE);

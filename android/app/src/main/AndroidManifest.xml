@@ -20,6 +20,7 @@
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
         <activity android:name=".SliceActivity" android:exported="false" android:label="Slice a model" />
+        <activity android:name=".GcodeViewerActivity" android:exported="false" android:label="Toolpath" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

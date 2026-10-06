@@ -1,6 +1,10 @@
 # Link Workshop for Android
 
-**v0.6.0 (development):** slice STL, 3MF, OBJ, Draco and STEP models on the phone with ElegooSlicer's own engine and Elegoo presets (Files → Slice a model on this phone), then upload and print as usual. See [SLICER_PORT.md](SLICER_PORT.md) and [../slicer](../slicer/README.md); builds include the slicer only after `slicer/scripts/install-into-app.sh`.
+**v0.7.0 (development):** 3D toolpath viewer (Files → Preview toolpath, or Preview after slicing) with layer and move scrubbing, playback, feature filters and travel moves; **Live toolpath** on the Monitor tab follows the running print, using the printer's layer and nozzle position, with printed moves in color, the rest of the layer ghosted and lower layers dimmed. The app keeps copies of G-code it uploads, slices or downloads so it can show the file being printed, and can download it from the printer otherwise.
+
+<img src="docs/screenshots/viewer-dark.png" width="240" alt="Toolpath viewer, mid-layer"> <img src="docs/screenshots/viewer-benchy.png" width="240" alt="3DBenchy toolpath">
+
+**v0.6.0:** slice STL, 3MF, OBJ, Draco and STEP models on the phone with ElegooSlicer's own engine and Elegoo presets (Files → Slice a model on this phone), then upload and print as usual. See [SLICER_PORT.md](SLICER_PORT.md) and [../slicer](../slicer/README.md); builds include the slicer only after `slicer/scripts/install-into-app.sh`.
 
 <img src="docs/screenshots/slice-light.png" width="240" alt="Slice screen with a sliced calibration box">
 

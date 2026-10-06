@@ -43,6 +43,9 @@ public final class PrinterService extends Service {
     private final Set<Integer> queryBusy = new HashSet<>();
     private PrintAlerts alerts = new PrintAlerts();
     public File selectedFile;
+    /** Copies of uploaded, sliced and downloaded G-code, for the toolpath viewer to follow prints. */
+    GcodeLibrary library;
+    private String viewerDownload;
     public String selectedName;
     public GcodeInspector.Report selectedReport;
     public android.graphics.Bitmap selectedThumbnail;
@@ -74,6 +77,7 @@ public final class PrinterService extends Service {
         public void run() { if (destroyed) return; checkRoute(); if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
     };
     @Override public void onCreate() {
+        library = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
         super.onCreate();
         File[] oldCopies = getCacheDir().listFiles();
         if (oldCopies != null) for (File file : oldCopies) if (file.isFile() && (file.getName().startsWith("upload-") || file.getName().startsWith("download-")) && file.getName().endsWith(".gcode")) file.delete();
@@ -95,6 +99,11 @@ public final class PrinterService extends Service {
         startMonitoring(); if (!wanted) stopMonitoring(); return START_NOT_STICKY;
     }
     public void observe(Observer observer) { this.observer = observer; if (observer != null) observer.changed(); }
+    // Other screens (the G-code viewer following a print) watch alongside MainActivity's observer, and keep the
+    // cloud polling at the visible rate while they are shown.
+    private final List<Observer> watchers = new ArrayList<>();
+    public void watch(Observer watcher) { if (!watchers.contains(watcher)) watchers.add(watcher); watcher.changed(); main.removeCallbacks(cloudPoll); main.post(cloudPoll); }
+    public void unwatch(Observer watcher) { watchers.remove(watcher); }
     public String host() { return host; }
     public String accessCode() { return code; }
     public String serial() { return serial; }
@@ -140,12 +149,16 @@ public final class PrinterService extends Service {
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
             public void query(int method, JSONObject params, JSONObject result) { deliver(() -> handleQuery(method, params, result)); }
             public void queryError(int method, String text) { deliver(() -> handleQueryError(method, text)); }
-            public void uploaded(String name) { deliver(() -> { feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0); }); }
+            public void uploaded(String name) { deliver(() -> {
+                feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0);
+                File copy = selectedFile; if (copy != null) files.execute(() -> keep(copy, name));
+            }); }
             public void downloadProgress(int percent) { deliver(() -> feedback = percent < 0 ? "Downloading G-code… size not reported" : "Downloading G-code: " + percent + "%"); }
             public void downloaded(File file, String name) { main.post(() -> {
                 if (destroyed || generation != current) { file.delete(); return; }
                 importing = true; feedback = "Download received. Inspecting phone copy…"; changed();
                 files.execute(() -> {
+                    keep(file, name);
                     GcodeInspector.Report report = null;
                     try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
                     GcodeInspector.Report result = report;
@@ -160,6 +173,11 @@ public final class PrinterService extends Service {
     private void handleQuery(int method, JSONObject params, JSONObject result) {
         queryBusy.remove(method);
         if (method == Cc2Codec.FILES) { filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer."; }
+        if (method == Cc2Codec.FILES && viewerDownload != null) {
+            String wanted = viewerDownload; viewerDownload = null;
+            if (knownFile("local", wanted)) download("local", wanted);
+            else feedback = StatusPresentation.clean(wanted) + " is not among the first printer files listed. Download it from the Files tab instead.";
+        }
         if (method == Cc2Codec.HISTORY) { history = result; historyMessage = "History received from printer."; }
         if (method == Cc2Codec.DISK) disk = result;
         if (method == Cc2Codec.THUMBNAIL) {
@@ -247,6 +265,17 @@ public final class PrinterService extends Service {
         JSONArray files = filePage.optJSONArray("file_list"); if (files == null) return false;
         for (int i = 0; i < files.length(); i++) { JSONObject file = files.optJSONObject(i); if (file != null && filename.equals(file.optString("filename"))) return true; }
         return false;
+    }
+    /** Downloads the printer file being printed for the toolpath viewer, listing the printer's files first if needed. */
+    public void downloadForViewer(String filename) {
+        if (!ready() || pinProbe) { feedback = "Downloading from the printer needs the local connection (LAN Only, HTTP port 80)."; changed(); return; }
+        if (fileBusy()) { feedback = "Wait for the current file transfer to finish."; changed(); return; }
+        if (knownFile("local", filename)) { download("local", filename); return; }
+        viewerDownload = filename; feedback = "Looking for " + StatusPresentation.clean(filename) + " on the printer…"; browse("local", 0); changed();
+    }
+    /** Keeps a copy in the viewer's library; failures only cost the viewer that file. */
+    void keep(File file, String name) {
+        try { if (library != null) library.put(file, name); } catch (IOException ignored) { }
     }
     public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, JSONArray maps) {
         if (!liveFresh() || !Cc2Codec.idle(liveStatus()) || !knownFile(storage, filename) || maps.length() > 0 && (!canvasFresh() || !FeatureData.mappings(canvas, maps))) {
@@ -386,7 +415,11 @@ public final class PrinterService extends Service {
             String done = text; main.post(() -> { if (!destroyed) { exporting = false; feedback = done; changed(); } });
         });
     }
-    private void changed() { if (observer != null && !destroyed) observer.changed(); }
+    private void changed() {
+        if (destroyed) return;
+        if (observer != null) observer.changed();
+        for (Observer watcher : new ArrayList<>(watchers)) watcher.changed();
+    }
 
     /** Monitoring through the cloud while the app is visible; background watching is a separate opt-in setting. */
     public void cloudVisible(boolean visible) { cloudVisible = visible; if (visible) { main.removeCallbacks(cloudPoll); main.post(cloudPoll); } }
@@ -408,10 +441,11 @@ public final class PrinterService extends Service {
         main.removeCallbacks(cloudPoll);
         if (destroyed) return;
         boolean background = cloudBackground();
-        if (wanted || !(cloudVisible || background)) { cloudPolling = false; stopLive(); return; }
+        boolean visible = cloudVisible || !watchers.isEmpty();
+        if (wanted || !(visible || background)) { cloudPolling = false; stopLive(); return; }
         cloudPolling = true;
         // With live pushes, polling is only a consistency check.
-        main.postDelayed(cloudPoll, cloudLiveOn ? 60_000 : cloudVisible ? CLOUD_VISIBLE_POLL_MS : CLOUD_BACKGROUND_POLL_MS);
+        main.postDelayed(cloudPoll, cloudLiveOn ? 60_000 : visible ? CLOUD_VISIBLE_POLL_MS : CLOUD_BACKGROUND_POLL_MS);
         cloudWorker.execute(() -> {
             CloudLogin.Account account;
             try { account = cloudAccounts.load(); } catch (Exception error) { account = null; }
@@ -558,7 +592,7 @@ public final class PrinterService extends Service {
         lastNotification = now; getSystemService(NotificationManager.class).notify(NOTIFICATION, notification());
     }
     @Override public void onDestroy() {
-        destroyed = true; observer = null; clearRoute(); main.removeCallbacksAndMessages(null);
+        destroyed = true; observer = null; watchers.clear(); clearRoute(); main.removeCallbacksAndMessages(null);
         if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();
         if (session != null) session.close(); session = null; code = "";
         files.shutdownNow(); if (selectedFile != null) selectedFile.delete();

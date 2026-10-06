@@ -56,7 +56,7 @@ public final class MainActivity extends Activity {
     private Spinner storagePicker, routePicker, authPicker;
     private NetworkRoute cameraRoute;
     private AutoCloseable cameraRouteWatch;
-    private Button sliceModel;
+    private Button sliceModel, liveToolpath, previewToolpath;
     private Button resume, discover, saveProfile, chooseProfile, removeProfile, cancelUpload, listFiles, previousFiles, nextFiles, loadHistory, loadDisk,
         cameraStart, cameraQuery, cameraSnapshot, heater, fan, speed, lightOn, lightOff;
     private ImageView cameraImage;
@@ -188,12 +188,14 @@ public final class MainActivity extends Activity {
         job = label(heroText, "", 14, INK, false); job.setMaxLines(2); job.setEllipsize(android.text.TextUtils.TruncateAt.END);
         detail = label(heroText, "", 13, MUTED, false);
         faults = label(hero, "", 14, ERROR, true);
-        graphs = button(hero, "Graphs", () -> {
+        LinearLayout heroButtons = row(hero);
+        liveToolpath = rowButton(heroButtons, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), false);
+        graphs = rowButton(heroButtons, "Graphs", () -> {
             PrintRecorder.Recording current = printer == null || printer.recorder == null ? null : printer.recorder.current();
             Intent intent = new Intent(this, RecordingsActivity.class);
             if (current != null) intent.putExtra(RecordingsActivity.EXTRA_META, current.meta.getAbsolutePath());
             startActivity(intent);
-        });
+        }, false);
         LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams tilesLayout = new LinearLayout.LayoutParams(-1, -2); tilesLayout.topMargin = dp(12); currentSection.addView(tiles, tilesLayout);
         tileNozzle = tile(tiles, "Nozzle", 0); tileBed = tile(tiles, "Bed", dp(8)); tileChamber = tile(tiles, "Chamber", dp(8));
@@ -241,6 +243,10 @@ public final class MainActivity extends Activity {
         inspection = label(files, "Select a G-code file to inspect it offline. Printer connection is not required.", 13, INK, false); inspection.setTextIsSelectable(true);
         filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER); files.addView(filePreview, new LinearLayout.LayoutParams(-1,dp(200))); filePreview.setVisibility(View.GONE);
         previewInfo = label(files, "Embedded previews appear when a supported image is present in the selected G-code.", 13, MUTED, false);
+        previewToolpath = button(files, "Preview toolpath…", () -> {
+            if (printer == null || printer.selectedFile == null) return;
+            startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, printer.selectedFile.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, printer.selectedName));
+        });
         materialDetails = button(files, "Material details…", () -> {
             if (printer == null || printer.selectedReport == null) return;
             SlicedMaterials materials = printer.selectedReport.materials; LinearLayout body = dialogBody();
@@ -775,6 +781,7 @@ public final class MainActivity extends Activity {
         filePreview.setImageBitmap(hasReport ? printer.selectedThumbnail : null); filePreview.setVisibility(hasReport && printer.selectedThumbnail != null ? View.VISIBLE : View.GONE);
         previewInfo.setText(!hasReport ? "Embedded previews appear when a supported image is present in the selected G-code." : report.thumbnail == null ? report.thumbnailNote : printer.selectedThumbnail == null ? "Embedded image found but Android could not decode it. File inspection remains available." : report.thumbnailNote + " · slicer image, not a live camera or motion simulation");
         materialDetails.setEnabled(hasReport && !report.materials.entries.isEmpty());
+        previewToolpath.setEnabled(printer != null && printer.selectedFile != null && !printer.importing);
         selected.setText(printer != null && printer.selectedFile != null ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Choose a .gcode file sliced for this printer.");
         // Header.
         String name = "Link Workshop", model = "Centauri Carbon 2";
@@ -805,7 +812,9 @@ public final class MainActivity extends Activity {
             detail.setText("");
         }
         PrintRecorder.Recording recordingNow = printer == null || printer.recorder == null ? null : printer.recorder.current();
-        graphs.setText(recordingNow != null ? "Graphs for this print" : "Print recordings");
+        graphs.setText(recordingNow != null ? "Graphs" : "Print recordings");
+        JSONObject machineNow = snapshot.optJSONObject("machine_status");
+        liveToolpath.setVisibility(machineNow != null && machineNow.optInt("status", -1) == 2 ? View.VISIBLE : View.GONE);
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
         faults.setText(codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen.");

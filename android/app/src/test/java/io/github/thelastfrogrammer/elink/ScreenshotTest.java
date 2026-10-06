@@ -109,4 +109,40 @@ public class ScreenshotTest {
             }
         }
     }
+
+    /** The toolpath viewer's controls with the Benchy-sized fixture; the WebGL area (blank here) is recorded in viewer-<theme>.json. */
+    @Test public void renderViewer() throws Exception {
+        String out = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        File gcode = new File(context.getCacheDir(), "Benchy_PLA_0.2mm.gcode");
+        try (java.io.InputStream in = getClass().getResourceAsStream("/gcode/tolerance-cc2.gcode")) { java.nio.file.Files.copy(in, gcode.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        for (String theme : new String[] {"light", "dark"}) {
+            context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
+            android.content.Intent intent = new android.content.Intent(context, GcodeViewerActivity.class)
+                .putExtra(GcodeViewerActivity.EXTRA_FILE, gcode.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, "ElegooToleranceTest.gcode");
+            GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
+            long deadline = System.currentTimeMillis() + 30_000;
+            java.lang.reflect.Field pathField = GcodeViewerActivity.class.getDeclaredField("path"); pathField.setAccessible(true);
+            while (pathField.get(activity) == null && System.currentTimeMillis() < deadline) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            java.lang.reflect.Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(activity, true);
+            // Scrub to the middle of layer 20, as a user would.
+            java.lang.reflect.Field layer = GcodeViewerActivity.class.getDeclaredField("layer"), move = GcodeViewerActivity.class.getDeclaredField("move");
+            layer.setAccessible(true); move.setAccessible(true); layer.setInt(activity, 19);
+            GcodeToolpath path = (GcodeToolpath) pathField.get(activity); move.setInt(activity, (path.layerEnd(19) - path.layerStart(19)) / 2);
+            java.lang.reflect.Method sync = GcodeViewerActivity.class.getDeclaredMethod("syncBars"); sync.setAccessible(true); sync.invoke(activity);
+            View root = activity.getWindow().getDecorView();
+            int width = 1080, height = 2340;
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, width, height);
+            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            root.draw(new Canvas(bitmap));
+            File file = new File(out, "viewer-" + theme + ".png"); file.getParentFile().mkdirs();
+            try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+            java.lang.reflect.Field webField = GcodeViewerActivity.class.getDeclaredField("web"); webField.setAccessible(true);
+            View web = (View) webField.get(activity); int[] at = new int[2]; web.getLocationInWindow(at);
+            java.nio.file.Files.write(new File(out, "viewer-" + theme + ".json").toPath(), new JSONObject().put("x", at[0]).put("y", at[1]).put("w", web.getWidth()).put("h", web.getHeight())
+                .put("layerStart", path.layerStart(19)).put("layerEnd", path.layerEnd(19)).put("move", move.getInt(activity)).toString().getBytes("UTF-8"));
+        }
+    }
 }
