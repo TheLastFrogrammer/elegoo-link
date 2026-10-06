@@ -20,7 +20,7 @@ Researched 2026-10-06 to scope a cloud route that works with the printer's LAN O
 
 ## What an Android version would need
 
-- A `WebView` on the same sign-in page, with a `@JavascriptInterface` object registered as `wx` that has a `postMessage(String)` method. It handles `report.userInfo`. The user types their credentials only into Elegoo's own page; the app never sees the password.
+- A `WebView` on the same sign-in page that provides a `wx` object with a `postMessage(String)` method and handles `report.userInfo` (done; see below). The user types their credentials only into Elegoo's own page; the app never sees the password.
 - Tokens stored with the same Keystore protection as the access codes, refreshed before they expire, and cleared on logout.
 - A client ID choice. The slicer only uses `win`, `mac` or `linux`. Reusing one of those could collide with a running ElegooSlicer session for the same account. Whether the server accepts `elegooslicer_android_<userId>` is untested.
 - Mapping the cloud MQTT messages to the existing status model. The SDK has a separate cloud parser, `src/cloud/adapters/elegoo_fdm_cc2_message_adapter.cpp`, which needs comparing with the LAN one.
