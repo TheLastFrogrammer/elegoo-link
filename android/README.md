@@ -4,7 +4,7 @@ Independent native Android client in the Elegoo Link fork. **v0.3.5 source (unre
 
 The app ports the inspected LAN protocol to Java/Paho; it does not load the desktop C++ SDK. New features have automated transport/protocol coverage but have not been exercised on the user's physical printer. The latest supplied v0.3.3 screenshot reaches MQTT CONNECT but times out waiting for application registration; it does not prove PIN validity or Matrix coexistence; new features require the appropriate connection and firmware support.
 
-v0.3.5 has no published APK yet: the local build workspace became unavailable during validation. The last verified download remains [v0.3.4](releases/0.3.4/README.md). GitHub Android CI validates source changes without publishing an installable APK or accessing the existing signing key.
+v0.3.5 passed [GitHub Android CI](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/37402251862) (129 tests, zero failures/errors, zero lint errors, successful debug assembly), but has no compatible signed APK published yet: the local workspace holding the existing signing key is unavailable. The last verified download remains [v0.3.4](releases/0.3.4/README.md). GitHub Android CI validates source changes without publishing an installable APK or accessing the existing signing key.
 
 ## Included in v0.3.5 source
 
