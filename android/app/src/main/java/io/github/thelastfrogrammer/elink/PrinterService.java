@@ -44,6 +44,7 @@ public final class PrinterService extends Service {
     public File selectedFile;
     public String selectedName;
     public GcodeInspector.Report selectedReport;
+    public android.graphics.Bitmap selectedThumbnail;
     public boolean importing, exporting;
     private long canvasAt, lastNotification;
     private final Runnable reconnect = this::attempt;
@@ -129,7 +130,8 @@ public final class PrinterService extends Service {
                     GcodeInspector.Report report = null;
                     try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
                     GcodeInspector.Report result = report;
-                    main.post(() -> finishFile(file, name, result, "Downloaded phone copy ready. Save it with Save phone copy…; printer files are unchanged."));
+                    android.graphics.Bitmap preview = report == null ? null : ThumbnailDecoder.decode(report.thumbnail);
+                    main.post(() -> finishFile(file, name, result, preview, "Downloaded phone copy ready. Save it with Save phone copy…; printer files are unchanged."));
                 });
             }); }
         }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery(), new PrinterAuthentication(pinProbe, code)));
@@ -231,7 +233,8 @@ public final class PrinterService extends Service {
                 }
                 if (local.length() == 0) throw new IOException("File is empty");
                 File readyFile = local; String readyName = name; GcodeInspector.Report report = GcodeInspector.inspect(local);
-                main.post(() -> finishFile(readyFile, readyName, report, "Phone copy inspected. Uploading does not start a print."));
+                android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
+                main.post(() -> finishFile(readyFile, readyName, report, preview, "Phone copy inspected. Uploading does not start a print."));
             } catch (Exception error) {
                 if (local != null) local.delete();
                 main.post(() -> { if (!destroyed) { importing = false; feedback = "File import failed. Choose a nonempty .gcode file (up to 512 MiB) with a simple filename."; changed(); } });
@@ -240,14 +243,16 @@ public final class PrinterService extends Service {
             }
         });
     }
-    private void finishFile(File file, String name, GcodeInspector.Report report, String text) {
+    private void finishFile(File file, String name, GcodeInspector.Report report, android.graphics.Bitmap preview, String text) {
         if (destroyed) { file.delete(); return; }
         if (selectedFile != null) selectedFile.delete(); selectedFile = file; selectedName = name; selectedReport = report;
+        selectedThumbnail = preview;
         importing = false; feedback = text; changed();
     }
     public void clearPhoneCopy() {
         if (fileBusy()) return;
         if (selectedFile != null) selectedFile.delete(); selectedFile = null; selectedName = null; selectedReport = null;
+        selectedThumbnail = null;
         feedback = "Phone cache copy removed. Original documents and printer files are unchanged."; changed();
     }
     public void exportPhoneCopy(Uri uri, String expectedHash) {

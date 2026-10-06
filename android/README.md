@@ -1,11 +1,12 @@
 # Link Workshop for Android
 
-Independent native Android client in the Elegoo Link fork. **v0.3.3** adds offline G-code inspection and cancellable printer file downloads/export, retains the experimental read-only cloud-mode PIN probe and home-VPN remote routing and retains System/Light/Dark appearance with separate Monitor, Files, Camera and Settings tabs. First target: Centauri Carbon 2, including the user's firmware V02.01.00.00. Minimum Android 8/API 26; compile/target Android 16/API 36.
+Independent native Android client in the Elegoo Link fork. **v0.3.4** adds embedded PNG/JPEG previews and structured material evidence to the offline G-code workspace, retains the experimental read-only cloud-mode PIN probe and home-VPN remote routing and retains System/Light/Dark appearance with separate Monitor, Files, Camera and Settings tabs. First target: Centauri Carbon 2, including the user's firmware V02.01.00.00. Minimum Android 8/API 26; compile/target Android 16/API 36.
 
 The app ports the inspected LAN protocol to Java/Paho; it does not load the desktop C++ SDK. New features have automated transport/protocol coverage but have not been exercised on the user's physical printer. The previous MQTT authorization refusal is not evidence of successful registration; new features require the appropriate connection and firmware support.
 
-## Included in v0.3.3
+## Included in v0.3.4
 
+- **Embedded previews/materials:** extract bounded PNG/JPEG comment blocks without network access; native decoding on the file worker; Material details shows configured color swatches, source-array indices and reported length/mass. Mismatched/malformed vectors retain uncertainty and do not become CANVAS assignments. Colon-style metadata headers are recognized. See [THUMBNAILS.md](THUMBNAILS.md).
 - **Phone file workspace:** select a sliced .gcode file without connecting; bounded offline inspection of supported slicer comments, explicit T selections, exact size and SHA-256; share its report, save a phone copy through Android's document picker or clear the cache copy. No inferred tray mapping or automatic tool count.
 - **Printer downloads:** choose a listed internal/USB G-code file and Download to phone workspace, with cancellation and partial-cache cleanup. Requires LAN authentication, fresh file list and HTTP port 80; respects local/VPN routing and effective session token. Downloads and uploads are serialized; completed copies are inspected and can be exported. See [FILE_WORKSPACE.md](FILE_WORKSPACE.md).
 - **Matrix coexistence probe:** explicit authentication choice independent of local/VPN route; separate masked, memory-only current pairing PIN; UDP/manual identity with no HTTP bootstrap; session-level changing-command/upload blocks; no automatic retries, credential fallback, account login or binding changes. Firmware coexistence is unverified. Follow [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md) and the in-app guide.
@@ -21,11 +22,11 @@ The app ports the inspected LAN protocol to Java/Paho; it does not load the desk
 - **History/alerts:** internal storage usage and up to 50 newest reported history rows; optional notification for observed print completion or newly reported fault codes. Completion requires an observed job and explicit completed state; idle, cancellation, stale status and reconnect gaps do not imply completion. Alerts require notification permission and a live monitoring process.
 - **Connection reliability:** local Wi-Fi/Ethernet network binding, layered TCP/UDP/HTTP checks, optional manual serial, discovery authentication flags, foreground service ownership and up to five connection-only retries. Authentication failures are terminal. Commands and uploads are never replayed automatically.
 
-Official cloud login, embedded thumbnail preview, timelapse export, filament loading/unloading, file thumbnails, axis motion, multiple simultaneous printers, other models and phone-side slicing remain future work. Camera/files may be unsupported on older firmware; errors/timeouts leave the main monitor available.
+Official cloud login, verified complete tool/mapping suggestions, timelapse export, filament loading/unloading, file thumbnails, axis motion, multiple simultaneous printers, other models and phone-side slicing remain future work. Camera/files may be unsupported on older firmware; errors/timeouts leave the main monitor available.
 
 ## Install and connect
 
-1. Download `Link-Workshop-v0.3.3.apk` from this release. It uses the same development signing certificate as v0.2.0–v0.3.2, allowing a normal update that preserves app data. v0.1.0 used an older lost signing key and may need uninstalling first.
+1. Download `Link-Workshop-v0.3.4.apk` from this release. It uses the same development signing certificate as v0.2.0–v0.3.3, allowing a normal update that preserves app data. v0.1.0 used an older lost signing key and may need uninstalling first.
 2. Choose Local Wi-Fi / Ethernet first. Authentication is separate: **LAN access code** requires printer LAN Only and the code from that setting; discovery explicitly reporting protection off selects the upstream default. **Cloud-mode PIN probe (read-only)** keeps LAN Only off and uses the current printer-displayed pairing PIN in a separate field. This candidate may be refused by firmware; do not substitute the LAN code, unbind or re-pair. Read [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md). After the chosen authentication works locally, follow [REMOTE_ACCESS.md](REMOTE_ACCESS.md) for the Pi/VPN route.
 3. Use Find printers on Wi-Fi or leave serial blank for identity discovery. If identity discovery fails, enter the exact Serial Number from printer Settings → Device. Discovery still checks authentication mode with a supplied serial and its returned serial takes priority. A manual serial does not bypass MQTT authentication. PIN probe never falls back to HTTP identity.
 4. Use Check connection, then Connect. MQTT 1883 provides monitoring/controls in LAN mode; the PIN probe enables read queries only. HTTP 80 is optional for identity and required for this upload implementation. Camera uses its own printer endpoint, normally port 8080; remote diagnostics also probe that port. TCP reachability alone does not prove authentication or registration. MQTT code 5 means not authorized, rather than proving the password was mistyped.
@@ -43,6 +44,6 @@ JDK 17, Android SDK platform 36/build tools 35.0.0, Gradle 8.13 and AGP 8.11.1:
 ./gradlew --no-build-cache clean testDebugUnitTest lintDebug assembleDebug
 ```
 
-APK: `app/build/outputs/apk/debug/app-debug.apk`; app ID `io.github.thelastfrogrammer.elink`; v0.3.3/code 8. Retain your signing key privately for compatible subsequent installs. No printer/cloud credentials are required to build.
+APK: `app/build/outputs/apk/debug/app-debug.apk`; app ID `io.github.thelastfrogrammer.elink`; v0.3.4/code 9. Retain your signing key privately for compatible subsequent installs. No printer/cloud credentials are required to build.
 
 See [FILE_WORKSPACE.md](FILE_WORKSPACE.md), [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md), [PROTOCOL.md](PROTOCOL.md), [ROADMAP.md](ROADMAP.md), [VALIDATION.md](VALIDATION.md). Apache-2.0 applies to this repository; Eclipse Paho EPL-2.0/EDL-1.0 attribution is in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). No official app assets are copied.

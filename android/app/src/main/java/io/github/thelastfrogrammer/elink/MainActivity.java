@@ -25,6 +25,10 @@ public final class MainActivity extends Activity {
     private String pendingExportHash = "";
     private android.net.Uri pendingExportUri;
     private TextView inspection;
+    private ImageView filePreview;
+    private TextView previewInfo;
+    private GcodeInspector.Report renderedReport;
+    private Button materialDetails;
     private Button saveCopy, shareInspection, clearCopy, cancelDownload;
     private int INK = 0xff142c3b, MUTED = 0xff536976, TEAL = 0xff006b65, BACKGROUND = 0xffedf3f4, SURFACE = Color.WHITE, BUTTON = 0xffe0efec;
     private boolean dark;
@@ -97,7 +101,7 @@ public final class MainActivity extends Activity {
         });
         setContentView(scroll);
         label(content, "LINK WORKSHOP", 12, TEAL, true); label(content, "Your printer, on your phone", 25, INK, true);
-        label(content, "Centauri Carbon 2 · local / VPN · v0.3.3", 14, MUTED, false);
+        label(content, "Centauri Carbon 2 · local / VPN · v0.3.4", 14, MUTED, false);
         summary = label(content, "Disconnected · open Settings to connect", 14, TEAL, true);
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); content.addView(navigation);
         String[] titles = {"Monitor", "Files", "Camera", "Settings"};
@@ -177,6 +181,20 @@ public final class MainActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
         });
         inspection = label(files, "Select a G-code file to inspect it offline. Printer connection is not required.", 13, INK, false); inspection.setTextIsSelectable(true);
+        filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER); files.addView(filePreview, new LinearLayout.LayoutParams(-1,dp(200))); filePreview.setVisibility(View.GONE);
+        previewInfo = label(files, "Embedded previews appear when a supported image is present in the selected G-code.", 13, MUTED, false);
+        materialDetails = button(files, "Material details…", () -> {
+            if (printer == null || printer.selectedReport == null) return;
+            SlicedMaterials materials = printer.selectedReport.materials; LinearLayout body = dialogBody();
+            for (SlicedMaterials.Entry entry : materials.entries) {
+                LinearLayout row = new LinearLayout(this); body.addView(row);
+                if (entry.color != null) { View swatch = new View(this); swatch.setContentDescription("Configured filament color " + entry.color); swatch.setBackgroundColor(Color.parseColor(entry.color)); LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(28),dp(28)); size.setMargins(0,dp(8),dp(12),0); row.addView(swatch,size); }
+                label(row, entry.text(), 14, INK, false);
+            }
+            for (String warning : materials.warnings) label(body, warning, 13, MUTED, false);
+            label(body, "Comment indices are source-array positions, not confirmed tool or CANVAS tray IDs. No mapping is applied.", 13, MUTED, false);
+            ScrollView detail = new ScrollView(this); detail.addView(body); new AlertDialog.Builder(this).setTitle("Sliced material evidence").setView(detail).setPositiveButton("Close",null).show();
+        });
         shareInspection = button(files, "Share inspection report…", () -> {
             if (printer == null || printer.selectedReport == null) return;
             Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, StatusPresentation.clean(printer.selectedName) + "\n" + printer.selectedReport.text());
@@ -524,7 +542,12 @@ public final class MainActivity extends Activity {
         upload.setEnabled(ready && !printer.pinProbe() && printer.selectedFile != null && !fileBusy); pick.setEnabled(printer != null && !fileBusy);
         boolean hasReport = printer != null && printer.selectedFile != null && printer.selectedReport != null;
         saveCopy.setEnabled(hasReport && !fileBusy); shareInspection.setEnabled(hasReport && !fileBusy); clearCopy.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
-        inspection.setText(hasReport ? printer.selectedReport.text() : printer != null && printer.importing ? "Importing and inspecting G-code…" : "Select a G-code file to inspect it offline. Printer connection is not required.");
+        GcodeInspector.Report report = hasReport ? printer.selectedReport : null;
+        if (renderedReport != report || !hasReport) { renderedReport = report; inspection.setText(hasReport ? report.text() : "Select a G-code file to inspect it offline. Printer connection is not required."); }
+        if (!hasReport && printer != null && printer.importing) inspection.setText("Importing and inspecting G-code…");
+        filePreview.setImageBitmap(hasReport ? printer.selectedThumbnail : null); filePreview.setVisibility(hasReport && printer.selectedThumbnail != null ? View.VISIBLE : View.GONE);
+        previewInfo.setText(!hasReport ? "Embedded previews appear when a supported image is present in the selected G-code." : report.thumbnail == null ? report.thumbnailNote : printer.selectedThumbnail == null ? "Embedded image found but Android could not decode it. File inspection remains available." : report.thumbnailNote + " · slicer image, not a live camera or motion simulation");
+        materialDetails.setEnabled(hasReport && !report.materials.entries.isEmpty());
         selected.setText(printer != null && printer.selectedFile != null ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Choose a .gcode file sliced for this printer.");
         state.setText(!fresh && snapshot.length() > 0 ? "Status stale · controls disabled" : StatusPresentation.state(snapshot));
         JSONObject machine = snapshot.optJSONObject("machine_status"), print = snapshot.optJSONObject("print_status");
@@ -578,7 +601,7 @@ public final class MainActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
         try {
-            StringBuilder text = new StringBuilder("Link Workshop v0.3.3\nIndependent Android app derived from Elegoo Link.\n\n");
+            StringBuilder text = new StringBuilder("Link Workshop v0.3.4\nIndependent Android app derived from Elegoo Link.\n\n");
             for (String name : new String[] {"THIRD_PARTY_NOTICES.md", "Apache-2.0.txt", "Paho-NOTICE.txt", "Paho-EDL-1.0.txt", "Paho-EPL-2.0.txt"}) {
                 try (InputStream input = getAssets().open("licenses/" + name); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
                     byte[] buffer = new byte[4096]; int count; while ((count = input.read(buffer)) != -1) bytes.write(buffer, 0, count); text.append(bytes.toString("UTF-8")).append("\n\n");

@@ -1,6 +1,6 @@
 # G-code inspection and phone copies
 
-v0.3.3 adds a file workspace under Files. Offline inspection does not need the printer, LAN Only, a PIN or a VPN. Downloading printer files does need a working LAN-authenticated printer session and HTTP port 80. Your earlier HTTP refusal therefore remains a separate obstacle to downloads, even if MQTT monitoring succeeds.
+v0.3.4 extends a file workspace under Files. Offline inspection does not need the printer, LAN Only, a PIN or a VPN. Downloading printer files does need a working LAN-authenticated printer session and HTTP port 80. Your earlier HTTP refusal therefore remains a separate obstacle to downloads, even if MQTT monitoring succeeds.
 
 ## Inspect a sliced file on your phone
 
@@ -12,7 +12,9 @@ Explicit `T` selections are shown separately. A file that selects T0 and T2 repo
 
 SHA-256 identifies the exact bytes, including line endings. Matching filenames alone do not establish matching content. A fingerprint helps compare exported copies, but it is not a signature, authentication credential or assurance that the G-code is safe for the printer. No reference checksum is available from the download endpoint in this implementation.
 
-Text analysis bounds each line at 16 KiB, skipping longer lines and reporting that limitation. This includes large embedded data lines. Detected binary/control bytes disable text metadata/tool inferences. Only up to 32 distinct tool values are shown. Embedded thumbnail decoding, full G-code interpretation and motion preview are not included yet.
+Text analysis bounds each line at 16 KiB, skipping longer lines and reporting that limitation. This includes large embedded data lines. Detected binary/control bytes disable text metadata/tool inferences. Only up to 32 distinct tool values are shown. Supported embedded PNG/JPEG thumbnails are extracted and displayed with strict bounds; unsupported image formats are skipped. Full G-code interpretation and motion preview are not included. See [THUMBNAILS.md](THUMBNAILS.md).
+
+Material details shows up to eight source-array positions with configured material/color and estimated length/mass. Only #RRGGBB colors are interpreted. Unsupported, invalid or mismatched values remain explicit uncertainty; these positions are not confirmed tool or tray IDs. The report also includes this evidence.
 
 Use Share inspection report to open Android's share chooser. The app does not automatically send the report anywhere. The report includes filename and supported printer/material configuration comments, so review it before sharing. It includes no app connection credentials.
 
@@ -36,4 +38,4 @@ One completed copy is held in app cache, with no persistent job library. Clearin
 
 Native document-picker rotation/theme restoration, actual phone storage providers, large-file performance, HTTP firmware behavior and VPN interruption still need device testing. Automated tests cover the inspector and real download/session implementations with simulated transports; they do not substitute for those device checks.
 
-The next file features should be bounded embedded-thumbnail previews and verified sliced-tool metadata before reviewed mapping suggestions. Filament loading/unloading, calibration and axis motion need complete behavior/parameter evidence; commented SDK method numbers alone are insufficient to ship mechanical controls. Matrix preservation continues through the separate [coexistence test](MATRIX_COEXISTENCE.md).
+The next file feature should verify complete sliced-tool metadata and its firmware mapping semantics before reviewed mapping suggestions. Filament loading/unloading, calibration and axis motion need complete behavior/parameter evidence; commented SDK method numbers alone are insufficient to ship mechanical controls. Matrix preservation continues through the separate [coexistence test](MATRIX_COEXISTENCE.md).

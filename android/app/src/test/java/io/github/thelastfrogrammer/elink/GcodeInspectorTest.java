@@ -46,4 +46,11 @@ public class GcodeInspectorTest {
         try { inspect("T0"); fail(); } catch (InterruptedIOException expected) { } finally { Thread.interrupted(); }
         try { inspect(""); fail(); } catch (IOException expected) { }
     }
+    @Test public void primaryColonHeaderAndImageDoNotContaminateToolOrMaterialEvidence() throws Exception {
+        GcodeInspector.Report r=inspect("; total layer number: 100\n"+EmbeddedThumbnailTest.block("thumbnail",2,3,EmbeddedThumbnailTest.png(2,3))+"T0\n; filament used [mm] = 0,100\n; filament_type = PLA;PETG\n; filament_colour = #123456;#ABCDEF\n");
+        assertEquals("100",r.metadata.get("Reported layer count"));assertNotNull(r.thumbnail);assertEquals(Collections.singleton(0),r.tools);assertEquals("PETG",r.materials.entries.get(1).type);assertEquals(Double.valueOf(100),r.materials.entries.get(1).lengthMm);assertFalse(r.text().contains("iVBOR"));
+    }
+    @Test public void binaryContentClearsEarlierPreviewAndMaterialEvidence() throws Exception {
+        GcodeInspector.Report r=inspect(EmbeddedThumbnailTest.block("thumbnail",1,1,EmbeddedThumbnailTest.png(1,1))+"; filament_type = PLA\n\0binary");assertTrue(r.binary);assertNull(r.thumbnail);assertTrue(r.materials.entries.isEmpty());
+    }
 }

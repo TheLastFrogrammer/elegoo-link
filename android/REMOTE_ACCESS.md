@@ -1,6 +1,6 @@
 # Away-from-home access with your Pi
 
-Link Workshop v0.3.3 retains a **Remote through home VPN** route. Your always-on Raspberry Pi can be the gateway: phone → encrypted Tailscale tunnel → Pi → printer at `192.168.1.84`. Authentication is separate: full-control LAN mode requires LAN Only; the experimental read-only PIN probe tests normal cloud mode with Matrix retained. See [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md). A Pi cannot make a firmware-disabled local path available. This is a user-managed VPN connection, not Elegoo cloud login. A commercial privacy VPN alone does not provide a route into your home.
+Link Workshop v0.3.4 retains a **Remote through home VPN** route. Your always-on Raspberry Pi can be the gateway: phone → encrypted Tailscale tunnel → Pi → printer at `192.168.1.84`. Authentication is separate: full-control LAN mode requires LAN Only; the experimental read-only PIN probe tests normal cloud mode with Matrix retained. See [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md). A Pi cannot make a firmware-disabled local path available. This is a user-managed VPN connection, not Elegoo cloud login. A commercial privacy VPN alone does not provide a route into your home.
 
 The app is built and tested with simulated transports; the Pi has not been configured for you, and real CC2/S24+ remote operation remains unverified. First establish working local MQTT authentication and registration. Your earlier HTTP refusal and MQTT authorization error are independent of remote routing; a VPN cannot fix them.
 
@@ -62,7 +62,7 @@ The `/32` route targets one host. The policy limits that enrolled phone's access
 
 ## Connect from Android
 
-1. Install v0.3.3 over the earlier v0.2/v0.3 build. In Tailscale, connect to your tailnet. Android accepts approved subnet routes automatically. Ensure Link Workshop is not excluded by Tailscale's app split-tunneling settings.
+1. Install v0.3.4 over the earlier v0.2/v0.3 build. In Tailscale, connect to your tailnet. Android accepts approved subnet routes automatically. Ensure Link Workshop is not excluded by Tailscale's app split-tunneling settings.
 2. In Android VPN settings, enable **Always-on VPN** and **Block connections without VPN** when available. Blocking applies to the phone's networking beyond this app; review that effect. These system controls provide stronger enforcement during route changes than the app's checks alone. Only one VPN can run per Android user/profile at a time.
 3. In Link Workshop Settings, choose **Remote through home VPN**. Enter the **printer's home IP** `192.168.1.84`, not the Pi's `100.x` VPN address. Select the same authentication that already worked at home: LAN access code with LAN Only, or the explicit read-only cloud-mode PIN probe with cloud mode retained. Enter the corresponding credential in its separate field. If discovery fails, enter the exact Serial Number from printer Settings → Device. Save a profile if useful; its route preference is retained.
 4. Run **Check connection**, then **Connect**. Once the gateway is configured, test on cellular with home Wi-Fi off. Compare status and camera against the printer before relying on remote controls.

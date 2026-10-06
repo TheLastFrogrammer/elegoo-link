@@ -1,3 +1,19 @@
+# v0.3.4 validation
+
+Validated 2026-10-06. No physical CC2, S24+ or emulator is attached. The embedded-image parser and material summary were exercised with generated fixtures and a pinned full public Elegoo sample. Native Android BitmapFactory rendering, UI/lifecycle, user files and firmware mapping semantics still need device testing. Matrix coexistence/authorization remains unverified.
+
+- Full Gradle testDebugUnitTest, lintDebug and assembleDebug passed with build cache disabled: 46 tasks, 22 executed and 24 up-to-date. JDK 17, Gradle 8.13, AGP 8.11.1, SDK 36/build tools 35.0.0.
+- **121 JVM tests, zero failures/errors**. Twenty new tests cover wrapped PNG/JPEG extraction, defensive image-byte copies, largest valid candidate, unsupported formats, incorrect count/missing end, corrupt PNG CRC/truncated JPEG/wrong format, dimension mismatch and size limits, invalid base64, nested blocks/overlong lines, candidate-count cap, incomplete blocks interrupted by G-code, material arrays/quoted values/zero usage, vector length mismatch, malformed/negative/nonfinite usage, color interpretation, ambiguous quotes, contradictory usage indicators, vector/row bounds, incomplete evidence, colon headers, image isolation and binary invalidation.
+- **Lint: 0 errors, 21 warnings**, all SetTextI18n English UI text construction.
+- Primary integration check: official sample at CentauriCarbon2 commit 5a2ea7fc03e707552701b1a69f463699cbd39230, full 388901 bytes, SHA-256 49675a3a34c5ff52c7acefe4153a607ae22dd8599c143ff6376957812c1c01b7. Production inspector extracted a 2701-byte 144×144 PNG from 3604 base64 characters, colon header layer count 100, PLA/#36A8E1, 1466.83 mm and 4.41 g. PNG fully decoded on host with matching dimensions. This is additional integration evidence, not an Android graphics or physical printer test; the older factory sample reports a Centauri Carbon model. No sample file/image is shipped.
+- Final APK ZIP integrity, DEX markers for EmbeddedThumbnail/ThumbnailDecoder/SlicedMaterials/material dialog/version and retained PIN picker verified; final compiled classes postdate all final Java sources. Manifest **v0.3.4/code 9**, min 26, target/compile 36.
+- Signature Scheme v2 verified, one unchanged signer: certificate SHA-256 **9384f581bc33bc47517c6e5177702493fd0bcaabe17f0257430b37212efde6b3**. Compatible normal update over v0.2.0–v0.3.3.
+- APK **253311 bytes**, SHA-256 **f013f947c3b4fce3a3d0e3d76420bafb2c97a17e3ab457299b1d3d8b10c2f802**. Source checksum accompanies release; no credentials or signing keys are included.
+
+Acceptance: import actual single/multi-material files, compare embedded previews/comments with the slicer, try missing/corrupt/unsupported and multiple-size image blocks, test both themes/rotation and file replacement/cache clearing, and verify material swatches and array positions without automatic tray mapping. Android decoding failure must retain the text workspace. Test imported and downloaded copies, document picker return and report sharing. Native memory/performance/layout/accessibility remain unverified. Existing HTTP/VPN transfer and PIN restrictions continue under prior validation records. JPEG structural checks do not fully validate entropy; Android native decode must still succeed.
+
+See [THUMBNAILS.md](THUMBNAILS.md), [FILE_WORKSPACE.md](FILE_WORKSPACE.md) and [PROTOCOL.md](PROTOCOL.md). Earlier validation follows.
+
 # v0.3.3 validation
 
 Validated 2026-10-06. Offline file inspection, HTTP downloading/cancellation and session guards are implemented and covered with JVM fixtures. No physical CC2, S24+ or emulator is attached. The printer's earlier HTTP refusal remains unresolved; this implementation does not make that service available. Cloud-mode PIN authorization and Matrix coexistence remain unverified.
