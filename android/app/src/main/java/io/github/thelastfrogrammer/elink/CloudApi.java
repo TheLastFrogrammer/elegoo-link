@@ -108,6 +108,21 @@ public final class CloudApi {
         } catch (Exception error) { return "three-part token that is not readable JSON, " + token.length() + " characters"; }
     }
 
+    /** Agora identity Elegoo issues for live commands; the same one ElegooSlicer uses (source=slicer). */
+    public static final class AgoraCredential {
+        public final String userId, rtmUserId, rtmToken;
+        AgoraCredential(String userId, String rtmUserId, String rtmToken) { this.userId = userId; this.rtmUserId = rtmUserId; this.rtmToken = rtmToken; }
+    }
+    public AgoraCredential agoraCredential() throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/device/list/agora-token?source=slicer", null, true).optJSONObject("data");
+        JSONObject token = data == null ? null : data.optJSONObject("agoraToken");
+        // userId is numeric in the SDK's parsing; keep its decimal text.
+        String userId = token == null ? "" : String.valueOf(token.optLong("userId", 0));
+        String rtmUserId = token == null ? "" : token.optString("rtmUserId", ""), rtmToken = token == null ? "" : token.optString("rtmToken", "");
+        if ("0".equals(userId) || rtmUserId.isEmpty() || rtmToken.isEmpty()) throw new CloudException("Elegoo did not issue cloud control credentials for this account.", false);
+        return new AgoraCredential(userId, rtmUserId, rtmToken);
+    }
+
     public List<Device> devices() throws IOException {
         JSONArray data = authorized("GET", "/api/v1/device-management-server/device/list", null, true).optJSONArray("data");
         List<Device> devices = new ArrayList<>();

@@ -76,12 +76,19 @@ After another fresh sign-in, every read succeeded: `account-info/account`, `devi
 
 Comparing the three runs: a sign-in stopped working right after the app's first renewal attempt (`clientId "Slicer"`, refused with 400). So a refused renewal appears to end the session. Elegoo's account page renews the same token with `clientId "account"`, without an `Authorization` header, and only after the access token has expired. The app now does the same and never renews just because a request was refused. Cloud printers has a **Test sign-in renewal…** button to try that renewal before the token expires.
 
+## Cloud in the main app (v0.4.0)
+
+- **Monitor without LAN Only.** When there is no local session and the user is signed in, `PrinterService` polls the cloud (every 15 s while the app is visible, every 30 s with the optional background watch), and the Monitor tab, notification and completion/fault alerts use that status. A local session always takes precedence.
+- **Cloud commands** (`CloudControl`, `AgoraLink`): Pause, Resume, Stop and the chamber light. They follow the SDK's `RtmService`: `GET device/list/agora-token?source=slicer` gives `agoraToken.{userId, rtmUserId, rtmToken}`; log in to Agora RTM (`io.agora:agora-rtm`, app ID from the SDK) as `rtmUserId`; subscribe to `userId`; publish the printer's ordinary JSON request (`{id, method, params}`, built by `Cc2Codec`) to the user channel `<userId><serial>` with custom type `PlainText`; the reply comes back from publisher `<userId><serial>` with the same `id`. One command at a time, 10 s reply timeout, never retried. The session opens on the first command and closes after two idle minutes.
+- **Shared identity.** `source=slicer` is ElegooSlicer's identity, so the app and an open ElegooSlicer can sign each other out of cloud control (`SAME_UID_LOGIN`). The app explains this before the first cloud command, never reconnects by itself, and Matrix is expected to be unaffected (untested).
+- **APK size.** Agora's native library is about 10 MB for 64-bit ARM; the app ships that CPU type only (`abiFilters 'arm64-v8a'`).
+
 ## Open questions to test first
 
 1. ~~Does the sign-in page hand off tokens to the Android `WebView`?~~ Yes, confirmed on the user's phone.
 2. Does the Cloud printers screen stay current during a print? (Idle status and temperatures confirmed.)
 3. Does renewal with `clientId "account"` work? (Use Test sign-in renewal.)
 4. Does the MQTT credential endpoint accept an `android` client ID?
-5. Does a cloud MQTT or RTM session from the app keep Matrix and ElegooSlicer connected?
+5. Do cloud commands reach the printer, and does Matrix keep working while the app sends them?
 
 This uses Elegoo's servers and the user's own account in a way Elegoo did not design for, so it can break when they change their service.

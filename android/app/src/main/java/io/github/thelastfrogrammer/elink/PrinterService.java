@@ -17,6 +17,7 @@ import java.util.concurrent.*;
 /** User-started foreground connection, independent of Activity instances. Main thread owns UI state. */
 public final class PrinterService extends Service {
     public static final String DISCONNECT = "io.github.thelastfrogrammer.elink.DISCONNECT";
+    public static final String STOP_CLOUD = "io.github.thelastfrogrammer.elink.STOP_CLOUD";
     private static final int NOTIFICATION = 1;
     private static final String CHANNEL = "printer-connection";
     public interface Observer { void changed(); }
@@ -46,6 +47,21 @@ public final class PrinterService extends Service {
     public boolean importing;
     private long canvasAt, lastNotification;
     private final Runnable reconnect = this::attempt;
+
+    // Elegoo cloud monitoring and controls, used whenever there is no local session (see CLOUD_LOGIN.md).
+    private static final long CLOUD_VISIBLE_POLL_MS = 15_000, CLOUD_BACKGROUND_POLL_MS = 30_000;
+    private final ScheduledExecutorService cloudWorker = Executors.newSingleThreadScheduledExecutor();
+    private CloudAccountStore cloudAccounts;
+    private volatile CloudApi cloudApi;
+    private CloudControl cloudControl;
+    private PrintAlerts cloudAlerts = new PrintAlerts();
+    private boolean cloudVisible, cloudPolling;
+    public JSONObject cloudStatus = new JSONObject();
+    public String cloudName = "", cloudModel = "", cloudSerial = "", cloudMessage = "";
+    public int cloudOnline = -1;
+    public long cloudCheckedAt;
+    public boolean cloudSignedIn, cloudCommandBusy;
+    private final Runnable cloudPoll = new Runnable() { public void run() { pollCloud(); } };
     private final Runnable freshness = new Runnable() {
         public void run() { if (destroyed) return; checkRoute(); if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
     };
@@ -54,10 +70,16 @@ public final class PrinterService extends Service {
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Printer connection", NotificationManager.IMPORTANCE_LOW));
         main.post(freshness);
+        cloudAccounts = new CloudAccountStore(this);
+        if (cloudBackground()) main.post(cloudPoll);
     }
     @Override public IBinder onBind(Intent intent) { return binder; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && DISCONNECT.equals(intent.getAction())) { disconnect(); return START_NOT_STICKY; }
+        if (intent != null && STOP_CLOUD.equals(intent.getAction())) {
+            getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putBoolean("cloudBackground", false).apply();
+            cloudSettingsChanged(); changed(); return START_NOT_STICKY;
+        }
         // An explicit UI action starts this service before connect(), satisfying Android's foreground deadline.
         startMonitoring(); if (!wanted) stopMonitoring(); return START_NOT_STICKY;
     }
@@ -135,6 +157,7 @@ public final class PrinterService extends Service {
             wanted = false; code = "";
             connection = message + (retryable ? "\nAutomatic retries stopped. Run Check connection, then reconnect." : pinProbe ? "\nPIN probe stopped; reconnect explicitly when ready. No automatic retries." : "");
             stopMonitoring();
+            main.removeCallbacks(cloudPoll); main.post(cloudPoll);
         }
         changed();
     }
@@ -176,6 +199,7 @@ public final class PrinterService extends Service {
         if (session != null) session.close(); session = null; code = "";
         resetData();
         connection = "Disconnected"; stopMonitoring(); changed();
+        main.removeCallbacks(cloudPoll); main.post(cloudPoll);
     }
     public void select(Uri uri) {
         if (importing || uploading()) return;
@@ -219,32 +243,126 @@ public final class PrinterService extends Service {
         });
     }
     private void changed() { if (observer != null && !destroyed) observer.changed(); }
-    private void showAlert(String text) {
+
+    /** Monitoring through the cloud while the app is visible; background watching is a separate opt-in setting. */
+    public void cloudVisible(boolean visible) { cloudVisible = visible; if (visible) { main.removeCallbacks(cloudPoll); main.post(cloudPoll); } }
+    public boolean cloudBackground() { return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudBackground", false) && cloudAccountPresent(); }
+    /** Called after the setting changes or the account changes, while the app is visible. */
+    public void cloudSettingsChanged() {
+        cloudApi = null;
+        if (cloudBackground() && !wanted) startMonitoring();
+        else if (!wanted && foreground) { stopForeground(STOP_FOREGROUND_REMOVE); foreground = false; stopSelf(); }
+        main.removeCallbacks(cloudPoll); main.post(cloudPoll);
+    }
+    private boolean cloudAccountPresent() { try { return cloudAccounts != null && cloudAccounts.load() != null; } catch (Exception error) { return false; } }
+    /** A successful cloud read in the last minute, with the printer online. */
+    public boolean cloudFresh() { return cloudOnline == 1 && cloudCheckedAt != 0 && System.currentTimeMillis() - cloudCheckedAt < 60_000 && cloudStatus.length() > 0; }
+    /** Cloud data is shown only when there is no local session. */
+    public boolean usingCloud() { return !wanted && cloudSignedIn && !cloudSerial.isEmpty(); }
+
+    private void pollCloud() {
+        main.removeCallbacks(cloudPoll);
+        if (destroyed) return;
+        boolean background = cloudBackground();
+        if (wanted || !(cloudVisible || background)) { cloudPolling = false; return; }
+        cloudPolling = true;
+        main.postDelayed(cloudPoll, cloudVisible ? CLOUD_VISIBLE_POLL_MS : CLOUD_BACKGROUND_POLL_MS);
+        cloudWorker.execute(() -> {
+            CloudLogin.Account account;
+            try { account = cloudAccounts.load(); } catch (Exception error) { account = null; }
+            if (account == null) { main.post(() -> { cloudSignedIn = false; cloudSerial = ""; cloudStatus = new JSONObject(); cloudMessage = "Sign in with Elegoo in Settings to monitor through the cloud."; changed(); }); return; }
+            CloudApi api = cloudApi;
+            if (api == null || !api.account().accessToken.equals(account.accessToken)) {
+                api = new CloudApi(cloudAccounts.china(), account, cloudAgent(), CloudApi::https); api.language(Locale.getDefault().getLanguage()); cloudApi = api;
+            }
+            String preferred = getSharedPreferences("workshop-settings", MODE_PRIVATE).getString("cloudSerial", "");
+            CloudApi.Device device = null; int online = -1; CloudApi.Snapshot snapshot = null; String message = "";
+            CloudLogin.Account before = api.account();
+            try {
+                List<CloudApi.Device> devices = api.devices();
+                for (CloudApi.Device candidate : devices) if (candidate.serial.equals(preferred)) device = candidate;
+                if (device == null && !devices.isEmpty()) device = devices.get(0);
+                if (device == null) message = "No printers are bound to this Elegoo account.";
+                else { online = api.online(device.serial); snapshot = api.status(device.serial); }
+            } catch (Exception error) { message = error.getMessage() == null ? "Could not reach the Elegoo cloud." : error.getMessage(); }
+            api.takeTrace();
+            if (api.account() != before) try { if (cloudAccounts.load() != null) cloudAccounts.save(api.account()); } catch (Exception ignored) { }
+            CloudApi.Device found = device; int reportedOnline = online; CloudApi.Snapshot reported = snapshot; String text = message;
+            main.post(() -> {
+                if (destroyed) return;
+                cloudSignedIn = true; cloudMessage = text;
+                if (found != null) {
+                    if (!found.serial.equals(cloudSerial)) cloudAlerts = new PrintAlerts();
+                    cloudName = found.name; cloudModel = found.model; cloudSerial = found.serial; cloudOnline = reportedOnline;
+                }
+                if (reported != null) {
+                    cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
+                    // Local alerts take precedence while connected locally.
+                    if (!wanted && reportedOnline == 1) showAlert(cloudAlerts.update(reported.status), cloudName);
+                } else if (found == null) { cloudSerial = ""; cloudStatus = new JSONObject(); }
+                changed(); updateNotification(false);
+            });
+        });
+    }
+    private String cloudAgent() {
+        String version; try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { version = "dev"; }
+        return CloudLogin.SLICER_AGENT + " (Android " + Build.VERSION.RELEASE + "; " + (Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown") + ") LinkWorkshop/" + version;
+    }
+
+    /** Sends one command through the cloud. Only commands CloudControl allows, with fresh cloud status. */
+    public void cloudCommand(JSONObject request) {
+        if (!usingCloud() || !cloudFresh() || cloudCommandBusy) return;
+        CloudApi api = cloudApi; if (api == null) return;
+        if (cloudControl == null) cloudControl = new CloudControl(() -> {
+            CloudApi current = cloudApi; if (current == null) throw new IOException("Sign in with Elegoo again.");
+            return current.agoraCredential();
+        }, AgoraLink::new, cloudWorker);
+        cloudCommandBusy = true; feedback = "Sending through the Elegoo cloud…"; changed();
+        cloudControl.send(cloudSerial, request, (acknowledged, text) -> main.post(() -> {
+            cloudCommandBusy = false; feedback = text; changed();
+            // Refresh status soon so the result shows; nothing is retried.
+            main.removeCallbacks(cloudPoll); main.postDelayed(cloudPoll, 2000);
+        }));
+    }
+    public void cloudPause() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.PAUSE)); }
+    public void cloudResume() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.RESUME)); }
+    public void cloudStop() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.STOP)); }
+    public void cloudLight(boolean on) { cloudCommandSafe(() -> Cc2Codec.lightRequest(0, on)); }
+    private interface RequestBuilder { JSONObject build() throws Exception; }
+    private void cloudCommandSafe(RequestBuilder builder) { try { cloudCommand(builder.build()); } catch (Exception error) { feedback = "Could not prepare the cloud command."; changed(); } }
+    private void showAlert(String text) { showAlert(text, host); }
+    private void showAlert(String text, String title) {
         if (text.isEmpty() || !getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alerts", true)) return;
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("printer-alerts", "Print completion and faults", NotificationManager.IMPORTANCE_DEFAULT));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         manager.notify(text.startsWith("Print complete") ? 2 : 3, new Notification.Builder(this, "printer-alerts").setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Link Workshop · " + host).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
+            .setContentTitle("Link Workshop · " + StatusPresentation.clean(title)).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
     }
     private Notification notification() {
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent view = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent disconnect = PendingIntent.getService(this, 1, new Intent(this, PrinterService.class).setAction(DISCONNECT), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         String text = !ready() ? connection.split("\n")[0] : !fresh() ? "Status stale · awaiting printer" : StatusPresentation.state(status);
+        if (!wanted && cloudFresh()) text = "Cloud · " + StatusPresentation.overview(cloudStatus).split("\n")[0];
         if (ready() && fresh() && !StatusPresentation.faultCodes(status).isEmpty()) text += " · Printer reports a fault";
         if (uploading()) text = feedback;
-        return new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("Link Workshop · " + host)
+        String title = wanted || cloudName.isEmpty() ? host : StatusPresentation.clean(cloudName);
+        return new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("Link Workshop · " + title)
             .setContentText(text).setContentIntent(view).setOngoing(true).setOnlyAlertOnce(true)
-            .addAction(new Notification.Action.Builder(null, "Disconnect", disconnect).build()).build();
+            .addAction(wanted ? new Notification.Action.Builder(null, "Disconnect", disconnect).build()
+                : new Notification.Action.Builder(null, "Stop watching", PendingIntent.getService(this, 2, new Intent(this, PrinterService.class).setAction(STOP_CLOUD), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build()).build();
     }
     private void startMonitoring() {
         if (android.os.Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
         else startForeground(NOTIFICATION, notification());
         foreground = true;
     }
-    private void stopMonitoring() { if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); foreground = false; stopSelf(); }
+    private void stopMonitoring() {
+        if (cloudBackground()) { updateNotification(true); return; }
+        if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); foreground = false; stopSelf();
+    }
     private void updateNotification(boolean force) {
         if (!foreground) return;
         long now = System.nanoTime();
@@ -253,6 +371,7 @@ public final class PrinterService extends Service {
     }
     @Override public void onDestroy() {
         destroyed = true; observer = null; clearRoute(); main.removeCallbacksAndMessages(null);
+        if (cloudControl != null) cloudControl.close(); cloudWorker.shutdown();
         if (session != null) session.close(); session = null; code = "";
         files.shutdownNow(); if (selectedFile != null) selectedFile.delete();
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy();

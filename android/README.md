@@ -1,5 +1,9 @@
 # Link Workshop for Android
 
+**v0.4.0 (development):** redesigned interface with bottom navigation, a progress ring and temperature tiles; monitoring, alerts and Pause/Resume/Stop/light through the Elegoo cloud when LAN Only is off (sign in under Settings → Elegoo account). See [CLOUD_LOGIN.md](CLOUD_LOGIN.md).
+
+<img src="docs/screenshots/monitor-dark.png" width="240" alt="Monitor tab, dark theme"> <img src="docs/screenshots/monitor-light.png" width="240" alt="Monitor tab, light theme">
+
 Independent native Android client in the Elegoo Link fork. **v0.3.2** adds an experimental read-only cloud-mode local PIN probe to test Matrix coexistence, retains home-VPN remote routing and retains System/Light/Dark appearance with separate Monitor, Files, Camera and Settings tabs. First target: Centauri Carbon 2, including the user's firmware V02.01.00.00. Minimum Android 8/API 26; compile/target Android 16/API 36.
 
 The app ports the inspected LAN protocol to Java/Paho; it does not load the desktop C++ SDK. New features have automated transport/protocol coverage but have not been exercised on the user's physical printer. The previous MQTT authorization refusal is not evidence of successful registration; new features require the appropriate connection and firmware support.
