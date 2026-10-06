@@ -91,8 +91,13 @@ public final class Cc2Codec {
     }
     /** Whether the printer reports the axis as homed (tool_head.homed_axes, for example "xyz"). */
     public static boolean homed(JSONObject status, String axis) {
-        JSONObject head = status.optJSONObject("tool_head");
+        // Elegoo's page reads tool_head; the SDK reads toolhead. Accept either.
+        JSONObject head = status.optJSONObject("tool_head"); if (head == null) head = status.optJSONObject("toolhead");
         return head != null && head.optString("homed_axes", "").toLowerCase(Locale.ROOT).contains(axis);
+    }
+    /** Print head position: gcode_move (Elegoo's page) or gcode_move_inf (SDK). */
+    public static JSONObject position(JSONObject status) {
+        JSONObject move = status.optJSONObject("gcode_move"); return move != null ? move : status.optJSONObject("gcode_move_inf");
     }
     /** Seconds to wait for the printer's reply; filament changes reply only when finished (Elegoo's page waits 5 minutes). */
     public static int timeoutSeconds(int method) {

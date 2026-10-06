@@ -18,6 +18,7 @@
         <activity android:name=".CloudStatusActivity" android:exported="false" android:label="Cloud printers" />
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
+        <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />
     </application>
 </manifest>

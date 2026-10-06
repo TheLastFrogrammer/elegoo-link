@@ -55,6 +55,12 @@ public final class PrinterService extends Service {
     private volatile CloudApi cloudApi;
     private CloudControl cloudControl;
     private PrintAlerts cloudAlerts = new PrintAlerts();
+    /** Records each print's progress for graphs (see PrintRecorder); on by default, Settings can turn it off. */
+    public PrintRecorder recorder;
+    private void record(JSONObject value, String source, String name) {
+        if (recorder != null && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("recordPrints", true))
+            recorder.update(System.currentTimeMillis(), value, source, name);
+    }
     private boolean cloudVisible, cloudPolling;
     public JSONObject cloudStatus = new JSONObject();
     public String cloudName = "", cloudModel = "", cloudSerial = "", cloudMessage = "";
@@ -71,6 +77,7 @@ public final class PrinterService extends Service {
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Printer connection", NotificationManager.IMPORTANCE_LOW));
         main.post(freshness);
         cloudAccounts = new CloudAccountStore(this);
+        recorder = new PrintRecorder(RecordingsActivity.directory(this));
         if (cloudBackground()) main.post(cloudPoll);
     }
     @Override public IBinder onBind(Intent intent) { return binder; }
@@ -119,7 +126,7 @@ public final class PrinterService extends Service {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
             public void connection(String text, boolean registered) { deliver(() -> { connection = registered ? "Connected" + (remote ? " through VPN" : " locally") + (pinProbe ? " · read-only PIN probe" : "") + " · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
-            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } showAlert(alerts.update(value)); }); }
+            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } showAlert(alerts.update(value)); record(value, "local", attributes.optString("hostname", host)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
@@ -362,7 +369,7 @@ public final class PrinterService extends Service {
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
                     // Local alerts take precedence while connected locally.
-                    if (!wanted && reportedOnline == 1) showAlert(cloudAlerts.update(reported.status), cloudName);
+                    if (!wanted && reportedOnline == 1) { showAlert(cloudAlerts.update(reported.status), cloudName); record(reported.status, "cloud", cloudName); }
                 } else if (found == null) { cloudSerial = ""; cloudStatus = new JSONObject(); }
                 changed(); updateNotification(false);
             });

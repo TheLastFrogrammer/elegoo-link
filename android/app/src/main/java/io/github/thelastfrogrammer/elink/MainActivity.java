@@ -40,6 +40,7 @@ public final class MainActivity extends Activity {
     private CheckBox cloudBackground;
     private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck, urgentStop;
     private ImageView fileThumbnail;
+    private Button graphs;
     private String fileThumbnailKey = "";
     private Button cloudCamera;
     private CloudAccountStore cloudAccounts;
@@ -175,6 +176,12 @@ public final class MainActivity extends Activity {
         job = label(heroText, "", 14, INK, false); job.setMaxLines(2); job.setEllipsize(android.text.TextUtils.TruncateAt.END);
         detail = label(heroText, "", 13, MUTED, false);
         faults = label(hero, "", 14, ERROR, true);
+        graphs = button(hero, "Graphs", () -> {
+            PrintRecorder.Recording current = printer == null || printer.recorder == null ? null : printer.recorder.current();
+            Intent intent = new Intent(this, RecordingsActivity.class);
+            if (current != null) intent.putExtra(RecordingsActivity.EXTRA_META, current.meta.getAbsolutePath());
+            startActivity(intent);
+        });
         LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams tilesLayout = new LinearLayout.LayoutParams(-1, -2); tilesLayout.topMargin = dp(12); currentSection.addView(tiles, tilesLayout);
         tileNozzle = tile(tiles, "Nozzle", 0); tileBed = tile(tiles, "Bed", dp(8)); tileChamber = tile(tiles, "Chamber", dp(8));
@@ -248,6 +255,8 @@ public final class MainActivity extends Activity {
         pages[3].removeView(account); pages[3].addView(account, 0);
         LinearLayout preferences = card("App preferences");
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
+        CheckBox record = checkbox(preferences, "Record prints for graphs", settings.getBoolean("recordPrints", true));
+        record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
@@ -352,8 +361,8 @@ public final class MainActivity extends Activity {
         if (printer == null) return;
         JSONObject current = printer.liveStatus();
         LinearLayout body = dialogBody();
-        JSONObject position = current.optJSONObject("gcode_move");
-        label(body, "Homed: " + (current.optJSONObject("tool_head") == null ? "unknown" : current.optJSONObject("tool_head").optString("homed_axes", "none").toUpperCase(Locale.ROOT))
+        JSONObject position = Cc2Codec.position(current), head = current.optJSONObject("tool_head") != null ? current.optJSONObject("tool_head") : current.optJSONObject("toolhead");
+        label(body, "Homed: " + (head == null ? "unknown" : head.optString("homed_axes", "none").toUpperCase(Locale.ROOT))
             + (position == null ? "" : String.format(Locale.ROOT, "\nPosition X %.1f · Y %.1f · Z %.1f", position.optDouble("x", 0), position.optDouble("y", 0), position.optDouble("z", 0)))
             + "\nAn axis must be homed before it can move. Each tap sends one move.", 14, INK, false);
         Spinner axis = spinner(body, new String[] {"X axis", "Y axis", "Z axis"});
@@ -511,6 +520,9 @@ public final class MainActivity extends Activity {
         previousFiles = rowButton(pageRow, "Previous 50", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); }, false);
         nextFiles = rowButton(pageRow, "Next 50", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); }, false);
         label(browser, "Tap a file for details, print setup or deletion. The printer must be idle.", 13, MUTED, false);
+        LinearLayout recordings = card("Print recordings");
+        label(recordings, "Graphs of progress, layers, temperatures and fans for each print this app has watched.", 13, MUTED, false);
+        button(recordings, "Open recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
         LinearLayout storage = card("Storage & print history");
         diskInfo = label(storage, "Storage usage not loaded.", 14, MUTED, false);
         loadDisk = button(storage, "Refresh storage usage", () -> { if (printer != null) printer.loadDisk(); });
@@ -739,6 +751,8 @@ public final class MainActivity extends Activity {
             job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in with Elegoo to watch through the cloud.") : "No active print.");
             detail.setText("");
         }
+        PrintRecorder.Recording recordingNow = printer == null || printer.recorder == null ? null : printer.recorder.current();
+        graphs.setText(recordingNow != null ? "Graphs for this print" : "Print recordings");
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
         faults.setText(codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen.");
