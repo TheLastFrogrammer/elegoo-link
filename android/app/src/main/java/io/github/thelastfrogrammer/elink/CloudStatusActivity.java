@@ -23,7 +23,7 @@ public final class CloudStatusActivity extends Activity {
     private TextView header, body;
     private CloudAccountStore store;
     private CloudApi api;
-    private boolean visible, busy;
+    private boolean visible, busy, checked;
     private final Runnable poll = new Runnable() { public void run() { refresh(); main.postDelayed(this, POLL_MS); } };
 
     @Override protected void onCreate(Bundle saved) {
@@ -46,6 +46,7 @@ public final class CloudStatusActivity extends Activity {
             if (account == null) { body.setText("Not signed in. Use Settings → Elegoo account → Sign in with Elegoo first."); return; }
             String agent = CloudLogin.SLICER_AGENT + " (Android " + Build.VERSION.RELEASE + "; " + (Build.SUPPORTED_ABIS.length > 0 ? Build.SUPPORTED_ABIS[0] : "unknown") + ") LinkWorkshop/" + version();
             api = new CloudApi(store.china(), account, agent, CloudApi::https);
+            api.language(java.util.Locale.getDefault().getLanguage());
         } catch (Exception error) { store.forget(); body.setText("Saved Elegoo sign-in could not be decrypted. Sign in again."); }
     }
     private String version() {
@@ -62,6 +63,8 @@ public final class CloudStatusActivity extends Activity {
         worker.execute(() -> {
             String text;
             CloudLogin.Account before = api.account();
+            boolean first = !checked; checked = true;
+            if (first) api.accountCheck();
             try { text = describe(api); }
             catch (CloudApi.CloudException error) {
                 text = error.getMessage();
@@ -71,7 +74,9 @@ public final class CloudStatusActivity extends Activity {
             if (api.account() != before) try { if (store.load() != null) store.save(api.account()); } catch (Exception ignored) { }
             CloudLogin.Account now = api.account();
             StringBuilder details = new StringBuilder("\n\nDetails (no secrets)\nAccess token valid until ").append(CloudApi.when(now.accessExpires))
-                .append("\nRefresh token valid until ").append(CloudApi.when(now.refreshExpires)).append(now.refreshToken.isEmpty() ? " (none received)" : "");
+                .append("\nRefresh token valid until ").append(CloudApi.when(now.refreshExpires)).append(now.refreshToken.isEmpty() ? " (none received)" : "")
+                .append("\nAccess token: ").append(CloudApi.describe(now.accessToken))
+                .append(now.signInNote.isEmpty() ? "" : "\n" + now.signInNote);
             for (String line : api.takeTrace()) details.append("\n• ").append(line);
             String result = text + details;
             main.post(() -> { busy = false; if (!isDestroyed()) body.setText(result); });

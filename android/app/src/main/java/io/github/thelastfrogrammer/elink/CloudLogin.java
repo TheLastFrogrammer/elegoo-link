@@ -40,21 +40,39 @@ public final class CloudLogin {
     public static final class Account {
         public final String userId, nickname, accessToken, refreshToken;
         public final long accessExpires, refreshExpires;
+        /** Secret-free: which fields the sign-in page reported, for diagnosing token problems. */
+        public final String signInNote;
         Account(String userId, String nickname, String accessToken, String refreshToken, long accessExpires, long refreshExpires) {
+            this(userId, nickname, accessToken, refreshToken, accessExpires, refreshExpires, "");
+        }
+        Account(String userId, String nickname, String accessToken, String refreshToken, long accessExpires, long refreshExpires, String signInNote) {
             this.userId = userId; this.nickname = nickname; this.accessToken = accessToken; this.refreshToken = refreshToken;
-            this.accessExpires = accessExpires; this.refreshExpires = refreshExpires;
+            this.accessExpires = accessExpires; this.refreshExpires = refreshExpires; this.signInNote = signInNote;
+        }
+        Account withTokens(String userId, String accessToken, String refreshToken, long accessExpires, long refreshExpires) {
+            return new Account(userId, nickname, accessToken, refreshToken, accessExpires, refreshExpires, signInNote);
         }
         static Account fromReport(JSONObject params) {
             String nickname = params.optString("nickname", "");
             if (nickname.isEmpty()) nickname = params.optString("username", "");
+            String note = params.optString("signInNote", "");
+            if (note.isEmpty()) {
+                List<String> keys = new ArrayList<>();
+                for (Iterator<String> it = params.keys(); it.hasNext(); ) keys.add(it.next());
+                Collections.sort(keys);
+                note = "Sign-in page reported: " + String.join(", ", keys);
+            }
             return new Account(params.optString("userId", "").trim(), nickname, params.optString("accessToken", ""), params.optString("refreshToken", ""),
-                params.optLong("accessTokenExpireTime", 0), params.optLong("refreshTokenExpireTime", 0));
+                params.optLong("accessTokenExpireTime", 0), params.optLong("refreshTokenExpireTime", 0), note);
         }
         public JSONObject toJson() throws Exception {
             return new JSONObject().put("userId", userId).put("nickname", nickname).put("accessToken", accessToken).put("refreshToken", refreshToken)
-                .put("accessTokenExpireTime", accessExpires).put("refreshTokenExpireTime", refreshExpires);
+                .put("accessTokenExpireTime", accessExpires).put("refreshTokenExpireTime", refreshExpires).put("signInNote", signInNote);
         }
-        public static Account fromJson(JSONObject json) { return fromReport(json); }
+        public static Account fromJson(JSONObject json) {
+            if (!json.has("signInNote")) try { json.put("signInNote", "Signed in with an earlier version; sign in again to record what the page reported."); } catch (Exception ignored) { }
+            return fromReport(json);
+        }
         boolean complete() { return !userId.isEmpty() && !accessToken.isEmpty(); }
         /** Secret-free description: never includes tokens. */
         public String summary() {

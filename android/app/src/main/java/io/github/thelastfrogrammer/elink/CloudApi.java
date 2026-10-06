@@ -39,6 +39,7 @@ public final class CloudApi {
     }
 
     private final String base, userAgent;
+    private String language = "en";
     private final Transport transport;
     private CloudLogin.Account account;
     private final List<String> trace = new ArrayList<>();
@@ -47,6 +48,7 @@ public final class CloudApi {
         this.base = china ? CHINA : GLOBAL; this.account = account; this.userAgent = userAgent; this.transport = transport;
     }
     public CloudLogin.Account account() { return account; }
+    public void language(String language) { if (language != null && !language.isEmpty()) this.language = language; }
     /** Secret-free record of requests since the last call: paths, HTTP status, server code and message, refresh reasons. */
     public synchronized List<String> takeTrace() { List<String> copy = new ArrayList<>(trace); trace.clear(); return copy; }
     private synchronized void note(String line) { if (trace.size() < 40) trace.add(line); }
@@ -71,8 +73,30 @@ public final class CloudApi {
         } catch (org.json.JSONException impossible) { throw new IOException(impossible); }
         if (data == null || data.optString("accessToken", "").isEmpty()) throw new CloudException("Elegoo returned no new sign-in token. Sign in again.", true);
         String userId = data.optString("accountId", "");
-        account = new CloudLogin.Account(userId.isEmpty() ? account.userId : userId, account.nickname, data.optString("accessToken"),
+        account = account.withTokens(userId.isEmpty() ? account.userId : userId, data.optString("accessToken"),
             data.optString("refreshToken", account.refreshToken), data.optLong("expiresTime", 0), data.optLong("refreshExpiresTime", account.refreshExpires));
+    }
+
+    /** Checks the token against the account service only, without renewing it; the result is recorded in the trace. */
+    public void accountCheck() {
+        try { call("GET", "/api/v1/account-center-server/account-info/account", null); }
+        catch (IOException error) { /* already traced */ }
+    }
+
+    /** Secret-free description of a token: for a JWT, its claim names and a few identifying claim values; never the signature. */
+    static String describe(String token) {
+        String[] parts = token.split("\\.");
+        if (parts.length != 3) return "opaque token, " + token.length() + " characters";
+        try {
+            JSONObject claims = new JSONObject(new String(java.util.Base64.getUrlDecoder().decode(parts[1]), StandardCharsets.UTF_8));
+            List<String> keys = new ArrayList<>();
+            for (Iterator<String> it = claims.keys(); it.hasNext(); ) keys.add(it.next());
+            Collections.sort(keys);
+            StringBuilder text = new StringBuilder("JWT with claims: ").append(String.join(", ", keys));
+            for (String key : Arrays.asList("iss", "aud", "azp", "client_id", "clientId", "cid", "client", "source", "platform", "scope", "loginType", "login_type"))
+                if (claims.has(key)) text.append("\n  ").append(key).append(" = ").append(StatusPresentation.clean(String.valueOf(claims.opt(key))));
+            return text.toString();
+        } catch (Exception error) { return "three-part token that is not readable JSON, " + token.length() + " characters"; }
     }
 
     public List<Device> devices() throws IOException {
@@ -119,6 +143,9 @@ public final class CloudApi {
         headers.put("Authorization", "Bearer " + account.accessToken);
         headers.put("User-Agent", userAgent);
         headers.put("Accept", "application/json");
+        // Sent by Elegoo's own account page with every request.
+        headers.put("User-Lang", language);
+        headers.put("X-Client-Request-Id", UUID.randomUUID().toString());
         if (body != null) headers.put("Content-Type", "application/json");
         Response response = transport.send(method, base + path, headers, body);
         String endpoint = method + " " + (path.contains("?") ? path.substring(0, path.indexOf('?')) : path).replaceFirst("^/api/v1/[^/]+/", "");

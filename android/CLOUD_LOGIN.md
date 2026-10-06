@@ -49,6 +49,17 @@ The HTTPS status is rebuilt from per-field reports (`reportLinkKey`, `reportValu
 
 The HTTPS reads are the same kind of requests Matrix and ElegooSlicer make, with no session of their own, so they should not disturb those apps. Live MQTT and RTM do create sessions, which is where the client ID and same-user kick-off questions matter.
 
+## First phone result (2026-10-06)
+
+With a sign-in whose access token was valid for six more days, `GET device/list` answered `code 401 账号未登录` ("account not logged in"), and `POST token/refresh` with `clientId "Slicer"` answered `code 400 无效的刷新令牌` ("invalid refresh token").
+
+What the account page's code shows (`account.elegoo.com/assets/*.js`):
+
+- The slicer sign-in flow logs in with `clientId` `Slicer` (`useSlicerFontFamily-*.js`: `Slicer`, `SatelLite` or `Nexprint`, chosen from the user agent or a `clientId` query parameter). It then hands its "biz" token to the host through `report.userInfo` (`finishSlicerIpcLogin-*.js`).
+- The page's own token renewal uses `clientId` `account`, which is the plain web sign-in client. It also sends `User-Lang`, `X-Client-Request-Id`, and `elegoo-gray-v: gray` when the page runs on Elegoo's canary ("gray") servers.
+
+Working theory: the app received a web-session (`account`) token rather than a `Slicer` one, for example because the page reused an existing web login. The Cloud printers details now describe the token (claim names and client-identifying claims, never the token itself), check it against `account-info/account`, and show which fields the page reported at sign-in.
+
 ## Open questions to test first
 
 1. ~~Does the sign-in page hand off tokens to the Android `WebView`?~~ Yes, confirmed on the user's phone.

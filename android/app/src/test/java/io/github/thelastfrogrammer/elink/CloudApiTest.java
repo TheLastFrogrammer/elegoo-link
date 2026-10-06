@@ -148,6 +148,37 @@ public class CloudApiTest {
         catch (CloudApi.CloudException error) { assertEquals("Elegoo cloud returned HTTP 502.", error.getMessage()); }
     }
 
+    @Test public void tokenDescriptionShowsClaimsButNeverTheToken() throws Exception {
+        java.util.Base64.Encoder b64 = java.util.Base64.getUrlEncoder().withoutPadding();
+        String payload = new JSONObject().put("clientId", "account").put("accountId", "42").put("email", "me@example.com").put("exp", 1).toString();
+        String jwt = b64.encodeToString("{\"alg\":\"HS256\"}".getBytes("UTF-8")) + "." + b64.encodeToString(payload.getBytes("UTF-8")) + ".c2lnbmF0dXJl";
+        String text = CloudApi.describe(jwt);
+        assertTrue(text, text.startsWith("JWT with claims: accountId, clientId, email, exp"));
+        assertTrue(text, text.contains("clientId = account"));
+        assertFalse(text, text.contains("me@example.com") || text.contains(jwt) || text.contains("c2lnbmF0dXJl"));
+        assertEquals("opaque token, 6 characters", CloudApi.describe("abcdef"));
+    }
+
+    @Test public void accountCheckIsTracedWithoutRenewingAndRequestsCarryPageHeaders() throws Exception {
+        FakeCloud cloud = new FakeCloud().reply(200, "{\"code\":401,\"msg\":\"no\"}");
+        CloudApi api = new CloudApi(false, account(inAnHour()), "a", cloud); api.language("de");
+        api.accountCheck();
+        assertEquals(1, cloud.calls.size());
+        assertEquals("GET account-info/account → HTTP 200, code 401 no", api.takeTrace().get(0));
+        assertEquals("de", cloud.calls.get(0).headers.get("User-Lang"));
+        assertEquals(36, cloud.calls.get(0).headers.get("X-Client-Request-Id").length());
+    }
+
+    @Test public void renewedTokensKeepTheSignInNote() throws Exception {
+        CloudLogin.Account signedIn = CloudLogin.Account.fromReport(new JSONObject().put("userId", "42").put("accessToken", "a").put("refreshToken", "r").put("bindCode", "x"));
+        assertEquals("Sign-in page reported: accessToken, bindCode, refreshToken, userId", signedIn.signInNote);
+        FakeCloud cloud = new FakeCloud().reply(401, "").ok(new JSONObject().put("accessToken", "n").put("expiresTime", inAnHour())).ok(new JSONArray());
+        CloudApi api = new CloudApi(false, signedIn, "a", cloud); api.devices();
+        assertEquals(signedIn.signInNote, api.account().signInNote);
+        assertEquals(signedIn.signInNote, CloudLogin.Account.fromJson(api.account().toJson()).signInNote);
+        assertTrue(CloudLogin.Account.fromJson(new JSONObject().put("userId", "1").put("accessToken", "t")).signInNote.startsWith("Signed in with an earlier version"));
+    }
+
     @Test public void transportRefusesPlainHttp() {
         try { CloudApi.https("GET", "http://matrix.elegoo.com/", new HashMap<>(), null); fail(); } catch (IOException expected) { }
     }
