@@ -20,10 +20,16 @@ libslic3r without the GUI; it's the reference for what the JNI facade has to do.
 
 ## Phases
 
-### 1. Headless build on Linux (proves the engine path)
-- Configure ElegooSlicer with `SLIC3R_GUI=OFF` and build only libslic3r + the CLI.
-- Slice a CC2 test model with the bundled `resources/profiles/Elegoo/machine/ECC2/*.json` presets and diff the
-  G-code against the desktop app's output for the same 3MF. This becomes the regression check for every later step.
+### 1. Headless build on Linux (proves the engine path) — done
+Built in [`slicer/`](../slicer/README.md): libslic3r without the GUI, a small engine facade and a `link-slicer` CLI.
+Its G-code is identical to the official ElegooSlicer v1.5.3.5 for every model and preset tested
+([results](../slicer/RESULTS.md)).
+
+- ElegooSlicer's own build can't do this even with `SLIC3R_GUI=OFF`: it still requires OpenGL, GLFW, Sentry,
+  CURL and DBus. `slicer/` builds libslic3r directly, with a dependency build that reuses ElegooSlicer's pinned
+  recipes for only the 17 libraries the engine needs.
+- `slicer/scripts/compare-official.sh` (slice the same model with both, diff the G-code) is the regression check
+  for every later step.
 
 ### 2. Cross-compile the dependencies with the NDK (arm64-v8a, API 26+)
 The bulk of the work. Most are CMake projects that cross-compile cleanly:
