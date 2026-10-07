@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class SliceActivity extends Activity {
     static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", RESULT_PRINT_SETUP = "printSetup", TRAY_PLANS = "tray-plans";
     static final int ALL_PLATES = -1;
-    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5;
+    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5, OBJECT_SETTINGS = 6;
     private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
     private static final Set<String> MODEL_TYPES = new HashSet<>(Arrays.asList("stl", "3mf", "obj", "drc", "step", "stp", "amf"));
@@ -69,13 +69,15 @@ public final class SliceActivity extends Activity {
     private Bundle restored;
     private final List<File> slicedFiles = new ArrayList<>();
     private final List<String> slicedNames = new ArrayList<>();
-    private Button uploadPrint;
+    private Button uploadPrint, objectButton;
     private TextView printerHint;
     // What the model files hold (engine inspect: objects, 3MF plates, project settings, preview meshes).
     private org.json.JSONObject inspected;
     private int plate;                        // 3MF plate, 1-based; 0 = the first
     private boolean projectSettings = true;   // apply a project's own process settings
     private final Map<String, String> customOverrides = new LinkedHashMap<>(); // from the settings screen
+    // Settings for single objects, keyed "file,object" (0-based), from the settings screen in object mode.
+    private final Map<String, Map<String, String>> objectSettings = new LinkedHashMap<>();
     private org.json.JSONArray placements;    // the plate view's layout, or null to arrange automatically
     private String calibration;               // a calibration print instead of models (engine mode), or null
     private double[] calibrationRange = new double[3];
@@ -238,6 +240,10 @@ public final class SliceActivity extends Activity {
         state.putInt("plate", plate); state.putBoolean("projectSettings", projectSettings);
         if (calibration != null) { state.putString("calibration", calibration); state.putDoubleArray("calibrationRange", calibrationRange); state.putStringArray("calibrationSpec", calibrationSpec); }
         state.putString("customOverrides", new org.json.JSONObject(customOverrides).toString());
+        org.json.JSONObject perObject = new org.json.JSONObject();
+        try { for (Map.Entry<String, Map<String, String>> entry : objectSettings.entrySet()) perObject.put(entry.getKey(), new org.json.JSONObject(entry.getValue())); }
+        catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
+        state.putString("objectSettings", perObject.toString());
         if (placements != null) state.putString("placements", placements.toString());
         if (!slicing && !busy) state.putString("status", status.getText().toString());
     }
@@ -281,6 +287,13 @@ public final class SliceActivity extends Activity {
             if (saved.getString("placements") != null) placements = new org.json.JSONArray(saved.getString("placements"));
             org.json.JSONObject custom = new org.json.JSONObject(saved.getString("customOverrides", "{}"));
             for (Iterator<String> keys = custom.keys(); keys.hasNext(); ) { String key = keys.next(); customOverrides.put(key, custom.getString(key)); }
+            org.json.JSONObject perObject = new org.json.JSONObject(saved.getString("objectSettings", "{}"));
+            for (Iterator<String> ids = perObject.keys(); ids.hasNext(); ) {
+                String id = ids.next(); org.json.JSONObject values = perObject.getJSONObject(id); Map<String, String> map = new LinkedHashMap<>();
+                for (Iterator<String> keys = values.keys(); keys.hasNext(); ) { String key = keys.next(); map.put(key, values.getString(key)); }
+                objectSettings.put(id, map);
+            }
+            showObjectSettings();
         } catch (org.json.JSONException ignored) { }
         plate = saved.getInt("plate", 0); projectSettings = saved.getBoolean("projectSettings", true);
         if (saved.getString("calibration") != null && saved.getStringArray("calibrationSpec") != null) {
@@ -312,6 +325,7 @@ public final class SliceActivity extends Activity {
         editPlate = rowButton(layoutRow, "Edit plate…", this::openPlate, false);
         autoLayout = rowButton(layoutRow, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
+        objectButton = button(modelCard, "Settings for one model…", this::chooseObjectSettings, false);
 
         LinearLayout presetCard = card("Presets");
         label(presetCard, "Printer", 12, muted, false); printerSpinner = spinner(presetCard);
@@ -485,6 +499,7 @@ public final class SliceActivity extends Activity {
         selection.modelFilaments = assignment;
         selection.overrides.putAll(customOverrides); selection.overrides.putAll(quick);
         for (Slot slot : slots) selection.filamentOverrides.add(new LinkedHashMap<>(slot.edits));
+        if (calibration == null) for (Map.Entry<String, Map<String, String>> entry : objectSettings.entrySet()) selection.objectSettings.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
         if (calibration != null) { selection.calibration = calibration; selection.calibrationStart = calibrationRange[0]; selection.calibrationEnd = calibrationRange[1]; selection.calibrationStep = calibrationRange[2]; }
         selection.plate = plate == ALL_PLATES ? 1 : plate; selection.projectSettings = projectSettings && project() != null;
         if (withPlacements && placements != null)
@@ -689,6 +704,19 @@ public final class SliceActivity extends Activity {
         if (request == PLATE) {
             try { placements = new org.json.JSONArray(data.getStringExtra(PlateActivity.EXTRA_PLACEMENTS)); } catch (org.json.JSONException | NullPointerException ignored) { }
             showLayout();
+            int[] edit = data.getIntArrayExtra(PlateActivity.EXTRA_EDIT_OBJECT);
+            if (edit != null && edit.length == 2) openObjectSettings(edit[0], edit[1], data.getStringExtra(PlateActivity.EXTRA_EDIT_NAME));
+            return;
+        }
+        if (request == OBJECT_SETTINGS) {
+            int[] id = data.getIntArrayExtra(SliceSettingsActivity.EXTRA_OBJECT);
+            if (id != null && id.length == 2) try {
+                org.json.JSONObject changed = new org.json.JSONObject(data.getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
+                Map<String, String> map = new LinkedHashMap<>();
+                for (Iterator<String> keys = changed.keys(); keys.hasNext(); ) { String key = keys.next(); map.put(key, changed.getString(key)); }
+                if (map.isEmpty()) objectSettings.remove(id[0] + "," + id[1]); else objectSettings.put(id[0] + "," + id[1], map);
+                showObjectSettings();
+            } catch (org.json.JSONException | NullPointerException ignored) { }
             return;
         }
         if (request == PICK_MODELS) {
@@ -746,7 +774,7 @@ public final class SliceActivity extends Activity {
             org.json.JSONObject shownRead = read;
             main.post(() -> {
                 if (isDestroyed()) return;
-                inspected = shownRead; plate = 0; placements = null; projectSettings = true;
+                inspected = shownRead; plate = 0; placements = null; projectSettings = true; objectSettings.clear(); showObjectSettings();
                 busy = slicing; models.clear(); modelSlots.clear(); models.addAll(imported); showModels(); showProject(); showLayout();
                 status.setText(shownProblem != null ? shownProblem : "Ready."); status.setTextColor(shownProblem != null ? error : ink);
                 resultCard.setVisibility(View.GONE); updateButtons();
@@ -875,6 +903,51 @@ public final class SliceActivity extends Activity {
             .putExtra(PlateActivity.EXTRA_INSPECTED, inspected.toString()).putExtra(PlateActivity.EXTRA_COLOURS, colours).putExtra(PlateActivity.EXTRA_SLOTS, selection.modelFilaments);
         if (placements != null) intent.putExtra(PlateActivity.EXTRA_PLACEMENTS, placements.toString());
         startActivityForResult(intent, PLATE);
+    }
+
+    /** The objects of the loaded files as {file, object, name}, in file order. */
+    private List<Object[]> objectList() {
+        List<Object[]> list = new ArrayList<>();
+        org.json.JSONArray files = inspected == null ? null : inspected.optJSONArray("files");
+        for (int f = 0; files != null && f < files.length(); f++) {
+            org.json.JSONArray objects = files.optJSONObject(f).optJSONArray("objects");
+            for (int o = 0; objects != null && o < objects.length(); o++) {
+                String name = objects.optJSONObject(o).optString("name", "");
+                if (name.isEmpty()) name = models.size() > f ? models.get(f).getName() : "Model " + (f + 1);
+                list.add(new Object[] {f, o, name});
+            }
+        }
+        return list;
+    }
+
+    private void chooseObjectSettings() {
+        List<Object[]> objects = objectList();
+        if (objects.isEmpty()) return;
+        if (objects.size() == 1) { openObjectSettings(0, 0, (String) objects.get(0)[2]); return; }
+        String[] names = new String[objects.size()];
+        for (int i = 0; i < names.length; i++) {
+            Map<String, String> own = objectSettings.get(objects.get(i)[0] + "," + objects.get(i)[1]);
+            names[i] = objects.get(i)[2] + (own == null || own.isEmpty() ? "" : " · " + own.size() + " changed");
+        }
+        new android.app.AlertDialog.Builder(this).setTitle("Settings for one model")
+            .setItems(names, (d, which) -> openObjectSettings((int) objects.get(which)[0], (int) objects.get(which)[1], (String) objects.get(which)[2]))
+            .setNegativeButton("Cancel", null).show();
+    }
+
+    private void openObjectSettings(int file, int object, String name) {
+        NativeSlicer.Selection selection = selection(false);
+        if (selection == null || file < 0 || file >= models.size()) return;
+        String[] paths = new String[models.size()]; for (int i = 0; i < paths.length; i++) paths[i] = models.get(i).getAbsolutePath();
+        startActivityForResult(new Intent(this, SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson())
+            .putExtra(SliceSettingsActivity.EXTRA_OBJECT, new int[] {file, object}).putExtra(SliceSettingsActivity.EXTRA_OBJECT_NAME, name)
+            .putExtra(SliceSettingsActivity.EXTRA_MODELS, new String[0]), OBJECT_SETTINGS);
+    }
+
+    private void showObjectSettings() {
+        if (objectButton == null) return;
+        int changed = 0; for (Map<String, String> values : objectSettings.values()) if (!values.isEmpty()) changed++;
+        objectButton.setText(changed == 0 ? "Settings for one model…" : "Settings for one model… (" + changed + " model" + (changed == 1 ? "" : "s") + " changed)");
+        objectButton.setTextColor(changed == 0 ? ColorStateList.valueOf(teal) : ColorStateList.valueOf(dark ? 0xffffd27a : 0xff8a5300));
     }
 
     private void openFilamentSettings(int index) {
@@ -1119,6 +1192,8 @@ public final class SliceActivity extends Activity {
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
         for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
         editPlate.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty() && plate != ALL_PLATES); autoLayout.setEnabled(!busy);
+        objectButton.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty() && calibration == null);
+        objectButton.setVisibility(models.isEmpty() || calibration != null ? View.GONE : View.VISIBLE);
         boolean local = printer != null && printer.ready() && !printer.pinProbe(), cloud = printer != null && printer.cloudUploadReady() && settings.getBoolean("cloudControlUnderstood", false);
         boolean canUpload = local || cloud;
         if (uploadPrint != null) uploadPrint.setEnabled(!busy && canUpload && !slicedFiles.isEmpty());

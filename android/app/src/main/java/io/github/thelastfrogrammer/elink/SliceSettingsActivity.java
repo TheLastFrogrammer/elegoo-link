@@ -25,8 +25,9 @@ import org.json.JSONObject;
  * changed settings (config key -> serialized value) as EXTRA_OVERRIDES.
  */
 public final class SliceSettingsActivity extends Activity {
-    static final String EXTRA_SELECTION = "selection", EXTRA_MODELS = "models", EXTRA_OVERRIDES = "overrides", EXTRA_FILAMENT_SLOT = "filamentSlot";
-    static final String CUSTOM_PRESETS = "slice-custom-presets", FILAMENT_SETS = "slice-filament-sets";
+    static final String EXTRA_SELECTION = "selection", EXTRA_MODELS = "models", EXTRA_OVERRIDES = "overrides", EXTRA_FILAMENT_SLOT = "filamentSlot",
+        EXTRA_OBJECT = "object", EXTRA_OBJECT_NAME = "objectName";
+    static final String CUSTOM_PRESETS = "slice-custom-presets", FILAMENT_SETS = "slice-filament-sets", OBJECT_SETS = "slice-object-sets";
 
     /** Filament settings for one slot (the per-filament values of the slot's preset). */
     static final String[][] FILAMENT_GROUPS = {
@@ -36,6 +37,8 @@ public final class SliceSettingsActivity extends Activity {
         {"Cooling", "fan_min_speed", "fan_max_speed", "close_fan_the_first_x_layers", "full_fan_speed_layer", "slow_down_layer_time"},
     };
     private int slot = -1;   // filament slot being edited (0-based), or -1 for the process settings
+    /** Object being edited ({file, object}, 0-based), or null: only settings an object can have, on top of the plate's. */
+    private int[] object;
     private String[][] groups() { return slot >= 0 ? FILAMENT_GROUPS : GROUPS; }
 
     /** Groups and keys shown, in order; keys this engine does not know are left out. */
@@ -81,11 +84,17 @@ public final class SliceSettingsActivity extends Activity {
         ui = new WorkshopUi(this);
         super.onCreate(saved);
         slot = getIntent().getIntExtra(EXTRA_FILAMENT_SLOT, -1);
-        content = slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament slot on top of its preset. \u201cPrinter's value\u201d means the printer preset decides.")
+        object = getIntent().getIntArrayExtra(EXTRA_OBJECT);
+        if (object != null && object.length != 2) object = null;
+        String objectName = getIntent().getStringExtra(EXTRA_OBJECT_NAME);
+        content = object != null ? ui.page("Settings for " + (objectName == null || objectName.isEmpty() ? "this model" : objectName),
+                "Changes apply to this model and its copies only, on top of the print settings for the whole plate.")
+            : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament slot on top of its preset. \u201cPrinter's value\u201d means the printer preset decides.")
             : ui.page("Print settings", "Changes apply to this slice on top of the process preset. The preset's value is shown under each setting.");
         try {
             selection = new JSONObject(getIntent().getStringExtra(EXTRA_SELECTION));
             JSONObject start = saved != null && saved.getString(EXTRA_OVERRIDES) != null ? new JSONObject(saved.getString(EXTRA_OVERRIDES))
+                : object != null ? objectValues(selection, object)
                 : slot >= 0 ? (selection.optJSONArray("filament_overrides") != null ? selection.getJSONArray("filament_overrides").optJSONObject(slot) : null)
                 : selection.optJSONObject("overrides");
             if (start != null) for (Iterator<String> keys = start.keys(); keys.hasNext(); ) { String key = keys.next(); overrides.put(key, start.getString(key)); }
@@ -104,7 +113,7 @@ public final class SliceSettingsActivity extends Activity {
         LinearLayout buttons = ui.row(top);
         ui.rowButton(buttons, "Saved sets…", this::chooseSaved, false);
         ui.rowButton(buttons, "Save these…", this::saveSet, false);
-        ui.button(top, "Reset all to the preset", () -> { overrides.clear(); load(); }, false);
+        ui.button(top, object != null ? "Reset all to the plate's settings" : "Reset all to the preset", () -> { overrides.clear(); load(); }, false);
         list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); content.addView(list);
         LinearLayout done = ui.card(content, null);
         ui.button(done, "Use these settings", this::finishWithResult, true);
@@ -117,7 +126,21 @@ public final class SliceSettingsActivity extends Activity {
     }
 
     // The result is kept current, so leaving with Back (or a back gesture) keeps the changes too.
-    private void keepResult() { setResult(RESULT_OK, new Intent().putExtra(EXTRA_OVERRIDES, new JSONObject(overrides).toString()).putExtra(EXTRA_FILAMENT_SLOT, slot)); }
+    private void keepResult() {
+        Intent result = new Intent().putExtra(EXTRA_OVERRIDES, new JSONObject(overrides).toString()).putExtra(EXTRA_FILAMENT_SLOT, slot);
+        if (object != null) result.putExtra(EXTRA_OBJECT, object);
+        setResult(RESULT_OK, result);
+    }
+
+    /** The values already set for one object in a selection's object_settings, or null. */
+    static JSONObject objectValues(JSONObject selection, int[] object) {
+        JSONArray list = selection.optJSONArray("object_settings");
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject item = list.optJSONObject(i);
+            if (item != null && item.optInt("file") == object[0] && item.optInt("object") == object[1]) return item.optJSONObject("values");
+        }
+        return null;
+    }
 
     private void finishWithResult() { keepResult(); finish(); }
 
@@ -133,14 +156,14 @@ public final class SliceSettingsActivity extends Activity {
                 JSONArray perSlot = json.optJSONArray("filament_overrides"); if (perSlot == null) perSlot = new JSONArray();
                 while (perSlot.length() <= slot) perSlot.put(new JSONObject());
                 perSlot.put(slot, new JSONObject(overrides)); json.put("filament_overrides", perSlot);
-            } else json.put("overrides", new JSONObject(overrides));
+            } else if (object == null) json.put("overrides", new JSONObject(overrides));
             request = json.toString();
         } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
         SliceActivity.worker().execute(() -> {
             try {
                 NativeSlicer engine = SliceActivity.engine(getApplicationContext());
                 JSONObject described = engine.describeJson(models, request, keys);
-                JSONObject read = slot >= 0 ? forSlot(described, slot) : described;
+                JSONObject read = slot >= 0 ? forSlot(described, slot) : object != null ? forObject(described) : described;
                 main.post(() -> { if (!isDestroyed()) { definitions = read; build(); } });
             } catch (Exception failure) {
                 main.post(() -> { if (!isDestroyed()) { summary.setText("Settings could not be read: " + failure.getMessage()); summary.setTextColor(ui.error); } });
@@ -161,6 +184,18 @@ public final class SliceSettingsActivity extends Activity {
             }
         }
         updateSummary(); filter();
+    }
+
+    /** Object mode: only settings an object can have, measured against the plate's value rather than the preset. */
+    static JSONObject forObject(JSONObject definitions) throws JSONException {
+        JSONObject out = new JSONObject();
+        for (Iterator<String> keys = definitions.keys(); keys.hasNext(); ) {
+            String key = keys.next(); JSONObject definition = definitions.getJSONObject(key);
+            if (!definition.optBoolean("per_object")) continue;
+            if (definition.has("value")) definition.put("preset", definition.getString("value"));
+            out.put(key, definition);
+        }
+        return out;
     }
 
     /** Per-filament (vector) settings narrowed to one slot: its element of each value, with the scalar type. */
@@ -197,7 +232,7 @@ public final class SliceSettingsActivity extends Activity {
         TextView note = ui.label(row, "", 12, ui.muted, false); note.setPadding(0, 0, 0, ui.dp(2));
         Runnable showNote = () -> {
             boolean changed = overrides.containsKey(key);
-            note.setText((changed ? "Changed · preset: " : "Preset: ") + display(definition, preset) + (tooltip.isEmpty() ? "" : " · tap the name for help"));
+            note.setText((object != null ? (changed ? "Changed · plate: " : "Plate: ") : changed ? "Changed · preset: " : "Preset: ") + display(definition, preset) + (tooltip.isEmpty() ? "" : " · tap the name for help"));
             note.setTextColor(changed ? ui.teal : ui.muted);
             title.setTypeface(android.graphics.Typeface.DEFAULT, changed ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
             updateSummary();
@@ -286,7 +321,8 @@ public final class SliceSettingsActivity extends Activity {
     private void updateSummary() {
         if (summary == null) return;
         keepResult();
-        summary.setText(overrides.isEmpty() ? "All settings follow the process preset." : overrides.size() + " setting(s) changed from the preset.");
+        if (object != null) summary.setText(overrides.isEmpty() ? "This model follows the plate's settings." : overrides.size() + " setting(s) differ for this model.");
+        else summary.setText(overrides.isEmpty() ? "All settings follow the process preset." : overrides.size() + " setting(s) changed from the preset.");
         summary.setTextColor(ui.ink);
     }
 
@@ -301,7 +337,7 @@ public final class SliceSettingsActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ saved sets of changes
-    private SharedPreferences store() { return getSharedPreferences(slot >= 0 ? FILAMENT_SETS : CUSTOM_PRESETS, MODE_PRIVATE); }
+    private SharedPreferences store() { return getSharedPreferences(object != null ? OBJECT_SETS : slot >= 0 ? FILAMENT_SETS : CUSTOM_PRESETS, MODE_PRIVATE); }
 
     private void saveSet() {
         if (overrides.isEmpty()) { Toast.makeText(this, "Change a setting first.", Toast.LENGTH_SHORT).show(); return; }

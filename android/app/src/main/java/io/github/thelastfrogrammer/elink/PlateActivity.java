@@ -25,7 +25,9 @@ import org.json.JSONObject;
  */
 public final class PlateActivity extends Activity {
     static final String EXTRA_MODELS = "models", EXTRA_SELECTION = "selection", EXTRA_INSPECTED = "inspected",
-        EXTRA_PLACEMENTS = "placements", EXTRA_COLOURS = "colours", EXTRA_SLOTS = "slots";
+        EXTRA_PLACEMENTS = "placements", EXTRA_COLOURS = "colours", EXTRA_SLOTS = "slots",
+        /** Result: the Slice screen should open the settings for this object ({file, object}) after taking the layout. */
+        EXTRA_EDIT_OBJECT = "editObject", EXTRA_EDIT_NAME = "editName";
     private static final String ORIGIN = "https://appassets.androidplatform.net";
 
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -33,7 +35,7 @@ public final class PlateActivity extends Activity {
     private WebView web;
     private TextView status, selectedLabel;
     private EditText scale;
-    private Button rotateLeft, rotateRight, rotate90, copy, remove, arrange, done, layFace, upright;
+    private Button rotateLeft, rotateRight, rotate90, copy, remove, arrange, done, layFace, upright, modelSettings;
     private boolean laying;
     private final List<File> models = new ArrayList<>();
     private String selection;
@@ -84,6 +86,7 @@ public final class PlateActivity extends Activity {
         remove = ui.rowButton(edit, "Remove", () -> js("plate.remove()"), false);
         LinearLayout finish = ui.row(panel);
         arrange = ui.rowButton(finish, "Arrange", this::arrangeAll, false);
+        modelSettings = ui.rowButton(finish, "Model settings…", this::editSelectedSettings, false);
         done = ui.rowButton(finish, "Done", this::finishWithResult, true);
         setContentView(root);
         setButtons();
@@ -111,6 +114,15 @@ public final class PlateActivity extends Activity {
     private void finishWithResult() {
         if (placements.length() == 0) { status.setText("Put at least one model on the plate, or go back to the Slice screen with Arrange."); status.setTextColor(ui.error); return; }
         setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
+        finish();
+    }
+
+    /** Back to the Slice screen with the layout, asking it to open the selected model's own settings. */
+    private void editSelectedSettings() {
+        if (selected < 0 || selected >= placements.length() || placements.length() == 0) return;
+        JSONObject p = placements.optJSONObject(selected);
+        setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString())
+            .putExtra(EXTRA_EDIT_OBJECT, new int[] {p.optInt("file"), p.optInt("object")}).putExtra(EXTRA_EDIT_NAME, name(selected)));
         finish();
     }
 
@@ -218,7 +230,7 @@ public final class PlateActivity extends Activity {
 
     private void setButtons() {
         boolean on = selected >= 0;
-        for (View view : new View[] {rotateLeft, rotateRight, rotate90, copy, remove, scale, upright}) view.setEnabled(on);
+        for (View view : new View[] {rotateLeft, rotateRight, rotate90, copy, remove, scale, upright, modelSettings}) view.setEnabled(on);
         layFace.setEnabled(placements.length() > 0);
     }
 

@@ -71,6 +71,8 @@ final class NativeSlicer implements AutoCloseable {
         final List<double[]> placements = new ArrayList<>();
         /** Per filament slot: setting key -> value for that slot only. */
         final List<Map<String, String>> filamentOverrides = new ArrayList<>();
+        /** Per object and all its copies, keyed "file,object" (0-based): setting key -> value (object settings only). */
+        final Map<String, Map<String, String>> objectSettings = new LinkedHashMap<>();
         /** A calibration print instead of model files: mode ("temperature", "pressure_advance", "flow", "max_flow", "retraction") and range. */
         String calibration; double calibrationStart, calibrationEnd, calibrationStep;
 
@@ -95,6 +97,14 @@ final class NativeSlicer implements AutoCloseable {
                 JSONArray perSlot = new JSONArray();
                 for (Map<String, String> slot : filamentOverrides) { JSONObject one = new JSONObject(); for (Map.Entry<String, String> e : slot.entrySet()) one.put(e.getKey(), e.getValue()); perSlot.put(one); }
                 json.put("filament_overrides", perSlot);
+                JSONArray objects = new JSONArray();
+                for (Map.Entry<String, Map<String, String>> entry : objectSettings.entrySet()) {
+                    if (entry.getValue().isEmpty()) continue;
+                    String[] id = entry.getKey().split(",");
+                    JSONObject values = new JSONObject(); for (Map.Entry<String, String> e : entry.getValue().entrySet()) values.put(e.getKey(), e.getValue());
+                    objects.put(new JSONObject().put("file", Integer.parseInt(id[0])).put("object", Integer.parseInt(id[1])).put("values", values));
+                }
+                json.put("object_settings", objects);
                 if (calibration != null) json.put("calibration", new JSONObject().put("mode", calibration).put("start", calibrationStart).put("end", calibrationEnd).put("step", calibrationStep));
                 return json.toString();
             } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }

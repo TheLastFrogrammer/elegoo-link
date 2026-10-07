@@ -271,6 +271,49 @@ public class SlicerIntegrationTest {
         }
     }
 
+    @Test public void settingsForOneObject() throws Exception {
+        List<File> models = Arrays.asList(box(20, 20, 10), box(20, 20, 10));
+        File output = new File(context().getCacheDir(), "objects.gcode");
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("wall_loops", "3");
+            slicer.slice(models, selection, output, null);
+            int plain = Files.readAllLines(output.toPath()).size();
+            Map<String, String> strong = new LinkedHashMap<>(); strong.put("wall_loops", "6"); strong.put("sparse_infill_density", "60%");
+            selection.objectSettings.put("1,0", strong);
+            slicer.slice(models, selection, output, null);
+            int second = Files.readAllLines(output.toPath()).size();
+            selection.objectSettings.clear(); selection.objectSettings.put("0,0", strong);
+            slicer.slice(models, selection, output, null);
+            int first = Files.readAllLines(output.toPath()).size();
+            assertTrue("more walls and infill on one box: " + plain + " -> " + second, second > plain * 1.1);
+            assertEquals("the same change on either identical box", second, first, second * 0.02);
+            // Only settings an object can have.
+            selection.objectSettings.put("0,0", Collections.singletonMap("nozzle_temperature", "200"));
+            try { slicer.slice(models, selection, output, null); fail("expected a refusal"); }
+            catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("Not a per-object setting: nozzle_temperature")); }
+            org.json.JSONObject described = slicer.describe(Collections.emptyList(), selection, Arrays.asList("wall_loops", "enable_prime_tower", "nozzle_temperature"));
+            assertTrue(described.getJSONObject("wall_loops").getBoolean("per_object"));
+            assertFalse(described.getJSONObject("enable_prime_tower").getBoolean("per_object"));
+            org.json.JSONObject forObject = SliceSettingsActivity.forObject(described);
+            assertEquals("plate value is the baseline", "3", forObject.getJSONObject("wall_loops").getString("preset"));
+            assertFalse(forObject.has("enable_prime_tower")); assertFalse(forObject.has("nozzle_temperature"));
+        }
+        // The settings screen in object mode starts from the object's own values and returns them for that object.
+        NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+        selection.objectSettings.put("1,0", Collections.singletonMap("wall_loops", "5"));
+        android.content.Intent intent = new android.content.Intent(context(), SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson())
+            .putExtra(SliceSettingsActivity.EXTRA_OBJECT, new int[] {1, 0}).putExtra(SliceSettingsActivity.EXTRA_OBJECT_NAME, "box");
+        org.robolectric.android.controller.ActivityController<SliceSettingsActivity> controller = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup();
+        SliceSettingsActivity screen = controller.get();
+        waitFor(() -> field(screen, "definitions") != null);
+        org.json.JSONObject definitions = (org.json.JSONObject) field(screen, "definitions");
+        assertTrue(definitions.has("wall_loops")); assertFalse(definitions.has("enable_prime_tower"));
+        org.robolectric.shadows.ShadowActivity shadow = Shadows.shadowOf(screen);
+        assertEquals("{\"wall_loops\":\"5\"}", shadow.getResultIntent().getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
+        assertArrayEquals(new int[] {1, 0}, shadow.getResultIntent().getIntArrayExtra(SliceSettingsActivity.EXTRA_OBJECT));
+    }
+
     @Test public void slicesACalibrationFromTheSliceScreen() throws Exception {
         SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
         waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));

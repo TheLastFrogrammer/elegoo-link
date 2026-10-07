@@ -41,6 +41,10 @@ struct Selection {
     // Filament settings per slot (key -> value for that slot only, e.g. nozzle_temperature -> 215), on top of the
     // filament presets.
     std::vector<std::vector<std::pair<std::string, std::string>>> filament_overrides;
+    // Settings for one object and all its copies, like the desktop's per-object settings (right-click an object →
+    // Add settings): process settings an object can have (see object_setting()), on top of the process and `overrides`.
+    struct ObjectSettings { int file = 0, object = 0; std::vector<std::pair<std::string, std::string>> values; };
+    std::vector<ObjectSettings> object_settings;
     // A calibration print instead of the model files, set up as ElegooSlicer's Calibration menu does it with filament
     // slot 1: "temperature" (tower, start/end in °C), "pressure_advance" (tower), "flow" (pass 1 or 2 in `start`),
     // "max_flow" (mm³/s), "retraction" (mm).
@@ -50,6 +54,10 @@ struct Selection {
 // Parses a Selection from JSON (the app's format): {"printer","process","filaments":[],"colours":[],"model_filaments":[],
 // "overrides":{key:value},"plate","project_settings","placements":[{"file","object","x","y","rotation","scale"}]}.
 Selection selection_from_json(const std::string& json);
+
+// Whether a setting can differ per object: ElegooSlicer's object and region settings (PrintObjectConfig,
+// PrintRegionConfig), without the filament assignment, which has its own field.
+bool object_setting(const std::string& key);
 
 struct Result {
     std::string gcode_path;

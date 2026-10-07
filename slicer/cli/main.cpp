@@ -11,6 +11,7 @@
 // Projects and layouts: --plate N, --project-settings, --place FILE,OBJECT,X,Y[,ROTATION[,SCALE]] (once per copy).
 //
 // Prints one JSON object with the result (or {"error": ...}) on stdout; progress goes to stderr.
+#include <algorithm>
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
@@ -66,6 +67,7 @@ int usage()
         "    With slicing or --arrange: --plate N (3MF project plate), --project-settings (the project's process\n"
         "    settings), --place FILE,OBJECT,X,Y[,ROTATION[,SCALE[,DX,DY,DZ]]] (once per copy; files and objects count from 0;\n"
         "    DX,DY,DZ: outward normal of a face to lay on the bed).\n"
+        "    --object-set FILE,OBJECT,key=value changes a setting for one object (files and objects count from 0).\n"
         "    --filament-set SLOT,key=value changes one filament slot's setting; --calibrate MODE,START,END,STEP slices\n"
         "    a calibration print instead of MODEL files (temperature, pressure_advance, flow, max_flow, retraction).\n";
     return 2;
@@ -118,6 +120,16 @@ int main(int argc, char** argv)
             if (parts.size() > 1) selection.calibration.start = std::atof(parts[1].c_str());
             if (parts.size() > 2) selection.calibration.end = std::atof(parts[2].c_str());
             if (parts.size() > 3) selection.calibration.step = std::atof(parts[3].c_str());
+        }
+        else if (arg == "--object-set") {
+            std::string spec = value(); std::vector<std::string> parts; std::stringstream list(spec.substr(0, spec.find('='))); std::string item;
+            while (std::getline(list, item, ',')) parts.push_back(item);
+            const size_t eq = spec.find('=');
+            if (parts.size() != 3 || eq == std::string::npos) { std::cerr << "--object-set expects FILE,OBJECT,key=value\n"; return usage(); }
+            const int file = std::atoi(parts[0].c_str()), object = std::atoi(parts[1].c_str());
+            auto it = std::find_if(selection.object_settings.begin(), selection.object_settings.end(), [&](const auto& s) { return s.file == file && s.object == object; });
+            if (it == selection.object_settings.end()) { selection.object_settings.push_back({file, object, {}}); it = selection.object_settings.end() - 1; }
+            it->values.emplace_back(parts[2], spec.substr(eq + 1));
         }
         else if (arg == "--filament-set") {
             std::string spec = value(); size_t comma = spec.find(','), eq = spec.find('=');

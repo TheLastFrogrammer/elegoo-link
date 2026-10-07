@@ -838,6 +838,14 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
             } else if (!object->config.has("extruder")) {
                 object->config.set_key_value("extruder", new ConfigOptionInt(1));
             }
+            for (const Selection::ObjectSettings& settings : selection.object_settings)
+                if (settings.file == int(file) && settings.object == int(o))
+                    for (const auto& [key, value] : settings.values) {
+                        if (!object_setting(key))
+                            throw std::runtime_error("Not a per-object setting: " + key);
+                        ConfigSubstitutionContext strict(ForwardCompatibilitySubstitutionRule::Disable);
+                        object->config.set_deserialize(key, value, strict);
+                    }
             loaded.objects[file][o] = int(loaded.model.objects.size()) - 1;
         }
     }
@@ -918,6 +926,18 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
     return loaded;
 }
 
+bool object_setting(const std::string& key)
+{
+    static const std::set<std::string> keys = [] {
+        std::set<std::string> all;
+        for (const std::string& k : PrintObjectConfig().keys()) all.insert(k);
+        for (const std::string& k : PrintRegionConfig().keys()) all.insert(k);
+        all.erase("extruder");
+        return all;
+    }();
+    return keys.count(key) > 0;
+}
+
 Selection selection_from_json(const std::string& text)
 {
     const nlohmann::json json = nlohmann::json::parse(text);
@@ -936,6 +956,14 @@ Selection selection_from_json(const std::string& text)
         for (const auto& slot : json["filament_overrides"]) {
             selection.filament_overrides.emplace_back();
             for (const auto& [key, value] : slot.items()) selection.filament_overrides.back().emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
+        }
+    if (json.contains("object_settings"))
+        for (const auto& item : json["object_settings"]) {
+            Selection::ObjectSettings settings;
+            settings.file = item.value("file", 0); settings.object = item.value("object", 0);
+            if (item.contains("values"))
+                for (const auto& [key, value] : item["values"].items()) settings.values.emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
+            selection.object_settings.push_back(settings);
         }
     if (json.contains("calibration")) {
         const auto& c = json["calibration"];
@@ -1077,6 +1105,7 @@ std::string Engine::describe(const Selection& selection, const std::vector<std::
     base_selection.overrides.clear();
     base_selection.filament_overrides.clear();
     base_selection.placements.clear();
+    base_selection.object_settings.clear();
     base_selection.calibration = {};
     const DynamicPrintConfig base = load(models, base_selection, false).config;
     const DynamicPrintConfig effective = load(models, Selection(selection), false).config;
@@ -1106,6 +1135,7 @@ std::string Engine::describe(const Selection& selection, const std::vector<std::
         }
         if (effective.has(key)) item["value"] = effective.opt_serialize(key);
         if (base.has(key)) item["preset"] = base.opt_serialize(key);
+        item["per_object"] = object_setting(key);
         result[key] = item;
     }
     return result.dump();

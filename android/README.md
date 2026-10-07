@@ -1,6 +1,6 @@
 # Link Workshop for Android
 
-**v0.12.0 (development):** **Upload and print…** and Files uploads also work through the Elegoo cloud: the file goes to Elegoo's storage and the printer fetches it, as ElegooSlicer does; a cloud-mode download that the printer refuses now says why (its file server is off outside LAN Only).
+**v0.12.0 (development):** **Upload and print…** and Files uploads also work through the Elegoo cloud: the file goes to Elegoo's storage and the printer fetches it, as ElegooSlicer does; **Settings for one model…** (on the Slice screen, or **Model settings…** in the plate view) gives one model and its copies its own walls, infill, speeds, supports and other object settings, like the desktop's per-object settings; a cloud-mode download that the printer refuses now says why (its file server is off outside LAN Only).
 
 **v0.11.1:** downloads also work while the printer is watched through the Elegoo cloud: the app finds the printer on the same Wi-Fi by its serial and downloads from its HTTP port, as Elegoo's printer page does (Live toolpath's **Download from printer** and the Files tab).
 
