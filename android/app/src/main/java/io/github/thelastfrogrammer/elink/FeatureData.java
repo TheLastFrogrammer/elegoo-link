@@ -38,8 +38,34 @@ public final class FeatureData {
                 long elapsed = row.optLong("end_time") - row.optLong("begin_time");
                 if (elapsed >= 0) text.append(" · ").append(duration(elapsed));
             }
+            switch (row.optInt("time_lapse_video_status", 0)) {
+                case 1: text.append("\nTimelapse recorded; the printer has not made the video yet."); break;
+                case 2: text.append("\nTimelapse video ready").append(videoSize(row)).append("."); break;
+                case 3: text.append("\nThe printer could not make the timelapse video."); break;
+                default: break;
+            }
         }
         return text.toString();
+    }
+    /** History entries whose timelapse video is ready to download (time_lapse_video_status 2), newest first, at most 10. */
+    public static java.util.List<JSONObject> timelapses(JSONObject result) {
+        java.util.List<JSONObject> ready = new java.util.ArrayList<>();
+        JSONArray rows = result == null ? null : result.optJSONArray("history_task_list");
+        if (rows == null) return ready;
+        for (int i = rows.length() - 1; i >= 0 && ready.size() < 10; i--) {
+            JSONObject row = rows.optJSONObject(i);
+            if (row == null || row.optInt("time_lapse_video_status") != 2) continue;
+            try { Cc2Codec.timelapse(row.optString("time_lapse_video_url")); ready.add(row); } catch (IllegalArgumentException unusable) { }
+        }
+        return ready;
+    }
+    /** " (12.3 MB, 0:45)" from a history entry's video size (bytes) and duration (seconds), or "". */
+    public static String videoSize(JSONObject row) {
+        long bytes = row.optLong("time_lapse_video_size", 0), seconds = row.optLong("time_lapse_video_duration", 0);
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (bytes > 0) parts.add(String.format(java.util.Locale.ROOT, "%.1f MB", bytes / 1048576.0));
+        if (seconds > 0) parts.add(String.format(java.util.Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60));
+        return parts.isEmpty() ? "" : " (" + String.join(", ", parts) + ")";
     }
     public static String disk(JSONObject data) { return "Internal storage: " + size(data.optLong("used_bytes", -1)) + " used / " + size(data.optLong("total_bytes", -1)); }
     public static String cameraUrl(String host, String supplied) throws Exception {

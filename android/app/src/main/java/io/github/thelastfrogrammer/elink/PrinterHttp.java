@@ -37,10 +37,25 @@ public final class PrinterHttp {
     /** SDK storage paths; encode each query value separately and never follow redirects. */
     public void download(File destination, String storage, String filename, Progress progress) throws Exception {
         Cc2Codec.storage(storage); Cc2Codec.filename(filename);
+        fetch(storage.equals("local") ? "/download" : "/download/udisk", filename, destination, progress, GcodeInspector.MAX_BYTES, true);
+    }
+
+    /** Largest timelapse video accepted. */
+    static final long MAX_VIDEO_BYTES = 4L * 1024 * 1024 * 1024;
+
+    /**
+     * A print's timelapse video, by the time_lapse_video_url its history entry reports, through the same download
+     * endpoint Elegoo's own printer page uses for it.
+     */
+    public void downloadTimelapse(File destination, String videoUrl, Progress progress) throws Exception {
+        Cc2Codec.timelapse(videoUrl);
+        fetch("/download", videoUrl, destination, progress, MAX_VIDEO_BYTES, false);
+    }
+
+    private void fetch(String path, String filename, File destination, Progress progress, long maxBytes, boolean gcode) throws Exception {
         HttpURLConnection connection = null; boolean success = false;
         try {
             checkCancelled();
-            String path = storage.equals("local") ? "/download" : "/download/udisk";
             connection = open(path + "?X-Token=" + URLEncoder.encode(token, "UTF-8") + "&file_name=" + URLEncoder.encode(filename, "UTF-8"));
             connection.setRequestMethod("GET"); connection.setReadTimeout(30000);
             connection.setRequestProperty("Accept", "application/octet-stream"); connection.setRequestProperty("Accept-Encoding", "identity");
@@ -49,18 +64,19 @@ public final class PrinterHttp {
             if (code != 200) throw new PrinterErrors.HttpStatus(code);
             String type = connection.getContentType(), encoding = connection.getContentEncoding();
             if (type != null && (type.toLowerCase(Locale.ROOT).contains("json") || type.toLowerCase(Locale.ROOT).contains("html"))
-                || encoding != null && !encoding.equalsIgnoreCase("identity")) throw new IOException("Printer did not return a plain G-code file");
+                || encoding != null && !encoding.equalsIgnoreCase("identity")) throw new IOException(gcode ? "Printer did not return a plain G-code file" : "Printer did not return a video file");
             long total = connection.getContentLengthLong();
-            if (total == 0 || total > GcodeInspector.MAX_BYTES) throw new IOException("File is empty or exceeds 512 MiB");
+            if (total == 0 || total > maxBytes) throw new IOException("File is empty or exceeds " + maxBytes / (1024 * 1024) + " MiB");
             long copied = 0; int last = -2; boolean first = true;
             try (InputStream input = connection.getInputStream(); OutputStream output = new BufferedOutputStream(new FileOutputStream(destination))) {
                 byte[] buffer = new byte[65536]; int count;
                 while ((count = input.read(buffer)) != -1) {
                     checkCancelled(); if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
-                    if (first) for (int i = 0; i < count; i++) if (!Character.isWhitespace((char) (buffer[i] & 255))) {
+                    if (first && gcode) for (int i = 0; i < count; i++) if (!Character.isWhitespace((char) (buffer[i] & 255))) {
                         if (buffer[i] == '{' || buffer[i] == '<') throw new IOException("Printer returned an error document instead of G-code"); first = false; break;
                     }
-                    copied += count; if (copied > GcodeInspector.MAX_BYTES || total > 0 && copied > total) throw new IOException("Download exceeded expected size");
+                    if (first && !gcode && count > 0) { if (buffer[0] == '{' || buffer[0] == '<') throw new IOException("Printer returned an error document instead of a video"); first = false; }
+                    copied += count; if (copied > maxBytes || total > 0 && copied > total) throw new IOException("Download exceeded expected size");
                     output.write(buffer, 0, count);
                     int percent = total > 0 ? (int) Math.min(99, copied * 100 / total) : -1;
                     if (percent != last) { last = percent; progress.update(percent); }

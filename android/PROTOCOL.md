@@ -78,7 +78,7 @@ Read-only discovery uses the existing UDP 52700/method 7000 parser, collecting u
 
 Alerts require an observed active job plus explicit completed substate 2077, match its reported UUID/filename when present and deduplicate completion. A completed event that clears the filename uses the observed name. Idle/cancelled/stale/disconnected states never imply completion; reconnection can therefore miss an event. Newly appearing fault codes alert once until cleared. No separate cloud notification backend runs after process death.
 
-Homing/movement and filament-loading parameters are not exposed. Official cloud/Agora, timelapse export and other model protocols remain outside this release.
+Homing/movement and filament-loading parameters are not exposed. Other model protocols remain outside this release.
 
 The following sections describe earlier releases and the original audit; their stated gaps are historical.
 
@@ -132,3 +132,13 @@ The user's v0.2.1 manual-serial attempt reaches MQTT but receives CONNACK code 5
 The inspected upstream discovery adapter selects accessCode authentication only for token_status 1; token_status 0 selects the default password. A reported lan_status 0 is cloud mode and selects a separate pinCode path upstream. The Android client now retains these fields (boolean or numeric 0/1); invalid/absent values remain unknown. It selects 123456 only when code protection is explicitly disabled, otherwise retains the entered code. A known cloud/WAN mode is rejected locally with an explanation before sending LAN credentials. MQTT 3.1.1 is requested explicitly. Uploads use the same selected credential as the MQTT session.
 
 Discovery metadata is queried even with a manual serial; if a valid response from the selected IP provides a different serial, it takes priority and the mismatch is reported. If UDP is blocked, the manual serial still permits connection without HTTP. Connection checks report mode/protection and serial mismatch without printing the serial or access code. MQTT authorization failures include the known mode/protection summary and are terminal; the app does not guess passwords or rotate client formats to bypass an authorization refusal.
+
+## Timelapse videos
+
+The CC2 has no export command for timelapses (Elegoo's own SDK lists method 1045 "Export timelapse video" as not
+designed yet). Instead, each print history entry (1036) carries `time_lapse_video_status` (0 none, 1 recorded but no
+video yet, 2 video ready, 3 failed), `time_lapse_video_url`, `time_lapse_video_size` (bytes) and
+`time_lapse_video_duration` (seconds). Elegoo's printer page downloads a ready video through the normal file download
+endpoint: `GET http://<printer>/download?X-Token=<access code>&file_name=<time_lapse_video_url>`. The app does the
+same over the local connection, accepting only printer paths (no URLs, no `..`), and saves the video through the
+Android file picker. Not yet tried against a real printer.

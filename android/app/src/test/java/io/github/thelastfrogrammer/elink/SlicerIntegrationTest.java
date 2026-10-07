@@ -289,6 +289,29 @@ public class SlicerIntegrationTest {
         assertEquals(PROCESS, ((Spinner) field(again, "processSpinner")).getSelectedItem());
     }
 
+    /** With -Dscreenshots=<dir>: the print settings screen with two changes. */
+    @Test public void renderSettingsScreen() throws Exception {
+        String out = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
+        for (String theme : new String[] {"light", "dark"}) {
+            context().getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("wall_loops", "4"); selection.overrides.put("sparse_infill_pattern", "gyroid");
+            android.content.Intent intent = new android.content.Intent(context(), SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson());
+            SliceSettingsActivity activity = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
+            waitFor(() -> field(activity, "definitions") != null);
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            View root = activity.getWindow().getDecorView();
+            int width = 1080, height = 4200;
+            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+            root.layout(0, 0, width, height);
+            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+            root.draw(new Canvas(bitmap));
+            File file = new File(out, "settings-" + theme + ".png"); file.getParentFile().mkdirs();
+            try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+        }
+    }
+
     /** With -Dscreenshots=<dir> as well: the Slice screen after a real slice, light and dark. */
     @Test public void renderSliceScreen() throws Exception {
         String out = System.getProperty("screenshots", "");

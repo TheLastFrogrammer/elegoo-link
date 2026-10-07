@@ -40,6 +40,20 @@ public final class SliceSettingsActivity extends Activity {
         {"Special", "spiral_mode", "print_sequence", "fuzzy_skin", "fuzzy_skin_thickness", "reduce_crossing_wall", "enable_arc_fitting"},
     };
 
+    /** Names for settings whose ElegooSlicer label only makes sense inside its desktop panel ("Enable", "Width", "Outer wall"). */
+    static final Map<String, String> LABELS = new HashMap<>();
+    static {
+        String[][] names = {{"line_width", "Line width"}, {"default_acceleration", "Acceleration"}, {"enable_prime_tower", "Prime tower"},
+            {"prime_tower_width", "Prime tower width"}, {"support_type", "Support type"}, {"support_style", "Support style"},
+            {"support_threshold_angle", "Support threshold angle"}, {"support_top_z_distance", "Support top Z distance"},
+            {"support_interface_top_layers", "Support top interface layers"}, {"support_base_pattern_spacing", "Support base pattern spacing"},
+            {"support_on_build_plate_only", "Support on build plate only"}, {"initial_layer_speed", "First layer speed"},
+            {"outer_wall_speed", "Outer wall speed"}, {"inner_wall_speed", "Inner wall speed"}, {"sparse_infill_speed", "Sparse infill speed"},
+            {"internal_solid_infill_speed", "Internal solid infill speed"}, {"top_surface_speed", "Top surface speed"},
+            {"gap_infill_speed", "Gap infill speed"}, {"travel_speed", "Travel speed"}, {"fuzzy_skin", "Fuzzy skin"}, {"ironing_type", "Ironing"}};
+        for (String[] name : names) LABELS.put(name[0], name[1]);
+    }
+
     private final Handler main = new Handler(Looper.getMainLooper());
     private WorkshopUi ui;
     private LinearLayout content, list;
@@ -116,6 +130,7 @@ public final class SliceSettingsActivity extends Activity {
             for (int i = 1; i < group.length; i++) {
                 JSONObject definition = definitions.optJSONObject(group[i]);
                 if (definition == null || !supported(definition.optString("type"))) continue;
+                if (LABELS.containsKey(group[i])) try { definition.put("label", LABELS.get(group[i])); } catch (JSONException ignored) { }
                 if (card == null) card = ui.card(list, group[0]);
                 rows.put(group[i], row(card, group[i], definition));
             }
@@ -198,7 +213,8 @@ public final class SliceSettingsActivity extends Activity {
             }
             default: {
                 String unit = definition.optString("unit");
-                return value + (unit.isEmpty() || value.endsWith("%") || unit.equals("%") && value.endsWith("%") ? "" : " " + unit);
+                if (unit.endsWith(" or %")) unit = unit.substring(0, unit.length() - 5); // "mm or %": the value says which
+                return value + (unit.isEmpty() || value.endsWith("%") ? "" : " " + unit);
             }
         }
     }

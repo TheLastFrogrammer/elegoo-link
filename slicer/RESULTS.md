@@ -101,6 +101,23 @@ configuration block are identical. The single-filament Benchy still matches with
 Mixed materials are checked as the desktop checks them: PLA with PETG is refused with ElegooSlicer's "Selected nozzle
 temperatures are incompatible" message.
 
+## 3MF projects and placements
+
+| Case | G-code commands (differing) | Estimate | Notes |
+|---|---|---|---|
+| Two-plate project from the official CLI (`--export-3mf`), plate 2 | 362,300 (72) | 4h 13m 55s both | `--plate 2`; all 72 are 0.001 mm rounding from moving the plate to the bed |
+| Same project with edited settings (0.28 mm, 35% gyroid, 4 walls), plate 1 | 6,754,079 (0) | 20h 31m 14s both | `--project-settings`; the official CLI applies project settings itself |
+| Test fixture (two flat domes, 0.28 mm / 35% in the project), plate 2 | 81,184 (16) | 1h 36m 1s both | `android/app/src/test/resources/twoplate_project.3mf` |
+
+Plate membership follows the desktop: copies belong to the plate whose area holds their footprint center, in the
+desktop's plate grid (plates `1.2 ×` the bed size apart). Placements (`--place`) were checked by measuring the
+G-code: a 20 mm box turned 45° and scaled 2× at (60, 70) prints centered there (G-code Y is 1.5 mm lower: the CC2
+profile's `extruder_offset`).
+
+Memory: link-slicer's peak grows with mesh triangles (about 0.33 KB each) and model surface (about 3.8 KB per mm²
+at 0.20 mm layers): 178 MB for a 40 k-triangle 60 mm sphere, 799 MB for a 2 M-triangle one, 650 MB for a 200 mm
+sphere. The app warns from that estimate before slices that likely exceed the phone's free memory.
+
 ## Implications for step 2 (Android cross-compile)
 
 - Same 17 libraries, from the same recipes; the deps driver already passes `CMAKE_TOOLCHAIN_FILE` through to each

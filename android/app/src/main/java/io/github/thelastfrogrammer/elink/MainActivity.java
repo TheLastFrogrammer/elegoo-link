@@ -21,12 +21,15 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7;
     private String pendingExportHash = "";
     private android.net.Uri pendingExportUri;
     private TextView inspection;
     private ImageView filePreview;
     private TextView previewInfo;
+    private LinearLayout timelapseList;
+    private Button saveTimelapse;
+    private JSONObject renderedHistory;
     private LinearLayout fileDetails, transferRow, trayList, pageRow;
     private String dismissedFeedback = "", renderedCanvas;
     private GcodeInspector.Report renderedReport;
@@ -330,7 +333,7 @@ public final class MainActivity extends Activity {
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
         LinearLayout about = card("Link Workshop " + appVersion());
-        label(about, "Development build: printer behavior still needs hardware testing. Planned next: timelapse export, a fuller slicer settings editor and other printer models.", 13, MUTED, false);
+        label(about, "Development build: printer behavior still needs hardware testing. Planned next: painting tools in the slicer, slicing all plates of a project at once, and other printer models.", 13, MUTED, false);
         button(about, "Share diagnostics…", this::shareDiagnostics);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
@@ -617,6 +620,25 @@ public final class MainActivity extends Activity {
         loadDisk = button(storage, "Refresh storage usage", () -> { if (printer != null) printer.loadDisk(); });
         loadHistory = button(storage, "Refresh print history", () -> { if (printer != null) printer.loadHistory(); });
         historyInfo = label(storage, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
+        // Timelapse videos the printer made for recent prints: download over LAN, then save.
+        timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); storage.addView(timelapseList);
+        saveTimelapse = button(storage, "Save timelapse…", () -> {
+            if (printer == null || printer.timelapseFile == null) return;
+            startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.timelapseName), SAVE_TIMELAPSE);
+        });
+        saveTimelapse.setVisibility(View.GONE);
+    }
+
+    /** One download button per history entry whose timelapse video is ready, newest first. Rebuilt when history changes. */
+    private void renderTimelapses() {
+        JSONObject history = printer == null ? null : printer.history;
+        if (history == renderedHistory) return;
+        renderedHistory = history; timelapseList.removeAllViews();
+        for (JSONObject row : FeatureData.timelapses(history)) {
+            String name = StatusPresentation.clean(row.optString("task_name", "Print")).replaceFirst("(?i)\\.gcode$", "");
+            String url = row.optString("time_lapse_video_url");
+            button(timelapseList, "Download timelapse: " + name + FeatureData.videoSize(row), () -> { if (printer != null) printer.downloadTimelapse(url, row.optString("task_name")); });
+        }
     }
     private Spinner spinner(LinearLayout parent, String[] items) {
         Spinner view = new Spinner(this); ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, items); adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); view.setAdapter(adapter); view.setBackgroundTintList(tint(TEAL)); parent.addView(view, new LinearLayout.LayoutParams(-1, dp(52))); return view;
@@ -786,6 +808,9 @@ public final class MainActivity extends Activity {
         }
         diskInfo.setText(printer == null || printer.disk.length() == 0 ? "Storage usage not loaded." : FeatureData.disk(printer.disk));
         historyInfo.setText(printer == null ? "History not loaded." : printer.history.length() == 0 ? printer.historyMessage : FeatureData.history(printer.history));
+        renderTimelapses();
+        for (int i = 0; i < timelapseList.getChildCount(); i++) timelapseList.getChildAt(i).setEnabled(ready && !printer.pinProbe() && !printer.fileBusy());
+        saveTimelapse.setVisibility(printer != null && printer.timelapseFile != null ? View.VISIBLE : View.GONE);
         String selectedHost = host.getText().toString().trim();
         if (!cameraHost.equals(selectedHost)) { stopCamera(); cameraHost = selectedHost; cameraReported = ""; cameraAddress.setText(selectedHost.isEmpty() ? "" : "http://" + selectedHost + ":8080/?action=stream"); lastFrame = null; cameraImage.setImageDrawable(null); }
         if (ready && !printer.cameraUrl.isEmpty() && cameraPlayer == null && !printer.cameraUrl.equals(cameraReported)) { cameraAddress.setText(printer.cameraUrl); cameraReported = printer.cameraUrl; }
@@ -960,6 +985,18 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == SAVE_TIMELAPSE && result == RESULT_OK && data != null && data.getData() != null && printer != null && printer.timelapseFile != null) {
+            File source = printer.timelapseFile; android.net.Uri target = data.getData();
+            checks.execute(() -> {
+                String text;
+                try (InputStream in = new FileInputStream(source); OutputStream out = getContentResolver().openOutputStream(target)) {
+                    if (out == null) throw new IOException();
+                    byte[] buffer = new byte[1 << 16]; int count; while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+                    text = "Timelapse saved.";
+                } catch (IOException error) { text = "The timelapse could not be saved there."; }
+                String done = text; main.post(() -> { if (!isDestroyed()) message(done); });
+            });
+        }
         if (request == SAVE_GCODE) {
             if (result == RESULT_OK && data != null && data.getData() != null) { pendingExportUri = data.getData(); finishPendingExport(); }
             else { pendingExportHash = ""; pendingExportUri = null; }

@@ -36,6 +36,11 @@ public final class Cc2Codec {
         if (value == null || value.isEmpty() || value.length() > 240 || value.contains("/") || value.contains("\\")
             || value.matches("(?s).*[\\p{Cntrl}].*") || !value.toLowerCase(Locale.ROOT).endsWith(".gcode")) throw new IllegalArgumentException("Select a G-code filename from the printer");
     }
+    /** A timelapse video reference from print history (time_lapse_video_url): a printer path, never a URL elsewhere. */
+    public static void timelapse(String value) {
+        if (value == null || value.trim().isEmpty() || value.length() > 1024 || value.matches("(?s).*[\\p{Cntrl}].*") || value.contains("..")
+            || value.matches("(?i)^[a-z][a-z0-9+.-]*://.*")) throw new IllegalArgumentException("The printer reported no usable timelapse video");
+    }
     public static JSONObject filesRequest(int id, String storage, int offset) throws JSONException {
         storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid page offset");
         JSONObject params = new JSONObject().put("storage_media", storage).put("offset", offset).put("limit", 50);

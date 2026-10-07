@@ -65,4 +65,22 @@ public class FeatureProtocolTest {
         String text=FeatureData.history(new JSONObject("{\"history_task_list\":[{\"task_name\":\"old\",\"task_status\":1},{\"task_name\":\"new\",\"task_status\":99}]}"));
         assertTrue(text.indexOf("new")<text.indexOf("old")); assertTrue(text.contains("Reported state 99")); assertTrue(text.contains("Completed"));
     }
+    @Test public void historyShowsTimelapseVideosAndListsTheReadyOnes() throws Exception {
+        org.json.JSONObject history = new org.json.JSONObject("{\"history_task_list\":["
+            + "{\"task_name\":\"old.gcode\",\"task_status\":1,\"begin_time\":0,\"end_time\":60,\"time_lapse_video_status\":2,\"time_lapse_video_url\":\"/v/old.mp4\",\"time_lapse_video_size\":12902400,\"time_lapse_video_duration\":45},"
+            + "{\"task_name\":\"making.gcode\",\"task_status\":1,\"time_lapse_video_status\":1,\"time_lapse_video_url\":\"\"},"
+            + "{\"task_name\":\"failed.gcode\",\"task_status\":2,\"time_lapse_video_status\":3},"
+            + "{\"task_name\":\"none.gcode\",\"task_status\":1,\"time_lapse_video_status\":0},"
+            + "{\"task_name\":\"new.gcode\",\"task_status\":1,\"time_lapse_video_status\":2,\"time_lapse_video_url\":\"/v/new.mp4\"},"
+            + "{\"task_name\":\"odd.gcode\",\"task_status\":1,\"time_lapse_video_status\":2,\"time_lapse_video_url\":\"http://x/y.mp4\"}]}");
+        String text = FeatureData.history(history);
+        assertTrue(text.contains("Timelapse video ready (12.3 MB, 0:45)."));
+        assertTrue(text.contains("the printer has not made the video yet"));
+        assertTrue(text.contains("could not make the timelapse video"));
+        java.util.List<org.json.JSONObject> ready = FeatureData.timelapses(history);
+        assertEquals(2, ready.size());
+        assertEquals("new.gcode", ready.get(0).getString("task_name")); assertEquals("old.gcode", ready.get(1).getString("task_name"));
+        assertEquals("", FeatureData.videoSize(ready.get(0)));
+        assertTrue(FeatureData.timelapses(null).isEmpty());
+    }
 }

@@ -286,6 +286,7 @@ public final class SliceActivity extends Activity {
         LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
         editPlate = rowButton(layoutRow, "Edit plate…", this::openPlate, false);
         autoLayout = rowButton(layoutRow, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
+        autoLayout.setVisibility(View.GONE);
 
         LinearLayout presetCard = card("Presets");
         label(presetCard, "Printer", 12, muted, false); printerSpinner = spinner(presetCard);

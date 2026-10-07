@@ -77,7 +77,9 @@ Started, in Link Workshop itself (chosen over a separate app): `SliceActivity` (
 picks models, printer, process and filament presets, infill, supports and brim, then slices with progress and cancel.
 The G-code goes to the Files tab for upload or is saved. Since added: the toolpath viewer, the embedded preview thumbnail
 and multi-filament slots filled from the CANVAS trays (per-model slot, colours, flushing volumes, prime tower; the
-tray plan prefills Print setup). Not yet: a settings editor beyond the quick settings, multi-plate 3MF projects.
+tray plan prefills Print setup), a plate view to move, turn, scale and copy models, a full print settings editor,
+3MF projects (plate choice and project settings) and a memory estimate before big slices. Not yet: painting tools,
+slicing all plates of a project at once, filament and printer preset editing.
 The notes below were the plan.
 
 - Import STL/3MF/OBJ from the Files picker or share sheet.

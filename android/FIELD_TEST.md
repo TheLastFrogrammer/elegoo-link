@@ -45,3 +45,27 @@ coordinates.
 
 The log records the stored plan, the trays the printer reported, how many were prefilled, and the mapping sent at
 print start.
+
+## 5. Plate view, settings and 3MF projects
+
+1. Slice screen → **Edit plate…**: drag a model, turn it, scale it, copy it, then **Done** and slice. Check the
+   printed layout matches the plate view.
+2. **All settings…**: change a few settings (for example wall loops and infill pattern), slice, and check the
+   G-code preview.
+3. Open a 3MF project saved with several plates in ElegooSlicer: pick plate 2, slice, and compare with what the
+   desktop slices for that plate.
+
+## 6. Big slices
+
+Slice something large (a big model, many copies or a fine layer height). If the app warns about memory, note the
+estimate it shows. The log records the estimate next to the real peak memory of each slice, which is what the
+estimate needs to be tuned on a phone; if Android closes the app mid-slice, the next start says so and logs it.
+
+## 7. Timelapse videos
+
+1. Start a print with **Record timelapse on printer** on, and let it finish.
+2. Files → Storage & print history → **Refresh print history**. The print should say the timelapse video is ready
+   (it can take a minute after the print while the printer makes it).
+3. Tap **Download timelapse**, then **Save timelapse…**, and play the saved video.
+
+If the download fails, the error and the history entry help: share the diagnostics and a screenshot of the history.

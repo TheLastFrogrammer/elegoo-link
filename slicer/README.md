@@ -96,6 +96,13 @@ link-slicer --resources $R --printer "Elegoo Centauri Carbon 2 0.4 nozzle" \
     --assign 1,2 --output plate.gcode body.stl lid.stl
 ```
 
+3MF projects and layouts: `--plate N` slices plate N of a project (keeping its layout), `--project-settings` applies
+the project's own process settings on top of the process preset, and `--place FILE,OBJECT,X,Y[,ROTATION[,SCALE]]`
+(once per copy) puts objects exactly there instead of arranging them. `--inspect [--mesh-dir DIR]` lists what model
+files contain (objects, triangles, surface area, plates, project settings) and writes simplified preview meshes;
+`--arrange` prints where each object would go; `--describe key,key` prints setting definitions with preset and
+effective values.
+
 It prints one JSON line (`gcode`, `print_time_s`, `filament_mm`, `filament_g`, `filament_cm3`, `warnings`, or
 `error`) and progress on stderr. A single object is centered on the bed; several are arranged. `--set` takes any
 ElegooSlicer setting key with its serialized value. `--export-presets DIR` writes the resolved presets as JSON.

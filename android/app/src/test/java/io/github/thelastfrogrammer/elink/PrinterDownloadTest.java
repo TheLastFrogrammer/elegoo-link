@@ -70,4 +70,26 @@ public class PrinterDownloadTest {
             try { http.download(file, "sdcard", "test.gcode", p -> { }); fail(); } catch (IllegalArgumentException expected) { }
         } finally { file.delete(); }
     }
+    @Test public void timelapseVideosUseTheDownloadEndpointWithTheReportedName() throws Exception {
+        File file = File.createTempFile("timelapse-", ".mp4"); List<Connection> opened = new ArrayList<>(); List<Integer> progress = new ArrayList<>();
+        byte[] video = new byte[200000]; video[4] = 'f'; video[5] = 't'; video[6] = 'y'; video[7] = 'p';
+        try {
+            new PrinterHttp("192.168.1.50", "code", url -> { Connection c = new Connection(url); c.body = video; c.length = video.length; c.type = "video/mp4"; opened.add(c); return c; })
+                .downloadTimelapse(file, "/user/timelapse/Benchy 1.mp4", progress::add);
+            Connection c = opened.get(0);
+            assertEquals("/download", c.getURL().getPath());
+            assertEquals("X-Token=code&file_name=%2Fuser%2Ftimelapse%2FBenchy+1.mp4", c.getURL().getQuery());
+            assertArrayEquals(video, Files.readAllBytes(file.toPath())); assertEquals(Integer.valueOf(100), progress.get(progress.size() - 1));
+        } finally { file.delete(); }
+        // Error documents and references that are not printer paths never become downloads.
+        for (String bad : new String[] {"", " ", "http://elsewhere.example/v.mp4", "../../etc/passwd", "a\nb.mp4"}) {
+            try { new PrinterHttp("192.168.1.50", "code", url -> new Connection(url)).downloadTimelapse(file, bad, p -> { }); fail("Must reject " + bad); }
+            catch (IllegalArgumentException expected) { }
+        }
+        try {
+            new PrinterHttp("192.168.1.50", "code", url -> { Connection c = new Connection(url); c.body = "{\"error_code\":1020}".getBytes(StandardCharsets.UTF_8); c.length = c.body.length; return c; })
+                .downloadTimelapse(file, "v.mp4", p -> { });
+            fail("Must reject an error document");
+        } catch (IOException expected) { assertFalse(file.exists()); }
+    }
 }

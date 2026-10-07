@@ -1,23 +1,32 @@
-# Android client progress
+# Link Workshop roadmap
 
-v0.3.5 source provides the CC2 client with explicit local and user-managed home-VPN routes plus a read-only cloud-mode local PIN probe, offline G-code inspection, embedded PNG/JPEG previews, structured material evidence and internal/USB file downloads/export. Implemented means present in code and covered where feasible by automated checks; physical CC2/S24+ validation remains pending.
+State as of v0.10.0. "Done" means in the app and covered by automated tests where possible; almost nothing has
+been checked on a real Centauri Carbon 2 yet, so every area also lists what still needs hardware. The field-test
+checklist is [FIELD_TEST.md](FIELD_TEST.md); Settings → Share diagnostics records what the app saw.
 
-| Area | Implemented | Remaining |
+## By area
+
+| Area | Done | Still to do |
 | --- | --- | --- |
-| Interface | Monitor/Files/Camera/Settings; System/Light/Dark | On-device layout, accessibility and landscape review |
-| Connection | UDP picker/manual identity; per-IP encrypted profiles; foreground monitoring; bounded reconnect; layered diagnosis including registration QoS 1, SUBACK/PUBACK and redacted reply counters | Successful physical authorization/registration on the user's CC2; device lifecycle/Keystore migration validation |
-| Matrix preservation | Explicit current-PIN experiment, memory-only secret, no HTTP token use, no writes/uploads/retries, no account-binding changes, coexistence test guide | Hardware proof of simultaneous Matrix use; legitimate cloud account bootstrap and server-issued identity/collision handling if local PIN path fails |
-| Files/printing | Internal/USB pagination, metadata, upload/cancel, download/cancel/export, offline comment/T-selection/SHA-256 inspection, embedded previews and material/color/usage evidence, delete, start with checks/plate/timelapse/tool mappings, pause/resume/stop | Verified complete sliced-tool metadata for mapping, file export/recovery transport when HTTP is unavailable |
-| Printer settings | Light, bounded idle heater targets, fan channels, printing speed modes, automatic refill | Filament loading/unloading, calibration, homing/movement only after complete behavior verification |
-| CANVAS | Materials/colors/active tray, fresh reported tray mapping | Editing filament profiles and persistent usage tracking |
-| Camera | Local MJPEG, larger view, document-picker snapshots, independent lifecycle | Timelapse export, stream capability variations, background playback policy |
-| Awareness | Live service notification, deduplicated completion/new fault alerts, history, storage usage | Reconciliation of missed completion while disconnected; device battery/notification behavior |
-| Remote/model expansion | CC2 local Wi-Fi/Ethernet; explicit VPN route, route-loss checks, remote diagnostics and Pi setup guide | Physical Pi/VPN/S24+ acceptance; official cloud auth; other model adapters; simultaneous printer dashboard |
+| Connection | LAN (MQTT + HTTP) with discovery, saved printers, encrypted access codes, reconnect and connection diagnosis; home-VPN route; Elegoo cloud sign-in for monitoring and control without LAN Only; read-only PIN probe | First successful LAN registration on the user's CC2; Matrix coexistence proof (see [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md)) |
+| Monitor | Progress ring, temperatures, faults, pause/resume/stop, light, printer settings (temperatures, fans, speed modes), maintenance (filament, CANVAS trays, homing, axis moves, leveling, vibration test, self-check, emergency stop), CANVAS trays with colours and the active tray, alerts and background watching | Hardware check of maintenance commands |
+| Files | Printer files (internal/USB) with start, delete and download; upload; offline G-code inspection with embedded previews and material evidence; print setup with plate, checks, timelapse and per-tool CANVAS tray mapping (prefilled from the phone's slicer) | — |
+| Print history | History with durations; timelapse status per print; download and save of finished timelapse videos (LAN) | Check the timelapse download on hardware: the app follows Elegoo's own printer page, untested here |
+| Camera | Local MJPEG stream with snapshots; cloud camera | Stream variations across firmware versions |
+| Toolpath viewer | 3D G-code viewer with layers, moves, playback, features and travel; Live toolpath following the running print | Confirm the printer's layer numbering and nozzle position frame (logged in diagnostics) |
+| Slicer | ElegooSlicer's own engine on the phone (identical G-code to the desktop on tested models); Elegoo presets; multi-filament with CANVAS trays, colours, flushing and prime tower; preview thumbnail; plate view (move, turn, scale, copy, remove, arrange); full print settings editor with saved sets; 3MF projects with plate choice and project settings; memory estimate before big slices; "Open with" from other apps | Speed and memory on a real phone; painting/supports/seam painting tools; multi-plate slicing in one go; editing filament and printer presets |
+| Recordings | Graphs of each watched print (progress, layers, temperatures, fans) | — |
 
-No automatic replay of any changing command or upload is planned. An acknowledgement and a fresh resulting printer state remain distinct. Printer start/delete/temperature require fresh appropriate state; explicit tray mappings require fresh CANVAS data and an existing connected tray with material. Axis movement remains blocked.
+## Next
 
-Phone-side slicing is a separate project and outside the present management-client scope.
+1. Hardware round: work through FIELD_TEST.md on the phone and CC2 and fix what the diagnostics show.
+2. Slicer: supports and seam painting on models, and modifiers (per-object settings) in the plate view.
+3. Slice every plate of a project in one go, with one G-code per plate.
+4. Filament and printer preset editing, saved on the phone.
+5. Other printer models (the Centauri Carbon 1 uses a different protocol).
 
-Matrix preservation now takes priority over assuming LAN Only is required for every route. The local PIN branch is a source-backed candidate, not firmware proof; full cloud login/live transport is a separate implementation. See [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md) for pinned source findings and the acceptance gate. No controls will be enabled for the experimental PIN route until coexistence and authorization semantics are established on hardware.
+## Rules that stay
 
-Next file-workspace priority: verify complete sliced tool-use metadata and index/firmware mapping semantics before offering a reviewed mapping suggestion. Offline inspection is observational and does not automatically infer a complete count from T commands or config vectors. Mechanical filament/calibration/movement features remain behind a complete protocol/behavior audit; commented SDK method IDs alone are insufficient. [FILE_WORKSPACE.md](FILE_WORKSPACE.md) records the current scope and limits.
+No command that changes the printer is ever repeated automatically. An acknowledgement is not treated as the
+resulting state. Starting, deleting and temperature changes need a fresh status; tray mappings need fresh CANVAS
+data with a loaded tray.

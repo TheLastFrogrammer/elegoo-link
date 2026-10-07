@@ -26,6 +26,7 @@ public final class Cc2Session implements AutoCloseable {
         default void uploaded(String filename) { }
         default void downloadProgress(int percent) { }
         default void downloaded(File file, String filename) { }
+        default void timelapseDownloaded(File file, String videoUrl) { }
     }
     interface MqttFactory { MqttClient create(String uri, String clientId) throws MqttException; }
     public interface IdentityResolver extends AutoCloseable {
@@ -391,6 +392,26 @@ public final class Cc2Session implements AutoCloseable {
                     Listener current = listener;
                     if (current != null && !closed && !downloadCancelled) { current.downloaded(destination, name); delivered = true; }
                 } catch (Exception exception) { if (!closed && !downloadCancelled) emitResult(PrinterErrors.describe(exception, "File download")); }
+                finally { if (!delivered) destination.delete(); downloading = false; downloadHttp = null; }
+            });
+            return true;
+        } catch (RejectedExecutionException stopped) { downloading = false; downloadHttp = null; destination.delete(); return false; }
+    }
+    /** A print's timelapse video (its history entry's time_lapse_video_url) into `destination`. */
+    public synchronized boolean downloadTimelapse(File destination, String videoUrl) {
+        if (readOnly()) { emitResult("PIN probe cannot download files: PINs are not HTTP tokens."); return false; }
+        if (!ready() || uploading || downloading) return false;
+        Cc2Codec.timelapse(videoUrl);
+        downloading = true; downloadCancelled = false;
+        PrinterHttp downloader = new PrinterHttp(http.host(), sessionToken, connections); downloadHttp = downloader;
+        try {
+            transfer.execute(() -> {
+                boolean delivered = false;
+                try {
+                    downloader.downloadTimelapse(destination, videoUrl, percent -> { Listener current = listener; if (current != null && !closed && !downloadCancelled) current.downloadProgress(percent); });
+                    Listener current = listener;
+                    if (current != null && !closed && !downloadCancelled) { current.timelapseDownloaded(destination, videoUrl); delivered = true; }
+                } catch (Exception exception) { if (!closed && !downloadCancelled) emitResult(PrinterErrors.describe(exception, "Timelapse download")); }
                 finally { if (!delivered) destination.delete(); downloading = false; downloadHttp = null; }
             });
             return true;

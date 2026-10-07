@@ -10,7 +10,6 @@ import android.provider.OpenableColumns;
 import org.json.JSONObject;
 import org.json.JSONArray;
 import java.io.*;
-import java.util.Locale;
 import java.util.*;
 import java.util.concurrent.*;
 
@@ -153,7 +152,12 @@ public final class PrinterService extends Service {
                 feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0);
                 File copy = selectedFile; if (copy != null) files.execute(() -> keep(copy, name));
             }); }
-            public void downloadProgress(int percent) { deliver(() -> feedback = percent < 0 ? "Downloading G-code… size not reported" : "Downloading G-code: " + percent + "%"); }
+            public void downloadProgress(int percent) { deliver(() -> feedback = (timelapseRequested != null ? "Downloading timelapse" : "Downloading G-code") + (percent < 0 ? "… size not reported" : ": " + percent + "%")); }
+            public void timelapseDownloaded(File file, String url) { deliver(() -> {
+                File previous = timelapseFile; if (previous != null && !previous.equals(file)) previous.delete();
+                timelapseFile = file; timelapseName = timelapseRequested == null ? "timelapse.mp4" : timelapseRequested; timelapseRequested = null;
+                feedback = "Timelapse downloaded. Save it with Save timelapse… on the Files tab.";
+            }); }
             public void downloaded(File file, String name) { main.post(() -> {
                 if (destroyed || generation != current) { file.delete(); return; }
                 importing = true; feedback = "Download received. Inspecting phone copy…"; changed();
@@ -232,6 +236,23 @@ public final class PrinterService extends Service {
     public void upload() { if (ready() && selectedFile != null && !fileBusy()) { session.upload(selectedFile, selectedName); changed(); } }
     public void cancelUpload() { if (session != null) session.cancelUpload(); }
     public void cancelDownload() { if (session != null) session.cancelDownload(); }
+    /** The last downloaded timelapse video on the phone (cache), and the name to save it under. */
+    public File timelapseFile; public String timelapseName; private String timelapseRequested;
+    public void downloadTimelapse(String videoUrl, String taskName) {
+        if (!ready() || pinProbe) { feedback = "Timelapse videos download over the local connection (LAN Only, HTTP port 80)."; changed(); return; }
+        if (fileBusy()) { feedback = "Wait for the current file transfer to finish."; changed(); return; }
+        String base = taskName == null ? "" : taskName.replaceFirst("(?i)\\.gcode$", "").replaceAll("[^A-Za-z0-9 _.()+-]", "_").trim();
+        String name = (base.isEmpty() ? "timelapse" : base + "_timelapse") + (videoUrl.toLowerCase(Locale.ROOT).matches(".*\\.(mp4|avi|mkv|mov)$") ? videoUrl.substring(videoUrl.lastIndexOf('.')) : ".mp4");
+        File directory = new File(getCacheDir(), "timelapse");
+        if (!directory.isDirectory() && !directory.mkdirs()) { feedback = "Cannot use the phone's cache for the timelapse."; changed(); return; }
+        try {
+            File destination = new File(directory, "download-" + System.currentTimeMillis() + ".part");
+            timelapseRequested = name;
+            if (!session.downloadTimelapse(destination, videoUrl)) { timelapseRequested = null; return; }
+            feedback = "Downloading timelapse for " + StatusPresentation.clean(taskName == null ? "this print" : taskName) + "… HTTP port 80 is required."; changed();
+        } catch (IllegalArgumentException invalid) { timelapseRequested = null; feedback = invalid.getMessage(); changed(); }
+    }
+    public void clearTimelapse() { File file = timelapseFile; timelapseFile = null; timelapseName = null; if (file != null) file.delete(); changed(); }
     public void download(String storage, String filename) {
         if (!ready() || pinProbe || fileBusy() || !knownFile(storage, filename)) { feedback = "Refresh files and use LAN authentication before downloading. Wait for other file work to finish."; changed(); return; }
         File local = null;
