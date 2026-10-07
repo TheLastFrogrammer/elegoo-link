@@ -35,6 +35,9 @@ public final class CloudControl implements AutoCloseable {
         default void done(boolean acknowledged, String message, JSONObject result) { done(acknowledged, message); }
     }
 
+    /** Progress the printer reports unasked while it fetches a cloud upload (method 6006). */
+    public interface Transfers { void status(String serial, String task, int progress, int status); }
+
     private final Credentials credentials;
     private final LinkFactory factory;
     private final ScheduledExecutorService worker;
@@ -45,6 +48,9 @@ public final class CloudControl implements AutoCloseable {
     private Pending pending;
     private ScheduledFuture<?> idle;
     private int nextId = 1;
+    private Transfers transfers;
+    /** Serial whose transfer is being watched; keeps the session open until cleared. */
+    private String watching;
 
     private static final class Pending { int id; String publisher; Reply reply; ScheduledFuture<?> timeout; }
 
@@ -65,10 +71,17 @@ public final class CloudControl implements AutoCloseable {
             case Cc2Codec.ATTRIBUTES: case Cc2Codec.STATUS: case Cc2Codec.START: case Cc2Codec.PAUSE: case Cc2Codec.STOP: case Cc2Codec.RESUME:
             case Cc2Codec.TEMPERATURE: case Cc2Codec.LIGHT: case Cc2Codec.FAN: case Cc2Codec.SPEED: case Cc2Codec.HISTORY:
             case Cc2Codec.FILES: case Cc2Codec.DELETE: case Cc2Codec.DISK: case Cc2Codec.CANVAS: case Cc2Codec.AUTO_REFILL: case Cc2Codec.THUMBNAIL:
+            case Cc2Codec.FETCH: case Cc2Codec.FETCH_CANCEL:
                 return true;
             default: return Cc2Codec.maintenance(method);
         }
     }
+
+    /**
+     * Passes the printer's transfer reports for this serial to the listener and keeps the session open meanwhile; null
+     * stops watching. Elegoo's SDK uploads the same way: progress arrives on the user channel, not as a reply.
+     */
+    public synchronized void watchTransfers(String serial, Transfers listener) { watching = listener == null ? null : serial; transfers = listener; }
 
     /** Last reason the session ended from outside, or "" if it did not. */
     public synchronized String endedReason() { return ended; }
@@ -122,11 +135,18 @@ public final class CloudControl implements AutoCloseable {
     }
 
     private void received(String publisher, String text) {
+        JSONObject message;
+        try { message = new JSONObject(text); } catch (Exception error) { return; }
+        Transfers listener; String serial;
+        synchronized (this) { listener = transfers; serial = watching; }
+        if (listener != null && serial != null && publisher.equals(userId + serial) && message.optInt("method", -1) == Cc2Codec.FETCH_STATUS) {
+            JSONObject result = message.optJSONObject("result");
+            if (result != null) listener.status(serial, result.optString("taskID", ""), Math.max(0, Math.min(100, result.optInt("progress", 0))), result.optInt("status", 0));
+            return;
+        }
         Pending wait;
         synchronized (this) { wait = pending; }
         if (wait == null || !wait.publisher.equals(publisher)) return;
-        JSONObject message;
-        try { message = new JSONObject(text); } catch (Exception error) { return; }
         if (message.optInt("id", -1) != wait.id) return;
         JSONObject result = message.optJSONObject("result");
         int code = result == null ? -1 : result.optInt("error_code", 0);
@@ -151,7 +171,7 @@ public final class CloudControl implements AutoCloseable {
     private void scheduleIdleClose() {
         synchronized (this) {
             if (idle != null) idle.cancel(false);
-            idle = worker.schedule(() -> { synchronized (CloudControl.this) { if (pending != null) { scheduleIdleClose(); return; } } closeLink(); }, idleCloseMs, TimeUnit.MILLISECONDS);
+            idle = worker.schedule(() -> { synchronized (CloudControl.this) { if (pending != null || watching != null) { scheduleIdleClose(); return; } } closeLink(); }, idleCloseMs, TimeUnit.MILLISECONDS);
         }
     }
 

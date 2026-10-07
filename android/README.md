@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.11.1 (development):** downloads also work while the printer is watched through the Elegoo cloud: the app finds the printer on the same Wi-Fi by its serial and downloads from its HTTP port, as Elegoo's printer page does (Live toolpath's **Download from printer** and the Files tab).
+**v0.12.0 (development):** **Upload and print…** and Files uploads also work through the Elegoo cloud: the file goes to Elegoo's storage and the printer fetches it, as ElegooSlicer does; a cloud-mode download that the printer refuses now says why (its file server is off outside LAN Only).
+
+**v0.11.1:** downloads also work while the printer is watched through the Elegoo cloud: the app finds the printer on the same Wi-Fi by its serial and downloads from its HTTP port, as Elegoo's printer page does (Live toolpath's **Download from printer** and the Files tab).
 
 **v0.11.0:** printer downloads fixed (no stale-list lockout, `%20` names like Elegoo's SDK, files in folders, odd content types and gzip handled) with a one-step **Download and save to phone**; **Upload and print…** after slicing uploads and opens Print setup with the trays filled in; a 3MF project's plates can all be sliced at once (one G-code each); **Lay on face** in the plate view; **Filament settings…** per slot (temperatures, flow ratio, pressure advance, max volumetric speed, retraction, cooling) with saved sets; and **calibration prints** from ElegooSlicer's Calibration menu: temperature tower, flow rate (two passes), pressure advance tower, max volumetric speed and retraction tower, each with how to read the result.
 

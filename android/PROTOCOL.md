@@ -142,3 +142,23 @@ video yet, 2 video ready, 3 failed), `time_lapse_video_url`, `time_lapse_video_s
 endpoint: `GET http://<printer>/download?X-Token=<access code>&file_name=<time_lapse_video_url>`. The app does the
 same over the local connection, accepting only printer paths (no URLs, no `..`), and saves the video through the
 Android file picker. Not yet tried against a real printer.
+
+## Uploads through the cloud
+
+Followed from the SDK's `CloudService::uploadFile` (src/cloud/cloud_service.cpp) and `HttpService::uploadFile`.
+The printer never receives the file from the phone: it fetches it from Elegoo's storage.
+
+1. `GET /api/v1/device-management-server/oss/biz-entrypoint?filename=<storage name>&bucketAlias=iot-private&module=gcode&fileMd5=<base64 MD5>`
+   returns `entrypoint` (a signed upload address), `accessUrl` and `objectName`. The storage name is the last six
+   characters of the account ID, `_`, the last six of the printer ID (the serial), `_`, the hex MD5 and the extension.
+2. `PUT <entrypoint>` with `Content-Type: application/octet-stream` and `Content-MD5: <base64 MD5>`. Files from 500 MB
+   use a multipart upload in the SDK; the app refuses those through the cloud.
+3. Through the cloud control channel: method 1058 `{taskID: <serial>}` clears an earlier transfer (a refusal only means
+   there was none), one second's pause, then method 1057 `{filename: <name on the printer>, url: <accessUrl>, md5: <hex>, taskID: <serial>}`.
+4. The printer reports unasked, on the same channel, method 6006 `{result: {taskID, progress, status}}` with status
+   1 done, 2 cancelled, 3 failed. The SDK gives up after 60 s without a report; so does the app, and it sends 1058 then.
+
+Progress shown: 0–50 % while storing, 50–100 % while the printer fetches, as in the SDK. Not yet tried against a real printer.
+
+Downloads have no cloud path: the SDK's cloud service has no file download, and a CC2 in cloud mode was seen refusing
+connections on its HTTP port 80, so downloading needs LAN Only and the local connection.

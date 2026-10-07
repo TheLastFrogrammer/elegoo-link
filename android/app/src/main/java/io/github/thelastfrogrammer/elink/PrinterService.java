@@ -111,7 +111,7 @@ public final class PrinterService extends Service {
     public boolean pinProbe() { return pinProbe; }
     public boolean ready() { return session != null && session.ready() && (!remote || route != null && route.available()); }
     public boolean fresh() { return ready() && session.fresh(); }
-    public boolean uploading() { return session != null && session.uploading(); }
+    public boolean uploading() { return session != null && session.uploading() || cloudUpload != null; }
     public boolean downloading() { return session != null && session.downloading(); }
     public boolean fileBusy() { return importing || exporting || uploading() || downloading() || directDownloading; }
     private volatile boolean directDownloading;
@@ -147,24 +147,11 @@ public final class PrinterService extends Service {
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
             public void uploadProgress(int percent) { deliver(() -> feedback = "Uploading " + (queuedName != null ? queuedName : selectedName) + ": " + percent + "%"); }
-            public void uploadFailed(String name) { deliver(() -> {
-                if (queuedName == null) return;
-                int left = uploadQueue.size(); uploadQueue.clear(); queuedFile = null; queuedName = null;
-                if (left > 0) feedback = feedback + " " + left + " more file(s) were not sent.";
-            }); }
+            public void uploadFailed(String name) { deliver(PrinterService.this::queueFailed); }
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
             public void query(int method, JSONObject params, JSONObject result) { deliver(() -> handleQuery(method, params, result)); }
             public void queryError(int method, String text) { deliver(() -> handleQueryError(method, text)); }
-            public void uploaded(String name) { deliver(() -> {
-                feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0);
-                File copy = queuedName != null && queuedName.equals(name) ? queuedFile : selectedFile;
-                if (copy != null) files.execute(() -> keep(copy, name));
-                if (queuedName != null) {
-                    queuedFile = null; queuedName = null; uploadedCount++;
-                    if (uploadQueue.isEmpty()) feedback = uploadedCount == 1 ? "Uploaded " + name + "." : "Uploaded " + uploadedCount + " files.";
-                    main.postDelayed(PrinterService.this::pumpUploads, 300);
-                }
-            }); }
+            public void uploaded(String name) { deliver(() -> uploadedFile(name, "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it.")); }
             public void downloadProgress(int percent) { deliver(() -> feedback = (timelapseRequested != null ? "Downloading timelapse" : "Downloading G-code") + (percent < 0 ? "… size not reported" : ": " + percent + "%")); }
             public void timelapseDownloaded(File file, String url) { deliver(() -> {
                 File previous = timelapseFile; if (previous != null && !previous.equals(file)) previous.delete();
@@ -241,23 +228,79 @@ public final class PrinterService extends Service {
     // Files sent from the Slice screen, one after another.
     private final java.util.List<Object[]> uploadQueue = new java.util.ArrayList<>();
     private File queuedFile; private String queuedName; private int uploadedCount;
-    /** Uploads the files under the given printer names, in order. Needs the local connection. */
+    /** Files can be sent: over the local connection, or through the Elegoo cloud while watching that way. */
+    public boolean canUpload() { return ready() ? !pinProbe : cloudUploadReady(); }
+    /** No local session, fresh cloud status and a signed-in account: files go through Elegoo's storage (CloudUpload). */
+    public boolean cloudUploadReady() { return !ready() && viaCloud() && cloudApi != null; }
+    /** Uploads the files under the given printer names, in order: locally when connected, otherwise through the cloud. */
     public boolean uploadFiles(java.util.List<File> sources, java.util.List<String> names) {
-        if (!ready() || pinProbe) { feedback = "Uploading needs the local connection (Settings → Local connection)."; changed(); return false; }
+        if (!canUpload()) { feedback = "Uploading needs the local connection, or the printer watched through the Elegoo cloud (Settings)."; changed(); return false; }
         for (int i = 0; i < sources.size(); i++) uploadQueue.add(new Object[] {sources.get(i), names.get(i)});
         uploadedCount = 0; pumpUploads(); return true;
     }
     public boolean uploadsPending() { return queuedName != null || !uploadQueue.isEmpty(); }
     private void pumpUploads() {
         if (uploadQueue.isEmpty() || queuedName != null || destroyed) return;
-        if (!ready()) { uploadQueue.clear(); feedback = "Connection lost; uploads stopped."; changed(); return; }
-        if (fileBusy()) { main.postDelayed(this::pumpUploads, 500); return; }
+        if (!canUpload()) { uploadQueue.clear(); feedback = "Connection lost; uploads stopped."; changed(); return; }
+        if (fileBusy() || cloudCommandBusy) { main.postDelayed(this::pumpUploads, 500); return; }
         Object[] next = uploadQueue.remove(0);
         queuedFile = (File) next[0]; queuedName = (String) next[1];
-        feedback = "Uploading " + queuedName + "…"; session.upload(queuedFile, queuedName); changed();
+        feedback = "Uploading " + queuedName + "…";
+        if (ready()) session.upload(queuedFile, queuedName); else uploadThroughCloud(queuedFile, queuedName);
+        changed();
     }
-    public void upload() { if (ready() && selectedFile != null && !fileBusy()) { session.upload(selectedFile, selectedName); changed(); } }
-    public void cancelUpload() { if (session != null) session.cancelUpload(); }
+    public void upload() {
+        if (selectedFile == null || fileBusy()) return;
+        if (ready()) { if (!pinProbe) session.upload(selectedFile, selectedName); changed(); }
+        else if (cloudUploadReady()) uploadFiles(java.util.Collections.singletonList(selectedFile), java.util.Collections.singletonList(selectedName));
+    }
+    public void cancelUpload() { if (session != null) session.cancelUpload(); CloudUpload cloud = cloudUpload; if (cloud != null) cloud.cancel(); }
+    private void uploadedFile(String name, String message) {
+        feedback = message; browse("local", 0);
+        File copy = queuedName != null && queuedName.equals(name) ? queuedFile : selectedFile;
+        if (copy != null) files.execute(() -> keep(copy, name));
+        if (queuedName != null) {
+            queuedFile = null; queuedName = null; uploadedCount++;
+            if (uploadQueue.isEmpty()) feedback = uploadedCount == 1 ? message : "Uploaded " + uploadedCount + " files.";
+            main.postDelayed(PrinterService.this::pumpUploads, 300);
+        }
+    }
+    private void queueFailed() {
+        if (queuedName == null) return;
+        int left = uploadQueue.size(); uploadQueue.clear(); queuedFile = null; queuedName = null;
+        if (left > 0) feedback = feedback + " " + left + " more file(s) were not sent.";
+    }
+
+    /** The upload running through the Elegoo cloud, if any. */
+    private CloudUpload cloudUpload;
+    private void uploadThroughCloud(File file, String name) {
+        CloudApi api = cloudApi; String serial = cloudSerial;
+        ensureCloudControl();
+        CloudControl control = cloudControl;
+        Diagnostics.note(Diagnostics.FILES, "cloud upload started (" + (file.length() / 1024) + " KB)");
+        CloudUpload.Commands commands = new CloudUpload.Commands() {
+            public void send(JSONObject request, CloudControl.Reply reply) {
+                main.post(() -> { cloudCommandBusy = true; changed(); });
+                control.send(serial, request, (acknowledged, text) -> { main.post(() -> { cloudCommandBusy = false; changed(); }); reply.done(acknowledged, text); });
+            }
+            public void watch(CloudControl.Transfers listener) { control.watchTransfers(serial, listener); }
+        };
+        CloudUpload[] self = new CloudUpload[1];
+        self[0] = new CloudUpload(api, CloudApi::put, commands, files, cloudWorker, serial, file, name, new CloudUpload.Listener() {
+            public void progress(int percent) { main.post(() -> { if (cloudUpload != self[0]) return; feedback = "Uploading " + name + " through the Elegoo cloud: " + percent + "%" + (percent >= 50 ? " (printer fetching)" : ""); changed(); updateNotification(false); }); }
+            public void finished(boolean done, String message) { main.post(() -> {
+                if (cloudUpload != self[0]) return;
+                cloudUpload = null;
+                Diagnostics.note(Diagnostics.FILES, "cloud upload " + (done ? "finished" : "ended: " + message));
+                if (destroyed) return;
+                if (done) uploadedFile(name, message + " Choose Print setup to start it.");
+                else { feedback = message; queueFailed(); }
+                changed();
+            }); }
+        });
+        cloudUpload = self[0];
+        self[0].start();
+    }
     public void cancelDownload() {
         if (session != null) session.cancelDownload();
         PrinterHttp direct = directHttp; if (direct != null) direct.cancel();
@@ -294,6 +337,11 @@ public final class PrinterService extends Service {
                 http.download(local, storage, filename, percent -> main.post(() -> { feedback = "Downloading G-code" + (percent < 0 ? "…" : ": " + percent + "%"); changed(); }));
             } catch (PrinterErrors.Rejected rejected) {
                 failure = "The printer refused the download: its access code is needed. Connect once locally in Settings with \u201cRemember access code\u201d on, then try again.";
+            } catch (java.net.ConnectException refused) {
+                // Seen on a CC2 in cloud mode: found on Wi-Fi, but nothing listens on its HTTP port.
+                Diagnostics.note(Diagnostics.FILES, "direct download refused: printer HTTP port closed");
+                failure = "The printer was found on this Wi-Fi but does not serve files right now (HTTP port 80 is closed). In cloud mode the CC2 keeps its file server off; "
+                    + "turn on LAN Only on the printer and connect locally to download. Elegoo's cloud has no way to fetch files from the printer.";
             } catch (Exception error) {
                 failure = error instanceof IOException && error.getMessage() != null ? error.getMessage() : PrinterErrors.describe(error, "Download");
             } finally { directHttp = null; }
@@ -636,10 +684,7 @@ public final class PrinterService extends Service {
             if (method != Cc2Codec.CANVAS) { feedback = "Waiting for the previous cloud command to finish."; changed(); }
             return;
         }
-        if (cloudControl == null) cloudControl = new CloudControl(() -> {
-            CloudApi current = cloudApi; if (current == null) throw new IOException("Sign in with Elegoo again.");
-            return current.agoraCredential();
-        }, AgoraLink::new, cloudWorker);
+        ensureCloudControl();
         cloudCommandBusy = true; if (!query) feedback = "Sending through the Elegoo cloud…"; changed();
         JSONObject params = request.optJSONObject("params") == null ? new JSONObject() : request.optJSONObject("params");
         cloudControl.send(cloudSerial, request, new CloudControl.Reply() {
@@ -655,6 +700,12 @@ public final class PrinterService extends Service {
                 });
             }
         });
+    }
+    private void ensureCloudControl() {
+        if (cloudControl == null) cloudControl = new CloudControl(() -> {
+            CloudApi current = cloudApi; if (current == null) throw new IOException("Sign in with Elegoo again.");
+            return current.agoraCredential();
+        }, AgoraLink::new, cloudWorker);
     }
     public void cloudPause() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.PAUSE)); }
     public void cloudResume() { cloudCommandSafe(() -> Cc2Codec.request(0, Cc2Codec.RESUME)); }

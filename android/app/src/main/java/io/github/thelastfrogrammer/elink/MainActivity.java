@@ -897,7 +897,8 @@ public final class MainActivity extends Activity {
         if ((ready || cloud) && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText(ready ? "Automatic refill unavailable" : "Automatic refill (refresh trays first)");
         boolean fileBusy = printer != null && printer.fileBusy();
-        upload.setEnabled(ready && !printer.pinProbe() && printer.selectedFile != null && !fileBusy); pick.setEnabled(printer != null && !fileBusy);
+        upload.setEnabled((ready && !printer.pinProbe() || cloudFresh && cloudOk && printer.cloudUploadReady() && !printer.cloudCommandBusy) && printer.selectedFile != null && !fileBusy);
+        upload.setText(ready || !cloud ? "Upload to printer" : "Upload through the cloud"); pick.setEnabled(printer != null && !fileBusy);
         boolean hasReport = printer != null && printer.selectedFile != null && printer.selectedReport != null;
         saveCopy.setEnabled(hasReport && !fileBusy); shareInspection.setEnabled(hasReport && !fileBusy); clearCopy.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
         GcodeInspector.Report report = hasReport ? printer.selectedReport : null;

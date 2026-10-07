@@ -77,3 +77,11 @@ If the download fails, the error and the history entry help: share the diagnosti
 2. Slice screen → **Calibration print…** → Temperature tower; slice, **Upload and print…**, and check that the
    temperature drops by 5 °C per 10 mm block. Enter the best temperature in slot 1's **Filament settings…** and slice
    something with it.
+
+## 9. Upload through the Elegoo cloud
+
+1. Disconnect the local connection, keep the printer in cloud mode and watch it through the cloud (Printer tab shows
+   **Cloud**). Turn on cloud controls if asked.
+2. Slice something small → **Upload and print…**. Files shows "Uploading … through the Elegoo cloud" up to 50 %
+   while the phone stores the file, then "(printer fetching)" to 100 %. Print setup should open once the file is listed.
+3. If it stops, Share diagnostics: the Printer file downloads section notes the cloud upload start and how it ended.

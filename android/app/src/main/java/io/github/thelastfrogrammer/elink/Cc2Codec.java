@@ -16,6 +16,11 @@ public final class Cc2Codec {
     /** Maintenance commands, with formats taken from Elegoo's printer page (ElegooSlicer lan_service_web). */
     public static final int URGENT_STOP = 1007, FEED = 1024, RETREAT = 1025, HOME = 1026, MOVE = 1027, AUTO_LEVEL = 1032, VIBRATION = 1033,
         SELF_CHECK = 1035, THUMBNAIL = 1045, CANVAS_LOAD = 2001, CANVAS_UNLOAD = 2002;
+    /**
+     * Cloud uploads (SDK SET_PRINTER_DOWNLOAD_FILE / CANCEL_PRINTER_DOWNLOAD_FILE): the printer fetches a file from Elegoo's
+     * storage and reports its progress unasked with method 6006 {taskID, progress, status 1 done, 2 cancelled, 3 failed}.
+     */
+    public static final int FETCH = 1057, FETCH_CANCEL = 1058, FETCH_STATUS = 6006;
     private JSONObject snapshot;
     private int sequence = -1, gaps;
 
@@ -42,6 +47,18 @@ public final class Cc2Codec {
     public static void timelapse(String value) {
         if (value == null || value.trim().isEmpty() || value.length() > 1024 || value.matches("(?s).*[\\p{Cntrl}].*") || value.contains("..")
             || value.matches("(?i)^[a-z][a-z0-9+.-]*://.*")) throw new IllegalArgumentException("The printer reported no usable timelapse video");
+    }
+    /** Asks the printer to fetch an uploaded file from Elegoo's storage (https only) and save it under filename. */
+    public static JSONObject fetchRequest(int id, String filename, String url, String md5, String task) throws JSONException {
+        filename(filename);
+        if (url == null || !url.startsWith("https://") || url.length() > 4096 || url.matches("(?s).*[\\p{Cntrl}\\s].*")) throw new IllegalArgumentException("Elegoo returned no usable download address");
+        if (md5 == null || !md5.matches("[0-9a-f]{32}")) throw new IllegalArgumentException("Invalid file checksum");
+        if (!Cc2Discovery.validSerial(task)) throw new IllegalArgumentException("Invalid transfer task");
+        return envelope(id, FETCH, new JSONObject().put("filename", filename).put("url", url).put("md5", md5).put("taskID", task));
+    }
+    public static JSONObject fetchCancelRequest(int id, String task) throws JSONException {
+        if (!Cc2Discovery.validSerial(task)) throw new IllegalArgumentException("Invalid transfer task");
+        return envelope(id, FETCH_CANCEL, new JSONObject().put("taskID", task));
     }
     public static JSONObject filesRequest(int id, String storage, int offset) throws JSONException {
         storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid page offset");
@@ -110,7 +127,7 @@ public final class Cc2Codec {
     public static int timeoutSeconds(int method) {
         if (method == FEED || method == RETREAT || method == CANVAS_LOAD || method == CANVAS_UNLOAD) return 330;
         if (method == HOME) return 60;
-        if (method == MOVE) return 30;
+        if (method == MOVE || method == FETCH) return 30;
         return isQuery(method) ? 15 : 8;
     }
     public static JSONObject lightRequest(int id, boolean on) throws JSONException { return envelope(id, LIGHT, new JSONObject().put("power", on ? 1 : 0)); }

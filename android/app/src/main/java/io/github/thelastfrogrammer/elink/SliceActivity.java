@@ -633,10 +633,11 @@ public final class SliceActivity extends Activity {
         updateButtons();
     }
 
-    /** Uploads the result over the local connection; for one file, Print setup opens when it is on the printer. */
+    /** Uploads the result (locally, or through the cloud); for one file, Print setup opens when it is on the printer. */
     private void uploadAndPrint() {
         if (printer == null || slicedFiles.isEmpty()) return;
-        if (!printer.ready() || printer.pinProbe()) { status.setText("Uploading needs the local connection to the printer: connect in Settings, or use Send to Files tab."); status.setTextColor(error); return; }
+        boolean cloud = !printer.ready() && printer.cloudUploadReady() && settings.getBoolean("cloudControlUnderstood", false);
+        if (!cloud && (!printer.ready() || printer.pinProbe())) { status.setText("Uploading needs the local connection or the printer watched through the Elegoo cloud: see Settings, or use Send to Files tab."); status.setTextColor(error); return; }
         for (File file : slicedFiles) if (!file.isFile()) { status.setText("The sliced file is gone; slice again."); status.setTextColor(error); return; }
         if (!printer.uploadFiles(new ArrayList<>(slicedFiles), new ArrayList<>(slicedNames))) return;
         Intent back = new Intent();
@@ -1118,9 +1119,13 @@ public final class SliceActivity extends Activity {
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
         for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
         editPlate.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty() && plate != ALL_PLATES); autoLayout.setEnabled(!busy);
-        boolean canUpload = printer != null && printer.ready() && !printer.pinProbe();
+        boolean local = printer != null && printer.ready() && !printer.pinProbe(), cloud = printer != null && printer.cloudUploadReady() && settings.getBoolean("cloudControlUnderstood", false);
+        boolean canUpload = local || cloud;
         if (uploadPrint != null) uploadPrint.setEnabled(!busy && canUpload && !slicedFiles.isEmpty());
-        if (printerHint != null) printerHint.setText(canUpload ? "Uploads over the local connection, then opens Print setup with the CANVAS trays from this slice." : "Connect to the printer locally (Settings) to upload from here; Send to Files tab works without.");
+        if (printerHint != null) printerHint.setText(local ? "Uploads over the local connection, then opens Print setup with the CANVAS trays from this slice."
+            : cloud ? "Uploads through the Elegoo cloud (the printer fetches the file), then opens Print setup with the CANVAS trays from this slice."
+            : printer != null && printer.cloudUploadReady() ? "Turn on cloud controls on the Printer tab to upload through the Elegoo cloud; Send to Files tab works without."
+            : "Connect to the printer locally, or watch it through the Elegoo cloud (Settings), to upload from here; Send to Files tab works without.");
         allSettings.setEnabled(!busy && presetsReady);
         addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);
         for (int i = 0; i < modelAssign.getChildCount(); i++) modelAssign.getChildAt(i).setEnabled(!busy);

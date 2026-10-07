@@ -11,8 +11,9 @@ import org.json.JSONArray;
 import org.json.JSONObject;
 
 /**
- * Read-only Elegoo cloud HTTPS client, following the C++ SDK's HttpService (src/cloud/services/http_service.cpp).
- * Only reads: token refresh, bound printer list, online state and the last status the printer reported to the cloud.
+ * Elegoo cloud HTTPS client, following the C++ SDK's HttpService (src/cloud/services/http_service.cpp): token refresh,
+ * bound printer list, online state, the last status the printer reported to the cloud, and the storage address for
+ * sending a G-code file to a printer through the cloud (the printer then fetches it, see {@link Cc2Codec#FETCH}).
  */
 public final class CloudApi {
     public static final String GLOBAL = "https://matrix.elegoo.com", CHINA = "https://matrix.elegoo.com.cn";
@@ -143,6 +144,65 @@ public final class CloudApi {
         if (data == null || data.optString("host").isEmpty() || data.optString("mqttUserName").isEmpty())
             throw new CloudException("Elegoo did not issue live-update credentials for this app.", false);
         return new MqttCredential(data.optString("host"), data.optString("mqttClientId", clientId), data.optString("mqttUserName"), data.optString("mqttPassword"));
+    }
+
+    /** Where to put a file for a printer to fetch: a signed upload address and the address the printer downloads from. */
+    public static final class UploadTarget {
+        public final String uploadUrl, accessUrl;
+        UploadTarget(String uploadUrl, String accessUrl) { this.uploadUrl = uploadUrl; this.accessUrl = accessUrl; }
+    }
+    /** Files from 500 MB use the SDK's multipart upload, which this app does not implement. */
+    public static final long UPLOAD_LIMIT = 500L * 1024 * 1024 - 1;
+    /**
+     * Name the file is stored under in Elegoo's storage, as the SDK forms it: the last six characters of the account and
+     * of the printer, then the file's MD5, so two users' files of the same name never collide. The printer keeps the original name.
+     */
+    static String storageName(String userId, String serial, String md5Hex, String filename) {
+        String user = userId.length() > 6 ? userId.substring(userId.length() - 6) : userId;
+        // The SDK's printer ID is a prefix plus the serial, so it always has more than six characters.
+        user += "_" + (serial.length() > 6 ? serial.substring(serial.length() - 6) : serial);
+        String extension = filename.contains(".") ? filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "gcode";
+        return user + "_" + md5Hex + "." + extension;
+    }
+    public UploadTarget uploadTarget(String storageName, String md5Base64) throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/oss/biz-entrypoint?filename=" + URLEncoder.encode(storageName, "UTF-8")
+            + "&bucketAlias=iot-private&module=gcode&fileMd5=" + URLEncoder.encode(md5Base64, "UTF-8"), null, true).optJSONObject("data");
+        String upload = data == null ? "" : data.optString("entrypoint", ""), access = data == null ? "" : data.optString("accessUrl", "");
+        if (!upload.startsWith("https://") || !access.startsWith("https://") || data.optString("objectName", "").isEmpty())
+            throw new CloudException("Elegoo did not provide a place to upload the file.", false);
+        return new UploadTarget(upload, access);
+    }
+    /** MD5 of a file as {hex, base64}: the printer checks the hex form, the storage service the base64 one. */
+    static String[] md5(File file) throws IOException {
+        java.security.MessageDigest digest;
+        try { digest = java.security.MessageDigest.getInstance("MD5"); } catch (java.security.NoSuchAlgorithmException impossible) { throw new IOException(impossible); }
+        try (InputStream in = new FileInputStream(file)) { byte[] buffer = new byte[65536]; int read; while ((read = in.read(buffer)) != -1) digest.update(buffer, 0, read); }
+        byte[] sum = digest.digest(); StringBuilder hex = new StringBuilder();
+        for (byte b : sum) hex.append(String.format(Locale.ROOT, "%02x", b & 0xff));
+        return new String[] {hex.toString(), java.util.Base64.getEncoder().encodeToString(sum)};
+    }
+    /** Upload progress in percent; return false to cancel. */
+    public interface Progress { boolean update(int percent); }
+    public interface Uploader { int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException; }
+    /** PUT of a file to the signed address, as the SDK does (octet-stream, Content-MD5). Returns the HTTP status. */
+    public static int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException {
+        if (!url.startsWith("https://")) throw new IOException("Cloud uploads must use https");
+        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        try {
+            connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15_000); connection.setReadTimeout(60_000);
+            connection.setRequestMethod("PUT"); connection.setDoOutput(true);
+            long size = file.length(); connection.setFixedLengthStreamingMode(size);
+            for (Map.Entry<String, String> header : headers.entrySet()) connection.setRequestProperty(header.getKey(), header.getValue());
+            try (OutputStream out = connection.getOutputStream(); InputStream in = new FileInputStream(file)) {
+                byte[] buffer = new byte[65536]; long sent = 0; int read, last = -1;
+                while ((read = in.read(buffer)) != -1) {
+                    out.write(buffer, 0, read); sent += read;
+                    int percent = size == 0 ? 100 : (int) (sent * 100 / size);
+                    if (percent != last) { last = percent; if (!progress.update(percent)) throw new InterruptedIOException("Upload cancelled."); }
+                }
+            }
+            return connection.getResponseCode();
+        } finally { connection.disconnect(); }
     }
 
     public List<Device> devices() throws IOException {
