@@ -67,7 +67,7 @@ final class NativeSlicer implements AutoCloseable {
         final Map<String, String> overrides = new LinkedHashMap<>();
         int plate;
         boolean projectSettings;
-        /** One per copy: {file, object, x, y, rotation, scale}; empty lets the engine arrange. */
+        /** One per copy: {file, object, x, y, rotation, scale[, down x, y, z]}; empty lets the engine arrange. */
         final List<double[]> placements = new ArrayList<>();
 
         Selection(String printer, String process, List<String> filaments) { this.printer = printer; this.process = process; this.filaments.addAll(filaments); }
@@ -82,8 +82,11 @@ final class NativeSlicer implements AutoCloseable {
                 JSONObject settings = new JSONObject(); for (Map.Entry<String, String> entry : overrides.entrySet()) settings.put(entry.getKey(), entry.getValue());
                 json.put("overrides", settings).put("plate", plate).put("project_settings", projectSettings);
                 JSONArray places = new JSONArray();
-                for (double[] p : placements)
-                    places.put(new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", p[5]));
+                for (double[] p : placements) {
+                    JSONObject place = new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", p[5]);
+                    if (p.length >= 9 && (p[6] != 0 || p[7] != 0 || p[8] != 0)) place.put("down", new JSONArray().put(p[6]).put(p[7]).put(p[8]));
+                    places.put(place);
+                }
                 return json.put("placements", places).toString();
             } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
         }

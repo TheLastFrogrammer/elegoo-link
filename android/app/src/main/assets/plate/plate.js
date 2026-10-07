@@ -130,29 +130,54 @@
   // ---------------------------------------------------------------- placements
   // The footprint of a copy turned by `rotation` and scaled: the bounding box of its mesh, relative to the mesh
   // origin. The engine centers that box on (x, y), so the mesh origin goes to (x, y) minus the box center.
-  function footprint(object, rotation, scale) {
-    const key = rotation.toFixed(3) + "/" + scale.toFixed(4);
+  // The turn laying the face with outward normal `down` on the bed, as a row-major 3x3 (the engine's lay_down).
+  function layDown(down) {
+    if (!down) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    let [x, y, z] = down; const l = Math.hypot(x, y, z);
+    if (l < 1e-9) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    x /= l; y /= l; z /= l;
+    const c = Math.max(-1, Math.min(1, -z));               // n · (0, 0, -1)
+    if (c > 1 - 1e-9) return [1, 0, 0, 0, 1, 0, 0, 0, 1];
+    if (c < -1 + 1e-9) return [1, 0, 0, 0, -1, 0, 0, 0, -1];  // half a turn about X
+    let ax = -y, ay = x, az = 0;                            // n × (0, 0, -1)
+    const al = Math.hypot(ax, ay, az); ax /= al; ay /= al; az /= al;
+    const angle = Math.acos(c), s = Math.sin(angle), t = 1 - Math.cos(angle), k = Math.cos(angle);
+    return [t * ax * ax + k, t * ax * ay - s * az, t * ax * az + s * ay,
+            t * ax * ay + s * az, t * ay * ay + k, t * ay * az - s * ax,
+            t * ax * az - s * ay, t * ay * az + s * ax, t * az * az + k];
+  }
+  // The copy's linear part: turned about Z and scaled, after laying a face down (row-major 3x3).
+  function linear(p) {
+    const L = layDown(p.down), c = Math.cos(p.rotation * Math.PI / 180) * p.scale, s = Math.sin(p.rotation * Math.PI / 180) * p.scale;
+    const R = [c, -s, 0, s, c, 0, 0, 0, p.scale];
+    const out = new Array(9);
+    for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) out[r * 3 + q] = R[r * 3] * L[q] + R[r * 3 + 1] * L[3 + q] + R[r * 3 + 2] * L[6 + q];
+    return out;
+  }
+  // The bounding box of the copy's mesh under its turn and scale, relative to the mesh origin. The engine centers the
+  // box's footprint on (x, y) and rests its bottom on the bed.
+  function footprint(object, p) {
+    const key = p.rotation.toFixed(3) + "/" + p.scale.toFixed(4) + "/" + (p.down ? p.down.map((v) => v.toFixed(4)).join(",") : "");
     if (object.footprints[key]) return object.footprints[key];
-    const c = Math.cos(rotation * Math.PI / 180), s = Math.sin(rotation * Math.PI / 180), v = object.positions;
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = 0;
+    const m = linear(p), v = object.positions;
+    let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
     for (let i = 0; i < v.length; i += 3) {
-      const x = (c * v[i] - s * v[i + 1]) * scale, y = (s * v[i] + c * v[i + 1]) * scale;
-      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; if (v[i + 2] * scale > maxZ) maxZ = v[i + 2] * scale;
+      const x = m[0] * v[i] + m[1] * v[i + 1] + m[2] * v[i + 2], y = m[3] * v[i] + m[4] * v[i + 1] + m[5] * v[i + 2], z = m[6] * v[i] + m[7] * v[i + 1] + m[8] * v[i + 2];
+      if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; if (z < minZ) minZ = z; if (z > maxZ) maxZ = z;
     }
-    if (!isFinite(minX)) { minX = minY = maxX = maxY = 0; }
-    const result = { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, w: maxX - minX, d: maxY - minY, h: maxZ };
+    if (!isFinite(minX)) { minX = minY = minZ = maxX = maxY = maxZ = 0; }
+    const result = { cx: (minX + maxX) / 2, cy: (minY + maxY) / 2, w: maxX - minX, d: maxY - minY, h: maxZ - minZ, z: minZ };
     if (Object.keys(object.footprints).length > 64) object.footprints = {};
     object.footprints[key] = result;
     return result;
   }
   function objectOf(p) { return scene.objects.find((o) => o.file === p.file && o.object === p.object); }
   function modelMatrix(p) {
-    const object = objectOf(p), box = footprint(object, p.rotation, p.scale);
-    const c = Math.cos(p.rotation * Math.PI / 180) * p.scale, s = Math.sin(p.rotation * Math.PI / 180) * p.scale;
-    return [c, s, 0, 0, -s, c, 0, 0, 0, 0, p.scale, 0, p.x - box.cx, p.y - box.cy, 0, 1];
+    const box = footprint(objectOf(p), p), m = linear(p);
+    return [m[0], m[3], m[6], 0, m[1], m[4], m[7], 0, m[2], m[5], m[8], 0, p.x - box.cx, p.y - box.cy, -box.z, 1];
   }
   function rect(p) {
-    const box = footprint(objectOf(p), p.rotation, p.scale);
+    const box = footprint(objectOf(p), p);
     return [p.x - box.w / 2, p.y - box.d / 2, p.x + box.w / 2, p.y + box.d / 2, box.h];
   }
   function overlaps(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
@@ -295,6 +320,30 @@
     });
     return best;
   }
+  // The outward normal, in the mesh's own frame, of the triangle of copy `index` under the screen point, or null.
+  function faceAt(clientX, clientY, index) {
+    const p = scene.placements[index], object = p && objectOf(p); if (!object) return null;
+    const r = ray(clientX, clientY), inverse = invert(modelMatrix(p));
+    const o = transform(inverse, r.origin, 1), d = transform(inverse, r.direction, 0), v = object.positions;
+    let best = Infinity, normal = null;
+    for (let i = 0; i < v.length; i += 9) {
+      const e1 = [v[i + 3] - v[i], v[i + 4] - v[i + 1], v[i + 5] - v[i + 2]], e2 = [v[i + 6] - v[i], v[i + 7] - v[i + 1], v[i + 8] - v[i + 2]];
+      const h = [d[1] * e2[2] - d[2] * e2[1], d[2] * e2[0] - d[0] * e2[2], d[0] * e2[1] - d[1] * e2[0]];
+      const a = e1[0] * h[0] + e1[1] * h[1] + e1[2] * h[2]; if (Math.abs(a) < 1e-12) continue;
+      const f = 1 / a, sv = [o[0] - v[i], o[1] - v[i + 1], o[2] - v[i + 2]];
+      const u = f * (sv[0] * h[0] + sv[1] * h[1] + sv[2] * h[2]); if (u < 0 || u > 1) continue;
+      const q = [sv[1] * e1[2] - sv[2] * e1[1], sv[2] * e1[0] - sv[0] * e1[2], sv[0] * e1[1] - sv[1] * e1[0]];
+      const w = f * (d[0] * q[0] + d[1] * q[1] + d[2] * q[2]); if (w < 0 || u + w > 1) continue;
+      const t = f * (e2[0] * q[0] + e2[1] * q[1] + e2[2] * q[2]);
+      if (t > 0 && t < best) {
+        best = t;
+        const n = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]], l = Math.hypot(...n) || 1;
+        normal = n.map((x) => Math.round(x / l * 1e5) / 1e5);
+      }
+    }
+    return normal;
+  }
+  let layMode = false;
   function onBed(clientX, clientY) {
     const r = ray(clientX, clientY);
     if (Math.abs(r.direction[2]) < 1e-9) return null;
@@ -354,7 +403,14 @@
   function release(e) {
     pointers.delete(e.pointerId);
     if (drag && moved) changed();
-    else if (tapStart && !moved && Date.now() - tapStart.t < 400 && pick(e.clientX, e.clientY) < 0) select(-1);
+    else if (tapStart && !moved && Date.now() - tapStart.t < 400) {
+      const hit = pick(e.clientX, e.clientY);
+      if (layMode && hit >= 0) {
+        const normal = faceAt(e.clientX, e.clientY, hit);
+        if (normal) { scene.placements[hit].down = normal; scene.placements[hit].rotation = 0; layMode = false; select(hit); changed();
+          if (android && android.onLayDone) android.onLayDone(true); }
+      } else if (hit < 0) select(-1);
+    }
     drag = null; tapStart = null;
   }
   canvas.addEventListener("pointerup", release);
@@ -392,6 +448,8 @@
       scene.placements.push(copy); select(scene.placements.length - 1); changed();
     },
     remove() { if (!current()) return; scene.placements.splice(selected, 1); select(-1); changed(); },
+    setLayMode(on) { layMode = !!on; },
+    upright() { const p = current(); if (!p) return; delete p.down; p.rotation = 0; changed(); },
     resetCamera() { setupBed(); redraw(); },
     redraw, camera, scene,
   };

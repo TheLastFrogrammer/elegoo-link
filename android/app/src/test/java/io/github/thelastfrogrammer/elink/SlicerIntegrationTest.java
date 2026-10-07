@@ -214,6 +214,12 @@ public class SlicerIntegrationTest {
             assertEquals(60, (minX + maxX) / 2, 0.1); assertEquals(68.5, (minY + maxY) / 2, 0.1);
             assertEquals(40 * Math.sqrt(2), maxX - minX, 1.0);
 
+            // Laid on its +X face, the box stands 20 mm tall.
+            selection.placements.clear();
+            selection.placements.add(new double[] {0, 0, 100, 100, 0, 1, 1, 0, 0});
+            slicer.slice(model, selection, output, null);
+            assertTrue(new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8).contains("; max_z_height: 20.00"));
+
             // Arranging two copies (one turned) keeps both, apart from each other.
             selection.placements.clear();
             selection.placements.add(new double[] {0, 0, 128, 128, 0, 1});

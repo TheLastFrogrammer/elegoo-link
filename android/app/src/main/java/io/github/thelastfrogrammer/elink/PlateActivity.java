@@ -33,7 +33,8 @@ public final class PlateActivity extends Activity {
     private WebView web;
     private TextView status, selectedLabel;
     private EditText scale;
-    private Button rotateLeft, rotateRight, rotate90, copy, remove, arrange, done;
+    private Button rotateLeft, rotateRight, rotate90, copy, remove, arrange, done, layFace, upright;
+    private boolean laying;
     private final List<File> models = new ArrayList<>();
     private String selection;
     private JSONObject inspected;
@@ -65,6 +66,13 @@ public final class PlateActivity extends Activity {
         rotateLeft = ui.rowButton(turn, "⟲ 15°", () -> js("plate.rotate(15)"), false);
         rotateRight = ui.rowButton(turn, "⟳ 15°", () -> js("plate.rotate(-15)"), false);
         rotate90 = ui.rowButton(turn, "90°", () -> js("plate.rotate(90)"), false);
+        LinearLayout lay = ui.row(panel);
+        layFace = ui.rowButton(lay, "Lay on face", () -> {
+            laying = !laying; js("plate.setLayMode(" + laying + ")");
+            layFace.setText(laying ? "Cancel" : "Lay on face");
+            if (laying) { status.setText("Tap the face of a model that should rest on the bed."); status.setTextColor(ui.teal); }
+        }, false);
+        upright = ui.rowButton(lay, "Upright", () -> js("plate.upright()"), false);
         LinearLayout edit = ui.row(panel);
         scale = new EditText(this); scale.setHint("Scale %"); scale.setHintTextColor(ui.muted); scale.setTextColor(ui.ink); scale.setSingleLine(true);
         scale.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL); scale.setImeOptions(EditorInfo.IME_ACTION_DONE);
@@ -210,12 +218,14 @@ public final class PlateActivity extends Activity {
 
     private void setButtons() {
         boolean on = selected >= 0;
-        for (View view : new View[] {rotateLeft, rotateRight, rotate90, copy, remove, scale}) view.setEnabled(on);
+        for (View view : new View[] {rotateLeft, rotateRight, rotate90, copy, remove, scale, upright}) view.setEnabled(on);
+        layFace.setEnabled(placements.length() > 0);
     }
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; load(); }); }
         @JavascriptInterface public void onLoaded(int count) { }
+        @JavascriptInterface public void onLayDone(boolean laid) { main.post(() -> { laying = false; layFace.setText("Lay on face"); }); }
         @JavascriptInterface public void onError(String message) { main.post(() -> { status.setText(message); status.setTextColor(ui.error); }); }
         @JavascriptInterface public void onSelect(int index) { main.post(() -> { selected = index; showSelected(); setButtons(); }); }
         @JavascriptInterface public void onChanged(String json) {

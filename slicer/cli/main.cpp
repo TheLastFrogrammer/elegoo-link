@@ -64,7 +64,10 @@ int usage()
         "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --arrange MODEL...\n"
         "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --describe KEY,KEY [MODEL...]\n"
         "    With slicing or --arrange: --plate N (3MF project plate), --project-settings (the project's process\n"
-        "    settings), --place FILE,OBJECT,X,Y[,ROTATION[,SCALE]] (once per copy; files and objects count from 0).\n";
+        "    settings), --place FILE,OBJECT,X,Y[,ROTATION[,SCALE[,DX,DY,DZ]]] (once per copy; files and objects count from 0;\n"
+        "    DX,DY,DZ: outward normal of a face to lay on the bed).\n"
+        "    --filament-set SLOT,key=value changes one filament slot's setting; --calibrate MODE,START,END,STEP slices\n"
+        "    a calibration print instead of MODEL files (temperature, pressure_advance, flow, max_flow, retraction).\n";
     return 2;
 }
 
@@ -107,6 +110,22 @@ int main(int argc, char** argv)
         else if (arg == "--describe") describe = value();
         else if (arg == "--plate") selection.plate = std::atoi(value().c_str());
         else if (arg == "--project-settings") selection.project_settings = true;
+        else if (arg == "--calibrate") {
+            std::stringstream list(value()); std::string item; std::vector<std::string> parts;
+            while (std::getline(list, item, ',')) parts.push_back(item);
+            if (parts.empty()) { std::cerr << "--calibrate expects MODE[,START,END,STEP]\n"; return usage(); }
+            selection.calibration.mode = parts[0];
+            if (parts.size() > 1) selection.calibration.start = std::atof(parts[1].c_str());
+            if (parts.size() > 2) selection.calibration.end = std::atof(parts[2].c_str());
+            if (parts.size() > 3) selection.calibration.step = std::atof(parts[3].c_str());
+        }
+        else if (arg == "--filament-set") {
+            std::string spec = value(); size_t comma = spec.find(','), eq = spec.find('=');
+            if (comma == std::string::npos || eq == std::string::npos || eq < comma) { std::cerr << "--filament-set expects SLOT,key=value\n"; return usage(); }
+            const size_t slot = size_t(std::max(1, std::atoi(spec.substr(0, comma).c_str()))) - 1;
+            if (selection.filament_overrides.size() <= slot) selection.filament_overrides.resize(slot + 1);
+            selection.filament_overrides[slot].emplace_back(spec.substr(comma + 1, eq - comma - 1), spec.substr(eq + 1));
+        }
         else if (arg == "--place") {
             std::stringstream list(value()); std::string item; std::vector<double> numbers;
             while (std::getline(list, item, ',')) numbers.push_back(std::atof(item.c_str()));
@@ -115,6 +134,7 @@ int main(int argc, char** argv)
             placement.file = int(numbers[0]); placement.object = int(numbers[1]); placement.x = numbers[2]; placement.y = numbers[3];
             if (numbers.size() > 4) placement.rotation = numbers[4];
             if (numbers.size() > 5) placement.scale = numbers[5];
+            if (numbers.size() > 8) for (int k = 0; k < 3; ++k) placement.down[k] = numbers[6 + k];
             selection.placements.push_back(placement);
         }
         else if (arg == "--set") {
@@ -128,7 +148,8 @@ int main(int argc, char** argv)
         else models.push_back(arg);
     }
     const bool query = inspect || arrange || !describe.empty();
-    if (resources.empty() || (list.empty() && export_dir.empty() && !query && (output.empty() || models.empty() || selection.printer.empty() || selection.process.empty())))
+    const bool calibrating = !selection.calibration.mode.empty();
+    if (resources.empty() || (list.empty() && export_dir.empty() && !query && (output.empty() || (models.empty() && !calibrating) || selection.printer.empty() || selection.process.empty())))
         return usage();
     if (work.empty())
         work = (boost::filesystem::temp_directory_path() / "link-slicer").string();

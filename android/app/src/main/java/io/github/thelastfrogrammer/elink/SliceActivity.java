@@ -474,7 +474,9 @@ public final class SliceActivity extends Activity {
         if (withPlacements && placements != null)
             for (int i = 0; i < placements.length(); i++) {
                 org.json.JSONObject p = placements.optJSONObject(i);
-                selection.placements.add(new double[] {p.optInt("file"), p.optInt("object"), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation"), p.optDouble("scale", 1)});
+                org.json.JSONArray down = p.optJSONArray("down");
+                selection.placements.add(new double[] {p.optInt("file"), p.optInt("object"), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation"), p.optDouble("scale", 1),
+                    down == null ? 0 : down.optDouble(0), down == null ? 0 : down.optDouble(1), down == null ? 0 : down.optDouble(2)});
             }
         return selection;
     }

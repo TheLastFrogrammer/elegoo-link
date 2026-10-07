@@ -33,8 +33,18 @@ struct Selection {
         double x = 0, y = 0;            // bed position of the copy's footprint center, mm
         double rotation = 0;            // degrees about Z, on top of the file's own orientation
         double scale = 1;               // uniform, on top of the file's own scale
+        // The outward normal (in the file's own orientation) of a face to lay on the bed, or zero to keep it upright.
+        // Applied before `rotation`.
+        double down[3] = {0, 0, 0};
     };
     std::vector<Placement> placements;
+    // Filament settings per slot (key -> value for that slot only, e.g. nozzle_temperature -> 215), on top of the
+    // filament presets.
+    std::vector<std::vector<std::pair<std::string, std::string>>> filament_overrides;
+    // A calibration print instead of the model files, set up as ElegooSlicer's Calibration menu does it with filament
+    // slot 1: "temperature" (tower, start/end in °C), "pressure_advance" (tower), "flow" (pass 1 or 2 in `start`),
+    // "max_flow" (mm³/s), "retraction" (mm).
+    struct Calibration { std::string mode; double start = 0, end = 0, step = 0; } calibration;
 };
 
 // Parses a Selection from JSON (the app's format): {"printer","process","filaments":[],"colours":[],"model_filaments":[],

@@ -5,6 +5,7 @@
 #include "thumbnail.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <optional>
@@ -24,6 +25,9 @@
 #include "libslic3r/FlushVolCalc.hpp"
 #include "libslic3r/Format/bbs_3mf.hpp"
 #include "libslic3r/QuadricEdgeCollapse.hpp"
+#include "libslic3r/CutUtils.hpp"
+#include "libslic3r/Flow.hpp"
+#include "libslic3r/calib.hpp"
 #include "libslic3r/GCode/WipeTower.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -476,6 +480,20 @@ std::pair<double, double> relative_rotation_scale(const Matrix3d& matrix, const 
     return {std::atan2(relative(1, 0), relative(0, 0)) * 180. / PI, scale};
 }
 
+// The turn that lays a face with outward normal `down` flat on the bed (the shortest one; half a turn about X for
+// a face already pointing up). The plate view computes the same.
+Matrix3d lay_down(const double down[3])
+{
+    Vec3d n(down[0], down[1], down[2]);
+    if (n.norm() < 1e-9) return Matrix3d::Identity();
+    n.normalize();
+    const Vec3d target(0, 0, -1);
+    const double c = std::clamp(n.dot(target), -1.0, 1.0);
+    if (c > 1 - 1e-9) return Matrix3d::Identity();
+    if (c < -1 + 1e-9) return Eigen::AngleAxisd(PI, Vec3d::UnitX()).toRotationMatrix();
+    return Eigen::AngleAxisd(std::acos(c), n.cross(target).normalized()).toRotationMatrix();
+}
+
 // Replaces an object's copies by the given placements: the first copy's orientation and scale from the file, turned
 // and scaled further, with the footprint centered on (x, y) and resting on the bed.
 void apply_placements(ModelObject* object, const std::vector<const Selection::Placement*>& placements)
@@ -487,7 +505,7 @@ void apply_placements(ModelObject* object, const std::vector<const Selection::Pl
         if (!(placement->scale > 0.001 && placement->scale < 1000))
             throw std::runtime_error("Scale must be between 0.001 and 1000");
         Transform3d matrix = Transform3d::Identity();
-        matrix.linear() = (Eigen::AngleAxisd(placement->rotation * PI / 180., Vec3d::UnitZ()).toRotationMatrix() * placement->scale) * base;
+        matrix.linear() = (Eigen::AngleAxisd(placement->rotation * PI / 180., Vec3d::UnitZ()).toRotationMatrix() * placement->scale) * lay_down(placement->down) * base;
         ModelInstance* instance = object->add_instance();
         instance->set_transformation(Geometry::Transformation(matrix));
         const BoundingBoxf3 box = object->instance_bounding_box(*instance, false);
@@ -497,13 +515,234 @@ void apply_placements(ModelObject* object, const std::vector<const Selection::Pl
 
 } // namespace
 
+// Cuts object `index` of `model` at height z (from the bed), keeping the lower or the upper part (Plater::cut_horizontal).
+static void cut_horizontal(Model& model, size_t index, double z, bool keep_lower)
+{
+    ModelObject* object = model.objects[index];
+    const Vec3d offset = object->instances.front()->get_offset();
+    ModelObjectCutAttributes attributes = keep_lower ? ModelObjectCutAttribute::KeepLower : ModelObjectCutAttribute::KeepUpper;
+    Cut cut(object, 0, Geometry::translation_transform(z * Vec3d::UnitZ() - offset), attributes);
+    const ModelObjectPtrs pieces = cut.perform_with_plane();
+    if (pieces.empty())
+        throw std::runtime_error("The calibration model could not be cut");
+    model.delete_object(index);
+    for (ModelObject* piece : pieces) { ModelObject* added = model.add_object(*piece); added->ensure_on_bed(); }
+}
+
+template <typename Option, typename Value> static void set_all(DynamicPrintConfig& config, const std::string& key, Value value)
+{
+    auto* option = config.option<Option>(key, true);
+    for (auto& v : option->values) v = value;
+    if (option->values.empty()) option->values.push_back(value);
+}
+
+// Builds a calibration print as ElegooSlicer's Plater::calib_* functions do (model, cuts, object and global
+// settings), for filament slot 1. Returns the calibration parameters for Print::set_calib_params.
+static Calib_Params setup_calibration(Model& model, DynamicPrintConfig& config, const Selection::Calibration& calibration, const std::string& resources)
+{
+    const std::string calib = resources + "/calib/";
+    auto load = [&](const std::string& path) {
+        DynamicPrintConfig ignored; ConfigSubstitutionContext substitutions(ForwardCompatibilitySubstitutionRule::EnableSilent);
+        Model loaded = Model::read_from_file(calib + path, &ignored, &substitutions, LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances);
+        for (ModelObject* object : loaded.objects) { ModelObject* added = model.add_object(*object); added->ensure_on_bed(); }
+    };
+    const double nozzle = config.option<ConfigOptionFloats>("nozzle_diameter")->get_at(0);
+    Calib_Params params;
+    params.start = calibration.start; params.end = calibration.end; params.step = calibration.step; params.print_numbers = false;
+    config.set_key_value("enable_wrapping_detection", new ConfigOptionBool(false));
+    if (config.has("resonance_avoidance")) config.set_key_value("resonance_avoidance", new ConfigOptionBool(false));
+    const std::string& mode = calibration.mode;
+
+    if (mode == "temperature") {
+        if (!(params.start > params.end && params.end >= 150 && params.start <= 350))
+            throw std::runtime_error("Temperature tower: start must be hotter than end, between 150 and 350 °C");
+        params.mode = CalibMode::Calib_Temp_Tower;
+        params.step = 5; // the tower's blocks are 5 °C apart
+        load("temperature_tower/temperature_tower.drc");
+        const double block_height = 10.0, scale = nozzle / 0.4;
+        long blocks = std::lround((500 - params.end) / 5 + 1);
+        if (blocks > 0 && blocks * block_height - EPSILON < model.objects[0]->bounding_box_exact().size().z())
+            cut_horizontal(model, 0, blocks * block_height - EPSILON, true);
+        blocks = std::lround((500 - params.start) / 5);
+        if (blocks > 0 && blocks * block_height + EPSILON < model.objects[0]->bounding_box_exact().size().z())
+            cut_horizontal(model, 0, blocks * block_height + EPSILON, false);
+        if (std::abs(scale - 1.0) > EPSILON) model.objects[0]->scale(scale, scale, scale);
+        model.objects[0]->ensure_on_bed();
+        set_all<ConfigOptionInts>(config, "nozzle_temperature_initial_layer", int(std::lround(params.start)));
+        set_all<ConfigOptionInts>(config, "nozzle_temperature", int(std::lround(params.start)));
+        auto& object = model.objects[0]->config;
+        object.set_key_value("layer_height", new ConfigOptionFloat(nozzle / 2));
+        object.set_key_value("brim_type", new ConfigOptionEnum<BrimType>(btOuterOnly));
+        object.set_key_value("brim_width", new ConfigOptionFloat(5.0));
+        object.set_key_value("brim_object_gap", new ConfigOptionFloat(0.0));
+        object.set_key_value("alternate_extra_wall", new ConfigOptionBool(false));
+        object.set_key_value("seam_slope_type", new ConfigOptionEnum<SeamScarfType>(SeamScarfType::None));
+        object.set_key_value("overhang_reverse", new ConfigOptionBool(false));
+        object.set_key_value("precise_z_height", new ConfigOptionBool(false));
+        config.set_key_value("initial_layer_print_height", new ConfigOptionFloat(nozzle / 2));
+    } else if (mode == "pressure_advance") {
+        if (!(params.step > 0 && params.end > params.start && params.start >= 0 && params.end <= 2))
+            throw std::runtime_error("Pressure advance: end must be above start (0 to 2), with a positive step");
+        params.mode = CalibMode::Calib_PA_Tower;
+        config.set_key_value("overhang_reverse", new ConfigOptionBool(false));
+        config.set_key_value("precise_z_height", new ConfigOptionBool(false));
+        load("pressure_advance/tower_with_seam.drc");
+        set_all<ConfigOptionFloats>(config, "slow_down_layer_time", 1.0);
+        auto& object = model.objects[0]->config;
+        object.set_key_value("alternate_extra_wall", new ConfigOptionBool(false));
+        const double speed = CalibPressureAdvance::find_optimal_PA_speed(config, config.get_abs_value("line_width", nozzle), config.get_abs_value("layer_height"), 0, 0);
+        object.set_key_value("outer_wall_speed", new ConfigOptionFloat(speed));
+        object.set_key_value("inner_wall_speed", new ConfigOptionFloat(speed));
+        object.set_key_value("seam_position", new ConfigOptionEnum<SeamPosition>(spRear));
+        object.set_key_value("wall_loops", new ConfigOptionInt(2));
+        object.set_key_value("top_shell_layers", new ConfigOptionInt(0));
+        object.set_key_value("bottom_shell_layers", new ConfigOptionInt(0));
+        object.set_key_value("sparse_infill_density", new ConfigOptionPercent(0));
+        object.set_key_value("brim_type", new ConfigOptionEnum<BrimType>(btEar));
+        object.set_key_value("brim_object_gap", new ConfigOptionFloat(0.0));
+        object.set_key_value("brim_ears_max_angle", new ConfigOptionFloat(135.0));
+        object.set_key_value("brim_width", new ConfigOptionFloat(6.0));
+        object.set_key_value("seam_slope_type", new ConfigOptionEnum<SeamScarfType>(SeamScarfType::None));
+        config.set_key_value("max_volumetric_extrusion_rate_slope", new ConfigOptionFloat(0));
+        const double height = std::ceil((params.end - params.start) / params.step) + 1;
+        if (height < model.objects[0]->bounding_box_exact().size().z())
+            cut_horizontal(model, 0, height, true);
+    } else if (mode == "flow") {
+        const int pass = int(std::lround(params.start));
+        if (pass != 1 && pass != 2) throw std::runtime_error("Flow rate: pass 1 or 2");
+        params.mode = CalibMode::Calib_None; // flow tests are plain prints with per-object flow ratios
+        load(pass == 1 ? "filament_flow/Orca-LinearFlow.3mf" : "filament_flow/Orca-LinearFlow_fine.3mf");
+        // adjust_settings_for_flowrate_calib (linear "YOLO" variant)
+        const double xy = nozzle / 0.6, layer_height = nozzle / 2.0;
+        const double first_layer = std::max(config.opt_float("initial_layer_print_height"), layer_height);
+        const double z = (first_layer + 9 * layer_height) / 2;
+        const double flow = config.option<ConfigOptionFloats>("filament_flow_ratio")->get_at(0);
+        const Flow infill(float(nozzle * 1.2), float(layer_height), float(nozzle));
+        const double max_speed = config.option<ConfigOptionFloats>("filament_max_volumetric_speed")->get_at(0) /
+                                 (infill.mm3_per_mm() * (flow + (pass == 2 ? 0.035 : 0.05)) / flow);
+        const double solid_speed = std::floor(std::min(config.opt_float("internal_solid_infill_speed"), max_speed));
+        const double top_speed = std::floor(std::min(config.opt_float("top_surface_speed"), max_speed));
+        for (ModelObject* object : model.objects) {
+            for (ModelInstance* instance : object->instances) {
+                const Vec3d factor = xy > 1.2 ? Vec3d(xy, xy, z) : Vec3d(1, 1, z);
+                instance->set_scaling_factor(instance->get_scaling_factor().cwiseProduct(factor));
+            }
+            object->ensure_on_bed();
+            auto& c = object->config;
+            c.set_key_value("wall_loops", new ConfigOptionInt(1));
+            c.set_key_value("only_one_wall_top", new ConfigOptionBool(true));
+            c.set_key_value("thick_internal_bridges", new ConfigOptionBool(false));
+            c.set_key_value("enable_extra_bridge_layer", new ConfigOptionEnum<EnableExtraBridgeLayer>(eblDisabled));
+            c.set_key_value("internal_bridge_density", new ConfigOptionPercent(100));
+            c.set_key_value("sparse_infill_density", new ConfigOptionPercent(35));
+            c.set_key_value("min_width_top_surface", new ConfigOptionFloatOrPercent(100, true));
+            c.set_key_value("bottom_shell_layers", new ConfigOptionInt(2));
+            c.set_key_value("top_shell_layers", new ConfigOptionInt(5));
+            c.set_key_value("top_shell_thickness", new ConfigOptionFloat(0));
+            c.set_key_value("bottom_shell_thickness", new ConfigOptionFloat(0));
+            c.set_key_value("detect_thin_wall", new ConfigOptionBool(true));
+            c.set_key_value("filter_out_gap_fill", new ConfigOptionFloat(0));
+            c.set_key_value("sparse_infill_pattern", new ConfigOptionEnum<InfillPattern>(ipRectilinear));
+            c.set_key_value("top_surface_line_width", new ConfigOptionFloatOrPercent(nozzle * 1.2, false));
+            c.set_key_value("internal_solid_infill_line_width", new ConfigOptionFloatOrPercent(nozzle * 1.2, false));
+            c.set_key_value("top_surface_pattern", new ConfigOptionEnum<InfillPattern>(ipMonotonic));
+            c.set_key_value("top_solid_infill_flow_ratio", new ConfigOptionFloat(1.0));
+            c.set_key_value("infill_direction", new ConfigOptionFloat(45));
+            c.set_key_value("solid_infill_direction", new ConfigOptionFloat(135));
+            c.set_key_value("align_infill_direction_to_model", new ConfigOptionBool(true));
+            c.set_key_value("ironing_type", new ConfigOptionEnum<IroningType>(IroningType::NoIroning));
+            c.set_key_value("internal_solid_infill_speed", new ConfigOptionFloat(solid_speed));
+            c.set_key_value("top_surface_speed", new ConfigOptionFloat(top_speed));
+            c.set_key_value("seam_slope_type", new ConfigOptionEnum<SeamScarfType>(SeamScarfType::None));
+            c.set_key_value("gap_fill_target", new ConfigOptionEnum<GapFillTarget>(GapFillTarget::gftNowhere));
+            c.set_key_value("calib_flowrate_topinfill_special_order", new ConfigOptionBool(true));
+            // The object name carries the flow change: flowrate_0.05, flowrate_m0.05 ...
+            std::string name = object->name.size() > 9 ? object->name.substr(9) : "0";
+            if (!name.empty() && name[0] == 'm') name[0] = '-';
+            double modifier = 0;
+            try { modifier = std::stod(name); } catch (...) { }
+            c.set_key_value("print_flow_ratio", new ConfigOptionFloat((flow + modifier) / flow));
+        }
+        config.set_key_value("max_volumetric_extrusion_rate_slope", new ConfigOptionFloat(0));
+        config.set_key_value("layer_height", new ConfigOptionFloat(layer_height));
+        config.set_key_value("alternate_extra_wall", new ConfigOptionBool(false));
+        config.set_key_value("initial_layer_print_height", new ConfigOptionFloat(first_layer));
+        config.set_key_value("reduce_crossing_wall", new ConfigOptionBool(true));
+    } else if (mode == "max_flow") {
+        if (!(params.step > 0 && params.end > params.start && params.start > 0 && params.end <= 200))
+            throw std::runtime_error("Max volumetric speed: end above start (up to 200 mm³/s), positive step");
+        params.mode = CalibMode::Calib_Vol_speed_Tower;
+        load("volumetric_speed/SpeedTestStructure.drc");
+        ModelObject* object = model.objects[0];
+        BoundingBoxf bed; for (const Vec2d& p : config.option<ConfigOptionPoints>("printable_area")->values) bed.merge(p);
+        const double fit = (bed.size().x() - 10) / object->bounding_box_exact().size().x();
+        if (fit < 1.0) object->scale(fit, 1, 1);
+        const double line_width = nozzle * 1.75, layer_height = nozzle * 0.8;
+        auto* max_layer = config.option<ConfigOptionFloats>("max_layer_height", true);
+        if (max_layer->values.empty() || max_layer->values[0] < layer_height) max_layer->values.assign(std::max<size_t>(1, max_layer->values.size()), layer_height);
+        set_all<ConfigOptionFloats>(config, "filament_max_volumetric_speed", 200.0);
+        set_all<ConfigOptionFloats>(config, "slow_down_layer_time", 0.0);
+        auto& c = object->config;
+        c.set_key_value("enable_overhang_speed", new ConfigOptionBool(false));
+        c.set_key_value("wall_loops", new ConfigOptionInt(1));
+        c.set_key_value("alternate_extra_wall", new ConfigOptionBool(false));
+        c.set_key_value("top_shell_layers", new ConfigOptionInt(0));
+        c.set_key_value("bottom_shell_layers", new ConfigOptionInt(0));
+        c.set_key_value("sparse_infill_density", new ConfigOptionPercent(0));
+        c.set_key_value("outer_wall_line_width", new ConfigOptionFloatOrPercent(line_width, false));
+        c.set_key_value("layer_height", new ConfigOptionFloat(layer_height));
+        c.set_key_value("brim_type", new ConfigOptionEnum<BrimType>(btOuterAndInner));
+        c.set_key_value("brim_width", new ConfigOptionFloat(5.0));
+        c.set_key_value("brim_object_gap", new ConfigOptionFloat(0.0));
+        c.set_key_value("precise_z_height", new ConfigOptionBool(false));
+        config.set_key_value("timelapse_type", new ConfigOptionEnum<TimelapseType>(tlTraditional));
+        config.set_key_value("spiral_mode", new ConfigOptionBool(true));
+        config.set_key_value("max_volumetric_extrusion_rate_slope", new ConfigOptionFloat(0));
+        const double height = (params.end - params.start + 1) / params.step;
+        if (height < object->bounding_box_exact().size().z()) cut_horizontal(model, 0, height, true);
+        const double flow = config.option<ConfigOptionFloats>("filament_flow_ratio")->get_at(0);
+        const double mm3_per_mm = Flow(float(line_width), float(layer_height), float(nozzle)).mm3_per_mm() * flow;
+        params.end /= mm3_per_mm; params.start /= mm3_per_mm; params.step /= mm3_per_mm;
+    } else if (mode == "retraction") {
+        if (!(params.step > 0 && params.end > params.start && params.start >= 0 && params.end <= 10))
+            throw std::runtime_error("Retraction: end above start (up to 10 mm), positive step");
+        params.mode = CalibMode::Calib_Retraction_tower;
+        load("retraction/retraction_tower.drc");
+        ModelObject* object = model.objects[0];
+        const double layer_height = nozzle <= 0.1 ? 0.05 : nozzle <= 0.2 ? 0.1 : 0.2;
+        auto* max_layer = config.option<ConfigOptionFloats>("max_layer_height", true);
+        if (max_layer->values.empty() || max_layer->values[0] < layer_height) max_layer->values.assign(std::max<size_t>(1, max_layer->values.size()), layer_height);
+        config.set_key_value("use_firmware_retraction", new ConfigOptionBool(false));
+        auto& c = object->config;
+        c.set_key_value("wall_loops", new ConfigOptionInt(2));
+        c.set_key_value("top_shell_layers", new ConfigOptionInt(0));
+        c.set_key_value("bottom_shell_layers", new ConfigOptionInt(3));
+        c.set_key_value("sparse_infill_density", new ConfigOptionPercent(0));
+        config.set_key_value("initial_layer_print_height", new ConfigOptionFloat(layer_height));
+        c.set_key_value("layer_height", new ConfigOptionFloat(layer_height));
+        c.set_key_value("alternate_extra_wall", new ConfigOptionBool(false));
+        c.set_key_value("seam_position", new ConfigOptionEnum<SeamPosition>(spAligned));
+        c.set_key_value("wall_sequence", new ConfigOptionEnum<WallSequence>(WallSequence::InnerOuter));
+        c.set_key_value("overhang_reverse", new ConfigOptionBool(false));
+        c.set_key_value("precise_z_height", new ConfigOptionBool(false));
+        const double height = 1.0 + 0.4 + (params.end - params.start) / params.step - EPSILON;
+        if (height < object->bounding_box_exact().size().z()) cut_horizontal(model, 0, height, true);
+    } else
+        throw std::runtime_error("Unknown calibration: " + mode);
+    for (ModelObject* object : model.objects)
+        if (!object->config.has("extruder")) object->config.set_key_value("extruder", new ConfigOptionInt(1));
+    return params;
+}
+
 struct Engine::Loaded {
     Model model;
     DynamicPrintConfig config;
     std::vector<std::vector<int>> objects;  // per file: index in `model` of each file object, -1 when left out
     std::vector<Matrix3d> base;             // per model object: the file's own orientation and scale (first copy)
+    std::vector<std::vector<std::array<double, 3>>> downs; // per model object: each placed copy's laid-down face
     std::set<int> used;
     bool keep_layout = false;               // positions come from placements or the project plate
+    Calib_Params calibration;
     std::vector<std::string> warnings;
     std::optional<arrangement::ArrangePolygon> tower;
 };
@@ -512,7 +751,7 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
 {
     if (!m_state->loaded)
         throw std::runtime_error("No vendor loaded");
-    if (need_models && models.empty())
+    if (need_models && models.empty() && selection.calibration.mode.empty())
         throw std::runtime_error("No model files given");
     if (selection.filaments.empty())
         throw std::runtime_error("No filament preset given");
@@ -541,8 +780,9 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
     // 2. Models. A project 3MF brings its plates and settings; the plate to slice is picked here.
     DynamicPrintConfig project;
     bool project_plates = false;
-    loaded.objects.resize(models.size());
-    for (size_t file = 0; file < models.size(); ++file) {
+    const bool calibrating = !selection.calibration.mode.empty();
+    loaded.objects.resize(calibrating ? 0 : models.size());
+    for (size_t file = 0; file < (calibrating ? 0 : models.size()); ++file) {
         FileModel part = read_model(models[file]);
         if (project.empty() && part.project.has("print_settings_id"))
             project = part.project;
@@ -583,6 +823,8 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
                 continue;
             ModelObject* object = loaded.model.add_object(*source);
             loaded.base.push_back(source->instances.front()->get_matrix_no_offset().linear());
+            loaded.downs.emplace_back();
+            for (const Selection::Placement* p : placed) loaded.downs.back().push_back({p->down[0], p->down[1], p->down[2]});
             if (!selection.placements.empty())
                 apply_placements(object, placed);
             else if (keep[o].size() != object->instances.size()) {
@@ -599,7 +841,7 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
             loaded.objects[file][o] = int(loaded.model.objects.size()) - 1;
         }
     }
-    if (need_models && loaded.model.objects.empty())
+    if (need_models && loaded.model.objects.empty() && !calibrating)
         throw std::runtime_error(selection.placements.empty() ? "The model files contain no objects" : "No objects are placed on the plate");
     for (ModelObject* object : loaded.model.objects)
         object->ensure_on_bed();
@@ -619,6 +861,25 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
         if (config.def()->get(key) == nullptr)
             throw std::runtime_error("Unknown setting: " + key);
         config.set_deserialize(key, value, substitutions);
+    }
+    // Per-slot filament settings: element `slot` of the filament option.
+    for (size_t slot = 0; slot < selection.filament_overrides.size() && slot < filament_count; ++slot)
+        for (const auto& [key, value] : selection.filament_overrides[slot]) {
+            const ConfigOptionDef* def = config.def()->get(key);
+            auto* vector = dynamic_cast<ConfigOptionVectorBase*>(config.optptr(key, true));
+            if (def == nullptr || vector == nullptr)
+                throw std::runtime_error("Not a filament setting: " + key);
+            std::unique_ptr<ConfigOption> single(def->create_empty_option());
+            if (!single->deserialize(value)) throw std::runtime_error("Bad value for " + key + ": " + value);
+            if (vector->size() < filament_count) vector->resize(filament_count);
+            vector->set_at(single.get(), slot, 0);
+        }
+    if (calibrating) {
+        if (need_models)
+            loaded.calibration = setup_calibration(loaded.model, config, selection.calibration, m_state->resources);
+        loaded.objects.assign(1, std::vector<int>());
+        for (size_t i = 0; i < loaded.model.objects.size(); ++i) { loaded.objects[0].push_back(int(i)); loaded.base.push_back(loaded.model.objects[i]->instances.front()->get_matrix_no_offset().linear()); loaded.downs.emplace_back(); }
+        for (ModelObject* object : loaded.model.objects) object->ensure_on_bed();
     }
     config.normalize_fdm();
 
@@ -671,12 +932,24 @@ Selection selection_from_json(const std::string& text)
         for (const auto& [key, value] : json["overrides"].items()) selection.overrides.emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
     selection.plate = json.value("plate", 0);
     selection.project_settings = json.value("project_settings", false);
+    if (json.contains("filament_overrides"))
+        for (const auto& slot : json["filament_overrides"]) {
+            selection.filament_overrides.emplace_back();
+            for (const auto& [key, value] : slot.items()) selection.filament_overrides.back().emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
+        }
+    if (json.contains("calibration")) {
+        const auto& c = json["calibration"];
+        selection.calibration.mode = c.value("mode", ""); selection.calibration.start = c.value("start", 0.0);
+        selection.calibration.end = c.value("end", 0.0); selection.calibration.step = c.value("step", 0.0);
+    }
     if (json.contains("placements"))
         for (const auto& item : json["placements"]) {
             Selection::Placement placement;
             placement.file = item.value("file", 0); placement.object = item.value("object", 0);
             placement.x = item.value("x", 0.0); placement.y = item.value("y", 0.0);
             placement.rotation = item.value("rotation", 0.0); placement.scale = item.value("scale", 1.0);
+            if (item.contains("down") && item["down"].is_array() && item["down"].size() == 3)
+                for (int k = 0; k < 3; ++k) placement.down[k] = item["down"][k].get<double>();
             selection.placements.push_back(placement);
         }
     return selection;
@@ -772,11 +1045,16 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
         for (size_t o = 0; o < loaded.objects[f].size(); ++o) {
             if (loaded.objects[f][o] < 0) continue;
             const ModelObject* object = loaded.model.objects[loaded.objects[f][o]];
-            const Matrix3d& base = loaded.base[loaded.objects[f][o]];
+            const int index = loaded.objects[f][o];
             for (size_t i = 0; i < object->instances.size(); ++i) {
                 const BoundingBoxf3 box = object->instance_bounding_box(i, false);
+                std::array<double, 3> down = {0, 0, 0};
+                if (i < loaded.downs[index].size()) down = loaded.downs[index][i];
+                const Matrix3d base = lay_down(down.data()) * loaded.base[index];
                 const auto [rotation, scale] = relative_rotation_scale(object->instances[i]->get_matrix_no_offset().linear(), base);
-                placements.push_back({{"file", f}, {"object", o}, {"x", box.center().x()}, {"y", box.center().y()}, {"rotation", rotation}, {"scale", scale}});
+                nlohmann::json item = {{"file", f}, {"object", o}, {"x", box.center().x()}, {"y", box.center().y()}, {"rotation", rotation}, {"scale", scale}};
+                if (down[0] != 0 || down[1] != 0 || down[2] != 0) item["down"] = {down[0], down[1], down[2]};
+                placements.push_back(item);
             }
         }
     nlohmann::json bed = nlohmann::json::array();
@@ -797,7 +1075,9 @@ std::string Engine::describe(const Selection& selection, const std::vector<std::
 {
     Selection base_selection = selection;
     base_selection.overrides.clear();
+    base_selection.filament_overrides.clear();
     base_selection.placements.clear();
+    base_selection.calibration = {};
     const DynamicPrintConfig base = load(models, base_selection, false).config;
     const DynamicPrintConfig effective = load(models, Selection(selection), false).config;
     nlohmann::json result = nlohmann::json::object();
@@ -845,6 +1125,8 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     Print print;
     Model::setExtruderParams(config, int(filament_count));
     print.apply(model, config);
+    if (loaded.calibration.mode != CalibMode::Calib_None)
+        print.set_calib_params(loaded.calibration);
     print.is_BBL_printer() = false;
     StringObjectException warning;
     StringObjectException error = print.validate(&warning);

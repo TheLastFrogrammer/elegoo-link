@@ -17,6 +17,12 @@ cp -r "$ELEGOOSLICER_SRC/resources/info" "$ELEGOOSLICER_SRC/resources/flush" "$A
 cp "$SLICER_ROOT/LICENSE" "$ASSETS/LICENSE-AGPL-3.0.txt"
 # Bed models, textures and cover images are only used by the desktop GUI.
 find "$ASSETS" \( -name "*.png" -o -name "*.stl" -o -name "*.svg" \) -delete
+# Calibration models the engine's calibration prints use.
+C="$ELEGOOSLICER_SRC/resources/calib"
+for f in temperature_tower/temperature_tower.drc pressure_advance/tower_with_seam.drc filament_flow/Orca-LinearFlow.3mf \
+         filament_flow/Orca-LinearFlow_fine.3mf volumetric_speed/SpeedTestStructure.drc retraction/retraction_tower.drc; do
+    mkdir -p "$ASSETS/calib/$(dirname "$f")" && cp "$C/$f" "$ASSETS/calib/$f"
+done
 # The app re-extracts the assets when this changes.
 echo "$ELEGOOSLICER_COMMIT $(git -C "$SLICER_ROOT" rev-parse --short HEAD 2>/dev/null || echo dev) $(date -u +%Y%m%d%H%M%S)" > "$ASSETS/VERSION"
 (cd "$ASSETS" && find . -type f ! -name VERSION ! -name files.txt ! -name LICENSE-AGPL-3.0.txt | sed 's|^\./||' | sort > files.txt)
