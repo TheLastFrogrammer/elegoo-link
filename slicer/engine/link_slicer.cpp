@@ -11,6 +11,9 @@
 #include <set>
 #include <stdexcept>
 
+#include <cfloat>
+
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/filesystem.hpp>
 #include <boost/nowide/fstream.hpp>
 
@@ -19,6 +22,8 @@
 #include "libslic3r/libslic3r.h"
 #include "libslic3r/Arrange.hpp"
 #include "libslic3r/FlushVolCalc.hpp"
+#include "libslic3r/Format/bbs_3mf.hpp"
+#include "libslic3r/QuadricEdgeCollapse.hpp"
 #include "libslic3r/GCode/WipeTower.hpp"
 #include "libslic3r/BoundingBox.hpp"
 #include "libslic3r/GCode/GCodeProcessor.hpp"
@@ -381,16 +386,137 @@ static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrange
     }
 }
 
-Result Engine::slice(const std::vector<std::string>& models, const Selection& selection, const std::string& output,
-                     const Progress& progress, const std::atomic<bool>* cancel)
+// ----------------------------------------------------------------------------------------------------------------
+// Loading models and resolving the configuration, shared by slice(), arrange() and describe().
+
+namespace {
+
+constexpr double PLATE_GAP = 1. / 5.; // LOGICAL_PART_PLATE_GAP in ElegooSlicer's PartPlate.cpp
+
+// compute_colum_count() in ElegooSlicer's PartPlate.hpp: plates are laid out in a near-square grid.
+int plate_columns(int count)
+{
+    const float value = std::sqrt(float(count)), rounded = std::round(value);
+    return value > rounded ? int(rounded) + 1 : int(rounded);
+}
+
+BoundingBoxf bed_box(const DynamicPrintConfig& config)
+{
+    BoundingBoxf bed;
+    if (const auto* area = config.option<ConfigOptionPoints>("printable_area"))
+        for (const Vec2d& p : area->values) bed.merge(p);
+    return bed;
+}
+
+bool is_3mf(const std::string& path) { return boost::algorithm::iends_with(path, ".3mf"); }
+
+struct FileModel {
+    Model model;
+    DynamicPrintConfig project;          // a 3MF's project settings (empty otherwise)
+    std::vector<std::vector<std::pair<int, int>>> plates; // per plate: (object, instance)
+    std::vector<std::string> plate_names;
+};
+
+// Where plate `index` (0-based) of `count` sits in the desktop's plate grid (PartPlateList::compute_origin).
+Vec3d plate_origin(int index, int count, const BoundingBoxf& bed)
+{
+    const int columns = plate_columns(count);
+    return Vec3d((index % columns) * bed.size().x() * (1. + PLATE_GAP), -(index / columns) * bed.size().y() * (1. + PLATE_GAP), 0);
+}
+
+// Which plate each copy is on. The 3MF lists plates, but like the desktop app (PartPlateList::reload_all_objects) the
+// copies are assigned by where they sit: the plate whose area holds the center of their footprint.
+void assign_plates(FileModel& file, const BoundingBoxf& bed)
+{
+    const int count = int(file.plates.size());
+    for (auto& plate : file.plates) plate.clear();
+    if (count == 0 || !bed.defined) return;
+    for (size_t o = 0; o < file.model.objects.size(); ++o)
+        for (size_t i = 0; i < file.model.objects[o]->instances.size(); ++i) {
+            const Vec3d center = file.model.objects[o]->instance_bounding_box(i, false).center();
+            for (int p = 0; p < count; ++p) {
+                const Vec3d origin = plate_origin(p, count, bed);
+                if (center.x() >= origin.x() + bed.min.x() && center.x() <= origin.x() + bed.max.x() &&
+                    center.y() >= origin.y() + bed.min.y() && center.y() <= origin.y() + bed.max.y()) {
+                    file.plates[p].emplace_back(int(o), int(i));
+                    break;
+                }
+            }
+        }
+}
+
+FileModel read_model(const std::string& path)
+{
+    FileModel file;
+    ConfigSubstitutionContext substitutions(ForwardCompatibilitySubstitutionRule::EnableSilent);
+    PlateDataPtrs plate_data;
+    LoadStrategy strategy = LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances;
+    if (is_3mf(path)) strategy = strategy | LoadStrategy::LoadConfig;
+    try {
+        file.model = Model::read_from_file(path, &file.project, &substitutions, strategy, &plate_data);
+    } catch (...) {
+        release_PlateData_list(plate_data);
+        throw;
+    }
+    for (const PlateData* plate : plate_data) {
+        file.plates.emplace_back();
+        file.plate_names.push_back(plate->plate_name);
+    }
+    release_PlateData_list(plate_data);
+    if (file.project.has("printable_area"))
+        assign_plates(file, bed_box(file.project));
+    return file;
+}
+
+// Rotation about Z (degrees) and uniform scale of `matrix` relative to `base` (both linear parts).
+std::pair<double, double> relative_rotation_scale(const Matrix3d& matrix, const Matrix3d& base)
+{
+    const Matrix3d relative = matrix * base.inverse();
+    const double scale = std::cbrt(std::abs(relative.determinant()));
+    return {std::atan2(relative(1, 0), relative(0, 0)) * 180. / PI, scale};
+}
+
+// Replaces an object's copies by the given placements: the first copy's orientation and scale from the file, turned
+// and scaled further, with the footprint centered on (x, y) and resting on the bed.
+void apply_placements(ModelObject* object, const std::vector<const Selection::Placement*>& placements)
+{
+    const Matrix3d base = object->instances.front()->get_matrix_no_offset().linear();
+    while (!object->instances.empty())
+        object->delete_instance(object->instances.size() - 1);
+    for (const Selection::Placement* placement : placements) {
+        if (!(placement->scale > 0.001 && placement->scale < 1000))
+            throw std::runtime_error("Scale must be between 0.001 and 1000");
+        Transform3d matrix = Transform3d::Identity();
+        matrix.linear() = (Eigen::AngleAxisd(placement->rotation * PI / 180., Vec3d::UnitZ()).toRotationMatrix() * placement->scale) * base;
+        ModelInstance* instance = object->add_instance();
+        instance->set_transformation(Geometry::Transformation(matrix));
+        const BoundingBoxf3 box = object->instance_bounding_box(*instance, false);
+        instance->set_offset(Vec3d(placement->x - box.center().x(), placement->y - box.center().y(), -box.min.z()));
+    }
+}
+
+} // namespace
+
+struct Engine::Loaded {
+    Model model;
+    DynamicPrintConfig config;
+    std::vector<std::vector<int>> objects;  // per file: index in `model` of each file object, -1 when left out
+    std::set<int> used;
+    bool keep_layout = false;               // positions come from placements or the project plate
+    std::vector<std::string> warnings;
+    std::optional<arrangement::ArrangePolygon> tower;
+};
+
+Engine::Loaded Engine::load(const std::vector<std::string>& models, const Selection& selection, bool need_models)
 {
     if (!m_state->loaded)
         throw std::runtime_error("No vendor loaded");
-    if (models.empty())
+    if (need_models && models.empty())
         throw std::runtime_error("No model files given");
     if (selection.filaments.empty())
         throw std::runtime_error("No filament preset given");
-    auto report = [&](int percent, const std::string& text) { if (progress) progress(percent, text); };
+    Loaded loaded;
+    const size_t filament_count = selection.filaments.size();
 
     // 1. Presets -> one flat config, as the desktop app builds it for the active printer/process/filaments.
     PresetBundle& bundle = m_state->bundle;
@@ -398,18 +524,94 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     bundle.update_compatible(PresetSelectCompatibleType::Never);
     select(bundle.prints, selection.process, "process");
     // set_filament_preset() ignores slots beyond the current list, so size it first.
-    bundle.filament_presets.resize(selection.filaments.size());
-    for (size_t i = 0; i < selection.filaments.size(); ++i) {
+    bundle.filament_presets.resize(filament_count);
+    for (size_t i = 0; i < filament_count; ++i) {
         if (bundle.filaments.find_preset(selection.filaments[i], false) == nullptr)
             throw std::runtime_error("Unknown filament preset: " + selection.filaments[i]);
         if (i == 0)
             bundle.filaments.select_preset_by_name(selection.filaments[i], true);
         bundle.set_filament_preset(i, selection.filaments[i]);
     }
-    DynamicPrintConfig config = bundle.full_config();
+    DynamicPrintConfig& config = loaded.config;
+    config = bundle.full_config();
     // The plate type is project state in the desktop app, which starts it at the printer's default_bed_type.
     config.set_key_value("curr_bed_type", new ConfigOptionEnum<BedType>(default_bed_type(bundle, bundle.printers.get_edited_preset())));
 
+    // 2. Models. A project 3MF brings its plates and settings; the plate to slice is picked here.
+    DynamicPrintConfig project;
+    bool project_plates = false;
+    loaded.objects.resize(models.size());
+    for (size_t file = 0; file < models.size(); ++file) {
+        FileModel part = read_model(models[file]);
+        if (project.empty() && part.project.has("print_settings_id"))
+            project = part.project;
+        const int assigned = file < selection.model_filaments.size() ? selection.model_filaments[file] : 0;
+        if (assigned < 0 || assigned > int(filament_count))
+            throw std::runtime_error("Model " + std::to_string(file + 1) + " is assigned filament " + std::to_string(assigned) + ", but only " + std::to_string(filament_count) + " are set up");
+
+        // Copies per object: a project's chosen plate (moved from where that plate sits in the project's plate grid
+        // to the bed), or all of them.
+        std::vector<std::vector<int>> keep(part.model.objects.size());
+        if (!part.plates.empty()) {
+            const BoundingBoxf bed = bed_box(part.project.has("printable_area") ? part.project : config);
+            assign_plates(part, bed);
+            const int plate = selection.plate > 0 ? selection.plate : 1;
+            if (plate > int(part.plates.size()))
+                throw std::runtime_error("The project has " + std::to_string(part.plates.size()) + " plate(s); there is no plate " + std::to_string(plate));
+            for (const auto& [object, instance] : part.plates[plate - 1])
+                if (object >= 0 && object < int(keep.size()) && instance >= 0 && instance < int(part.model.objects[object]->instances.size()))
+                    keep[object].push_back(instance);
+            const Vec3d origin = plate_origin(plate - 1, int(part.plates.size()), bed);
+            for (size_t o = 0; o < keep.size(); ++o)
+                for (int instance : keep[o]) {
+                    ModelInstance* copy = part.model.objects[o]->instances[instance];
+                    copy->set_offset(copy->get_offset() - origin);
+                }
+            project_plates = true;
+        } else
+            for (size_t o = 0; o < keep.size(); ++o)
+                for (size_t i = 0; i < part.model.objects[o]->instances.size(); ++i) keep[o].push_back(int(i));
+
+        loaded.objects[file].assign(part.model.objects.size(), -1);
+        for (size_t o = 0; o < part.model.objects.size(); ++o) {
+            ModelObject* source = part.model.objects[o];
+            std::vector<const Selection::Placement*> placed;
+            for (const Selection::Placement& placement : selection.placements)
+                if (placement.file == int(file) && placement.object == int(o)) placed.push_back(&placement);
+            if (selection.placements.empty() ? keep[o].empty() : placed.empty())
+                continue;
+            ModelObject* object = loaded.model.add_object(*source);
+            if (!selection.placements.empty())
+                apply_placements(object, placed);
+            else if (keep[o].size() != object->instances.size()) {
+                for (int i = int(object->instances.size()) - 1; i >= 0; --i)
+                    if (std::find(keep[o].begin(), keep[o].end(), i) == keep[o].end()) object->delete_instance(i);
+            }
+            if (assigned > 0) {
+                // The whole file prints with this filament: the object's setting, with its parts' own ones cleared.
+                object->config.set_key_value("extruder", new ConfigOptionInt(assigned));
+                for (ModelVolume* volume : object->volumes) volume->config.erase("extruder");
+            } else if (!object->config.has("extruder")) {
+                object->config.set_key_value("extruder", new ConfigOptionInt(1));
+            }
+            loaded.objects[file][o] = int(loaded.model.objects.size()) - 1;
+        }
+    }
+    if (need_models && loaded.model.objects.empty())
+        throw std::runtime_error(selection.placements.empty() ? "The model files contain no objects" : "No objects are placed on the plate");
+    for (ModelObject* object : loaded.model.objects)
+        object->ensure_on_bed();
+    loaded.keep_layout = !selection.placements.empty() || (models.size() == 1 && project_plates);
+
+    // 3. The project's own process settings, then the app's overrides.
+    if (selection.project_settings && !project.empty()) {
+        for (const std::string& key : Preset::print_options())
+            if (project.has(key) && config.def()->get(key) != nullptr)
+                config.set_key_value(key, project.option(key)->clone());
+        const std::string printer = project.opt_string("printer_settings_id");
+        if (!printer.empty() && printer != selection.printer)
+            loaded.warnings.push_back("The project was set up for " + printer + "; its process settings were applied to " + selection.printer + ".");
+    }
     ConfigSubstitutionContext substitutions(ForwardCompatibilitySubstitutionRule::Disable);
     for (const auto& [key, value] : selection.overrides) {
         if (config.def()->get(key) == nullptr)
@@ -418,7 +620,6 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     }
     config.normalize_fdm();
 
-    const size_t filament_count = selection.filaments.size();
     if (!selection.filament_colours.empty()) {
         std::vector<std::string>& colours = config.option<ConfigOptionStrings>("filament_colour", true)->values;
         colours.resize(filament_count, colours.empty() ? "#F2754E" : colours.back());
@@ -438,43 +639,202 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     if (!config.has("nozzle_volume_type"))
         config.option<ConfigOptionEnumsGeneric>("nozzle_volume_type", true)->values.assign(1, nvtStandard);
 
-    // 2. Models.
-    report(0, "Loading model");
-    Model model;
-    for (size_t file = 0; file < models.size(); ++file) {
-        DynamicPrintConfig ignored;
-        ConfigSubstitutionContext ignored_substitutions(ForwardCompatibilitySubstitutionRule::EnableSilent);
-        Model part = Model::read_from_file(models[file], &ignored, &ignored_substitutions, LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances);
-        const int assigned = file < selection.model_filaments.size() ? selection.model_filaments[file] : 0;
-        if (assigned < 0 || assigned > int(filament_count))
-            throw std::runtime_error("Model " + std::to_string(file + 1) + " is assigned filament " + std::to_string(assigned) + ", but only " + std::to_string(filament_count) + " are set up");
-        for (ModelObject* source : part.objects) {
-            ModelObject* object = model.add_object(*source);
-            if (assigned > 0) {
-                // The whole file prints with this filament: the object's setting, with its parts' own ones cleared.
-                object->config.set_key_value("extruder", new ConfigOptionInt(assigned));
-                for (ModelVolume* volume : object->volumes) volume->config.erase("extruder");
-            } else if (!object->config.has("extruder")) {
-                object->config.set_key_value("extruder", new ConfigOptionInt(1));
+    loaded.used = used_filaments(loaded.model);
+    if (!loaded.used.empty() && *loaded.used.rbegin() > int(filament_count))
+        throw std::runtime_error("The model uses filament " + std::to_string(*loaded.used.rbegin()) + "; set up at least that many filaments");
+
+    // 4. Placement, as ElegooSlicer's arrange does it for one plate: footprints aligned to the axes, the bed's
+    // excluded areas kept clear, then nested from the bed center. Placed or project layouts are kept as they are.
+    loaded.tower = place_prime_tower(config, loaded.model, loaded.used.size());
+    if (!loaded.keep_layout && !loaded.model.objects.empty()) {
+        arrangement::ArrangePolygons keep_clear;
+        if (loaded.tower)
+            keep_clear.push_back(*loaded.tower);
+        place_on_bed(loaded.model, config, keep_clear);
+    }
+    return loaded;
+}
+
+Selection selection_from_json(const std::string& text)
+{
+    const nlohmann::json json = nlohmann::json::parse(text);
+    Selection selection;
+    selection.printer = json.value("printer", "");
+    selection.process = json.value("process", "");
+    if (json.contains("filaments")) selection.filaments = json["filaments"].get<std::vector<std::string>>();
+    if (json.contains("colours"))
+        for (const auto& colour : json["colours"]) selection.filament_colours.push_back(colour.is_string() ? colour.get<std::string>() : "");
+    if (json.contains("model_filaments")) selection.model_filaments = json["model_filaments"].get<std::vector<int>>();
+    if (json.contains("overrides"))
+        for (const auto& [key, value] : json["overrides"].items()) selection.overrides.emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
+    selection.plate = json.value("plate", 0);
+    selection.project_settings = json.value("project_settings", false);
+    if (json.contains("placements"))
+        for (const auto& item : json["placements"]) {
+            Selection::Placement placement;
+            placement.file = item.value("file", 0); placement.object = item.value("object", 0);
+            placement.x = item.value("x", 0.0); placement.y = item.value("y", 0.0);
+            placement.rotation = item.value("rotation", 0.0); placement.scale = item.value("scale", 1.0);
+            selection.placements.push_back(placement);
+        }
+    return selection;
+}
+
+std::string Engine::inspect(const std::vector<std::string>& models, const std::string& mesh_dir, size_t max_triangles)
+{
+    nlohmann::json files = nlohmann::json::array();
+    std::vector<FileModel> parts;
+    size_t total_triangles = 0;
+    for (const std::string& path : models) {
+        parts.push_back(read_model(path));
+        for (const ModelObject* object : parts.back().model.objects)
+            for (const ModelVolume* volume : object->volumes)
+                if (volume->is_model_part()) total_triangles += volume->mesh().its.indices.size();
+    }
+    double total_area = 0;
+    for (size_t f = 0; f < parts.size(); ++f) {
+        FileModel& part = parts[f];
+        nlohmann::json objects = nlohmann::json::array();
+        for (size_t o = 0; o < part.model.objects.size(); ++o) {
+            const ModelObject* object = part.model.objects[o];
+            const Transform3d base = object->instances.front()->get_matrix_no_offset();
+            size_t triangles = 0; double area = 0;
+            indexed_triangle_set merged; std::vector<unsigned char> filament;
+            for (const ModelVolume* volume : object->volumes) {
+                if (!volume->is_model_part()) continue;
+                indexed_triangle_set its = volume->mesh().its;
+                its_transform(its, base * volume->get_matrix());
+                triangles += its.indices.size();
+                for (const stl_triangle_vertex_indices& t : its.indices)
+                    area += 0.5 * (its.vertices[t[1]] - its.vertices[t[0]]).cast<double>().cross((its.vertices[t[2]] - its.vertices[t[0]]).cast<double>()).norm();
+                if (mesh_dir.empty()) continue;
+                // Simplified for display, each part in proportion to its share of all triangles.
+                const size_t budget = std::max<size_t>(500, size_t(double(max_triangles) * double(its.indices.size()) / double(std::max<size_t>(1, total_triangles))));
+                if (its.indices.size() > budget)
+                    its_quadric_edge_collapse(its, uint32_t(budget));
+                const int id = volume->config.has("extruder") ? volume->config.opt_int("extruder")
+                             : object->config.has("extruder") ? object->config.opt_int("extruder") : 1;
+                filament.insert(filament.end(), its.indices.size(), (unsigned char) std::clamp(id, 1, 255));
+                its_merge(merged, its);
+            }
+            const BoundingBoxf3 box = object->instance_bounding_box(0, true);
+            nlohmann::json item = {{"name", object->name}, {"triangles", triangles}, {"area", area},
+                                   {"size", {box.size().x(), box.size().y(), box.size().z()}}, {"copies", object->instances.size()}};
+            if (!mesh_dir.empty()) {
+                const std::string path = (boost::filesystem::path(mesh_dir) / ("f" + std::to_string(f) + "_o" + std::to_string(o) + ".lkm")).string();
+                boost::filesystem::create_directories(mesh_dir);
+                const Vec3f shift(float(-box.center().x()), float(-box.center().y()), float(-box.min.z()));
+                boost::nowide::ofstream out(path, std::ios::binary);
+                const uint32_t count = uint32_t(merged.indices.size());
+                out.write("LKM1", 4); out.write(reinterpret_cast<const char*>(&count), 4);
+                for (const stl_triangle_vertex_indices& t : merged.indices)
+                    for (int corner = 0; corner < 3; ++corner) { const Vec3f v = merged.vertices[t[corner]] + shift; out.write(reinterpret_cast<const char*>(v.data()), 12); }
+                out.write(reinterpret_cast<const char*>(filament.data()), filament.size());
+                if (!out) throw std::runtime_error("Cannot write " + path);
+                item["mesh"] = path;
+            }
+            total_area += area * double(object->instances.size());
+            objects.push_back(item);
+        }
+        nlohmann::json plates = nlohmann::json::array();
+        for (size_t p = 0; p < part.plates.size(); ++p) {
+            nlohmann::json members = nlohmann::json::array();
+            for (const auto& [object, instance] : part.plates[p]) members.push_back({object, instance});
+            plates.push_back({{"plate", p + 1}, {"name", part.plate_names[p]}, {"objects", members}});
+        }
+        nlohmann::json file = {{"path", models[f]}, {"objects", objects}, {"plates", plates}};
+        if (part.project.has("print_settings_id")) {
+            nlohmann::json project = {{"printer", part.project.opt_string("printer_settings_id")}, {"process", part.project.opt_string("print_settings_id")}};
+            if (const auto* ids = part.project.option<ConfigOptionStrings>("filament_settings_id")) project["filaments"] = ids->values;
+            if (const auto* colours = part.project.option<ConfigOptionStrings>("filament_colour")) project["colours"] = colours->values;
+            if (part.project.has("layer_height")) project["layer_height"] = part.project.opt_float("layer_height");
+            file["project"] = project;
+        }
+        files.push_back(file);
+    }
+    return nlohmann::json({{"files", files}, {"triangles", total_triangles}, {"area", total_area}}).dump();
+}
+
+std::string Engine::arrange(const std::vector<std::string>& models, const Selection& selection)
+{
+    Selection unplaced = selection;
+    unplaced.placements.clear();
+    Loaded loaded = load(models, unplaced, true);
+    nlohmann::json placements = nlohmann::json::array();
+    for (size_t f = 0; f < loaded.objects.size(); ++f)
+        for (size_t o = 0; o < loaded.objects[f].size(); ++o) {
+            if (loaded.objects[f][o] < 0) continue;
+            const ModelObject* object = loaded.model.objects[loaded.objects[f][o]];
+            const Matrix3d base = object->instances.front()->get_matrix_no_offset().linear();
+            for (size_t i = 0; i < object->instances.size(); ++i) {
+                const BoundingBoxf3 box = object->instance_bounding_box(i, false);
+                const auto [rotation, scale] = relative_rotation_scale(object->instances[i]->get_matrix_no_offset().linear(), base);
+                placements.push_back({{"file", f}, {"object", o}, {"x", box.center().x()}, {"y", box.center().y()}, {"rotation", rotation}, {"scale", scale}});
             }
         }
+    nlohmann::json bed = nlohmann::json::array();
+    for (const Vec2d& p : loaded.config.option<ConfigOptionPoints>("printable_area")->values) bed.push_back({p.x(), p.y()});
+    nlohmann::json excluded = nlohmann::json::array();
+    if (const auto* area = loaded.config.option<ConfigOptionPoints>("bed_exclude_area"))
+        for (const Vec2d& p : area->values) excluded.push_back({p.x(), p.y()});
+    nlohmann::json result = {{"placements", placements}, {"bed", bed}, {"excluded", excluded}, {"height", loaded.config.opt_float("printable_height")},
+                             {"kept_layout", loaded.keep_layout}, {"warnings", loaded.warnings}};
+    if (loaded.tower) {
+        const BoundingBox box = loaded.tower->poly.contour.bounding_box();
+        result["tower"] = {unscale<double>(box.min.x()), unscale<double>(box.min.y()), unscale<double>(box.max.x()), unscale<double>(box.max.y())};
     }
-    if (model.objects.empty())
-        throw std::runtime_error("The model files contain no objects");
-    for (ModelObject* object : model.objects)
-        object->ensure_on_bed();
-    const std::set<int> used = used_filaments(model);
-    if (!used.empty() && *used.rbegin() > int(filament_count))
-        throw std::runtime_error("The model uses filament " + std::to_string(*used.rbegin()) + "; set up at least that many filaments");
+    return result.dump();
+}
 
-    // 3. Placement, as ElegooSlicer's arrange does it for one plate: footprints aligned to the axes, the bed's
-    // excluded areas kept clear, then nested from the bed center.
-    arrangement::ArrangePolygons keep_clear;
-    if (auto tower = place_prime_tower(config, model, used.size()))
-        keep_clear.push_back(*tower);
-    place_on_bed(model, config, keep_clear);
+std::string Engine::describe(const Selection& selection, const std::vector<std::string>& keys, const std::vector<std::string>& models)
+{
+    Selection base_selection = selection;
+    base_selection.overrides.clear();
+    base_selection.placements.clear();
+    const DynamicPrintConfig base = load(models, base_selection, false).config;
+    const DynamicPrintConfig effective = load(models, Selection(selection), false).config;
+    nlohmann::json result = nlohmann::json::object();
+    for (const std::string& key : keys) {
+        const ConfigOptionDef* def = print_config_def.get(key);
+        if (def == nullptr) continue;
+        std::string type;
+        switch (def->type) {
+        case coFloat: type = "float"; break;           case coInt: type = "int"; break;
+        case coPercent: type = "percent"; break;       case coFloatOrPercent: type = "float_or_percent"; break;
+        case coBool: type = "bool"; break;             case coEnum: type = "enum"; break;
+        case coString: type = "string"; break;         case coFloats: type = "floats"; break;
+        case coInts: type = "ints"; break;             case coBools: type = "bools"; break;
+        case coPercents: type = "percents"; break;     case coStrings: type = "strings"; break;
+        default: type = "other"; break;
+        }
+        nlohmann::json item = {{"label", def->full_label.empty() ? def->label : def->full_label}, {"category", def->category},
+                               {"tooltip", def->tooltip}, {"unit", def->sidetext}, {"type", type}};
+        if (def->min > -FLT_MAX) item["min"] = def->min;
+        if (def->max < FLT_MAX) item["max"] = def->max;
+        if (!def->enum_values.empty()) {
+            nlohmann::json options = nlohmann::json::array();
+            for (size_t i = 0; i < def->enum_values.size(); ++i)
+                options.push_back({def->enum_values[i], i < def->enum_labels.size() ? def->enum_labels[i] : def->enum_values[i]});
+            item["enum"] = options;
+        }
+        if (effective.has(key)) item["value"] = effective.opt_serialize(key);
+        if (base.has(key)) item["preset"] = base.opt_serialize(key);
+        result[key] = item;
+    }
+    return result.dump();
+}
 
-    // 4. Slice.
+Result Engine::slice(const std::vector<std::string>& models, const Selection& selection, const std::string& output,
+                     const Progress& progress, const std::atomic<bool>* cancel)
+{
+    auto report = [&](int percent, const std::string& text) { if (progress) progress(percent, text); };
+    report(0, "Loading model");
+    Loaded loaded = load(models, selection, true);
+    Model& model = loaded.model;
+    DynamicPrintConfig& config = loaded.config;
+    const size_t filament_count = selection.filaments.size();
+
+    // Slice.
     Print print;
     Model::setExtruderParams(config, int(filament_count));
     print.apply(model, config);
@@ -487,6 +847,7 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
         throw std::runtime_error("Nothing to slice: no object is fully inside the printable area");
 
     Result result;
+    result.warnings = loaded.warnings;
     if (!warning.string.empty())
         result.warnings.push_back(warning.string);
     print.set_status_callback([&](const PrintBase::SlicingStatus& status) {

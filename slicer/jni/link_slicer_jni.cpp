@@ -2,6 +2,7 @@
 // Every call returns or throws: engine errors become java.lang.RuntimeException with the engine's message.
 #include <jni.h>
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 #include <sstream>
@@ -82,6 +83,17 @@ std::string json_string(const std::string& value)
 
 linkslicer::Engine* engine_of(jlong handle) { return reinterpret_cast<linkslicer::Engine*>(handle); }
 
+// The selection is JSON (linkslicer::selection_from_json); calls returning JSON pass the engine's JSON through.
+template <typename Call>
+jstring json_call(JNIEnv* env, Call call)
+{
+    std::string result, failure;
+    try { result = call(); } catch (const std::exception& error) { failure = error.what(); }
+    if (!failure.empty()) { throw_java(env, failure.c_str()); return nullptr; }
+    return env->NewStringUTF(result.c_str());
+}
+
+
 } // namespace
 
 extern "C" {
@@ -121,24 +133,37 @@ JNIEXPORT jobjectArray JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlic
 }
 
 // listener: an object with "boolean progress(int percent, String text)"; returning false cancels the slice.
+JNIEXPORT jstring JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlicer_inspect(JNIEnv* env, jclass, jlong handle,
+    jobjectArray models, jstring meshDir, jint maxTriangles)
+{
+    const std::vector<std::string> files = strings_of(env, models);
+    const std::string directory = string_of(env, meshDir);
+    return json_call(env, [&] { return engine_of(handle)->inspect(files, directory, size_t(std::max(1000, int(maxTriangles)))); });
+}
+
+JNIEXPORT jstring JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlicer_arrange(JNIEnv* env, jclass, jlong handle,
+    jobjectArray models, jstring selectionJson)
+{
+    const std::vector<std::string> files = strings_of(env, models);
+    const std::string json = string_of(env, selectionJson);
+    return json_call(env, [&] { return engine_of(handle)->arrange(files, linkslicer::selection_from_json(json)); });
+}
+
+JNIEXPORT jstring JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlicer_describe(JNIEnv* env, jclass, jlong handle,
+    jobjectArray models, jstring selectionJson, jobjectArray keys)
+{
+    const std::vector<std::string> files = strings_of(env, models), names = strings_of(env, keys);
+    const std::string json = string_of(env, selectionJson);
+    return json_call(env, [&] { return engine_of(handle)->describe(linkslicer::selection_from_json(json), names, files); });
+}
+
+// listener: an object with "boolean progress(int percent, String text)"; returning false cancels the slice.
 JNIEXPORT jstring JNICALL Java_io_github_thelastfrogrammer_elink_NativeSlicer_slice(JNIEnv* env, jclass, jlong handle,
-    jobjectArray models, jstring printer, jstring process, jobjectArray filaments, jobjectArray colours, jintArray modelFilaments,
-    jobjectArray keys, jobjectArray values, jstring output, jobject listener)
+    jobjectArray models, jstring selectionJson, jstring output, jobject listener)
 {
     linkslicer::Selection selection;
-    selection.printer = string_of(env, printer);
-    selection.process = string_of(env, process);
-    selection.filaments = strings_of(env, filaments);
-    selection.filament_colours = strings_of(env, colours);
-    if (modelFilaments != nullptr) {
-        const jsize count = env->GetArrayLength(modelFilaments);
-        std::vector<jint> values(count);
-        env->GetIntArrayRegion(modelFilaments, 0, count, values.data());
-        selection.model_filaments.assign(values.begin(), values.end());
-    }
-    const std::vector<std::string> overrideKeys = strings_of(env, keys), overrideValues = strings_of(env, values);
-    for (size_t i = 0; i < overrideKeys.size() && i < overrideValues.size(); ++i)
-        selection.overrides.emplace_back(overrideKeys[i], overrideValues[i]);
+    try { selection = linkslicer::selection_from_json(string_of(env, selectionJson)); }
+    catch (const std::exception& error) { throw_java(env, (std::string("Bad selection: ") + error.what()).c_str()); return nullptr; }
 
     std::atomic<bool> cancel{false};
     jobject listenerRef = listener ? env->NewGlobalRef(listener) : nullptr;

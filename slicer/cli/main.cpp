@@ -5,6 +5,10 @@
 //               [--colour #RRGGBB ...] [--assign 1,2,...] [--set key=value ...] --output out.gcode model.stl [model2.3mf ...]
 //   link-slicer --resources DIR --printer NAME --process NAME --filament NAME --export-presets DIR
 //               (resolved presets as JSON, the form ElegooSlicer's own --load-settings/--load-filaments take)
+//   link-slicer --resources DIR --inspect [--mesh-dir DIR] MODEL...      (objects, 3MF plates and project settings)
+//   link-slicer --resources DIR ... --arrange MODEL...                   (where each object would go)
+//   link-slicer --resources DIR ... --describe key,key [MODEL...]         (setting definitions and values)
+// Projects and layouts: --plate N, --project-settings, --place FILE,OBJECT,X,Y[,ROTATION[,SCALE]] (once per copy).
 //
 // Prints one JSON object with the result (or {"error": ...}) on stdout; progress goes to stderr.
 #include <chrono>
@@ -55,7 +59,12 @@ int usage()
         "              [--colour #RRGGBB ...] [--assign N,N,...] [--set key=value ...] [--vendor Elegoo] [--work DIR]\n"
         "              --output out.gcode MODEL...\n"
         "    --filament and --colour repeat once per filament slot; --assign gives each MODEL file its slot.\n"
-        "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --export-presets DIR\n";
+        "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --export-presets DIR\n"
+        "  link-slicer --resources DIR --inspect [--mesh-dir DIR] MODEL...\n"
+        "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --arrange MODEL...\n"
+        "  link-slicer --resources DIR --printer NAME --process NAME --filament NAME --describe KEY,KEY [MODEL...]\n"
+        "    With slicing or --arrange: --plate N (3MF project plate), --project-settings (the project's process\n"
+        "    settings), --place FILE,OBJECT,X,Y[,ROTATION[,SCALE]] (once per copy; files and objects count from 0).\n";
     return 2;
 }
 
@@ -64,8 +73,8 @@ int usage()
 int main(int argc, char** argv)
 {
     const auto started = std::chrono::steady_clock::now(); // elapsed_s covers preset loading as well as slicing
-    std::string resources, vendor = "Elegoo", list, output, work, export_dir;
-    bool quiet = false;
+    std::string resources, vendor = "Elegoo", list, output, work, export_dir, mesh_dir, describe;
+    bool quiet = false, inspect = false, arrange = false;
     linkslicer::Selection selection;
     std::vector<std::string> models;
     for (int i = 1; i < argc; ++i) {
@@ -92,6 +101,22 @@ int main(int argc, char** argv)
         else if (arg == "--work") work = value();
         else if (arg == "--export-presets") export_dir = value();
         else if (arg == "--quiet") quiet = true;
+        else if (arg == "--inspect") inspect = true;
+        else if (arg == "--mesh-dir") mesh_dir = value();
+        else if (arg == "--arrange") arrange = true;
+        else if (arg == "--describe") describe = value();
+        else if (arg == "--plate") selection.plate = std::atoi(value().c_str());
+        else if (arg == "--project-settings") selection.project_settings = true;
+        else if (arg == "--place") {
+            std::stringstream list(value()); std::string item; std::vector<double> numbers;
+            while (std::getline(list, item, ',')) numbers.push_back(std::atof(item.c_str()));
+            if (numbers.size() < 4) { std::cerr << "--place expects FILE,OBJECT,X,Y[,ROTATION[,SCALE]]\n"; return usage(); }
+            linkslicer::Selection::Placement placement;
+            placement.file = int(numbers[0]); placement.object = int(numbers[1]); placement.x = numbers[2]; placement.y = numbers[3];
+            if (numbers.size() > 4) placement.rotation = numbers[4];
+            if (numbers.size() > 5) placement.scale = numbers[5];
+            selection.placements.push_back(placement);
+        }
         else if (arg == "--set") {
             std::string pair = value();
             size_t eq = pair.find('=');
@@ -102,7 +127,8 @@ int main(int argc, char** argv)
         else if (!arg.empty() && arg[0] == '-') { std::cerr << "Unknown option " << arg << "\n"; return usage(); }
         else models.push_back(arg);
     }
-    if (resources.empty() || (list.empty() && export_dir.empty() && (output.empty() || models.empty() || selection.printer.empty() || selection.process.empty())))
+    const bool query = inspect || arrange || !describe.empty();
+    if (resources.empty() || (list.empty() && export_dir.empty() && !query && (output.empty() || models.empty() || selection.printer.empty() || selection.process.empty())))
         return usage();
     if (work.empty())
         work = (boost::filesystem::temp_directory_path() / "link-slicer").string();
@@ -120,6 +146,14 @@ int main(int argc, char** argv)
             else return usage();
             for (const std::string& name : engine.presets(kind, selection.printer))
                 std::cout << name << "\n";
+            return 0;
+        }
+        if (inspect) { std::cout << engine.inspect(models, mesh_dir) << std::endl; return 0; }
+        if (arrange) { std::cout << engine.arrange(models, selection) << std::endl; return 0; }
+        if (!describe.empty()) {
+            std::vector<std::string> keys; std::stringstream list(describe); std::string key;
+            while (std::getline(list, key, ',')) keys.push_back(key);
+            std::cout << engine.describe(selection, keys, models) << std::endl;
             return 0;
         }
         if (!export_dir.empty()) {
