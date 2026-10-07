@@ -232,6 +232,58 @@ public class SlicerIntegrationTest {
         }
     }
 
+    @Test public void calibrationPrintsAndFilamentSettings() throws Exception {
+        File output = new File(context().getCacheDir(), "calibration.gcode");
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.calibration = "temperature"; selection.calibrationStart = 230; selection.calibrationEnd = 200;
+            slicer.slice(Collections.emptyList(), selection, output, null);
+            String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            for (int t = 230; t >= 200; t -= 5) assertTrue("tower block at " + t, gcode.contains("\nM104 S" + t));
+            assertFalse(gcode.contains("\nM104 S195"));
+            assertTrue(gcode.contains("; max_z_height: 70.00"));
+
+            selection.calibration = "pressure_advance"; selection.calibrationStart = 0; selection.calibrationEnd = 0.02; selection.calibrationStep = 0.002;
+            slicer.slice(Collections.emptyList(), selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("SET_PRESSURE_ADVANCE ADVANCE=0.02"));
+
+            selection.calibration = "temperature"; selection.calibrationStart = 180; selection.calibrationEnd = 200;
+            try { slicer.slice(Collections.emptyList(), selection, output, null); fail("expected a range error"); }
+            catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("hotter")); }
+
+            // A filament slot's own settings.
+            selection.calibration = null;
+            Map<String, String> edits = new HashMap<>(); edits.put("nozzle_temperature", "215"); edits.put("filament_flow_ratio", "0.95");
+            selection.filamentOverrides.add(edits);
+            slicer.slice(Collections.singletonList(box(20, 20, 10)), selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("; nozzle_temperature = 215\n")); assertTrue(gcode.contains("; filament_flow_ratio = 0.95\n"));
+            org.json.JSONObject one = SliceSettingsActivity.forSlot(slicer.describe(Collections.emptyList(), selection, Arrays.asList("nozzle_temperature", "filament_retraction_length", "layer_height")), 0);
+            assertEquals("215", one.getJSONObject("nozzle_temperature").getString("value"));
+            assertEquals("int", one.getJSONObject("nozzle_temperature").getString("type"));
+            assertEquals("nil", one.getJSONObject("filament_retraction_length").getString("preset"));
+            assertFalse("process settings are not per filament", one.has("layer_height"));
+            for (String[] group : SliceSettingsActivity.FILAMENT_GROUPS) {
+                org.json.JSONObject all = SliceSettingsActivity.forSlot(slicer.describe(Collections.emptyList(), selection, Arrays.asList(group).subList(1, group.length)), 0);
+                for (int i = 1; i < group.length; i++) assertTrue("unknown filament setting " + group[i], all.has(group[i]));
+            }
+        }
+    }
+
+    @Test public void slicesACalibrationFromTheSliceScreen() throws Exception {
+        SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        java.lang.reflect.Method start = SliceActivity.class.getDeclaredMethod("startCalibration", String.class, double[].class, String[].class); start.setAccessible(true);
+        String[][] calibrations = (String[][]) field(activity, "CALIBRATIONS");
+        start.invoke(activity, "retraction", new double[] {0, 1, 0.2}, calibrations[5]);
+        assertTrue(((android.widget.Button) field(activity, "slice")).isEnabled());
+        invoke(activity, "startSlice");
+        waitFor(() -> ((View) field(activity, "resultCard")).getVisibility() == View.VISIBLE);
+        assertEquals("calibration_retraction_0-1.gcode", field(activity, "slicedName"));
+        assertTrue(((android.widget.TextView) field(activity, "resultText")).getText().toString().startsWith("How to read it: Retraction grows"));
+    }
+
     @Test public void describesSettings() throws Exception {
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
             NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));

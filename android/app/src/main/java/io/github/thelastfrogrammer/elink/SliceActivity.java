@@ -35,7 +35,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class SliceActivity extends Activity {
     static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", RESULT_PRINT_SETUP = "printSetup", TRAY_PLANS = "tray-plans";
     static final int ALL_PLATES = -1;
-    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4;
+    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5;
     private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
     private static final Set<String> MODEL_TYPES = new HashSet<>(Arrays.asList("stl", "3mf", "obj", "drc", "step", "stp", "amf"));
@@ -77,6 +77,10 @@ public final class SliceActivity extends Activity {
     private boolean projectSettings = true;   // apply a project's own process settings
     private final Map<String, String> customOverrides = new LinkedHashMap<>(); // from the settings screen
     private org.json.JSONArray placements;    // the plate view's layout, or null to arrange automatically
+    private String calibration;               // a calibration print instead of models (engine mode), or null
+    private double[] calibrationRange = new double[3];
+    private TextView calibrationLabel;
+    private Button calibrate;
     private boolean largeConfirmed;
     private LinearLayout projectBox;
     private TextView layoutLabel, settingsSummary;
@@ -104,8 +108,9 @@ public final class SliceActivity extends Activity {
 
     /** One filament slot: preset, optional CANVAS tray and colour. Slot k is G-code tool k - 1. */
     private final class Slot {
-        LinearLayout row; TextView title, swatch; Spinner preset, tray;
+        LinearLayout row; TextView title, swatch; Spinner preset, tray; Button settings;
         String colour, wanted; TrayPlan.Tray source; List<TrayPlan.Tray> trayChoices = new ArrayList<>();
+        final Map<String, String> edits = new LinkedHashMap<>(); // this slot's filament settings changes
     }
     private EditText infill;
     private Button chooseModels, slice, cancel, useInFiles, saveCopy;
@@ -212,7 +217,7 @@ public final class SliceActivity extends Activity {
         try {
             for (Slot slot : slots) {
                 org.json.JSONObject item = new org.json.JSONObject().put("preset", selected(slot.preset) != null ? selected(slot.preset) : slot.wanted == null ? "" : slot.wanted)
-                    .put("colour", slot.colour == null ? "" : slot.colour);
+                    .put("colour", slot.colour == null ? "" : slot.colour).put("edits", new org.json.JSONObject(slot.edits));
                 if (slot.source != null) item.put("tray", new org.json.JSONObject().put("canvas_id", slot.source.canvasId).put("tray_id", slot.source.trayId)
                     .put("type", slot.source.type).put("name", slot.source.name).put("brand", slot.source.brand).put("colour", slot.source.colour == null ? "" : slot.source.colour));
                 list.put(item);
@@ -231,6 +236,7 @@ public final class SliceActivity extends Activity {
         state.putString("slicedName", slicedName);
         if (inspected != null) state.putString("inspected", inspected.toString());
         state.putInt("plate", plate); state.putBoolean("projectSettings", projectSettings);
+        if (calibration != null) { state.putString("calibration", calibration); state.putDoubleArray("calibrationRange", calibrationRange); state.putStringArray("calibrationSpec", calibrationSpec); }
         state.putString("customOverrides", new org.json.JSONObject(customOverrides).toString());
         if (placements != null) state.putString("placements", placements.toString());
         if (!slicing && !busy) state.putString("status", status.getText().toString());
@@ -253,6 +259,9 @@ public final class SliceActivity extends Activity {
                 Slot slot = slots.get(slots.size() - 1);
                 slot.wanted = item.optString("preset").isEmpty() ? null : item.optString("preset");
                 slot.colour = TrayPlan.colour(item.optString("colour")); showSwatch(slot);
+                org.json.JSONObject edits = item.optJSONObject("edits");
+                if (edits != null) for (Iterator<String> keys = edits.keys(); keys.hasNext(); ) { String key = keys.next(); slot.edits.put(key, edits.getString(key)); }
+                showSlotSettings(slot);
             }
         } catch (org.json.JSONException ignored) { }
         restoredPrinter = saved.getString("printer"); restoredProcess = saved.getString("process");
@@ -274,6 +283,9 @@ public final class SliceActivity extends Activity {
             for (Iterator<String> keys = custom.keys(); keys.hasNext(); ) { String key = keys.next(); customOverrides.put(key, custom.getString(key)); }
         } catch (org.json.JSONException ignored) { }
         plate = saved.getInt("plate", 0); projectSettings = saved.getBoolean("projectSettings", true);
+        if (saved.getString("calibration") != null && saved.getStringArray("calibrationSpec") != null) {
+            calibration = saved.getString("calibration"); calibrationRange = saved.getDoubleArray("calibrationRange"); calibrationSpec = saved.getStringArray("calibrationSpec"); showCalibration();
+        }
         showModels(); showProject(); showLayout(); showSettingsSummary();
         if (saved.getString("status") != null) status.setText(saved.getString("status"));
     }
@@ -292,6 +304,8 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
         }, false);
+        calibrate = button(modelCard, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
+        calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
@@ -470,6 +484,8 @@ public final class SliceActivity extends Activity {
         for (int i = 0; i < assignment.length; i++) assignment[i] = slots.size() > 1 && i < modelSlots.size() ? modelSlots.get(i) : 0;
         selection.modelFilaments = assignment;
         selection.overrides.putAll(customOverrides); selection.overrides.putAll(quick);
+        for (Slot slot : slots) selection.filamentOverrides.add(new LinkedHashMap<>(slot.edits));
+        if (calibration != null) { selection.calibration = calibration; selection.calibrationStart = calibrationRange[0]; selection.calibrationEnd = calibrationRange[1]; selection.calibrationStep = calibrationRange[2]; }
         selection.plate = plate == ALL_PLATES ? 1 : plate; selection.projectSettings = projectSettings && project() != null;
         if (withPlacements && placements != null)
             for (int i = 0; i < placements.length(); i++) {
@@ -496,12 +512,12 @@ public final class SliceActivity extends Activity {
 
     private void startSlice() {
         NativeSlicer.Selection selection = selection(true);
-        if (models.isEmpty() || selection == null) return;
+        if ((models.isEmpty() && calibration == null) || selection == null) return;
         String printer = selection.printer, process = selection.process;
         List<String> filaments = new ArrayList<>(selection.filaments), colours = new ArrayList<>(selection.colours);
         TrayPlan plan = plan();
         // Warn before a slice that likely needs more memory than the phone has free; Android would close the app.
-        SliceEstimate need = estimate(selection);
+        SliceEstimate need = calibration != null ? null : estimate(selection);
         android.app.ActivityManager.MemoryInfo memory = new android.app.ActivityManager.MemoryInfo();
         ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
         if (need != null && need.risky(memory.availMem) && !largeConfirmed) {
@@ -515,18 +531,19 @@ public final class SliceActivity extends Activity {
         SharedPreferences.Editor remember = settings.edit().putString("slicePrinter", printer).putString("sliceProcess", process);
         for (int i = 0; i < filaments.size(); i++) remember.putString(i == 0 ? "sliceFilament" : "sliceFilament" + (i + 1), filaments.get(i));
         remember.apply();
-        String base = models.get(0).getName().replaceFirst("\\.[^.]+$", "");
-        slicedName = (models.size() > 1 ? base + "_plate" : base) + ".gcode";
+        String base = calibration != null ? "calibration_" + calibrationSpec[0] + (calibrationSpec[2].isEmpty() ? "" : "_" + trimNumber(calibrationRange[0]) + "-" + trimNumber(calibrationRange[1]))
+            : models.get(0).getName().replaceFirst("\\.[^.]+$", "");
+        slicedName = (models.size() > 1 && calibration == null ? base + "_plate" : base) + ".gcode";
         File outputDir = new File(getCacheDir(), "sliced"); outputDir.mkdirs();
         // One plate, or every plate of the project with a G-code each.
         List<Integer> plates = new ArrayList<>();
-        if (plate == ALL_PLATES) for (int p = 1; p <= projectPlates(); p++) plates.add(p); else plates.add(plate);
+        if (plate == ALL_PLATES && calibration == null) for (int p = 1; p <= projectPlates(); p++) plates.add(p); else plates.add(plate == ALL_PLATES ? 1 : plate);
         List<String> names = new ArrayList<>(); List<File> outputs = new ArrayList<>();
         for (int p : plates) {
             String fileName = plates.size() > 1 ? base + "_plate" + p + ".gcode" : slicedName;
             names.add(fileName); outputs.add(new File(outputDir, fileName));
         }
-        List<File> input = new ArrayList<>(models);
+        List<File> input = calibration != null ? new ArrayList<>() : new ArrayList<>(models);
         busy = true; cancelRequested.set(false); resultCard.setVisibility(View.GONE); progress.setProgress(0); progress.setVisibility(View.VISIBLE);
         status.setTextColor(ink); status.setText("Slicing…"); updateButtons();
         slicing = true; slicingPercent = 0; slicingText = "Slicing…";
@@ -605,6 +622,7 @@ public final class SliceActivity extends Activity {
             if (colours.get(i) != null) text.append(" · ").append(colours.get(i));
             if (tool != null) text.append(" · CANVAS ").append(tool.canvasId).append(" tray ").append(tool.trayId);
         }
+        if (calibration != null && calibrationSpec != null) text.insert(0, "How to read it: " + calibrationSpec[5] + "\n\n");
         resultText.setText(text.toString());
         uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " plates" : "Upload and print…");
         useInFiles.setText(slicedFiles.size() > 1 ? "Send plate " + plates.get(0) + " to the Files tab" : "Send to Files tab");
@@ -654,6 +672,16 @@ public final class SliceActivity extends Activity {
                 Map<String, String> map = new LinkedHashMap<>();
                 for (Iterator<String> keys = changed.keys(); keys.hasNext(); ) { String key = keys.next(); map.put(key, changed.getString(key)); }
                 takeOverrides(map);
+            } catch (org.json.JSONException | NullPointerException ignored) { }
+            return;
+        }
+        if (request == FILAMENT_SETTINGS) {
+            int index = data.getIntExtra(SliceSettingsActivity.EXTRA_FILAMENT_SLOT, -1);
+            if (index >= 0 && index < slots.size()) try {
+                org.json.JSONObject changed = new org.json.JSONObject(data.getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
+                Slot slot = slots.get(index); slot.edits.clear();
+                for (Iterator<String> keys = changed.keys(); keys.hasNext(); ) { String key = keys.next(); slot.edits.put(key, changed.getString(key)); }
+                showSlotSettings(slot);
             } catch (org.json.JSONException | NullPointerException ignored) { }
             return;
         }
@@ -848,6 +876,93 @@ public final class SliceActivity extends Activity {
         startActivityForResult(intent, PLATE);
     }
 
+    private void openFilamentSettings(int index) {
+        NativeSlicer.Selection selection = selection(false);
+        if (selection == null || index < 0) return;
+        startActivityForResult(new Intent(this, SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson())
+            .putExtra(SliceSettingsActivity.EXTRA_FILAMENT_SLOT, index).putExtra(SliceSettingsActivity.EXTRA_MODELS, new String[0]), FILAMENT_SETTINGS);
+    }
+
+    private void showSlotSettings(Slot slot) {
+        slot.settings.setText(slot.edits.isEmpty() ? "Filament settings…" : "Filament settings… (" + slot.edits.size() + " changed)");
+        slot.settings.setTextColor(slot.edits.isEmpty() ? ColorStateList.valueOf(teal) : ColorStateList.valueOf(dark ? 0xffffd27a : 0xff8a5300));
+    }
+
+    // ------------------------------------------------------------------ calibration prints
+    /** ElegooSlicer's calibration prints for filament slot 1, with the ranges its Calibration menu starts from. */
+    private static final String[][] CALIBRATIONS = {
+        // mode, title, start label, end label, step label, how to read the result
+        {"temperature", "Temperature tower", "Hottest (°C, bottom)", "Coolest (°C, top)", "", "Each 10 mm block is 5 °C cooler than the one below, starting from the bottom. Pick the best-looking block and set the slot's nozzle temperature to it (Filament settings…)."},
+        {"flow", "Flow rate (pass 1)", "", "", "", "Each square changes the flow ratio by the number printed on it. Pick the smoothest top surface and add its number to the slot's flow ratio (Filament settings…). Then print pass 2 for a finer step."},
+        {"flow2", "Flow rate (pass 2, finer)", "", "", "", "As pass 1, in finer steps: add the number on the smoothest square to the slot's flow ratio."},
+        {"pressure_advance", "Pressure advance tower", "Start", "End", "Step per mm", "Pressure advance rises by the step for every millimetre of height. Find the height where the corners look best and set pressure advance = start + step × height (mm)."},
+        {"max_flow", "Max volumetric speed", "Start (mm³/s)", "End (mm³/s)", "Step per mm", "The flow rises by the step for every millimetre of height. Find the height where the walls start to fail and set max volumetric speed = start + step × height (mm), a little lower to be safe."},
+        {"retraction", "Retraction tower", "Start (mm)", "End (mm)", "Step per mm", "Retraction grows by the step for every millimetre above the 1.4 mm base. Find the lowest section without strings and set retraction length = start + step × (height − 1.4 mm)."},
+    };
+
+    private double[] calibrationDefaults(String mode) {
+        String filament = slots.isEmpty() ? "" : String.valueOf(selected(slots.get(0).preset)).toUpperCase(Locale.ROOT);
+        switch (mode) {
+            case "temperature":
+                if (filament.contains("PETG")) return new double[] {260, 230, 5};
+                if (filament.contains("ABS") || filament.contains("ASA")) return new double[] {270, 240, 5};
+                if (filament.contains("TPU")) return new double[] {240, 210, 5};
+                if (filament.contains("PC")) return new double[] {280, 250, 5};
+                return new double[] {230, 190, 5};
+            case "pressure_advance": return new double[] {0, 0.1, 0.002};
+            case "max_flow": return new double[] {5, 25, 0.5};
+            case "retraction": return new double[] {0, 2, 0.1};
+            default: return new double[] {1, 0, 0};
+        }
+    }
+
+    private void chooseCalibration() {
+        String[] titles = new String[CALIBRATIONS.length];
+        for (int i = 0; i < titles.length; i++) titles[i] = CALIBRATIONS[i][1];
+        new AlertDialog.Builder(this).setTitle("Calibration print").setItems(titles, (d, which) -> configureCalibration(CALIBRATIONS[which])).setNegativeButton("Cancel", null).show();
+    }
+
+    private void configureCalibration(String[] spec) {
+        String mode = spec[0].equals("flow2") ? "flow" : spec[0];
+        double[] range = spec[0].equals("flow2") ? new double[] {2, 0, 0} : calibrationDefaults(mode);
+        if (spec[2].isEmpty()) { startCalibration(mode, range, spec); return; }
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
+        EditText[] fields = new EditText[3];
+        for (int i = 0; i < 3; i++) {
+            if (spec[2 + i].isEmpty()) continue;
+            TextView name = new TextView(this); name.setText(spec[2 + i]); name.setTextColor(muted); body.addView(name);
+            fields[i] = new EditText(this); fields[i].setSingleLine(true); fields[i].setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            fields[i].setText(range[i] == Math.rint(range[i]) ? String.valueOf((long) range[i]) : String.valueOf(range[i])); body.addView(fields[i]);
+        }
+        new AlertDialog.Builder(this).setTitle(spec[1]).setMessage("Prints with filament slot 1 (" + (slots.isEmpty() ? "" : selected(slots.get(0).preset)) + ").").setView(body)
+            .setNegativeButton("Cancel", null).setPositiveButton("Use", (d, w) -> {
+                double[] chosen = range.clone();
+                try { for (int i = 0; i < 3; i++) if (fields[i] != null) chosen[i] = Double.parseDouble(fields[i].getText().toString().trim()); }
+                catch (NumberFormatException e) { status.setText("Enter numbers for the calibration range."); status.setTextColor(error); return; }
+                startCalibration(mode, chosen, spec);
+            }).show();
+    }
+
+    private String[] calibrationSpec;
+    private void startCalibration(String mode, double[] range, String[] spec) {
+        calibration = mode; calibrationRange = range; calibrationSpec = spec; placements = null;
+        showCalibration(); updateButtons();
+        status.setText("Ready to slice the " + spec[1].toLowerCase(Locale.ROOT) + "."); status.setTextColor(ink);
+    }
+
+    private void showCalibration() {
+        boolean on = calibration != null;
+        calibrationLabel.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (on) {
+            String range = calibrationSpec[2].isEmpty() ? "" : String.format(Locale.getDefault(), " · %s → %s%s", trimNumber(calibrationRange[0]), trimNumber(calibrationRange[1]),
+                calibrationSpec[4].isEmpty() ? "" : ", step " + trimNumber(calibrationRange[2]));
+            calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nThe model files are set aside while this is on.");
+        }
+        calibrate.setText(on ? "Back to my models" : "Calibration print…");
+    }
+
+    private static String trimNumber(double value) { return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value); }
+
     private void openSettings() {
         NativeSlicer.Selection selection = selection(false);
         if (selection == null) return;
@@ -888,6 +1003,7 @@ public final class SliceActivity extends Activity {
             }
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
+        slot.settings = button(slot.row, "Filament settings…", () -> openFilamentSettings(slots.indexOf(slot)), false);
         slots.add(slot); slotList.addView(slot.row);
         if (filamentPresets.length > 0)
             fill(slot.preset, Arrays.asList(filamentPresets), remembered(filamentPresets, slots.size() == 1 ? "sliceFilament" : "sliceFilament" + slots.size(), "Elegoo PLA @"));
@@ -995,7 +1111,7 @@ public final class SliceActivity extends Activity {
         if (slice == null) return;
         boolean presetsReady = selected(printerSpinner) != null && selected(processSpinner) != null;
         for (Slot slot : slots) presetsReady &= selected(slot.preset) != null;
-        slice.setEnabled(!busy && !models.isEmpty() && presetsReady);
+        slice.setEnabled(!busy && (!models.isEmpty() || calibration != null) && presetsReady);
         boolean slicing = busy && progress.getVisibility() == View.VISIBLE;
         cancel.setEnabled(slicing); cancel.setVisibility(slicing ? View.VISIBLE : View.GONE); slice.setVisibility(slicing ? View.GONE : View.VISIBLE);
         chooseModels.setEnabled(!busy);

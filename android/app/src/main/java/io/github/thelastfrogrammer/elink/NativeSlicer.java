@@ -69,6 +69,10 @@ final class NativeSlicer implements AutoCloseable {
         boolean projectSettings;
         /** One per copy: {file, object, x, y, rotation, scale[, down x, y, z]}; empty lets the engine arrange. */
         final List<double[]> placements = new ArrayList<>();
+        /** Per filament slot: setting key -> value for that slot only. */
+        final List<Map<String, String>> filamentOverrides = new ArrayList<>();
+        /** A calibration print instead of model files: mode ("temperature", "pressure_advance", "flow", "max_flow", "retraction") and range. */
+        String calibration; double calibrationStart, calibrationEnd, calibrationStep;
 
         Selection(String printer, String process, List<String> filaments) { this.printer = printer; this.process = process; this.filaments.addAll(filaments); }
 
@@ -87,7 +91,12 @@ final class NativeSlicer implements AutoCloseable {
                     if (p.length >= 9 && (p[6] != 0 || p[7] != 0 || p[8] != 0)) place.put("down", new JSONArray().put(p[6]).put(p[7]).put(p[8]));
                     places.put(place);
                 }
-                return json.put("placements", places).toString();
+                json.put("placements", places);
+                JSONArray perSlot = new JSONArray();
+                for (Map<String, String> slot : filamentOverrides) { JSONObject one = new JSONObject(); for (Map.Entry<String, String> e : slot.entrySet()) one.put(e.getKey(), e.getValue()); perSlot.put(one); }
+                json.put("filament_overrides", perSlot);
+                if (calibration != null) json.put("calibration", new JSONObject().put("mode", calibration).put("start", calibrationStart).put("end", calibrationEnd).put("step", calibrationStep));
+                return json.toString();
             } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
         }
     }

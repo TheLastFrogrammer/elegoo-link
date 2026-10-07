@@ -118,6 +118,20 @@ Memory: link-slicer's peak grows with mesh triangles (about 0.33 KB each) and mo
 at 0.20 mm layers): 178 MB for a 40 k-triangle 60 mm sphere, 799 MB for a 2 M-triangle one, 650 MB for a 200 mm
 sphere. The app warns from that estimate before slices that likely exceed the phone's free memory.
 
+## Calibration prints
+
+Ported from ElegooSlicer's `Plater::calib_*` (same models from `resources/calib`, cuts, object and global settings and
+`Print::set_calib_params`). The desktop's calibrations are GUI-only, so there is no official CLI to compare with; the
+G-code was checked for the intended variation instead (Centauri Carbon 2, Elegoo PLA):
+
+| Calibration | Check |
+|---|---|
+| Temperature tower 230 → 190 °C | `M104 S230` … `S190` in 5 °C steps, one per 10 mm block; 90 mm tall |
+| Pressure advance 0 → 0.08, step 0.002 | `SET_PRESSURE_ADVANCE` rising by 0.002 per mm; 41 mm tall |
+| Max volumetric speed 5 → 25 mm³/s | vase mode, feedrate rising every millimetre (F1620 → F4740 …) |
+| Retraction 0 → 2 mm, step 0.1 | retraction length rising with height above the 1.4 mm base |
+| Flow rate passes 1 and 2 | the linear ("YOLO") test objects with their per-object flow ratios |
+
 ## Implications for step 2 (Android cross-compile)
 
 - Same 17 libraries, from the same recipes; the deps driver already passes `CMAKE_TOOLCHAIN_FILE` through to each

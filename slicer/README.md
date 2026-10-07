@@ -103,6 +103,13 @@ files contain (objects, triangles, surface area, plates, project settings) and w
 `--arrange` prints where each object would go; `--describe key,key` prints setting definitions with preset and
 effective values.
 
+Filament slots and calibration: `--filament-set SLOT,key=value` changes one slot's filament setting (for example
+`--filament-set 1,nozzle_temperature=215`); `--calibrate MODE[,START,END,STEP]` slices one of ElegooSlicer's calibration
+prints instead of model files with slot 1, set up as the desktop's Calibration menu does it: `temperature,230,190`
+(tower, 5 °C per 10 mm block), `flow,1` or `flow,2` (linear flow-rate test, passes 1 and 2),
+`pressure_advance,0,0.1,0.002` (tower, step per mm), `max_flow,5,25,0.5` (mm³/s, step per mm) and
+`retraction,0,2,0.1` (mm, step per mm).
+
 It prints one JSON line (`gcode`, `print_time_s`, `filament_mm`, `filament_g`, `filament_cm3`, `warnings`, or
 `error`) and progress on stderr. A single object is centered on the bed; several are arranged. `--set` takes any
 ElegooSlicer setting key with its serialized value. `--export-presets DIR` writes the resolved presets as JSON.

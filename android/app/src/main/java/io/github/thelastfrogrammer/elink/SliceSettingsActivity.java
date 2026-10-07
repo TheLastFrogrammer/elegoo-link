@@ -25,8 +25,18 @@ import org.json.JSONObject;
  * changed settings (config key -> serialized value) as EXTRA_OVERRIDES.
  */
 public final class SliceSettingsActivity extends Activity {
-    static final String EXTRA_SELECTION = "selection", EXTRA_MODELS = "models", EXTRA_OVERRIDES = "overrides";
-    static final String CUSTOM_PRESETS = "slice-custom-presets";
+    static final String EXTRA_SELECTION = "selection", EXTRA_MODELS = "models", EXTRA_OVERRIDES = "overrides", EXTRA_FILAMENT_SLOT = "filamentSlot";
+    static final String CUSTOM_PRESETS = "slice-custom-presets", FILAMENT_SETS = "slice-filament-sets";
+
+    /** Filament settings for one slot (the per-filament values of the slot's preset). */
+    static final String[][] FILAMENT_GROUPS = {
+        {"Temperatures", "nozzle_temperature_initial_layer", "nozzle_temperature", "textured_plate_temp_initial_layer", "textured_plate_temp"},
+        {"Flow", "filament_flow_ratio", "enable_pressure_advance", "pressure_advance", "filament_max_volumetric_speed"},
+        {"Retraction", "filament_retraction_length", "filament_retraction_speed", "filament_deretraction_speed", "filament_z_hop"},
+        {"Cooling", "fan_min_speed", "fan_max_speed", "close_fan_the_first_x_layers", "full_fan_speed_layer", "slow_down_layer_time"},
+    };
+    private int slot = -1;   // filament slot being edited (0-based), or -1 for the process settings
+    private String[][] groups() { return slot >= 0 ? FILAMENT_GROUPS : GROUPS; }
 
     /** Groups and keys shown, in order; keys this engine does not know are left out. */
     static final String[][] GROUPS = {
@@ -50,7 +60,10 @@ public final class SliceSettingsActivity extends Activity {
             {"support_on_build_plate_only", "Support on build plate only"}, {"initial_layer_speed", "First layer speed"},
             {"outer_wall_speed", "Outer wall speed"}, {"inner_wall_speed", "Inner wall speed"}, {"sparse_infill_speed", "Sparse infill speed"},
             {"internal_solid_infill_speed", "Internal solid infill speed"}, {"top_surface_speed", "Top surface speed"},
-            {"gap_infill_speed", "Gap infill speed"}, {"travel_speed", "Travel speed"}, {"fuzzy_skin", "Fuzzy skin"}, {"ironing_type", "Ironing"}};
+            {"gap_infill_speed", "Gap infill speed"}, {"travel_speed", "Travel speed"}, {"fuzzy_skin", "Fuzzy skin"}, {"ironing_type", "Ironing"},
+            {"fan_min_speed", "Minimum fan speed"}, {"fan_max_speed", "Maximum fan speed"}, {"textured_plate_temp", "Bed temperature (textured plate)"},
+            {"textured_plate_temp_initial_layer", "First layer bed temperature (textured plate)"}, {"filament_retraction_length", "Retraction length"},
+            {"filament_retraction_speed", "Retraction speed"}, {"filament_deretraction_speed", "De-retraction speed"}, {"slow_down_layer_time", "Slow down for layers under"}};
         for (String[] name : names) LABELS.put(name[0], name[1]);
     }
 
@@ -67,10 +80,14 @@ public final class SliceSettingsActivity extends Activity {
     @Override protected void onCreate(Bundle saved) {
         ui = new WorkshopUi(this);
         super.onCreate(saved);
-        content = ui.page("Print settings", "Changes apply to this slice on top of the process preset. The preset's value is shown under each setting.");
+        slot = getIntent().getIntExtra(EXTRA_FILAMENT_SLOT, -1);
+        content = slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament slot on top of its preset. \u201cPrinter's value\u201d means the printer preset decides.")
+            : ui.page("Print settings", "Changes apply to this slice on top of the process preset. The preset's value is shown under each setting.");
         try {
             selection = new JSONObject(getIntent().getStringExtra(EXTRA_SELECTION));
-            JSONObject start = saved != null && saved.getString(EXTRA_OVERRIDES) != null ? new JSONObject(saved.getString(EXTRA_OVERRIDES)) : selection.optJSONObject("overrides");
+            JSONObject start = saved != null && saved.getString(EXTRA_OVERRIDES) != null ? new JSONObject(saved.getString(EXTRA_OVERRIDES))
+                : slot >= 0 ? (selection.optJSONArray("filament_overrides") != null ? selection.getJSONArray("filament_overrides").optJSONObject(slot) : null)
+                : selection.optJSONObject("overrides");
             if (start != null) for (Iterator<String> keys = start.keys(); keys.hasNext(); ) { String key = keys.next(); overrides.put(key, start.getString(key)); }
         } catch (JSONException | NullPointerException error) { finish(); return; }
         String[] paths = getIntent().getStringArrayExtra(EXTRA_MODELS);
@@ -100,7 +117,7 @@ public final class SliceSettingsActivity extends Activity {
     }
 
     // The result is kept current, so leaving with Back (or a back gesture) keeps the changes too.
-    private void keepResult() { setResult(RESULT_OK, new Intent().putExtra(EXTRA_OVERRIDES, new JSONObject(overrides).toString())); }
+    private void keepResult() { setResult(RESULT_OK, new Intent().putExtra(EXTRA_OVERRIDES, new JSONObject(overrides).toString()).putExtra(EXTRA_FILAMENT_SLOT, slot)); }
 
     private void finishWithResult() { keepResult(); finish(); }
 
@@ -108,14 +125,22 @@ public final class SliceSettingsActivity extends Activity {
     private void load() {
         summary.setText("Reading settings…");
         List<String> keys = new ArrayList<>();
-        for (String[] group : GROUPS) keys.addAll(Arrays.asList(group).subList(1, group.length));
+        for (String[] group : groups()) keys.addAll(Arrays.asList(group).subList(1, group.length));
         String request;
-        try { request = new JSONObject(selection.toString()).put("overrides", new JSONObject(overrides)).put("placements", new JSONArray()).toString(); }
-        catch (JSONException impossible) { throw new IllegalStateException(impossible); }
+        try {
+            JSONObject json = new JSONObject(selection.toString()).put("placements", new JSONArray());
+            if (slot >= 0) {
+                JSONArray perSlot = json.optJSONArray("filament_overrides"); if (perSlot == null) perSlot = new JSONArray();
+                while (perSlot.length() <= slot) perSlot.put(new JSONObject());
+                perSlot.put(slot, new JSONObject(overrides)); json.put("filament_overrides", perSlot);
+            } else json.put("overrides", new JSONObject(overrides));
+            request = json.toString();
+        } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
         SliceActivity.worker().execute(() -> {
             try {
                 NativeSlicer engine = SliceActivity.engine(getApplicationContext());
-                JSONObject read = engine.describeJson(models, request, keys);
+                JSONObject described = engine.describeJson(models, request, keys);
+                JSONObject read = slot >= 0 ? forSlot(described, slot) : described;
                 main.post(() -> { if (!isDestroyed()) { definitions = read; build(); } });
             } catch (Exception failure) {
                 main.post(() -> { if (!isDestroyed()) { summary.setText("Settings could not be read: " + failure.getMessage()); summary.setTextColor(ui.error); } });
@@ -125,7 +150,7 @@ public final class SliceSettingsActivity extends Activity {
 
     private void build() {
         list.removeAllViews(); rows.clear();
-        for (String[] group : GROUPS) {
+        for (String[] group : groups()) {
             LinearLayout card = null;
             for (int i = 1; i < group.length; i++) {
                 JSONObject definition = definitions.optJSONObject(group[i]);
@@ -136,6 +161,23 @@ public final class SliceSettingsActivity extends Activity {
             }
         }
         updateSummary(); filter();
+    }
+
+    /** Per-filament (vector) settings narrowed to one slot: its element of each value, with the scalar type. */
+    static JSONObject forSlot(JSONObject definitions, int slot) throws JSONException {
+        JSONObject result = new JSONObject();
+        for (Iterator<String> keys = definitions.keys(); keys.hasNext(); ) {
+            String key = keys.next(); JSONObject definition = new JSONObject(definitions.getJSONObject(key).toString());
+            String type = definition.optString("type");
+            if (!type.endsWith("s") || type.equals("float_or_percent")) continue; // only per-filament vectors
+            definition.put("type", type.substring(0, type.length() - 1));
+            for (String field : new String[] {"value", "preset"}) {
+                String[] parts = definition.optString(field).split(",", -1);
+                if (parts.length > 0) definition.put(field, parts[Math.min(slot, parts.length - 1)].trim());
+            }
+            result.put(key, definition);
+        }
+        return result;
     }
 
     private static boolean supported(String type) {
@@ -179,7 +221,7 @@ public final class SliceSettingsActivity extends Activity {
                 break;
             }
             default: {
-                EditText input = ui.input(row, preset); input.setText(value);
+                EditText input = ui.input(row, "nil".equals(preset) ? "Printer's value" : preset); input.setText("nil".equals(value) ? "" : value);
                 row.removeView(input); row.addView(input, 1);
                 if (type.equals("int")) input.setInputType(InputType.TYPE_CLASS_NUMBER);
                 else if (type.equals("float")) input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
@@ -204,6 +246,7 @@ public final class SliceSettingsActivity extends Activity {
 
     /** A readable preset value: enum labels, On/Off, units. */
     private static String display(JSONObject definition, String value) {
+        if ("nil".equals(value)) return "printer's value";
         switch (definition.optString("type")) {
             case "bool": return "1".equals(value) ? "On" : "Off";
             case "enum": {
@@ -258,7 +301,7 @@ public final class SliceSettingsActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ saved sets of changes
-    private SharedPreferences store() { return getSharedPreferences(CUSTOM_PRESETS, MODE_PRIVATE); }
+    private SharedPreferences store() { return getSharedPreferences(slot >= 0 ? FILAMENT_SETS : CUSTOM_PRESETS, MODE_PRIVATE); }
 
     private void saveSet() {
         if (overrides.isEmpty()) { Toast.makeText(this, "Change a setting first.", Toast.LENGTH_SHORT).show(); return; }

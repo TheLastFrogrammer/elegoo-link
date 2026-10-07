@@ -69,3 +69,11 @@ estimate needs to be tuned on a phone; if Android closes the app mid-slice, the 
 3. Tap **Download timelapse**, then **Save timelapse…**, and play the saved video.
 
 If the download fails, the error and the history entry help: share the diagnostics and a screenshot of the history.
+
+## 8. Downloads and calibration
+
+1. Files → Printer files → tap a file → **Download and save to phone…**: the save picker should open when the download
+   is in. If it fails, the diagnostics now include the printer's HTTP answer for each download.
+2. Slice screen → **Calibration print…** → Temperature tower; slice, **Upload and print…**, and check that the
+   temperature drops by 5 °C per 10 mm block. Enter the best temperature in slot 1's **Filament settings…** and slice
+   something with it.
