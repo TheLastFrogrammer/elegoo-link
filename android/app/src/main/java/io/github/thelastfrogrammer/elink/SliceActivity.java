@@ -33,7 +33,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * the printer's CANVAS trays; the slot-to-tray plan is kept per file name (TRAY_PLANS) for the print setup dialog.
  */
 public final class SliceActivity extends Activity {
-    static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", TRAY_PLANS = "tray-plans";
+    static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", RESULT_PRINT_SETUP = "printSetup", TRAY_PLANS = "tray-plans";
+    static final int ALL_PLATES = -1;
     private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4;
     private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
@@ -66,6 +67,10 @@ public final class SliceActivity extends Activity {
     private static int slicingPercent;
     private static String slicingText = "Slicing…";
     private Bundle restored;
+    private final List<File> slicedFiles = new ArrayList<>();
+    private final List<String> slicedNames = new ArrayList<>();
+    private Button uploadPrint;
+    private TextView printerHint;
     // What the model files hold (engine inspect: objects, 3MF plates, project settings, preview meshes).
     private org.json.JSONObject inspected;
     private int plate;                        // 3MF plate, 1-based; 0 = the first
@@ -218,6 +223,8 @@ public final class SliceActivity extends Activity {
         state.putString("process", selected(processSpinner) != null ? selected(processSpinner) : restoredProcess);
         state.putString("infill", infill.getText().toString());
         state.putInt("support", supportSpinner.getSelectedItemPosition()); state.putInt("brim", brimSpinner.getSelectedItemPosition());
+        ArrayList<String> files = new ArrayList<>(); for (File file : slicedFiles) files.add(file.getAbsolutePath());
+        state.putStringArrayList("slicedFiles", files); state.putStringArrayList("slicedNames", new ArrayList<>(slicedNames));
         if (sliced != null && resultCard.getVisibility() == View.VISIBLE) {
             state.putString("sliced", sliced.getAbsolutePath()); state.putString("resultText", resultText.getText().toString());
         }
@@ -255,6 +262,10 @@ public final class SliceActivity extends Activity {
         String path = saved.getString("sliced");
         if (path != null && new File(path).isFile()) {
             sliced = new File(path); resultText.setText(saved.getString("resultText", "")); resultCard.setVisibility(View.VISIBLE); showPreview(sliced);
+            ArrayList<String> files = saved.getStringArrayList("slicedFiles"), names = saved.getStringArrayList("slicedNames");
+            if (files != null && names != null && files.size() == names.size()) for (int i = 0; i < files.size(); i++) { slicedFiles.add(new File(files.get(i))); slicedNames.add(names.get(i)); }
+            if (slicedFiles.isEmpty()) { slicedFiles.add(sliced); slicedNames.add(slicedName); }
+            uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " plates" : "Upload and print…");
         }
         try {
             if (saved.getString("inspected") != null) inspected = new org.json.JSONObject(saved.getString("inspected"));
@@ -332,12 +343,14 @@ public final class SliceActivity extends Activity {
         preview = new ImageView(this); preview.setContentDescription("Preview image embedded in the G-code"); preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         preview.setVisibility(View.GONE); resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
         resultText = label(resultCard, "", 14, ink, false); resultText.setTextIsSelectable(true);
-        useInFiles = button(resultCard, "Send to Files tab for upload", () -> {
+        uploadPrint = button(resultCard, "Upload and print…", this::uploadAndPrint, true);
+        printerHint = label(resultCard, "", 12, muted, false);
+        useInFiles = button(resultCard, "Send to Files tab", () -> {
             Intent handOver = new Intent().putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName);
             if (getCallingActivity() != null) setResult(RESULT_OK, handOver);
             else startActivity(handOver.setClass(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)); // opened from another app
             finish();
-        }, true);
+        }, false);
         button(resultCard, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
             .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
         saveCopy = button(resultCard, "Save G-code…", () -> {
@@ -457,7 +470,7 @@ public final class SliceActivity extends Activity {
         for (int i = 0; i < assignment.length; i++) assignment[i] = slots.size() > 1 && i < modelSlots.size() ? modelSlots.get(i) : 0;
         selection.modelFilaments = assignment;
         selection.overrides.putAll(customOverrides); selection.overrides.putAll(quick);
-        selection.plate = plate; selection.projectSettings = projectSettings && project() != null;
+        selection.plate = plate == ALL_PLATES ? 1 : plate; selection.projectSettings = projectSettings && project() != null;
         if (withPlacements && placements != null)
             for (int i = 0; i < placements.length(); i++) {
                 org.json.JSONObject p = placements.optJSONObject(i);
@@ -503,34 +516,48 @@ public final class SliceActivity extends Activity {
         String base = models.get(0).getName().replaceFirst("\\.[^.]+$", "");
         slicedName = (models.size() > 1 ? base + "_plate" : base) + ".gcode";
         File outputDir = new File(getCacheDir(), "sliced"); outputDir.mkdirs();
-        File output = new File(outputDir, slicedName);
+        // One plate, or every plate of the project with a G-code each.
+        List<Integer> plates = new ArrayList<>();
+        if (plate == ALL_PLATES) for (int p = 1; p <= projectPlates(); p++) plates.add(p); else plates.add(plate);
+        List<String> names = new ArrayList<>(); List<File> outputs = new ArrayList<>();
+        for (int p : plates) {
+            String fileName = plates.size() > 1 ? base + "_plate" + p + ".gcode" : slicedName;
+            names.add(fileName); outputs.add(new File(outputDir, fileName));
+        }
         List<File> input = new ArrayList<>(models);
         busy = true; cancelRequested.set(false); resultCard.setVisibility(View.GONE); progress.setProgress(0); progress.setVisibility(View.VISIBLE);
         status.setTextColor(ink); status.setText("Slicing…"); updateButtons();
         slicing = true; slicingPercent = 0; slicingText = "Slicing…";
-        String name = slicedName;
         StringBuilder inputs = new StringBuilder();
         for (File model : input) inputs.append(inputs.length() > 0 ? ", " : "").append(model.getName()).append(" (").append(size(model.length())).append(")");
         String setup = inputs + " · " + process + " · " + filaments.size() + " filament(s)" + (selection.overrides.isEmpty() ? "" : " · " + selection.overrides.size() + " override(s)")
-            + (selection.plate > 0 ? " · plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
+            + (plate == ALL_PLATES ? " · all " + plates.size() + " plates" : selection.plate > 0 ? " · plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
             + (need == null ? "" : " · estimated " + need.describe());
         markRunning(setup);
         long started = System.currentTimeMillis();
         worker.execute(() -> {
             try {
-                NativeSlicer.Result result = engine.slice(input, selection, output, (percent, text) -> {
-                    main.post(() -> {
-                        slicingPercent = percent; if (!cancelRequested.get()) slicingText = percent + "% · " + text;
-                        SliceActivity screen = current;
-                        if (screen != null && !screen.isDestroyed()) { screen.progress.setProgress(percent); if (!cancelRequested.get()) screen.status.setText(slicingText); }
-                    });
-                    return !cancelRequested.get();
-                });
+                List<NativeSlicer.Result> results = new ArrayList<>();
+                for (int i = 0; i < plates.size(); i++) {
+                    String prefix = plates.size() > 1 ? "Plate " + plates.get(i) + " of " + plates.size() + " · " : "";
+                    int part = i, count = plates.size();
+                    if (plates.size() > 1 || plate == ALL_PLATES) selection.plate = plates.get(i);
+                    results.add(engine.slice(input, selection, outputs.get(i), (percent, text) -> {
+                        int overall = (part * 100 + percent) / count;
+                        main.post(() -> {
+                            slicingPercent = overall; if (!cancelRequested.get()) slicingText = prefix + percent + "% · " + text;
+                            SliceActivity screen = current;
+                            if (screen != null && !screen.isDestroyed()) { screen.progress.setProgress(overall); if (!cancelRequested.get()) screen.status.setText(slicingText); }
+                        });
+                        return !cancelRequested.get();
+                    }));
+                }
                 long elapsed = System.currentTimeMillis() - started;
+                double seconds = 0, grams = 0; for (NativeSlicer.Result r : results) { seconds += r.printSeconds; grams += r.filamentGrams; }
                 Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "sliced in %.1f s · %s · estimate %s, %.1f g · %s",
-                    elapsed / 1000.0, setup, duration(result.printSeconds), result.filamentGrams, Diagnostics.memory()));
+                    elapsed / 1000.0, setup, duration(seconds), grams, Diagnostics.memory()));
                 clearRunning();
-                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(result, elapsed, printer, process, filaments, colours, plan, name); });
+                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(results, plates, names, elapsed, printer, process, filaments, colours, plan); });
             } catch (IOException failure) {
                 long elapsed = System.currentTimeMillis() - started;
                 boolean cancelled = cancelRequested.get();
@@ -548,15 +575,27 @@ public final class SliceActivity extends Activity {
         });
     }
 
-    private void finished(NativeSlicer.Result result, long elapsedMs, String printer, String process, List<String> filaments, List<String> colours, TrayPlan plan, String name) {
-        busy = false; progress.setVisibility(View.GONE); sliced = result.gcode; slicedName = name;
+    private void finished(List<NativeSlicer.Result> results, List<Integer> plates, List<String> names, long elapsedMs, String printer, String process,
+                          List<String> filaments, List<String> colours, TrayPlan plan) {
+        busy = false; progress.setVisibility(View.GONE);
+        slicedFiles.clear(); slicedNames.clear();
+        for (int i = 0; i < results.size(); i++) { slicedFiles.add(results.get(i).gcode); slicedNames.add(names.get(i)); }
+        sliced = slicedFiles.get(0); slicedName = slicedNames.get(0);
         // The print setup dialog offers this plan for a printer file of the same name.
-        getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit().putString(GcodeLibrary.safeName(slicedName), plan.toJson()).apply();
-        status.setText(String.format(Locale.getDefault(), "Sliced in %.1f s.", elapsedMs / 1000.0));
+        SharedPreferences.Editor plans = getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit();
+        for (String name : names) plans.putString(GcodeLibrary.safeName(name), plan.toJson());
+        plans.apply();
+        status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();
-        text.append(slicedName).append("\n");
-        text.append("Estimated print time: ").append(duration(result.printSeconds)).append("\n");
-        text.append(String.format(Locale.getDefault(), "Filament: %.1f g (%.2f m)\n", result.filamentGrams, result.filamentMm / 1000.0));
+        for (int i = 0; i < results.size(); i++) {
+            NativeSlicer.Result result = results.get(i);
+            if (results.size() > 1) text.append("Plate ").append(plates.get(i)).append(": ");
+            text.append(names.get(i)).append("\n");
+            text.append("Estimated print time: ").append(duration(result.printSeconds)).append("\n");
+            text.append(String.format(Locale.getDefault(), "Filament: %.1f g (%.2f m)\n", result.filamentGrams, result.filamentMm / 1000.0));
+            for (String warning : result.warnings) text.append("Warning: ").append(warning).append("\n");
+            if (results.size() > 1) text.append("\n");
+        }
         text.append(printer).append("\n").append(process);
         for (int i = 0; i < filaments.size(); i++) {
             TrayPlan.Tool tool = plan.tool(i);
@@ -564,13 +603,34 @@ public final class SliceActivity extends Activity {
             if (colours.get(i) != null) text.append(" · ").append(colours.get(i));
             if (tool != null) text.append(" · CANVAS ").append(tool.canvasId).append(" tray ").append(tool.trayId);
         }
-        for (String warning : result.warnings) text.append("\n\nWarning: ").append(warning);
         resultText.setText(text.toString());
+        uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " plates" : "Upload and print…");
+        useInFiles.setText(slicedFiles.size() > 1 ? "Send plate " + plates.get(0) + " to the Files tab" : "Send to Files tab");
         resultCard.setVisibility(View.VISIBLE);
         preview.setVisibility(View.GONE);
         scroll.post(() -> scroll.smoothScrollTo(0, resultCard.getTop() - dp(12)));
-        showPreview(result.gcode);
+        showPreview(sliced);
         updateButtons();
+    }
+
+    /** Uploads the result over the local connection; for one file, Print setup opens when it is on the printer. */
+    private void uploadAndPrint() {
+        if (printer == null || slicedFiles.isEmpty()) return;
+        if (!printer.ready() || printer.pinProbe()) { status.setText("Uploading needs the local connection to the printer: connect in Settings, or use Send to Files tab."); status.setTextColor(error); return; }
+        for (File file : slicedFiles) if (!file.isFile()) { status.setText("The sliced file is gone; slice again."); status.setTextColor(error); return; }
+        if (!printer.uploadFiles(new ArrayList<>(slicedFiles), new ArrayList<>(slicedNames))) return;
+        Intent back = new Intent();
+        if (slicedFiles.size() == 1) back.putExtra(RESULT_PRINT_SETUP, slicedName);
+        if (getCallingActivity() != null) setResult(RESULT_OK, back);
+        else startActivity(back.setClass(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        finish();
+    }
+
+    /** Plates in the loaded project, or 0. */
+    private int projectPlates() {
+        org.json.JSONObject file = project();
+        org.json.JSONArray plates = file == null ? null : file.optJSONArray("plates");
+        return plates == null ? 0 : plates.length();
     }
 
     /** Shows the preview image the engine embedded (the one the printer's file list will show). */
@@ -720,11 +780,13 @@ public final class SliceActivity extends Activity {
                 String name = entry.optString("name");
                 names.add("Plate " + (i + 1) + (name.isEmpty() ? "" : " · " + name) + " · " + count + " object" + (count == 1 ? "" : "s"));
             }
+            names.add("All " + plates.length() + " plates · one G-code each");
             label(projectBox, "Plate to slice", 12, muted, false);
-            Spinner plates_ = spinner(projectBox); fill(plates_, names, names.get(Math.max(0, Math.min(plate, names.size()) - 1)));
+            Spinner plates_ = spinner(projectBox); fill(plates_, names, names.get(plate == ALL_PLATES ? names.size() - 1 : Math.max(0, Math.min(plate, names.size() - 1) - 1)));
             plates_.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
-                    if (position + 1 != Math.max(1, plate)) { plate = position + 1; placements = null; showLayout(); }
+                    int chosen = position == names.size() - 1 ? ALL_PLATES : position + 1;
+                    if (chosen != (plate == 0 ? 1 : plate)) { plate = chosen; placements = null; showLayout(); }
                     updateButtons();
                 }
                 @Override public void onNothingSelected(AdapterView<?> p) { }
@@ -937,7 +999,10 @@ public final class SliceActivity extends Activity {
         chooseModels.setEnabled(!busy);
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
         for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
-        editPlate.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty()); autoLayout.setEnabled(!busy);
+        editPlate.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty() && plate != ALL_PLATES); autoLayout.setEnabled(!busy);
+        boolean canUpload = printer != null && printer.ready() && !printer.pinProbe();
+        if (uploadPrint != null) uploadPrint.setEnabled(!busy && canUpload && !slicedFiles.isEmpty());
+        if (printerHint != null) printerHint.setText(canUpload ? "Uploads over the local connection, then opens Print setup with the CANVAS trays from this slice." : "Connect to the printer locally (Settings) to upload from here; Send to Files tab works without.");
         allSettings.setEnabled(!busy && presetsReady);
         addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);
         for (int i = 0; i < modelAssign.getChildCount(); i++) modelAssign.getChildAt(i).setEnabled(!busy);

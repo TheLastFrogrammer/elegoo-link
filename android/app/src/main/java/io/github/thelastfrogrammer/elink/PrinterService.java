@@ -144,13 +144,24 @@ public final class PrinterService extends Service {
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
-            public void uploadProgress(int percent) { deliver(() -> feedback = "Uploading " + selectedName + ": " + percent + "%"); }
+            public void uploadProgress(int percent) { deliver(() -> feedback = "Uploading " + (queuedName != null ? queuedName : selectedName) + ": " + percent + "%"); }
+            public void uploadFailed(String name) { deliver(() -> {
+                if (queuedName == null) return;
+                int left = uploadQueue.size(); uploadQueue.clear(); queuedFile = null; queuedName = null;
+                if (left > 0) feedback = feedback + " " + left + " more file(s) were not sent.";
+            }); }
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
             public void query(int method, JSONObject params, JSONObject result) { deliver(() -> handleQuery(method, params, result)); }
             public void queryError(int method, String text) { deliver(() -> handleQueryError(method, text)); }
             public void uploaded(String name) { deliver(() -> {
                 feedback = "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it."; browse("local", 0);
-                File copy = selectedFile; if (copy != null) files.execute(() -> keep(copy, name));
+                File copy = queuedName != null && queuedName.equals(name) ? queuedFile : selectedFile;
+                if (copy != null) files.execute(() -> keep(copy, name));
+                if (queuedName != null) {
+                    queuedFile = null; queuedName = null; uploadedCount++;
+                    if (uploadQueue.isEmpty()) feedback = uploadedCount == 1 ? "Uploaded " + name + "." : "Uploaded " + uploadedCount + " files.";
+                    main.postDelayed(PrinterService.this::pumpUploads, 300);
+                }
             }); }
             public void downloadProgress(int percent) { deliver(() -> feedback = (timelapseRequested != null ? "Downloading timelapse" : "Downloading G-code") + (percent < 0 ? "… size not reported" : ": " + percent + "%")); }
             public void timelapseDownloaded(File file, String url) { deliver(() -> {
@@ -232,6 +243,24 @@ public final class PrinterService extends Service {
     public void autoRefill(boolean enabled) {
         if (!canvasFresh()) return;
         if (ready() && session != null) session.autoRefill(enabled); else if (viaCloud()) cloudSafe(() -> Cc2Codec.autoRefillRequest(0, enabled));
+    }
+    // Files sent from the Slice screen, one after another.
+    private final java.util.List<Object[]> uploadQueue = new java.util.ArrayList<>();
+    private File queuedFile; private String queuedName; private int uploadedCount;
+    /** Uploads the files under the given printer names, in order. Needs the local connection. */
+    public boolean uploadFiles(java.util.List<File> sources, java.util.List<String> names) {
+        if (!ready() || pinProbe) { feedback = "Uploading needs the local connection (Settings → Local connection)."; changed(); return false; }
+        for (int i = 0; i < sources.size(); i++) uploadQueue.add(new Object[] {sources.get(i), names.get(i)});
+        uploadedCount = 0; pumpUploads(); return true;
+    }
+    public boolean uploadsPending() { return queuedName != null || !uploadQueue.isEmpty(); }
+    private void pumpUploads() {
+        if (uploadQueue.isEmpty() || queuedName != null || destroyed) return;
+        if (!ready()) { uploadQueue.clear(); feedback = "Connection lost; uploads stopped."; changed(); return; }
+        if (fileBusy()) { main.postDelayed(this::pumpUploads, 500); return; }
+        Object[] next = uploadQueue.remove(0);
+        queuedFile = (File) next[0]; queuedName = (String) next[1];
+        feedback = "Uploading " + queuedName + "…"; session.upload(queuedFile, queuedName); changed();
     }
     public void upload() { if (ready() && selectedFile != null && !fileBusy()) { session.upload(selectedFile, selectedName); changed(); } }
     public void cancelUpload() { if (session != null) session.cancelUpload(); }

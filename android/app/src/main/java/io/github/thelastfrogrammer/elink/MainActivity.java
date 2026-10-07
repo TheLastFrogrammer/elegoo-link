@@ -28,7 +28,8 @@ public final class MainActivity extends Activity {
     private ImageView filePreview;
     private TextView previewInfo;
     private LinearLayout timelapseList;
-    private String saveAfterDownload;
+    private String saveAfterDownload, pendingPrintSetup;
+    private long printSetupUntil;
     private long saveGiveUpAt;
     private Button saveTimelapse;
     private JSONObject renderedHistory;
@@ -349,6 +350,8 @@ public final class MainActivity extends Activity {
     /** G-code from a Slice screen that another app opened ("Open with"), handed over like a slice started from Files. */
     private void receiveSliced(Intent intent) {
         if (intent == null) return;
+        String setup = intent.getStringExtra(SliceActivity.RESULT_PRINT_SETUP);
+        if (setup != null) { awaitPrintSetup(setup); intent.removeExtra(SliceActivity.RESULT_PRINT_SETUP); }
         String path = intent.getStringExtra(SliceActivity.RESULT_FILE), name = intent.getStringExtra(SliceActivity.RESULT_NAME);
         if (path == null || name == null) return;
         // Only the app's own sliced output is accepted.
@@ -356,6 +359,21 @@ public final class MainActivity extends Activity {
         try { if (!file.getCanonicalFile().getParentFile().equals(sliced.getCanonicalFile()) || !file.isFile()) return; } catch (IOException error) { return; }
         pendingSlicedFile = path; pendingSlicedName = name; intent.removeExtra(SliceActivity.RESULT_FILE);
         selectPage(1); takeSliced();
+    }
+    /** After "Upload and print" on the Slice screen: open Print setup once the upload is in the printer's file list. */
+    private void awaitPrintSetup(String name) {
+        pendingPrintSetup = name; printSetupUntil = System.currentTimeMillis() + 5 * 60_000; selectPage(1);
+    }
+    private void continuePrintSetup() {
+        if (pendingPrintSetup == null || printer == null) return;
+        if (System.currentTimeMillis() > printSetupUntil) { pendingPrintSetup = null; return; }
+        if (printer.uploadsPending() || !printer.filesFresh() || !"local".equals(printer.storage)) return;
+        org.json.JSONArray list = printer.filePage.optJSONArray("file_list");
+        if (list == null) return;
+        for (int i = 0; i < list.length(); i++) {
+            JSONObject file = list.optJSONObject(i);
+            if (file != null && pendingPrintSetup.equals(file.optString("filename"))) { pendingPrintSetup = null; startDialog(file, "local"); return; }
+        }
     }
     private void takeSliced() {
         if (printer == null || pendingSlicedFile == null) return;
@@ -829,6 +847,7 @@ public final class MainActivity extends Activity {
         historyInfo.setText(printer == null ? "History not loaded." : printer.history.length() == 0 ? printer.historyMessage : FeatureData.history(printer.history));
         renderTimelapses();
         continueSaveAfterDownload();
+        continuePrintSetup();
         for (int i = 0; i < timelapseList.getChildCount(); i++) timelapseList.getChildAt(i).setEnabled(ready && !printer.pinProbe() && !printer.fileBusy());
         saveTimelapse.setVisibility(printer != null && printer.timelapseFile != null ? View.VISIBLE : View.GONE);
         String selectedHost = host.getText().toString().trim();
@@ -1022,6 +1041,7 @@ public final class MainActivity extends Activity {
             else { pendingExportHash = ""; pendingExportUri = null; }
         }
         if (request == PICK_FILE && result == RESULT_OK && data != null && data.getData() != null && printer != null) printer.select(data.getData());
+        if (request == SLICE && result == RESULT_OK && data != null && data.getStringExtra(SliceActivity.RESULT_PRINT_SETUP) != null) awaitPrintSetup(data.getStringExtra(SliceActivity.RESULT_PRINT_SETUP));
         if (request == SLICE && result == RESULT_OK && data != null && printer != null) {
             String path = data.getStringExtra(SliceActivity.RESULT_FILE), name = data.getStringExtra(SliceActivity.RESULT_NAME);
             if (path != null && name != null) printer.selectSliced(new File(path), name);

@@ -175,6 +175,26 @@ public class SlicerIntegrationTest {
         }
     }
 
+    @Test public void slicesEveryPlateOfAProject() throws Exception {
+        SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        File project = fixture("twoplate_project.3mf");
+        @SuppressWarnings("unchecked") List<File> models = (List<File>) field(activity, "models"); models.clear(); models.add(project);
+        java.lang.reflect.Field inspected = SliceActivity.class.getDeclaredField("inspected"); inspected.setAccessible(true);
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) { inspected.set(activity, slicer.inspect(models, null, 1000)); }
+        java.lang.reflect.Field plate = SliceActivity.class.getDeclaredField("plate"); plate.setAccessible(true); plate.set(activity, SliceActivity.ALL_PLATES);
+        invoke(activity, "showModels"); invoke(activity, "showProject"); invoke(activity, "updateButtons");
+        invoke(activity, "startSlice");
+        waitFor(() -> ((View) field(activity, "resultCard")).getVisibility() == View.VISIBLE);
+        @SuppressWarnings("unchecked") List<File> files = (List<File>) field(activity, "slicedFiles");
+        @SuppressWarnings("unchecked") List<String> names = (List<String>) field(activity, "slicedNames");
+        assertEquals(Arrays.asList("twoplate_project_plate1.gcode", "twoplate_project_plate2.gcode"), names);
+        String first = new String(Files.readAllBytes(files.get(0).toPath()), StandardCharsets.UTF_8), second = new String(Files.readAllBytes(files.get(1).toPath()), StandardCharsets.UTF_8);
+        assertTrue(first.contains("; total layers count = 15")); assertTrue(second.contains("; total layers count = 22"));
+        assertTrue(((android.widget.TextView) field(activity, "resultText")).getText().toString().contains("Plate 2: twoplate_project_plate2.gcode"));
+        assertEquals("Upload all 2 plates", ((android.widget.Button) field(activity, "uploadPrint")).getText().toString());
+    }
+
     @Test public void placesTurnsScalesAndCopies() throws Exception {
         List<File> model = Collections.singletonList(box(20, 20, 10));
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {

@@ -24,6 +24,7 @@ public final class Cc2Session implements AutoCloseable {
         default void query(int method, JSONObject params, JSONObject result) { }
         default void queryError(int method, String message) { }
         default void uploaded(String filename) { }
+        default void uploadFailed(String filename) { }
         default void downloadProgress(int percent) { }
         default void downloaded(File file, String filename) { }
         default void timelapseDownloaded(File file, String videoUrl) { }
@@ -373,7 +374,10 @@ public final class Cc2Session implements AutoCloseable {
                 uploader.upload(file, name, percent -> { Listener current = listener; if (current != null && !closed) current.uploadProgress(percent); });
                 emitResult("Upload acknowledged by printer. Refresh Files to review print setup.");
                 Listener current = listener; if (current != null && !closed) current.uploaded(name);
-            } catch (Exception exception) { if (!closed && !uploadCancelled) emitResult(PrinterErrors.describe(exception, "Upload")); }
+            } catch (Exception exception) {
+                if (!closed && !uploadCancelled) emitResult(PrinterErrors.describe(exception, "Upload"));
+                Listener current = listener; if (current != null && !closed) current.uploadFailed(name);
+            }
             finally { uploading = false; uploadHttp = null; }
         });
     }
