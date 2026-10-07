@@ -5,7 +5,9 @@ import android.content.res.AssetManager;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -57,33 +59,99 @@ final class NativeSlicer implements AutoCloseable {
 
     String[] presets(int kind, String printer) { return presets(handle, kind, printer == null ? "" : printer); }
 
+    /** What to slice with: presets, filament slots, settings and layout. Serialized as the engine's selection JSON. */
+    static final class Selection {
+        String printer, process;
+        final List<String> filaments = new ArrayList<>(), colours = new ArrayList<>();
+        int[] modelFilaments;
+        final Map<String, String> overrides = new LinkedHashMap<>();
+        int plate;
+        boolean projectSettings;
+        /** One per copy: {file, object, x, y, rotation, scale}; empty lets the engine arrange. */
+        final List<double[]> placements = new ArrayList<>();
+
+        Selection(String printer, String process, List<String> filaments) { this.printer = printer; this.process = process; this.filaments.addAll(filaments); }
+
+        String toJson() {
+            try {
+                JSONObject json = new JSONObject().put("printer", printer).put("process", process).put("filaments", new JSONArray(filaments));
+                JSONArray colourList = new JSONArray(); for (String colour : colours) colourList.put(colour == null ? "" : colour);
+                json.put("colours", colourList);
+                JSONArray slots = new JSONArray(); if (modelFilaments != null) for (int slot : modelFilaments) slots.put(slot);
+                json.put("model_filaments", slots);
+                JSONObject settings = new JSONObject(); for (Map.Entry<String, String> entry : overrides.entrySet()) settings.put(entry.getKey(), entry.getValue());
+                json.put("overrides", settings).put("plate", plate).put("project_settings", projectSettings);
+                JSONArray places = new JSONArray();
+                for (double[] p : placements)
+                    places.put(new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", p[5]));
+                return json.put("placements", places).toString();
+            } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
+        }
+    }
+
     /** Slices the models onto one plate with one filament. */
     Result slice(List<File> models, String printer, String process, List<String> filaments, List<String[]> overrides, File output, Listener listener) throws IOException {
         return slice(models, printer, process, filaments, null, null, overrides, output, listener);
     }
 
     /**
-     * Slices the models onto one plate. Throws IOException with the engine's message on failure or cancellation.
+     * Slices the models onto one plate.
      * colours: optional "#RRGGBB" per filament slot (null entries keep the preset's colour).
      * modelFilaments: optional 1-based slot per model (0 keeps the file's own assignment, e.g. a painted 3MF).
      */
     Result slice(List<File> models, String printer, String process, List<String> filaments, List<String> colours, int[] modelFilaments,
                  List<String[]> overrides, File output, Listener listener) throws IOException {
-        String[] colourArray = new String[colours == null ? 0 : colours.size()];
-        for (int i = 0; i < colourArray.length; i++) colourArray[i] = colours.get(i) == null ? "" : colours.get(i);
-        String[] paths = new String[models.size()];
-        for (int i = 0; i < paths.length; i++) paths[i] = models.get(i).getAbsolutePath();
-        String[] keys = new String[overrides.size()], values = new String[overrides.size()];
-        for (int i = 0; i < keys.length; i++) { keys[i] = overrides.get(i)[0]; values[i] = overrides.get(i)[1]; }
+        Selection selection = new Selection(printer, process, filaments);
+        if (colours != null) selection.colours.addAll(colours);
+        selection.modelFilaments = modelFilaments;
+        for (String[] pair : overrides) selection.overrides.put(pair[0], pair[1]);
+        return slice(models, selection, output, listener);
+    }
+
+    /** Slices the models onto one plate. Throws IOException with the engine's message on failure or cancellation. */
+    Result slice(List<File> models, Selection selection, File output, Listener listener) throws IOException {
         try {
-            String json = slice(handle, paths, printer, process, filaments.toArray(new String[0]), colourArray,
-                modelFilaments == null ? new int[0] : modelFilaments, keys, values, output.getAbsolutePath(), listener);
-            return new Result(new JSONObject(json));
+            return new Result(new JSONObject(slice(handle, paths(models), selection.toJson(), output.getAbsolutePath(), listener)));
         } catch (RuntimeException error) {
             throw new IOException(error.getMessage(), error);
         } catch (org.json.JSONException error) {
             throw new IOException("Unexpected result from the slicer", error);
         }
+    }
+
+    /** Objects, 3MF plates and project settings of the model files; with meshDir, simplified meshes for previews. */
+    JSONObject inspect(List<File> models, File meshDir, int maxTriangles) throws IOException {
+        return json(() -> inspect(handle, paths(models), meshDir == null ? "" : meshDir.getAbsolutePath(), maxTriangles));
+    }
+
+    /** Where the engine would place each object (and the bed outline, excluded area and prime tower). */
+    JSONObject arrange(List<File> models, Selection selection) throws IOException {
+        return json(() -> arrange(handle, paths(models), selection.toJson()));
+    }
+
+    /** Definitions, preset values and effective values of the given setting keys. */
+    JSONObject describe(List<File> models, Selection selection, List<String> keys) throws IOException {
+        return json(() -> describe(handle, paths(models), selection.toJson(), keys.toArray(new String[0])));
+    }
+
+    /** describe() and arrange() with a selection already in the engine's JSON form. */
+    JSONObject describeJson(List<File> models, String selectionJson, List<String> keys) throws IOException {
+        return json(() -> describe(handle, paths(models), selectionJson, keys.toArray(new String[0])));
+    }
+    JSONObject arrangeJson(List<File> models, String selectionJson) throws IOException {
+        return json(() -> arrange(handle, paths(models), selectionJson));
+    }
+
+    private interface Call { String run(); }
+    private static JSONObject json(Call call) throws IOException {
+        try { return new JSONObject(call.run()); }
+        catch (RuntimeException error) { throw new IOException(error.getMessage(), error); }
+        catch (org.json.JSONException error) { throw new IOException("Unexpected result from the slicer", error); }
+    }
+    private static String[] paths(List<File> models) {
+        String[] paths = new String[models.size()];
+        for (int i = 0; i < paths.length; i++) paths[i] = models.get(i).getAbsolutePath();
+        return paths;
     }
 
     @Override public void close() { if (handle != 0) { destroy(handle); handle = 0; } }
@@ -127,6 +195,8 @@ final class NativeSlicer implements AutoCloseable {
     private static native long create(String resources, String work, String vendor);
     private static native void destroy(long handle);
     private static native String[] presets(long handle, int kind, String printer);
-    private static native String slice(long handle, String[] models, String printer, String process, String[] filaments,
-                                       String[] colours, int[] modelFilaments, String[] keys, String[] values, String output, Listener listener);
+    private static native String slice(long handle, String[] models, String selection, String output, Listener listener);
+    private static native String inspect(long handle, String[] models, String meshDir, int maxTriangles);
+    private static native String arrange(long handle, String[] models, String selection);
+    private static native String describe(long handle, String[] models, String selection, String[] keys);
 }

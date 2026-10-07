@@ -124,6 +124,107 @@ public class SlicerIntegrationTest {
         }
     }
 
+    private static File fixture(String name) throws IOException {
+        File file = new File(context().getCacheDir(), name);
+        try (InputStream in = SlicerIntegrationTest.class.getResourceAsStream("/" + name)) { Files.copy(in, file.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        return file;
+    }
+
+    /** A two-plate project saved by the official ElegooSlicer, with 0.28 mm layers and 35% infill in its settings. */
+    @Test public void inspectsArrangesAndSlicesAProjectPlate() throws Exception {
+        List<File> project = Collections.singletonList(fixture("twoplate_project.3mf"));
+        File meshes = new File(context().getCacheDir(), "meshes");
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            org.json.JSONObject inspected = slicer.inspect(project, meshes, 5000);
+            org.json.JSONObject file = inspected.getJSONArray("files").getJSONObject(0);
+            assertEquals(2, file.getJSONArray("objects").length());
+            assertEquals(2, file.getJSONArray("plates").length());
+            assertEquals("[[1,0]]", file.getJSONArray("plates").getJSONObject(1).getJSONArray("objects").toString());
+            assertEquals(PROCESS, file.getJSONObject("project").getString("process"));
+            assertEquals(0.28, file.getJSONObject("project").getDouble("layer_height"), 1e-9);
+            assertEquals(1920, inspected.getLong("triangles")); // 968 each in the STLs, less the degenerate triangles at the poles
+            byte[] mesh = Files.readAllBytes(new File(file.getJSONArray("objects").getJSONObject(0).getString("mesh")).toPath());
+            assertEquals("LKM1", new String(mesh, 0, 4, StandardCharsets.US_ASCII));
+            int triangles = java.nio.ByteBuffer.wrap(mesh, 4, 4).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt();
+            assertEquals(8 + triangles * 37, mesh.length);
+
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.plate = 2;
+            org.json.JSONObject layout = slicer.arrange(project, selection);
+            assertTrue(layout.getBoolean("kept_layout"));
+            org.json.JSONArray placed = layout.getJSONArray("placements");
+            assertEquals(1, placed.length());
+            assertEquals(1, placed.getJSONObject(0).getInt("object"));
+            assertEquals(128, placed.getJSONObject(0).getDouble("x"), 0.5);
+            assertEquals(128, placed.getJSONObject(0).getDouble("y"), 0.5);
+
+            File output = new File(context().getCacheDir(), "plate2.gcode");
+            selection.projectSettings = true;
+            slicer.slice(project, selection, output, null);
+            String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("; layer_height = 0.28")); assertTrue(gcode.contains("; sparse_infill_density = 35%"));
+            assertTrue(gcode.contains("; total layers count = 22"));
+            selection.projectSettings = false;
+            selection.overrides.put("sparse_infill_density", "10%");
+            slicer.slice(project, selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("; layer_height = 0.2\n")); assertTrue(gcode.contains("; sparse_infill_density = 10%"));
+            try {
+                selection.plate = 3; slicer.slice(project, selection, output, null); fail("expected an error for plate 3");
+            } catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("2 plate")); }
+        }
+    }
+
+    @Test public void placesTurnsScalesAndCopies() throws Exception {
+        List<File> model = Collections.singletonList(box(20, 20, 10));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("brim_type", "no_brim"); selection.overrides.put("skirt_loops", "0");
+            selection.placements.add(new double[] {0, 0, 60, 70, 45, 2});
+            File output = new File(context().getCacheDir(), "placed.gcode");
+            slicer.slice(model, selection, output, null);
+            // Layer 5's extrusions: a 40 mm square turned 45 degrees, centered on (60, 70); the CC2's extruder_offset
+            // (0, 1.5) shifts G-code Y by -1.5 from bed coordinates.
+            double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9; int layer = 0;
+            for (String line : Files.readAllLines(output.toPath())) {
+                if (line.startsWith(";LAYER_CHANGE")) layer++;
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("^G1 X([\\d.]+) Y([\\d.]+) E").matcher(line);
+                if (layer == 5 && m.find()) { double x = Double.parseDouble(m.group(1)), y = Double.parseDouble(m.group(2)); minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+            }
+            assertEquals(60, (minX + maxX) / 2, 0.1); assertEquals(68.5, (minY + maxY) / 2, 0.1);
+            assertEquals(40 * Math.sqrt(2), maxX - minX, 1.0);
+
+            // Arranging two copies (one turned) keeps both, apart from each other.
+            selection.placements.clear();
+            selection.placements.add(new double[] {0, 0, 128, 128, 0, 1});
+            selection.placements.add(new double[] {0, 0, 128, 128, 30, 1});
+            org.json.JSONArray arranged = slicer.arrange(model, selection).getJSONArray("placements");
+            assertEquals(2, arranged.length());
+            assertEquals(30, Math.abs(arranged.getJSONObject(1).getDouble("rotation")), 0.01);
+            double gap = Math.hypot(arranged.getJSONObject(0).getDouble("x") - arranged.getJSONObject(1).getDouble("x"), arranged.getJSONObject(0).getDouble("y") - arranged.getJSONObject(1).getDouble("y"));
+            assertTrue("copies apart: " + gap, gap > 20);
+        }
+    }
+
+    @Test public void describesSettings() throws Exception {
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("sparse_infill_density", "40%");
+            org.json.JSONObject described = slicer.describe(Collections.emptyList(), selection, Arrays.asList("sparse_infill_density", "seam_position", "enable_support", "no_such_key"));
+            org.json.JSONObject infill = described.getJSONObject("sparse_infill_density");
+            assertEquals("percent", infill.getString("type")); assertEquals("15%", infill.getString("preset")); assertEquals("40%", infill.getString("value"));
+            assertEquals(100, infill.getDouble("max"), 0);
+            assertEquals("enum", described.getJSONObject("seam_position").getString("type"));
+            assertTrue(described.getJSONObject("seam_position").getJSONArray("enum").length() >= 4);
+            assertEquals("bool", described.getJSONObject("enable_support").getString("type"));
+            assertFalse(described.has("no_such_key"));
+            for (String[] group : SliceSettingsActivity.GROUPS) {
+                org.json.JSONObject all = slicer.describe(Collections.emptyList(), selection, Arrays.asList(group).subList(1, group.length));
+                for (int i = 1; i < group.length; i++) assertTrue("unknown setting " + group[i], all.has(group[i]));
+            }
+        }
+    }
+
     @Test public void cancellingStopsTheSlice() throws Exception {
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
             slicer.slice(Collections.singletonList(box(20, 20, 10)), PRINTER, PROCESS, Collections.singletonList(PLA), Collections.emptyList(),

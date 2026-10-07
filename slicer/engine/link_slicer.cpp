@@ -501,6 +501,7 @@ struct Engine::Loaded {
     Model model;
     DynamicPrintConfig config;
     std::vector<std::vector<int>> objects;  // per file: index in `model` of each file object, -1 when left out
+    std::vector<Matrix3d> base;             // per model object: the file's own orientation and scale (first copy)
     std::set<int> used;
     bool keep_layout = false;               // positions come from placements or the project plate
     std::vector<std::string> warnings;
@@ -581,6 +582,7 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
             if (selection.placements.empty() ? keep[o].empty() : placed.empty())
                 continue;
             ModelObject* object = loaded.model.add_object(*source);
+            loaded.base.push_back(source->instances.front()->get_matrix_no_offset().linear());
             if (!selection.placements.empty())
                 apply_placements(object, placed);
             else if (keep[o].size() != object->instances.size()) {
@@ -757,15 +759,20 @@ std::string Engine::inspect(const std::vector<std::string>& models, const std::s
 
 std::string Engine::arrange(const std::vector<std::string>& models, const Selection& selection)
 {
-    Selection unplaced = selection;
-    unplaced.placements.clear();
-    Loaded loaded = load(models, unplaced, true);
+    // Without placements: the layout slicing would use. With them: those copies (turned, scaled, duplicated) arranged.
+    Loaded loaded = load(models, selection, true);
+    if (!selection.placements.empty()) {
+        arrangement::ArrangePolygons keep_clear;
+        if (loaded.tower)
+            keep_clear.push_back(*loaded.tower);
+        place_on_bed(loaded.model, loaded.config, keep_clear);
+    }
     nlohmann::json placements = nlohmann::json::array();
     for (size_t f = 0; f < loaded.objects.size(); ++f)
         for (size_t o = 0; o < loaded.objects[f].size(); ++o) {
             if (loaded.objects[f][o] < 0) continue;
             const ModelObject* object = loaded.model.objects[loaded.objects[f][o]];
-            const Matrix3d base = object->instances.front()->get_matrix_no_offset().linear();
+            const Matrix3d& base = loaded.base[loaded.objects[f][o]];
             for (size_t i = 0; i < object->instances.size(); ++i) {
                 const BoundingBoxf3 box = object->instance_bounding_box(i, false);
                 const auto [rotation, scale] = relative_rotation_scale(object->instances[i]->get_matrix_no_offset().linear(), base);
@@ -778,7 +785,7 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
     if (const auto* area = loaded.config.option<ConfigOptionPoints>("bed_exclude_area"))
         for (const Vec2d& p : area->values) excluded.push_back({p.x(), p.y()});
     nlohmann::json result = {{"placements", placements}, {"bed", bed}, {"excluded", excluded}, {"height", loaded.config.opt_float("printable_height")},
-                             {"kept_layout", loaded.keep_layout}, {"warnings", loaded.warnings}};
+                             {"kept_layout", loaded.keep_layout && selection.placements.empty()}, {"warnings", loaded.warnings}};
     if (loaded.tower) {
         const BoundingBox box = loaded.tower->poly.contour.bounding_box();
         result["tower"] = {unscale<double>(box.min.x()), unscale<double>(box.min.y()), unscale<double>(box.max.x()), unscale<double>(box.max.y())};

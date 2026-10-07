@@ -34,7 +34,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  */
 public final class SliceActivity extends Activity {
     static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", TRAY_PLANS = "tray-plans";
-    private static final int PICK_MODELS = 1, SAVE = 2;
+    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4;
+    private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
     private static final Set<String> MODEL_TYPES = new HashSet<>(Arrays.asList("stl", "3mf", "obj", "drc", "step", "stp", "amf"));
 
@@ -42,6 +43,19 @@ public final class SliceActivity extends Activity {
     private static NativeSlicer engine;
     private static final ExecutorService worker = Executors.newSingleThreadExecutor(runnable ->
         new Thread(null, runnable, "slicer", 64L * 1024 * 1024)); // libslic3r recurses deeply; give it a desktop-sized stack
+
+    /** The slicer thread; every engine call runs on it. */
+    static ExecutorService worker() { return worker; }
+
+    /** The shared engine with the Elegoo presets, opened on first use. Call on worker(). */
+    static NativeSlicer engine(android.content.Context context) throws IOException {
+        if (engine == null) {
+            long started = System.currentTimeMillis();
+            engine = NativeSlicer.open(context.getApplicationContext(), "Elegoo");
+            Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "presets loaded in %.1f s · %s", (System.currentTimeMillis() - started) / 1000.0, Diagnostics.memory()));
+        }
+        return engine;
+    }
 
     private final Handler main = new Handler(Looper.getMainLooper());
     // A slice outlives the screen that started it (rotation, theme change): its progress and result go to whichever
@@ -52,6 +66,16 @@ public final class SliceActivity extends Activity {
     private static int slicingPercent;
     private static String slicingText = "Slicing…";
     private Bundle restored;
+    // What the model files hold (engine inspect: objects, 3MF plates, project settings, preview meshes).
+    private org.json.JSONObject inspected;
+    private int plate;                        // 3MF plate, 1-based; 0 = the first
+    private boolean projectSettings = true;   // apply a project's own process settings
+    private final Map<String, String> customOverrides = new LinkedHashMap<>(); // from the settings screen
+    private org.json.JSONArray placements;    // the plate view's layout, or null to arrange automatically
+    private boolean largeConfirmed;
+    private LinearLayout projectBox;
+    private TextView layoutLabel, settingsSummary;
+    private Button editPlate, autoLayout, allSettings;
     private String restoredPrinter, restoredProcess;
     private SharedPreferences settings;
     private boolean dark, busy;
@@ -119,7 +143,27 @@ public final class SliceActivity extends Activity {
         if (saved != null) restore(saved);
         else { List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) importModels(incoming); }
         if (slicing) { busy = true; progress.setVisibility(View.VISIBLE); progress.setProgress(slicingPercent); status.setText(slicingText); updateButtons(); }
+        else checkInterrupted();
         loadPresets();
+    }
+
+    // A file that exists only while a slice runs: still there at the next start means Android closed the app mid-slice.
+    private File runningMarker() { return new File(getFilesDir(), "slice-running.txt"); }
+    private void markRunning(String setup) {
+        try (java.io.Writer out = new java.io.OutputStreamWriter(new FileOutputStream(runningMarker()), "UTF-8")) { out.write(setup); } catch (IOException ignored) { }
+    }
+    private void clearRunning() { runningMarker().delete(); }
+    private void checkInterrupted() {
+        File marker = runningMarker();
+        if (!marker.isFile()) return;
+        String setup = "";
+        try (InputStream in = new FileInputStream(marker); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+            byte[] buffer = new byte[4096]; int count; while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count); setup = bytes.toString("UTF-8");
+        } catch (IOException ignored) { }
+        marker.delete();
+        Diagnostics.note(Diagnostics.SLICER, "the previous slice did not finish: the app was closed while slicing (" + setup + ")");
+        status.setText("The last slice did not finish: Android closed the app while it was slicing, most likely for memory. Try fewer copies, a smaller scale or a thicker layer height.");
+        status.setTextColor(error);
     }
 
     /** Models handed over by another app: "Open with" (VIEW) or "Share" (SEND, SEND_MULTIPLE). */
@@ -178,6 +222,10 @@ public final class SliceActivity extends Activity {
             state.putString("sliced", sliced.getAbsolutePath()); state.putString("resultText", resultText.getText().toString());
         }
         state.putString("slicedName", slicedName);
+        if (inspected != null) state.putString("inspected", inspected.toString());
+        state.putInt("plate", plate); state.putBoolean("projectSettings", projectSettings);
+        state.putString("customOverrides", new org.json.JSONObject(customOverrides).toString());
+        if (placements != null) state.putString("placements", placements.toString());
         if (!slicing && !busy) state.putString("status", status.getText().toString());
     }
 
@@ -208,7 +256,14 @@ public final class SliceActivity extends Activity {
         if (path != null && new File(path).isFile()) {
             sliced = new File(path); resultText.setText(saved.getString("resultText", "")); resultCard.setVisibility(View.VISIBLE); showPreview(sliced);
         }
-        showModels();
+        try {
+            if (saved.getString("inspected") != null) inspected = new org.json.JSONObject(saved.getString("inspected"));
+            if (saved.getString("placements") != null) placements = new org.json.JSONArray(saved.getString("placements"));
+            org.json.JSONObject custom = new org.json.JSONObject(saved.getString("customOverrides", "{}"));
+            for (Iterator<String> keys = custom.keys(); keys.hasNext(); ) { String key = keys.next(); customOverrides.put(key, custom.getString(key)); }
+        } catch (org.json.JSONException ignored) { }
+        plate = saved.getInt("plate", 0); projectSettings = saved.getBoolean("projectSettings", true);
+        showModels(); showProject(); showLayout(); showSettingsSummary();
         if (saved.getString("status") != null) status.setText(saved.getString("status"));
     }
 
@@ -226,6 +281,11 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
         }, false);
+        projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
+        layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
+        LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
+        editPlate = rowButton(layoutRow, "Edit plate…", this::openPlate, false);
+        autoLayout = rowButton(layoutRow, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
 
         LinearLayout presetCard = card("Presets");
         label(presetCard, "Printer", 12, muted, false); printerSpinner = spinner(presetCard);
@@ -255,6 +315,9 @@ public final class SliceActivity extends Activity {
         supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList("Preset", "Off", "Normal (auto)", "Tree (auto)"), "Preset");
         label(settingsCard, "Brim", 12, muted, false);
         brimSpinner = spinner(settingsCard); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
+        settingsSummary = label(settingsCard, "", 13, muted, false);
+        allSettings = button(settingsCard, "All settings…", this::openSettings, false);
+        showSettingsSummary();
 
         LinearLayout sliceCard = actionBar; actionBar.setVisibility(View.VISIBLE);
         status = label(sliceCard, "Loading Elegoo presets…", 14, ink, false); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(3);
@@ -288,11 +351,7 @@ public final class SliceActivity extends Activity {
         busy = true; updateButtons();
         worker.execute(() -> {
             try {
-                if (engine == null) {
-                    long started = System.currentTimeMillis();
-                    engine = NativeSlicer.open(getApplicationContext(), "Elegoo");
-                    Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "presets loaded in %.1f s · %s", (System.currentTimeMillis() - started) / 1000.0, Diagnostics.memory()));
-                }
+                engine(getApplicationContext());
                 String[] printers = engine.presets(NativeSlicer.PRINTER, null);
                 main.post(() -> {
                     if (isDestroyed()) return;
@@ -335,32 +394,107 @@ public final class SliceActivity extends Activity {
         });
     }
 
-    private void startSlice() {
-        String printer = selected(printerSpinner), process = selected(processSpinner);
-        List<String> filaments = new ArrayList<>(), colours = new ArrayList<>();
-        for (Slot slot : slots) { filaments.add(selected(slot.preset)); colours.add(slot.colour); }
-        if (models.isEmpty() || printer == null || process == null || filaments.contains(null)) return;
-        int[] assignment = new int[models.size()];
-        for (int i = 0; i < assignment.length; i++) assignment[i] = slots.size() > 1 && i < modelSlots.size() ? modelSlots.get(i) : 0;
-        TrayPlan plan = plan();
-        List<String[]> overrides = new ArrayList<>();
+    /** The quick settings as config overrides, or null when one is invalid (the status line says why). */
+    private Map<String, String> quickOverrides() {
+        Map<String, String> overrides = new LinkedHashMap<>();
         String density = infill.getText().toString().trim();
         if (!density.isEmpty()) {
             int value; try { value = Integer.parseInt(density); } catch (NumberFormatException e) { value = -1; }
-            if (value < 0 || value > 100) { status.setText("Infill density must be 0 to 100."); status.setTextColor(error); return; }
-            overrides.add(new String[] {"sparse_infill_density", value + "%"});
+            if (value < 0 || value > 100) { status.setText("Infill density must be 0 to 100."); status.setTextColor(error); return null; }
+            overrides.put("sparse_infill_density", value + "%");
         }
         switch (supportSpinner.getSelectedItemPosition()) {
-            case 1: overrides.add(new String[] {"enable_support", "0"}); break;
-            case 2: overrides.add(new String[] {"enable_support", "1"}); overrides.add(new String[] {"support_type", "normal(auto)"}); break;
-            case 3: overrides.add(new String[] {"enable_support", "1"}); overrides.add(new String[] {"support_type", "tree(auto)"}); break;
+            case 1: overrides.put("enable_support", "0"); break;
+            case 2: overrides.put("enable_support", "1"); overrides.put("support_type", "normal(auto)"); break;
+            case 3: overrides.put("enable_support", "1"); overrides.put("support_type", "tree(auto)"); break;
             default: break;
         }
         switch (brimSpinner.getSelectedItemPosition()) {
-            case 1: overrides.add(new String[] {"brim_type", "no_brim"}); break;
-            case 2: overrides.add(new String[] {"brim_type", "auto_brim"}); break;
-            case 3: overrides.add(new String[] {"brim_type", "outer_only"}); break;
+            case 1: overrides.put("brim_type", "no_brim"); break;
+            case 2: overrides.put("brim_type", "auto_brim"); break;
+            case 3: overrides.put("brim_type", "outer_only"); break;
             default: break;
+        }
+        return overrides;
+    }
+
+    /** Settings from the settings screen go back into the quick settings where those can show them. */
+    private void takeOverrides(Map<String, String> overrides) {
+        customOverrides.clear(); customOverrides.putAll(overrides);
+        String density = customOverrides.get("sparse_infill_density");
+        if (density != null && density.matches("\\d{1,3}%")) { infill.setText(density.substring(0, density.length() - 1)); customOverrides.remove("sparse_infill_density"); }
+        else infill.setText("");
+        String support = customOverrides.get("enable_support"), type = customOverrides.get("support_type");
+        int supportChoice = 0;
+        if ("0".equals(support) && type == null) supportChoice = 1;
+        else if ("1".equals(support) && "normal(auto)".equals(type)) supportChoice = 2;
+        else if ("1".equals(support) && "tree(auto)".equals(type)) supportChoice = 3;
+        if (supportChoice > 0) { customOverrides.remove("enable_support"); customOverrides.remove("support_type"); }
+        supportSpinner.setSelection(supportChoice);
+        int brimChoice = Arrays.asList("", "no_brim", "auto_brim", "outer_only").indexOf(customOverrides.getOrDefault("brim_type", ""));
+        if (brimChoice > 0) customOverrides.remove("brim_type");
+        brimSpinner.setSelection(Math.max(0, brimChoice));
+        showSettingsSummary();
+    }
+
+    private void showSettingsSummary() {
+        settingsSummary.setText(customOverrides.isEmpty() ? "Everything else follows the process preset." : customOverrides.size() + " more setting(s) changed in All settings.");
+        settingsSummary.setTextColor(customOverrides.isEmpty() ? muted : teal);
+    }
+
+    /** What to slice: presets, filament slots, settings, 3MF plate and the layout. Null when something is missing or invalid. */
+    private NativeSlicer.Selection selection(boolean withPlacements) {
+        String printer = selected(printerSpinner), process = selected(processSpinner);
+        List<String> filaments = new ArrayList<>();
+        for (Slot slot : slots) filaments.add(selected(slot.preset));
+        if (printer == null || process == null || filaments.contains(null)) return null;
+        Map<String, String> quick = quickOverrides();
+        if (quick == null) return null;
+        NativeSlicer.Selection selection = new NativeSlicer.Selection(printer, process, filaments);
+        for (Slot slot : slots) selection.colours.add(slot.colour);
+        int[] assignment = new int[models.size()];
+        for (int i = 0; i < assignment.length; i++) assignment[i] = slots.size() > 1 && i < modelSlots.size() ? modelSlots.get(i) : 0;
+        selection.modelFilaments = assignment;
+        selection.overrides.putAll(customOverrides); selection.overrides.putAll(quick);
+        selection.plate = plate; selection.projectSettings = projectSettings && project() != null;
+        if (withPlacements && placements != null)
+            for (int i = 0; i < placements.length(); i++) {
+                org.json.JSONObject p = placements.optJSONObject(i);
+                selection.placements.add(new double[] {p.optInt("file"), p.optInt("object"), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation"), p.optDouble("scale", 1)});
+            }
+        return selection;
+    }
+
+    /** Rough peak memory of this slice, or null before the models were inspected. */
+    private SliceEstimate estimate(NativeSlicer.Selection selection) {
+        if (inspected == null) return null;
+        Map<String, Double> scales = null;
+        if (!selection.placements.isEmpty()) {
+            scales = new HashMap<>();
+            for (double[] p : selection.placements) scales.merge((int) p[0] + ":" + (int) p[1], p[5], Math::max);
+        }
+        double layer = 0.2;
+        try { if (selection.overrides.containsKey("layer_height")) layer = Double.parseDouble(selection.overrides.get("layer_height")); } catch (NumberFormatException ignored) { }
+        return SliceEstimate.of(inspected, scales, layer);
+    }
+
+    private void startSlice() {
+        NativeSlicer.Selection selection = selection(true);
+        if (models.isEmpty() || selection == null) return;
+        String printer = selection.printer, process = selection.process;
+        List<String> filaments = new ArrayList<>(selection.filaments), colours = new ArrayList<>(selection.colours);
+        TrayPlan plan = plan();
+        // Warn before a slice that likely needs more memory than the phone has free; Android would close the app.
+        SliceEstimate need = estimate(selection);
+        android.app.ActivityManager.MemoryInfo memory = new android.app.ActivityManager.MemoryInfo();
+        ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
+        if (need != null && need.risky(memory.availMem) && !largeConfirmed) {
+            new AlertDialog.Builder(this).setTitle("This is a big slice")
+                .setMessage(String.format(Locale.getDefault(), "Slicing this plate may need %s of memory; the phone has about %d MB free. Android may close the app while it slices.\n\nClose other apps, use fewer copies or a smaller scale, or try anyway.",
+                    need.describe(), memory.availMem / (1024 * 1024)))
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Slice anyway", (d, w) -> { largeConfirmed = true; startSlice(); largeConfirmed = false; }).show();
+            return;
         }
         SharedPreferences.Editor remember = settings.edit().putString("slicePrinter", printer).putString("sliceProcess", process);
         for (int i = 0; i < filaments.size(); i++) remember.putString(i == 0 ? "sliceFilament" : "sliceFilament" + (i + 1), filaments.get(i));
@@ -376,11 +510,14 @@ public final class SliceActivity extends Activity {
         String name = slicedName;
         StringBuilder inputs = new StringBuilder();
         for (File model : input) inputs.append(inputs.length() > 0 ? ", " : "").append(model.getName()).append(" (").append(size(model.length())).append(")");
-        String setup = inputs + " · " + process + " · " + filaments.size() + " filament(s)" + (overrides.isEmpty() ? "" : " · " + overrides.size() + " override(s)");
+        String setup = inputs + " · " + process + " · " + filaments.size() + " filament(s)" + (selection.overrides.isEmpty() ? "" : " · " + selection.overrides.size() + " override(s)")
+            + (selection.plate > 0 ? " · plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
+            + (need == null ? "" : " · estimated " + need.describe());
+        markRunning(setup);
         long started = System.currentTimeMillis();
         worker.execute(() -> {
             try {
-                NativeSlicer.Result result = engine.slice(input, printer, process, filaments, colours, assignment, overrides, output, (percent, text) -> {
+                NativeSlicer.Result result = engine.slice(input, selection, output, (percent, text) -> {
                     main.post(() -> {
                         slicingPercent = percent; if (!cancelRequested.get()) slicingText = percent + "% · " + text;
                         SliceActivity screen = current;
@@ -391,11 +528,13 @@ public final class SliceActivity extends Activity {
                 long elapsed = System.currentTimeMillis() - started;
                 Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "sliced in %.1f s · %s · estimate %s, %.1f g · %s",
                     elapsed / 1000.0, setup, duration(result.printSeconds), result.filamentGrams, Diagnostics.memory()));
+                clearRunning();
                 main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(result, elapsed, printer, process, filaments, colours, plan, name); });
             } catch (IOException failure) {
                 long elapsed = System.currentTimeMillis() - started;
                 boolean cancelled = cancelRequested.get();
                 Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "%s after %.1f s · %s · %s", cancelled ? "cancelled" : "failed: " + failure.getMessage(), elapsed / 1000.0, setup, Diagnostics.memory()));
+                clearRunning();
                 main.post(() -> {
                     slicing = false;
                     SliceActivity screen = current;
@@ -446,6 +585,20 @@ public final class SliceActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (result != RESULT_OK || data == null) return;
+        if (request == SETTINGS) {
+            try {
+                org.json.JSONObject changed = new org.json.JSONObject(data.getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
+                Map<String, String> map = new LinkedHashMap<>();
+                for (Iterator<String> keys = changed.keys(); keys.hasNext(); ) { String key = keys.next(); map.put(key, changed.getString(key)); }
+                takeOverrides(map);
+            } catch (org.json.JSONException | NullPointerException ignored) { }
+            return;
+        }
+        if (request == PLATE) {
+            try { placements = new org.json.JSONArray(data.getStringExtra(PlateActivity.EXTRA_PLACEMENTS)); } catch (org.json.JSONException | NullPointerException ignored) { }
+            showLayout();
+            return;
+        }
         if (request == PICK_MODELS) {
             List<Uri> uris = new ArrayList<>();
             if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
@@ -489,10 +642,20 @@ public final class SliceActivity extends Activity {
                     imported.add(file);
                 } catch (IOException failure) { problem = failure.getMessage(); file.delete(); }
             }
+            // What the files hold: objects, 3MF plates and project settings, and simplified meshes for the plate view.
+            org.json.JSONObject read = null;
+            File meshDir = new File(getCacheDir(), "slice-meshes");
+            deleteChildren(meshDir);
+            if (!imported.isEmpty()) {
+                try { read = engine(getApplicationContext()).inspect(imported, meshDir, PREVIEW_TRIANGLES); }
+                catch (IOException failure) { problem = "A model could not be read: " + failure.getMessage(); imported.clear(); }
+            }
             String shownProblem = problem;
+            org.json.JSONObject shownRead = read;
             main.post(() -> {
                 if (isDestroyed()) return;
-                busy = slicing; models.clear(); modelSlots.clear(); models.addAll(imported); showModels();
+                inspected = shownRead; plate = 0; placements = null; projectSettings = true;
+                busy = slicing; models.clear(); modelSlots.clear(); models.addAll(imported); showModels(); showProject(); showLayout();
                 status.setText(shownProblem != null ? shownProblem : "Ready."); status.setTextColor(shownProblem != null ? error : ink);
                 resultCard.setVisibility(View.GONE); updateButtons();
             });
@@ -526,6 +689,106 @@ public final class SliceActivity extends Activity {
                 @Override public void onNothingSelected(AdapterView<?> p) { }
             });
         }
+    }
+
+    /** The first model file that is a 3MF project (plates or settings), or null. */
+    private org.json.JSONObject project() {
+        org.json.JSONArray files = inspected == null ? null : inspected.optJSONArray("files");
+        if (files == null) return null;
+        for (int f = 0; f < files.length(); f++) {
+            org.json.JSONObject file = files.optJSONObject(f);
+            if (file.has("project") || file.optJSONArray("plates") != null && file.optJSONArray("plates").length() > 0) return file;
+        }
+        return null;
+    }
+
+    /** A 3MF project's plate choice, its settings and its filaments. */
+    private void showProject() {
+        projectBox.removeAllViews();
+        org.json.JSONObject file = project();
+        if (file == null) return;
+        TextView heading = label(projectBox, "3MF project", 14, ink, true);
+        ((LinearLayout.LayoutParams) heading.getLayoutParams()).topMargin = dp(10);
+        org.json.JSONArray plates = file.optJSONArray("plates");
+        if (plates != null && plates.length() > 1) {
+            if (models.size() > 1) label(projectBox, "With other model files added, the project's objects are arranged with them; pick its plate below.", 12, muted, false);
+            List<String> names = new ArrayList<>();
+            for (int i = 0; i < plates.length(); i++) {
+                org.json.JSONObject entry = plates.optJSONObject(i);
+                int count = entry.optJSONArray("objects") == null ? 0 : entry.optJSONArray("objects").length();
+                String name = entry.optString("name");
+                names.add("Plate " + (i + 1) + (name.isEmpty() ? "" : " · " + name) + " · " + count + " object" + (count == 1 ? "" : "s"));
+            }
+            label(projectBox, "Plate to slice", 12, muted, false);
+            Spinner plates_ = spinner(projectBox); fill(plates_, names, names.get(Math.max(0, Math.min(plate, names.size()) - 1)));
+            plates_.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+                @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
+                    if (position + 1 != Math.max(1, plate)) { plate = position + 1; placements = null; showLayout(); }
+                    updateButtons();
+                }
+                @Override public void onNothingSelected(AdapterView<?> p) { }
+            });
+        }
+        org.json.JSONObject settingsOf = file.optJSONObject("project");
+        if (settingsOf != null) {
+            CheckBox use = new CheckBox(this); use.setText("Use the project's print settings"); use.setTextColor(ink); use.setButtonTintList(ColorStateList.valueOf(teal));
+            use.setChecked(projectSettings); use.setOnCheckedChangeListener((v, checked) -> projectSettings = checked); projectBox.addView(use);
+            String printer = settingsOf.optString("printer");
+            label(projectBox, "Saved with " + settingsOf.optString("process") + (settingsOf.has("layer_height") ? String.format(Locale.getDefault(), " (%.2f mm layers)", settingsOf.optDouble("layer_height")) : "")
+                + (printer.isEmpty() ? "" : " for " + printer) + ". They apply on top of the process preset; your changes below still win.", 12, muted, false);
+            org.json.JSONArray filaments = settingsOf.optJSONArray("filaments");
+            if (filaments != null && filaments.length() > 0)
+                button(projectBox, "Use the project's " + filaments.length() + " filament" + (filaments.length() == 1 ? "" : "s"), this::useProjectFilaments, false);
+        }
+    }
+
+    /** One slot per project filament, with its preset (when this printer has it) and colour. */
+    private void useProjectFilaments() {
+        org.json.JSONObject file = project(); if (file == null || file.optJSONObject("project") == null) return;
+        org.json.JSONArray names = file.optJSONObject("project").optJSONArray("filaments"), colours = file.optJSONObject("project").optJSONArray("colours");
+        if (names == null || names.length() == 0) return;
+        while (slots.size() > 1) removeLastSlot();
+        for (int i = 1; i < names.length() && i < TrayPlan.MAX_TOOLS; i++) addSlot(null);
+        List<String> missing = new ArrayList<>();
+        for (int i = 0; i < slots.size(); i++) {
+            Slot slot = slots.get(i); String name = names.optString(i);
+            if (Arrays.asList(filamentPresets).contains(name)) fill(slot.preset, Arrays.asList(filamentPresets), name); else missing.add(name);
+            slot.colour = colours == null ? null : TrayPlan.colour(colours.optString(i)); showSwatch(slot);
+        }
+        for (int i = 0; i < modelSlots.size(); i++) if (is3mf(models.get(i))) modelSlots.set(i, 0);
+        showModels(); updateButtons();
+        status.setText(missing.isEmpty() ? "Set up " + slots.size() + " slot(s) from the project." : "Set up " + slots.size() + " slot(s); this printer has no preset named " + String.join(", ", missing) + ", so those slots keep their preset.");
+        status.setTextColor(missing.isEmpty() ? ink : error);
+    }
+
+    /** Automatic placement, or the plate view's layout. */
+    private void showLayout() {
+        boolean custom = placements != null;
+        layoutLabel.setVisibility(models.isEmpty() ? View.GONE : View.VISIBLE);
+        layoutLabel.setText(custom ? "Your layout: " + placements.length() + " cop" + (placements.length() == 1 ? "y" : "ies") + " placed in the plate view."
+            : project() != null && models.size() == 1 ? "Placed as in the project." : "Placed automatically.");
+        layoutLabel.setTextColor(custom ? teal : muted);
+        autoLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
+        updateButtons();
+    }
+
+    private void openPlate() {
+        NativeSlicer.Selection selection = selection(false);
+        if (selection == null || inspected == null) return;
+        String[] paths = new String[models.size()]; for (int i = 0; i < paths.length; i++) paths[i] = models.get(i).getAbsolutePath();
+        String[] colours = new String[slots.size()]; for (int i = 0; i < colours.length; i++) colours[i] = slots.get(i).colour != null ? slots.get(i).colour : "#F2754E";
+        Intent intent = new Intent(this, PlateActivity.class).putExtra(PlateActivity.EXTRA_MODELS, paths).putExtra(PlateActivity.EXTRA_SELECTION, selection.toJson())
+            .putExtra(PlateActivity.EXTRA_INSPECTED, inspected.toString()).putExtra(PlateActivity.EXTRA_COLOURS, colours).putExtra(PlateActivity.EXTRA_SLOTS, selection.modelFilaments);
+        if (placements != null) intent.putExtra(PlateActivity.EXTRA_PLACEMENTS, placements.toString());
+        startActivityForResult(intent, PLATE);
+    }
+
+    private void openSettings() {
+        NativeSlicer.Selection selection = selection(false);
+        if (selection == null) return;
+        String[] paths = new String[models.size()]; for (int i = 0; i < paths.length; i++) paths[i] = models.get(i).getAbsolutePath();
+        startActivityForResult(new Intent(this, SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson())
+            .putExtra(SliceSettingsActivity.EXTRA_MODELS, project() != null && projectSettings ? paths : new String[0]), SETTINGS);
     }
 
     private static boolean is3mf(File file) { return file.getName().toLowerCase(Locale.ROOT).endsWith(".3mf"); }
@@ -673,6 +936,8 @@ public final class SliceActivity extends Activity {
         chooseModels.setEnabled(!busy);
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
         for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
+        editPlate.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty()); autoLayout.setEnabled(!busy);
+        allSettings.setEnabled(!busy && presetsReady);
         addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);
         for (int i = 0; i < modelAssign.getChildCount(); i++) modelAssign.getChildAt(i).setEnabled(!busy);
     }
