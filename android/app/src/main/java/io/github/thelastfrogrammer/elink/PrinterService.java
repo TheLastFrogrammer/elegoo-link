@@ -113,7 +113,9 @@ public final class PrinterService extends Service {
     public boolean fresh() { return ready() && session.fresh(); }
     public boolean uploading() { return session != null && session.uploading(); }
     public boolean downloading() { return session != null && session.downloading(); }
-    public boolean fileBusy() { return importing || exporting || uploading() || downloading(); }
+    public boolean fileBusy() { return importing || exporting || uploading() || downloading() || directDownloading; }
+    private volatile boolean directDownloading;
+    private volatile PrinterHttp directHttp;
     public boolean canvasFresh() { return liveFresh() && canvas != null && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45); }
     public void connect(String host, String code, String serial) { connect(host, code, serial, false); }
     public void connect(String host, String code, String serial, boolean remote) {
@@ -171,15 +173,7 @@ public final class PrinterService extends Service {
             }); }
             public void downloaded(File file, String name) { main.post(() -> {
                 if (destroyed || generation != current) { file.delete(); return; }
-                importing = true; feedback = "Download received. Inspecting phone copy…"; changed();
-                files.execute(() -> {
-                    keep(file, name);
-                    GcodeInspector.Report report = null;
-                    try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
-                    GcodeInspector.Report result = report;
-                    android.graphics.Bitmap preview = report == null ? null : ThumbnailDecoder.decode(report.thumbnail);
-                    main.post(() -> finishFile(file, name, result, preview, "Downloaded to the phone. Save copy… keeps it in your files; the printer's copy is unchanged."));
-                });
+                received(file, name);
             }); }
         }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery(), new PrinterAuthentication(pinProbe, code)));
         connection = "Identifying printer for MQTT…"; changed(); session.connect();
@@ -264,7 +258,53 @@ public final class PrinterService extends Service {
     }
     public void upload() { if (ready() && selectedFile != null && !fileBusy()) { session.upload(selectedFile, selectedName); changed(); } }
     public void cancelUpload() { if (session != null) session.cancelUpload(); }
-    public void cancelDownload() { if (session != null) session.cancelDownload(); }
+    public void cancelDownload() {
+        if (session != null) session.cancelDownload();
+        PrinterHttp direct = directHttp; if (direct != null) direct.cancel();
+    }
+
+    /**
+     * Downloads a printer file straight from its HTTP port, without the local session: for printers watched through
+     * the Elegoo cloud, as Elegoo's own printer page does. The printer is found on this Wi-Fi by its serial; the token
+     * is the saved access code for that address, or the printer default.
+     */
+    private void downloadDirect(String storage, String filename) {
+        if (directDownloading) { feedback = "A download is already running."; changed(); return; }
+        String serial = cloudSerial, knownHost = host;
+        directDownloading = true; feedback = "Looking for the printer on this Wi-Fi…"; changed();
+        files.execute(() -> {
+            File local = null; String failure = null;
+            try {
+                NetworkRoute route = NetworkRoute.local(getApplicationContext());
+                String address = null;
+                if (!serial.isEmpty()) {
+                    try (Cc2Discovery scanner = route.discovery()) {
+                        for (Cc2Discovery.Found found : scanner.scan()) if (found.info.serial.equalsIgnoreCase(serial)) { address = found.host; break; }
+                    }
+                }
+                if (address == null && !knownHost.isEmpty() && serial.isEmpty()) address = knownHost;
+                if (address == null) throw new IOException("The printer did not answer on this Wi-Fi. Downloads come from the printer itself, so the phone must be on the same network.");
+                String token = "";
+                try { CredentialStore credentials = new CredentialStore(this); if (credentials.remembers(address)) token = credentials.load(address); } catch (Exception ignored) { }
+                Diagnostics.note(Diagnostics.FILES, "direct download from " + (serial.isEmpty() ? "the last printer" : "cloud printer found on Wi-Fi") + (token.isEmpty() ? " with the default token" : " with the saved access code"));
+                String where = address;
+                main.post(() -> { feedback = "Downloading " + StatusPresentation.clean(filename) + " from " + where + "…"; changed(); });
+                PrinterHttp http = new PrinterHttp(address, token, route.http()); directHttp = http;
+                local = File.createTempFile("download-", ".gcode", getCacheDir());
+                http.download(local, storage, filename, percent -> main.post(() -> { feedback = "Downloading G-code" + (percent < 0 ? "…" : ": " + percent + "%"); changed(); }));
+            } catch (PrinterErrors.Rejected rejected) {
+                failure = "The printer refused the download: its access code is needed. Connect once locally in Settings with \u201cRemember access code\u201d on, then try again.";
+            } catch (Exception error) {
+                failure = error instanceof IOException && error.getMessage() != null ? error.getMessage() : PrinterErrors.describe(error, "Download");
+            } finally { directHttp = null; }
+            File done = local; String problem = failure;
+            main.post(() -> {
+                directDownloading = false;
+                if (problem != null || done == null) { if (done != null) done.delete(); feedback = problem; changed(); return; }
+                received(done, filename);
+            });
+        });
+    }
     /** The last downloaded timelapse video on the phone (cache), and the name to save it under. */
     public File timelapseFile; public String timelapseName; private String timelapseRequested;
     public void downloadTimelapse(String videoUrl, String taskName) {
@@ -283,7 +323,8 @@ public final class PrinterService extends Service {
     }
     public void clearTimelapse() { File file = timelapseFile; timelapseFile = null; timelapseName = null; if (file != null) file.delete(); changed(); }
     public void download(String storage, String filename) {
-        if (!ready() || pinProbe) { feedback = "Downloading from the printer needs the local connection (Settings → Local connection; LAN Only on the printer, HTTP port 80)."; changed(); return; }
+        if (pinProbe) { feedback = "The PIN probe cannot download files."; changed(); return; }
+        if (!ready()) { if (fileBusy()) { feedback = "Wait for the current file transfer to finish."; changed(); return; } downloadDirect(storage, filename.replaceFirst("^/+", "")); return; }
         if (fileBusy()) { feedback = "Wait for the current file transfer to finish."; changed(); return; }
         if (!listed(storage, filename)) { feedback = "Refresh the printer's file list, then download from it."; changed(); return; }
         File local = null;
@@ -324,10 +365,24 @@ public final class PrinterService extends Service {
     }
     /** Downloads the printer file being printed for the toolpath viewer, listing the printer's files first if needed. */
     public void downloadForViewer(String filename) {
-        if (!ready() || pinProbe) { feedback = "Downloading from the printer needs the local connection (LAN Only, HTTP port 80)."; changed(); return; }
+        if (pinProbe) { feedback = "The PIN probe cannot download files."; changed(); return; }
         if (fileBusy()) { feedback = "Wait for the current file transfer to finish."; changed(); return; }
+        // Watched through the cloud: straight from the printer's HTTP port, as Elegoo's printer page does.
+        if (!ready()) { downloadDirect("local", filename.replaceFirst("^/+", "")); return; }
         if (knownFile("local", filename)) { download("local", filename); return; }
         viewerDownload = filename; feedback = "Looking for " + StatusPresentation.clean(filename) + " on the printer…"; browse("local", 0); changed();
+    }
+    /** A downloaded printer file: kept for the viewer, inspected and shown in the Files workspace. */
+    private void received(File file, String name) {
+        importing = true; feedback = "Download received. Inspecting phone copy…"; changed();
+                files.execute(() -> {
+                    keep(file, name);
+                    GcodeInspector.Report report = null;
+                    try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
+                    GcodeInspector.Report result = report;
+                    android.graphics.Bitmap preview = report == null ? null : ThumbnailDecoder.decode(report.thumbnail);
+                    main.post(() -> finishFile(file, name, result, preview, "Downloaded to the phone. Save copy… keeps it in your files; the printer's copy is unchanged."));
+                });
     }
     /** Keeps a copy in the viewer's library; failures only cost the viewer that file. */
     void keep(File file, String name) {

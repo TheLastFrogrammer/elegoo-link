@@ -58,6 +58,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private byte[] segments, travels, meta;
     private String loadedName, loadingName;
     private int layer, move, hidden, lastLocated = -1, loggedLayer = -1;
+    private boolean lastAttempt; // a download was tried: keep showing its outcome
     private long loggedAt;
     private PrinterService printer;
     private GcodeLibrary library;
@@ -321,17 +322,19 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private void showMissing(String filename) {
         title.setText(StatusPresentation.clean(filename.replaceFirst("(?i)\\.gcode$", "")));
-        status.setText("This phone has no copy of the G-code being printed.");
+        boolean fetching = printer != null && (printer.fileBusy() || printer.feedback != null && printer.feedback.startsWith("Looking for"));
+        status.setText(fetching ? StatusPresentation.clean(printer.feedback) : printer != null && lastAttempt && printer.feedback != null ? StatusPresentation.clean(printer.feedback) : "This phone has no copy of the G-code being printed.");
         if (missingCard.getVisibility() == View.VISIBLE) return;
         missingCard.removeAllViews(); missingCard.setVisibility(View.VISIBLE);
-        label(missingCard, "Files uploaded, sliced or downloaded with this app are kept for the viewer. Download this one from the printer (local connection), or choose a copy on this phone.", 13, ink, false);
+        label(missingCard, "Files uploaded, sliced or downloaded with this app are kept for the viewer. Download this one from the printer (the phone must be on the printer's Wi-Fi), or choose a copy on this phone.", 13, ink, false);
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(row);
         Button download = rowButton(row, "Download from printer", () -> {
             if (printer == null) return;
+            lastAttempt = true;
             printer.downloadForViewer(filename);
             status.setText(printer.feedback);
         });
-        download.setEnabled(printer != null && printer.ready());
+        download.setEnabled(printer != null);
         rowButton(row, "Choose file…", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             startActivityForResult(intent, CHOOSE);
