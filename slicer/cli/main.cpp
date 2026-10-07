@@ -69,7 +69,8 @@ int usage()
         "    DX,DY,DZ: outward normal of a face to lay on the bed).\n"
         "    --object-set FILE,OBJECT,key=value changes a setting for one object (files and objects count from 0).\n"
         "    --filament-set SLOT,key=value changes one filament slot's setting; --calibrate MODE,START,END,STEP slices\n"
-        "    a calibration print instead of MODEL files (temperature, pressure_advance, flow, max_flow, retraction).\n";
+        "    a calibration print instead of MODEL files (temperature, pressure_advance, flow, max_flow, retraction,\n"
+        "    pa_line, pa_pattern, shaping_freq, shaping_damp).\n";
     return 2;
 }
 

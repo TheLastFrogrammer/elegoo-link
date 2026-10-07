@@ -108,7 +108,10 @@ Filament slots and calibration: `--filament-set SLOT,key=value` changes one slot
 prints instead of model files with slot 1, set up as the desktop's Calibration menu does it: `temperature,230,190`
 (tower, 5 °C per 10 mm block), `flow,1` or `flow,2` (linear flow-rate test, passes 1 and 2),
 `pressure_advance,0,0.1,0.002` (tower, step per mm), `max_flow,5,25,0.5` (mm³/s, step per mm) and
-`retraction,0,2,0.1` (mm, step per mm).
+`retraction,0,2,0.1` (mm, step per mm), `pa_line,0,0.1,0.002` and `pa_pattern,0,0.08,0.005` (pressure advance lines
+or corner pattern), `shaping_freq,15,110,0` (input shaper frequency sweep in Hz; the last number is the damping, 0 keeps
+the printer's) and `shaping_damp,0,0.4,30` (damping sweep at 30 Hz). `--object-set FILE,OBJECT,key=value` gives one
+object its own setting (object and region settings only).
 
 It prints one JSON line (`gcode`, `print_time_s`, `filament_mm`, `filament_g`, `filament_cm3`, `warnings`, or
 `error`) and progress on stderr. A single object is centered on the bed; several are arranged. `--set` takes any

@@ -248,6 +248,31 @@ public class SlicerIntegrationTest {
             gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
             assertTrue(gcode.contains("SET_PRESSURE_ADVANCE ADVANCE=0.02"));
 
+            // Pressure advance lines and pattern: G-code drawn by the engine, one value per line or corner.
+            selection.calibration = "pa_line"; selection.calibrationStart = 0; selection.calibrationEnd = 0.1; selection.calibrationStep = 0.002;
+            slicer.slice(Collections.emptyList(), selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("SET_PRESSURE_ADVANCE ADVANCE=0.05;")); assertTrue(gcode.contains("SET_PRESSURE_ADVANCE ADVANCE=0.1;"));
+            selection.calibration = "pa_pattern"; selection.calibrationEnd = 0.08; selection.calibrationStep = 0.005;
+            slicer.slice(Collections.emptyList(), selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            for (String value : new String[] {"0.005", "0.04", "0.075", "0.08"}) assertTrue("pattern at " + value, gcode.contains("SET_PRESSURE_ADVANCE ADVANCE=" + value + ";"));
+            assertTrue(gcode.contains("; start pressure advance pattern for layer"));
+
+            // Input shaping: frequency, then damping, change with height on the ringing tower.
+            selection.calibration = "shaping_freq"; selection.calibrationStart = 15; selection.calibrationEnd = 110; selection.calibrationStep = 0;
+            slicer.slice(Collections.emptyList(), selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("SET_INPUT_SHAPER SHAPER_FREQ_X=15.00 SHAPER_FREQ_Y=15.00")); assertTrue(gcode.contains("SET_INPUT_SHAPER SHAPER_FREQ_X=110.00 SHAPER_FREQ_Y=110.00"));
+            assertTrue(gcode.contains("; max_z_height: 60.00"));
+            selection.calibration = "shaping_damp"; selection.calibrationStart = 0; selection.calibrationEnd = 0.4; selection.calibrationStep = 42;
+            slicer.slice(Collections.emptyList(), selection, output, null);
+            gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+            assertTrue(gcode.contains("SET_INPUT_SHAPER SHAPER_FREQ_X=42.00")); assertTrue(gcode.contains("DAMPING_RATIO_X=0.400 DAMPING_RATIO_Y=0.400"));
+            selection.calibrationStep = 0;
+            try { slicer.slice(Collections.emptyList(), selection, output, null); fail("expected a frequency error"); }
+            catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("frequency")); }
+
             selection.calibration = "temperature"; selection.calibrationStart = 180; selection.calibrationEnd = 200;
             try { slicer.slice(Collections.emptyList(), selection, output, null); fail("expected a range error"); }
             catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("hotter")); }

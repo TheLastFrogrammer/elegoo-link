@@ -131,6 +131,17 @@ G-code was checked for the intended variation instead (Centauri Carbon 2, Elegoo
 | Max volumetric speed 5 → 25 mm³/s | vase mode, feedrate rising every millimetre (F1620 → F4740 …) |
 | Retraction 0 → 2 mm, step 0.1 | retraction length rising with height above the 1.4 mm base |
 | Flow rate passes 1 and 2 | the linear ("YOLO") test objects with their per-object flow ratios |
+| Pressure advance lines 0 → 0.1, step 0.002 | 51 lines from `CalibPressureAdvanceLine`, one `SET_PRESSURE_ADVANCE` each, with numbers |
+| Pressure advance pattern 0 → 0.08, step 0.005 | 17 nested corners per layer from `CalibPressureAdvancePattern` (custom G-code around a handle cube), 4 layers |
+| Input shaping frequency 15 → 110 Hz | ringing tower in vase mode, `SET_INPUT_SHAPER SHAPER_FREQ_X/Y` rising per layer; 60 mm |
+| Input shaping damping 0 → 0.4 at 30 Hz | frequency set once, `DAMPING_RATIO_X/Y` rising per layer |
+
+The pressure advance pattern keeps a reference to its parameters (`CalibPressureAdvancePattern::m_params`), so the
+engine keeps them alive beside it until the custom G-code is generated. Input shaping uses Klipper's
+`SET_INPUT_SHAPER` (the CC2 profile's flavour is klipper); whether the CC2 firmware accepts it is untested.
+
+Per-object settings (`--object-set FILE,OBJECT,key=value`, `object_settings` in JSON) go into each object's own config,
+as the desktop's object settings do; only `PrintObjectConfig` and `PrintRegionConfig` keys are accepted.
 
 ## Implications for step 2 (Android cross-compile)
 

@@ -20,7 +20,8 @@ find "$ASSETS" \( -name "*.png" -o -name "*.stl" -o -name "*.svg" \) -delete
 # Calibration models the engine's calibration prints use.
 C="$ELEGOOSLICER_SRC/resources/calib"
 for f in temperature_tower/temperature_tower.drc pressure_advance/tower_with_seam.drc filament_flow/Orca-LinearFlow.3mf \
-         filament_flow/Orca-LinearFlow_fine.3mf volumetric_speed/SpeedTestStructure.drc retraction/retraction_tower.drc; do
+         filament_flow/Orca-LinearFlow_fine.3mf volumetric_speed/SpeedTestStructure.drc retraction/retraction_tower.drc \
+         pressure_advance/pressure_advance_test.drc input_shaping/ringing_tower.drc; do
     mkdir -p "$ASSETS/calib/$(dirname "$f")" && cp "$C/$f" "$ASSETS/calib/$f"
 done
 # The app re-extracts the assets when this changes.

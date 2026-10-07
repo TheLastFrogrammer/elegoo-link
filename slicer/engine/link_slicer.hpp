@@ -47,7 +47,9 @@ struct Selection {
     std::vector<ObjectSettings> object_settings;
     // A calibration print instead of the model files, set up as ElegooSlicer's Calibration menu does it with filament
     // slot 1: "temperature" (tower, start/end in °C), "pressure_advance" (tower), "flow" (pass 1 or 2 in `start`),
-    // "max_flow" (mm³/s), "retraction" (mm).
+    // "max_flow" (mm³/s), "retraction" (mm), "pa_line" and "pa_pattern" (pressure advance lines or the corner
+    // pattern, start/end/step), "shaping_freq" (input shaper frequency sweep start/end in Hz; step: damping, 0 keeps
+    // the printer's) and "shaping_damp" (damping sweep start/end; step: the frequency in Hz).
     struct Calibration { std::string mode; double start = 0, end = 0, step = 0; } calibration;
 };
 

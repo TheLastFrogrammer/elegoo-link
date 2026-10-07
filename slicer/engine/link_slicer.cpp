@@ -536,9 +536,28 @@ template <typename Option, typename Value> static void set_all(DynamicPrintConfi
     if (option->values.empty()) option->values.push_back(value);
 }
 
+// A pressure advance pattern and the parameters it refers to (CalibPressureAdvancePattern keeps a reference to them).
+struct PaPattern {
+    Calib_Params params;
+    std::unique_ptr<CalibPressureAdvancePattern> pattern;
+};
+
+// Sets every element of a (vector) option from one serialized value, whatever its exact option type (some filament
+// options are nullable vectors); a missing option is created with one element.
+static void set_each(DynamicPrintConfig& config, const std::string& key, const std::string& value)
+{
+    if (config.def()->get(key) == nullptr) return;
+    ConfigOption* option = config.optptr(key, true);
+    auto* vector = dynamic_cast<ConfigOptionVectorBase*>(option);
+    std::string text = value;
+    if (vector != nullptr) for (size_t i = 1; i < vector->size(); ++i) text += "," + value;
+    if (!option->deserialize(text)) throw std::runtime_error("Bad value for " + key + ": " + value);
+}
+
 // Builds a calibration print as ElegooSlicer's Plater::calib_* functions do (model, cuts, object and global
 // settings), for filament slot 1. Returns the calibration parameters for Print::set_calib_params.
-static Calib_Params setup_calibration(Model& model, DynamicPrintConfig& config, const Selection::Calibration& calibration, const std::string& resources)
+static Calib_Params setup_calibration(Model& model, DynamicPrintConfig& config, const Selection::Calibration& calibration, const std::string& resources,
+                                      std::shared_ptr<PaPattern>& pattern)
 {
     const std::string calib = resources + "/calib/";
     auto load = [&](const std::string& path) {
@@ -607,6 +626,122 @@ static Calib_Params setup_calibration(Model& model, DynamicPrintConfig& config, 
         const double height = std::ceil((params.end - params.start) / params.step) + 1;
         if (height < model.objects[0]->bounding_box_exact().size().z())
             cut_horizontal(model, 0, height, true);
+    } else if (mode == "pa_line" || mode == "pa_pattern") {
+        if (!(params.step > 0 && params.end > params.start && params.start >= 0 && params.end <= 2))
+            throw std::runtime_error("Pressure advance: end must be above start (0 to 2), with a positive step");
+        if ((params.end - params.start) / params.step > 60)
+            throw std::runtime_error("Pressure advance: at most 60 steps; use a larger step");
+        config.set_key_value("overhang_reverse", new ConfigOptionBool(false));
+        config.set_key_value("precise_z_height", new ConfigOptionBool(false));
+        params.print_numbers = true;
+        if (mode == "pa_line") {
+            // Plater::calib_pa, line method: a small anchor model; the lines themselves are G-code from CalibPressureAdvanceLine.
+            params.mode = CalibMode::Calib_PA_Line;
+            load("pressure_advance/pressure_advance_test.drc");
+        } else {
+            // Plater::_calib_pa_pattern with one speed and one acceleration: a "handle" cube; the pattern is custom G-code.
+            params.mode = CalibMode::Calib_PA_Pattern;
+            set_each(config, "filament_retract_when_changing_layer", "0");
+            set_each(config, "filament_wipe", "0");
+            set_each(config, "wipe", "0");
+            set_each(config, "retract_when_changing_layer", "0");
+            double accel = config.opt_float("outer_wall_acceleration");
+            if (accel == 0) accel = config.opt_float("inner_wall_acceleration");
+            if (accel == 0) accel = config.opt_float("default_acceleration");
+            config.set_key_value("outer_wall_acceleration", new ConfigOptionFloat(accel));
+            config.set_key_value("print_sequence", new ConfigOptionEnum<PrintSequence>(PrintSequence::ByLayer));
+            if (config.opt_float("default_jerk") > 0) {
+                double jerk = config.opt_float("outer_wall_jerk");
+                if (jerk == 0) jerk = config.opt_float("inner_wall_jerk");
+                if (jerk == 0) jerk = config.opt_float("default_jerk");
+                for (const char* key : {"default_jerk", "outer_wall_jerk", "inner_wall_jerk", "top_surface_jerk", "infill_jerk", "travel_jerk"})
+                    config.set_key_value(key, new ConfigOptionFloat(jerk));
+            }
+            const SuggestedConfigCalibPAPattern suggested;
+            for (const auto& [key, value] : suggested.float_pairs) config.set_key_value(key, new ConfigOptionFloat(value));
+            for (const auto& [key, value] : suggested.nozzle_ratio_pairs) config.set_key_value(key, new ConfigOptionFloatOrPercent(nozzle * value / 100, false));
+            for (const auto& [key, value] : suggested.int_pairs) config.set_key_value(key, new ConfigOptionInt(value));
+            config.set_key_value(suggested.brim_pair.first, new ConfigOptionEnum<BrimType>(suggested.brim_pair.second));
+            const double speed = CalibPressureAdvance::find_optimal_PA_speed(config, config.get_abs_value("line_width", nozzle), config.get_abs_value("layer_height"), 0, 0);
+            config.set_key_value("outer_wall_speed", new ConfigOptionFloat(speed));
+            params.speeds = {speed}; params.accelerations = {accel};
+
+            ModelObject* cube = model.add_object();
+            cube->name = "pa_pattern_" + std::to_string(int(speed)) + "_" + std::to_string(int(accel));
+            cube->add_volume(TriangleMesh(its_make_cube(1, 1, 1)));
+            cube->add_instance();
+            cube->center_around_origin();
+            pattern = std::make_shared<PaPattern>();
+            pattern->params = params;
+            pattern->pattern = std::make_unique<CalibPressureAdvancePattern>(pattern->params, config, false, *cube, Vec3d::Zero());
+            const CalibPressureAdvancePattern& test = *pattern->pattern;
+            const BoundingBoxf3 raw = cube->raw_bounding_box();
+            cube->scale(test.handle_xy_size() / raw.size().x(), test.handle_xy_size() / raw.size().y(), test.max_layer_z() / raw.size().z());
+            // One test: the pattern area centered on the bed, the handle where the pattern expects it.
+            BoundingBoxf bed; for (const Vec2d& p : config.option<ConfigOptionPoints>("printable_area")->values) bed.merge(p);
+            if (test.print_size_x() + 4 > bed.size().x() || test.print_size_y() + 4 > bed.size().y())
+                throw std::runtime_error("Pressure advance pattern: too many steps for the bed; use a larger step");
+            cube->instances[0]->set_offset(Vec3d(bed.center().x(), bed.center().y(), 0) + test.handle_pos_offset());
+            cube->ensure_on_bed();
+        }
+    } else if (mode == "shaping_freq" || mode == "shaping_damp") {
+        // Plater::calib_input_shaping_freq / _damp with the ringing tower: the shaper changes with height.
+        const bool freq = mode == "shaping_freq";
+        if (freq) {
+            if (!(params.start >= 0 && params.end > params.start && params.end <= 500))
+                throw std::runtime_error("Input shaping frequency: end above start, up to 500 Hz");
+            if (!(params.step >= 0 && params.step < 1))
+                throw std::runtime_error("Input shaping frequency: damping must be 0 (printer's value) or below 1");
+            params.mode = CalibMode::Calib_Input_shaping_freq;
+            params.freqStartX = params.freqStartY = params.start; params.freqEndX = params.freqEndY = params.end;
+            params.start = params.step; params.end = 0;
+        } else {
+            if (!(params.start >= 0 && params.end > params.start && params.end < 1))
+                throw std::runtime_error("Input shaping damping: end above start, below 1");
+            if (!(params.step > 0 && params.step <= 500))
+                throw std::runtime_error("Input shaping damping: give the frequency found with the frequency test (up to 500 Hz)");
+            params.mode = CalibMode::Calib_Input_shaping_damp;
+            params.freqStartX = params.freqStartY = params.step;
+        }
+        params.step = 0; params.shaper_type = "";
+        load("input_shaping/ringing_tower.drc");
+        const std::string flavor = config.opt_serialize("gcode_flavor");
+        const double jerk = flavor == "klipper" ? 5.0 : 10.0;
+        for (const char* key : {"machine_max_jerk_x", "machine_max_jerk_y"}) {
+            auto* option = config.option<ConfigOptionFloats>(key, true);
+            const double current = option->values.empty() ? 0 : option->values.front();
+            option->values.assign(std::max<size_t>(1, option->values.size()), std::max(current, jerk));
+        }
+        config.set_key_value("default_jerk", new ConfigOptionFloat(0));
+        const auto* pa = config.option<ConfigOptionBools>("enable_pressure_advance");
+        if (pa == nullptr || pa->values.empty() || !pa->values.front()) {
+            set_each(config, "enable_pressure_advance", "1");
+            set_each(config, "pressure_advance", "0");
+            set_each(config, "adaptive_pressure_advance", "0");
+        }
+        if (config.has("input_shaping_emit")) config.set_key_value("input_shaping_emit", new ConfigOptionBool(false));
+        set_each(config, "slow_down_layer_time", "0");
+        set_each(config, "slow_down_min_speed", "0");
+        set_each(config, "slow_down_for_layer_cooling", "0");
+        if (freq) config.set_key_value("layer_height", new ConfigOptionFloat(0.2));
+        config.set_key_value("enable_overhang_speed", new ConfigOptionBool(false));
+        config.set_key_value("timelapse_type", new ConfigOptionEnum<TimelapseType>(tlTraditional));
+        config.set_key_value("wall_loops", new ConfigOptionInt(1));
+        config.set_key_value("top_shell_layers", new ConfigOptionInt(0));
+        config.set_key_value("bottom_shell_layers", new ConfigOptionInt(1));
+        config.set_key_value("sparse_infill_density", new ConfigOptionPercent(0));
+        config.set_key_value("detect_thin_wall", new ConfigOptionBool(false));
+        config.set_key_value("spiral_mode", new ConfigOptionBool(true));
+        config.set_key_value("spiral_mode_smooth", new ConfigOptionBool(false));
+        config.set_key_value("bottom_surface_pattern", new ConfigOptionEnum<InfillPattern>(ipRectilinear));
+        config.set_key_value("outer_wall_speed", new ConfigOptionFloat(200));
+        config.set_key_value("default_acceleration", new ConfigOptionFloat(20000));
+        config.set_key_value("outer_wall_acceleration", new ConfigOptionFloat(20000));
+        config.set_key_value("precise_z_height", new ConfigOptionBool(false));
+        auto& object = model.objects[0]->config;
+        object.set_key_value("brim_type", new ConfigOptionEnum<BrimType>(btOuterOnly));
+        object.set_key_value("brim_width", new ConfigOptionFloat(3.0));
+        object.set_key_value("brim_object_gap", new ConfigOptionFloat(0.0));
     } else if (mode == "flow") {
         const int pass = int(std::lround(params.start));
         if (pass != 1 && pass != 2) throw std::runtime_error("Flow rate: pass 1 or 2");
@@ -745,6 +880,7 @@ struct Engine::Loaded {
     Calib_Params calibration;
     std::vector<std::string> warnings;
     std::optional<arrangement::ArrangePolygon> tower;
+    std::shared_ptr<PaPattern> pattern;     // pressure advance pattern: its custom G-code comes last
 };
 
 Engine::Loaded Engine::load(const std::vector<std::string>& models, const Selection& selection, bool need_models)
@@ -884,7 +1020,8 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
         }
     if (calibrating) {
         if (need_models)
-            loaded.calibration = setup_calibration(loaded.model, config, selection.calibration, m_state->resources);
+            loaded.calibration = setup_calibration(loaded.model, config, selection.calibration, m_state->resources, loaded.pattern);
+        if (loaded.pattern) loaded.keep_layout = true; // the handle sits where the pattern's G-code expects it
         loaded.objects.assign(1, std::vector<int>());
         for (size_t i = 0; i < loaded.model.objects.size(); ++i) { loaded.objects[0].push_back(int(i)); loaded.base.push_back(loaded.model.objects[i]->instances.front()->get_matrix_no_offset().linear()); loaded.downs.emplace_back(); }
         for (ModelObject* object : loaded.model.objects) object->ensure_on_bed();
@@ -922,6 +1059,11 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
         if (loaded.tower)
             keep_clear.push_back(*loaded.tower);
         place_on_bed(loaded.model, config, keep_clear);
+    }
+    // The pattern is drawn by custom G-code around the handle cube, from the final settings (Plater::_calib_pa_pattern_gen_gcode).
+    if (loaded.pattern && !loaded.model.objects.empty()) {
+        loaded.model.curr_plate_index = 0;
+        loaded.model.plates_custom_gcodes[0] = loaded.pattern->pattern->generate_custom_gcodes(config, false, *loaded.model.objects[0], Vec3d::Zero());
     }
     return loaded;
 }

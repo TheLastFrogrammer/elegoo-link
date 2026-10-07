@@ -85,3 +85,12 @@ If the download fails, the error and the history entry help: share the diagnosti
 2. Slice something small → **Upload and print…**. Files shows "Uploading … through the Elegoo cloud" up to 50 %
    while the phone stores the file, then "(printer fetching)" to 100 %. Print setup should open once the file is listed.
 3. If it stops, Share diagnostics: the Printer file downloads section notes the cloud upload start and how it ended.
+
+## 10. Per-model settings and the new calibrations
+
+1. Load two models → **Edit plate…** → select one → **Model settings…** → set Wall loops 5 and infill 50 %. Slice and
+   check in the toolpath viewer that only that model has the extra walls.
+2. **Calibration print…** → Pressure advance pattern; print it and check that the numbers above the corners read
+   from left to right as the dialog said.
+3. **Calibration print…** → Input shaping frequency. Watch the printer's screen or console for an error about
+   `SET_INPUT_SHAPER`: the app cannot tell whether the CC2 firmware accepts it. Report what happens.

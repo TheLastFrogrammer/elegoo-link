@@ -972,6 +972,10 @@ public final class SliceActivity extends Activity {
         {"pressure_advance", "Pressure advance tower", "Start", "End", "Step per mm", "Pressure advance rises by the step for every millimetre of height. Find the height where the corners look best and set pressure advance = start + step × height (mm)."},
         {"max_flow", "Max volumetric speed", "Start (mm³/s)", "End (mm³/s)", "Step per mm", "The flow rises by the step for every millimetre of height. Find the height where the walls start to fail and set max volumetric speed = start + step × height (mm), a little lower to be safe."},
         {"retraction", "Retraction tower", "Start (mm)", "End (mm)", "Step per mm", "Retraction grows by the step for every millimetre above the 1.4 mm base. Find the lowest section without strings and set retraction length = start + step × (height − 1.4 mm)."},
+        {"pa_line", "Pressure advance lines", "Start", "End", "Step per line", "One short line per value, pressure advance rising by the step from the front line, with values printed beside them. Pick the line whose width stays even where the speed changes and set the slot's pressure advance to its value (Filament settings…)."},
+        {"pa_pattern", "Pressure advance pattern", "Start", "End", "Step per pattern", "Nested corners, pressure advance rising by the step from left to right, values printed above. Pick the sharpest corner without a bulge or gap and set the slot's pressure advance to its value (Filament settings…)."},
+        {"shaping_freq", "Input shaping frequency", "Start (Hz)", "End (Hz)", "Damping (0 = printer's)", "The shaper frequency rises from start at the bottom to end at the top of the 60 mm tower. Find the height with the least ringing after corners: frequency = start + (end − start) × height ÷ 60. Then print the damping test with it. The printer must accept Klipper's SET_INPUT_SHAPER; not yet tried on a CC2."},
+        {"shaping_damp", "Input shaping damping", "Start", "End", "Frequency (Hz)", "The damping ratio rises from start at the bottom to end at the top of the 60 mm tower, at the frequency you found. Find the height with the least ringing: damping = start + (end − start) × height ÷ 60. The printer must accept Klipper's SET_INPUT_SHAPER; not yet tried on a CC2."},
     };
 
     private double[] calibrationDefaults(String mode) {
@@ -986,6 +990,10 @@ public final class SliceActivity extends Activity {
             case "pressure_advance": return new double[] {0, 0.1, 0.002};
             case "max_flow": return new double[] {5, 25, 0.5};
             case "retraction": return new double[] {0, 2, 0.1};
+            case "pa_line": return new double[] {0, 0.1, 0.002};
+            case "pa_pattern": return new double[] {0, 0.08, 0.005};
+            case "shaping_freq": return new double[] {15, 110, 0};
+            case "shaping_damp": return new double[] {0, 0.4, 30};
             default: return new double[] {1, 0, 0};
         }
     }
@@ -1029,7 +1037,8 @@ public final class SliceActivity extends Activity {
         calibrationLabel.setVisibility(on ? View.VISIBLE : View.GONE);
         if (on) {
             String range = calibrationSpec[2].isEmpty() ? "" : String.format(Locale.getDefault(), " · %s → %s%s", trimNumber(calibrationRange[0]), trimNumber(calibrationRange[1]),
-                calibrationSpec[4].isEmpty() ? "" : ", step " + trimNumber(calibrationRange[2]));
+                calibrationSpec[4].isEmpty() ? "" : calibrationSpec[4].startsWith("Step") ? ", step " + trimNumber(calibrationRange[2])
+                    : ", " + calibrationSpec[4].replaceFirst(" \\(.*", "").toLowerCase(Locale.ROOT) + " " + trimNumber(calibrationRange[2]));
             calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nThe model files are set aside while this is on.");
         }
         calibrate.setText(on ? "Back to my models" : "Calibration print…");
