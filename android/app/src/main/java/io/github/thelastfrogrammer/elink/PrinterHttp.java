@@ -52,30 +52,39 @@ public final class PrinterHttp {
         fetch("/download", videoUrl, destination, progress, MAX_VIDEO_BYTES, false);
     }
 
+    /** Query values encoded with %20 for spaces, as Elegoo's SDK sends them (form-style "+" is not decoded everywhere). */
+    static String query(String value) throws UnsupportedEncodingException { return URLEncoder.encode(value, "UTF-8").replace("+", "%20"); }
+
     private void fetch(String path, String filename, File destination, Progress progress, long maxBytes, boolean gcode) throws Exception {
         HttpURLConnection connection = null; boolean success = false;
+        String what = path + " " + filename, report = "";
+        long copied = 0;
         try {
             checkCancelled();
-            connection = open(path + "?X-Token=" + URLEncoder.encode(token, "UTF-8") + "&file_name=" + URLEncoder.encode(filename, "UTF-8"));
+            connection = open(path + "?X-Token=" + query(token) + "&file_name=" + query(filename));
             connection.setRequestMethod("GET"); connection.setReadTimeout(30000);
             connection.setRequestProperty("Accept", "application/octet-stream"); connection.setRequestProperty("Accept-Encoding", "identity");
             int code = connection.getResponseCode();
+            String type = connection.getContentType(), encoding = connection.getContentEncoding();
+            long total = connection.getContentLengthLong();
+            report = "HTTP " + code + (type == null ? "" : ", " + type) + (encoding == null ? "" : ", " + encoding) + (total < 0 ? ", length not given" : ", " + total + " bytes");
             if (code == 401 || code == 403) throw new PrinterErrors.Rejected(1000);
             if (code != 200) throw new PrinterErrors.HttpStatus(code);
-            String type = connection.getContentType(), encoding = connection.getContentEncoding();
-            if (type != null && (type.toLowerCase(Locale.ROOT).contains("json") || type.toLowerCase(Locale.ROOT).contains("html"))
-                || encoding != null && !encoding.equalsIgnoreCase("identity")) throw new IOException(gcode ? "Printer did not return a plain G-code file" : "Printer did not return a video file");
-            long total = connection.getContentLengthLong();
+            // The body decides, not its labels: some firmware labels files oddly. Compressed bodies are unpacked.
+            boolean gzip = encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip");
+            if (encoding != null && !gzip && !encoding.equalsIgnoreCase("identity")) throw new IOException("Printer sent the file in an unsupported encoding (" + encoding + ")");
+            if (gzip) total = -1;
             if (total == 0 || total > maxBytes) throw new IOException("File is empty or exceeds " + maxBytes / (1024 * 1024) + " MiB");
-            long copied = 0; int last = -2; boolean first = true;
-            try (InputStream input = connection.getInputStream(); OutputStream output = new BufferedOutputStream(new FileOutputStream(destination))) {
+            int last = -2; boolean first = true;
+            try (InputStream raw = connection.getInputStream(); InputStream input = gzip ? new java.util.zip.GZIPInputStream(raw) : raw;
+                 OutputStream output = new BufferedOutputStream(new FileOutputStream(destination))) {
                 byte[] buffer = new byte[65536]; int count;
                 while ((count = input.read(buffer)) != -1) {
                     checkCancelled(); if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
-                    if (first && gcode) for (int i = 0; i < count; i++) if (!Character.isWhitespace((char) (buffer[i] & 255))) {
-                        if (buffer[i] == '{' || buffer[i] == '<') throw new IOException("Printer returned an error document instead of G-code"); first = false; break;
+                    if (first) for (int i = 0; i < count; i++) if (!Character.isWhitespace((char) (buffer[i] & 255))) {
+                        if (errorDocument(buffer, i, count)) throw new IOException("Printer answered with an error instead of the " + (gcode ? "G-code" : "video") + ": " + new String(buffer, i, Math.min(count - i, 160), "UTF-8").trim());
+                        first = false; break;
                     }
-                    if (first && !gcode && count > 0) { if (buffer[0] == '{' || buffer[0] == '<') throw new IOException("Printer returned an error document instead of a video"); first = false; }
                     copied += count; if (copied > maxBytes || total > 0 && copied > total) throw new IOException("Download exceeded expected size");
                     output.write(buffer, 0, count);
                     int percent = total > 0 ? (int) Math.min(99, copied * 100 / total) : -1;
@@ -83,8 +92,12 @@ public final class PrinterHttp {
                 }
             }
             checkCancelled();
-            if (copied == 0 || total > 0 && copied != total) throw new IOException("Download was empty or incomplete");
+            if (copied == 0 || total > 0 && copied != total) throw new IOException("Download was empty or incomplete (" + copied + " of " + (total < 0 ? "?" : String.valueOf(total)) + " bytes)");
             progress.update(100); success = true;
+            Diagnostics.note(Diagnostics.FILES, "downloaded " + what + " · " + report + " · " + copied + " bytes received");
+        } catch (Exception failure) {
+            Diagnostics.note(Diagnostics.FILES, "download failed " + what + " · " + (report.isEmpty() ? "no response" : report) + " · " + copied + " bytes · " + failure);
+            throw failure;
         } finally {
             if (connection != null) connection.disconnect(); active = null;
             if (!success) destination.delete();
@@ -139,6 +152,14 @@ public final class PrinterHttp {
         }
     }
     private void checkCancelled() throws IOException { if (cancelled.get()) throw new IOException("Operation cancelled"); }
+    /** An error page or JSON error instead of the file: '{' (JSON) or an HTML/XML tag at the start. */
+    static boolean errorDocument(byte[] buffer, int start, int end) {
+        if (buffer[start] == '{') return true;
+        if (buffer[start] != '<') return false;
+        String head = new String(buffer, start, Math.min(end - start, 16), java.nio.charset.StandardCharsets.ISO_8859_1).toLowerCase(Locale.ROOT);
+        return head.startsWith("<html") || head.startsWith("<!doctype") || head.startsWith("<?xml") || head.startsWith("<body") || head.startsWith("<head");
+    }
+
     private HttpURLConnection open(String path) throws Exception {
         checkCancelled();
         HttpURLConnection connection = connections.open(new URL("http://" + host + path));

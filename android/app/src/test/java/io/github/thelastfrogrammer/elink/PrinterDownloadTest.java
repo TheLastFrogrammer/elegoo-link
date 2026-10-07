@@ -24,7 +24,7 @@ public class PrinterDownloadTest {
             try {
                 new PrinterHttp("192.168.1.50", "a&? token", url -> { Connection c = new Connection(url); opened.add(c); return c; }).download(file, storage, "two words.gcode", progress::add);
                 Connection c = opened.get(0); assertEquals(storage.equals("local") ? "/download" : "/download/udisk", c.getURL().getPath());
-                assertEquals("X-Token=a%26%3F+token&file_name=two+words.gcode", c.getURL().getQuery()); assertEquals("a&? token", c.getRequestProperty("X-Token"));
+                assertEquals("X-Token=a%26%3F%20token&file_name=two%20words.gcode", c.getURL().getQuery()); assertEquals("a&? token", c.getRequestProperty("X-Token"));
                 assertEquals("GET", c.getRequestMethod()); assertFalse(c.getInstanceFollowRedirects()); assertTrue(c.disconnected);
                 assertArrayEquals(c.body, Files.readAllBytes(file.toPath())); assertEquals(Integer.valueOf(100), progress.get(progress.size() - 1));
             } finally { file.delete(); }
@@ -40,8 +40,9 @@ public class PrinterDownloadTest {
     }
     @Test public void authorizationRedirectAndErrorResponsesNeverBecomeFiles() throws Exception {
         for (int code : new int[] {401, 403, 302, 404, 500}) rejected(code, 2, null, null, new byte[] {1, 2});
-        rejected(200, 2, "application/json", null, new byte[] {1, 2}); rejected(200, 2, "text/html", null, new byte[] {1, 2});
-        rejected(200, 2, null, "gzip", new byte[] {1, 2});
+        rejected(200, -1, "application/json", null, "{\"error_code\":1003}".getBytes(StandardCharsets.UTF_8));
+        rejected(200, -1, "text/html", null, "<html><body>Not found</body></html>".getBytes(StandardCharsets.UTF_8));
+        rejected(200, 2, null, "br", new byte[] {1, 2});
         rejected(200, -1, null, null, " \n{\"error_code\":1000}".getBytes(StandardCharsets.UTF_8));
     }
     @Test public void oversizedEmptyAndTruncatedPayloadsDeleteCacheCopy() throws Exception {
@@ -78,7 +79,7 @@ public class PrinterDownloadTest {
                 .downloadTimelapse(file, "/user/timelapse/Benchy 1.mp4", progress::add);
             Connection c = opened.get(0);
             assertEquals("/download", c.getURL().getPath());
-            assertEquals("X-Token=code&file_name=%2Fuser%2Ftimelapse%2FBenchy+1.mp4", c.getURL().getQuery());
+            assertEquals("X-Token=code&file_name=%2Fuser%2Ftimelapse%2FBenchy%201.mp4", c.getURL().getQuery());
             assertArrayEquals(video, Files.readAllBytes(file.toPath())); assertEquals(Integer.valueOf(100), progress.get(progress.size() - 1));
         } finally { file.delete(); }
         // Error documents and references that are not printer paths never become downloads.
@@ -91,5 +92,26 @@ public class PrinterDownloadTest {
                 .downloadTimelapse(file, "v.mp4", p -> { });
             fail("Must reject an error document");
         } catch (IOException expected) { assertFalse(file.exists()); }
+    }
+    @Test public void theBodyDecidesNotItsLabelAndGzipIsUnpacked() throws Exception {
+        File file = File.createTempFile("download-", ".gcode");
+        try {
+            // G-code labelled as JSON or HTML by odd firmware is still G-code.
+            for (String type : new String[] {"application/json", "text/html", "text/plain"}) {
+                new PrinterHttp("192.168.1.50", "code", url -> { Connection c = new Connection(url); c.type = type; return c; }).download(file, "local", "a.gcode", p -> { });
+                assertEquals("G28\nT0\n", new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            }
+            ByteArrayOutputStream packed = new ByteArrayOutputStream();
+            try (java.util.zip.GZIPOutputStream gzip = new java.util.zip.GZIPOutputStream(packed)) { gzip.write("; sliced\nG1 X1\n".getBytes(StandardCharsets.UTF_8)); }
+            new PrinterHttp("192.168.1.50", "code", url -> { Connection c = new Connection(url); c.encoding = "gzip"; c.body = packed.toByteArray(); c.length = c.body.length; return c; })
+                .download(file, "local", "a.gcode", p -> { });
+            assertEquals("; sliced\nG1 X1\n", new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            // Files in a folder, as the printer lists them.
+            List<Connection> opened = new ArrayList<>();
+            new PrinterHttp("192.168.1.50", "code", url -> { Connection c = new Connection(url); opened.add(c); return c; }).download(file, "local", "models/part one.gcode", p -> { });
+            assertEquals("X-Token=code&file_name=models%2Fpart%20one.gcode", opened.get(0).getURL().getQuery());
+            for (String bad : new String[] {"../x.gcode", "/abs.gcode", "a//b.gcode", "a\\b.gcode", "a/../b.gcode", "x.txt"})
+                try { Cc2Codec.filename(bad); fail("must reject " + bad); } catch (IllegalArgumentException expected) { }
+        } finally { file.delete(); }
     }
 }

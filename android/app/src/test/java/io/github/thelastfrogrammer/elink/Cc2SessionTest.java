@@ -370,7 +370,7 @@ public class Cc2SessionTest {
         try {
             s.connect(); take(l.statuses); assertEquals("123456", clients.get(0).password); assertTrue(s.download(file,"u-disk","two words.gcode"));
             assertEquals(file, take(l.downloads)); assertArrayEquals(connections.get(0).body, java.nio.file.Files.readAllBytes(file.toPath()));
-            assertEquals("123456", connections.get(0).getRequestProperty("X-Token")); assertEquals("X-Token=123456&file_name=two+words.gcode",connections.get(0).getURL().getQuery());
+            assertEquals("123456", connections.get(0).getRequestProperty("X-Token")); assertEquals("X-Token=123456&file_name=two%20words.gcode",connections.get(0).getURL().getQuery());
             assertTrue(clients.get(0).writes.isEmpty()); assertTrue(s.ready());
         } finally { s.close(); file.delete(); }
     }

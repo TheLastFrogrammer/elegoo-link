@@ -28,6 +28,8 @@ public final class MainActivity extends Activity {
     private ImageView filePreview;
     private TextView previewInfo;
     private LinearLayout timelapseList;
+    private String saveAfterDownload;
+    private long saveGiveUpAt;
     private Button saveTimelapse;
     private JSONObject renderedHistory;
     private LinearLayout fileDetails, transferRow, trayList, pageRow;
@@ -294,12 +296,7 @@ public final class MainActivity extends Activity {
             Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, StatusPresentation.clean(printer.selectedName) + "\n" + printer.selectedReport.text());
             startActivity(Intent.createChooser(send, "Share G-code inspection"));
         }, false);
-        saveCopy = rowButton(keepRow, "Save copy…", () -> {
-            if (printer == null || printer.selectedReport == null || printer.fileBusy()) return;
-            pendingExportHash = printer.selectedReport.sha256;
-            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.selectedName);
-            startActivityForResult(save, SAVE_GCODE);
-        }, false);
+        saveCopy = rowButton(keepRow, "Save copy…", this::saveSelected, false);
         clearCopy = rowButton(keepRow, "Remove", () -> { if (printer != null) printer.clearPhoneCopy(); }, false);
         transferRow = row(files);
         cancelUpload = rowButton(transferRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
@@ -629,6 +626,27 @@ public final class MainActivity extends Activity {
         saveTimelapse.setVisibility(View.GONE);
     }
 
+    /** Saves the phone copy of the selected G-code where the user picks. */
+    private void saveSelected() {
+        if (printer == null || printer.selectedReport == null || printer.fileBusy()) return;
+        pendingExportHash = printer.selectedReport.sha256;
+        String title = printer.selectedName.substring(printer.selectedName.lastIndexOf('/') + 1);
+        Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/octet-stream").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, title);
+        startActivityForResult(save, SAVE_GCODE);
+    }
+
+    /** "Download and save": once the download is in, open the save picker; give up when the download ends otherwise. */
+    private void continueSaveAfterDownload() {
+        if (saveAfterDownload == null || printer == null) return;
+        if (printer.selectedFile != null && saveAfterDownload.equals(printer.selectedName) && !printer.importing && printer.selectedReport != null) {
+            saveAfterDownload = null; saveGiveUpAt = 0; saveSelected();
+        } else if (!printer.downloading() && !printer.importing) {
+            // The finished download is handed over a moment after the transfer ends; give up only once that has passed.
+            long now = System.currentTimeMillis();
+            if (saveGiveUpAt == 0) saveGiveUpAt = now + 3000; else if (now > saveGiveUpAt) { saveAfterDownload = null; saveGiveUpAt = 0; }
+        } else saveGiveUpAt = 0;
+    }
+
     /** One download button per history entry whose timelapse video is ready, newest first. Rebuilt when history changes. */
     private void renderTimelapses() {
         JSONObject history = printer == null ? null : printer.history;
@@ -654,8 +672,9 @@ public final class MainActivity extends Activity {
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
         if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: print start and deletion are disabled.", 14, MUTED, false); dialog.show(); return; }
+        Button save = button(body, "Download and save to phone…", () -> { dialog.dismiss(); if (printer != null) { saveAfterDownload = name; printer.download(storage, name); } });
         Button download = button(body, "Download to phone workspace", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
-        download.setEnabled(printer != null && printer.filesFresh() && !printer.fileBusy());
+        save.setEnabled(printer != null && !printer.fileBusy()); download.setEnabled(printer != null && !printer.fileBusy());
         button(body, "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); });
         button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, which) -> { if (printer != null) printer.delete(storage, name); }).show(); });
@@ -809,6 +828,7 @@ public final class MainActivity extends Activity {
         diskInfo.setText(printer == null || printer.disk.length() == 0 ? "Storage usage not loaded." : FeatureData.disk(printer.disk));
         historyInfo.setText(printer == null ? "History not loaded." : printer.history.length() == 0 ? printer.historyMessage : FeatureData.history(printer.history));
         renderTimelapses();
+        continueSaveAfterDownload();
         for (int i = 0; i < timelapseList.getChildCount(); i++) timelapseList.getChildAt(i).setEnabled(ready && !printer.pinProbe() && !printer.fileBusy());
         saveTimelapse.setVisibility(printer != null && printer.timelapseFile != null ? View.VISIBLE : View.GONE);
         String selectedHost = host.getText().toString().trim();

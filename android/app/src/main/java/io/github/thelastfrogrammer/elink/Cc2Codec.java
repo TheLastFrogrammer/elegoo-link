@@ -33,8 +33,10 @@ public final class Cc2Codec {
     }
     public static void storage(String value) { if (!"local".equals(value) && !"u-disk".equals(value)) throw new IllegalArgumentException("Unsupported storage"); }
     public static void filename(String value) {
-        if (value == null || value.isEmpty() || value.length() > 240 || value.contains("/") || value.contains("\\")
-            || value.matches("(?s).*[\\p{Cntrl}].*") || !value.toLowerCase(Locale.ROOT).endsWith(".gcode")) throw new IllegalArgumentException("Select a G-code filename from the printer");
+        // Names as the printer lists them, which may include a folder ("models/part.gcode"); never a way out of it.
+        if (value == null || value.isEmpty() || value.length() > 240 || value.contains("\\") || value.startsWith("/") || value.contains("//")
+            || java.util.Arrays.asList(value.split("/")).contains("..") || value.matches("(?s).*[\\p{Cntrl}].*")
+            || !value.toLowerCase(Locale.ROOT).endsWith(".gcode")) throw new IllegalArgumentException("Select a G-code filename from the printer");
     }
     /** A timelapse video reference from print history (time_lapse_video_url): a printer path, never a URL elsewhere. */
     public static void timelapse(String value) {

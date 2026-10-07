@@ -167,7 +167,7 @@ public final class PrinterService extends Service {
                     try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
                     GcodeInspector.Report result = report;
                     android.graphics.Bitmap preview = report == null ? null : ThumbnailDecoder.decode(report.thumbnail);
-                    main.post(() -> finishFile(file, name, result, preview, "Downloaded phone copy ready. Save it with Save phone copy…; printer files are unchanged."));
+                    main.post(() -> finishFile(file, name, result, preview, "Downloaded to the phone. Save copy… keeps it in your files; the printer's copy is unchanged."));
                 });
             }); }
         }, selected.http(), selected.sockets(), new PrinterIdentity(serial, selected.discovery(), new PrinterAuthentication(pinProbe, code)));
@@ -254,7 +254,9 @@ public final class PrinterService extends Service {
     }
     public void clearTimelapse() { File file = timelapseFile; timelapseFile = null; timelapseName = null; if (file != null) file.delete(); changed(); }
     public void download(String storage, String filename) {
-        if (!ready() || pinProbe || fileBusy() || !knownFile(storage, filename)) { feedback = "Refresh files and use LAN authentication before downloading. Wait for other file work to finish."; changed(); return; }
+        if (!ready() || pinProbe) { feedback = "Downloading from the printer needs the local connection (Settings → Local connection; LAN Only on the printer, HTTP port 80)."; changed(); return; }
+        if (fileBusy()) { feedback = "Wait for the current file transfer to finish."; changed(); return; }
+        if (!listed(storage, filename)) { feedback = "Refresh the printer's file list, then download from it."; changed(); return; }
         File local = null;
         try {
             local = File.createTempFile("download-", ".gcode", getCacheDir());
@@ -282,7 +284,11 @@ public final class PrinterService extends Service {
     }
     public void camera() { if (ready() && !busy(Cc2Codec.CAMERA)) { queryBusy.add(Cc2Codec.CAMERA); session.camera(); changed(); } }
     private boolean knownFile(String storage, String filename) {
-        if (!filesFresh() || !this.storage.equals(storage)) return false;
+        return filesFresh() && listed(storage, filename);
+    }
+    /** In the last file list received for that storage, however old: downloading only reads, so it needs no fresh list. */
+    private boolean listed(String storage, String filename) {
+        if (filesAt == 0 || !this.storage.equals(storage)) return false;
         JSONArray files = filePage.optJSONArray("file_list"); if (files == null) return false;
         for (int i = 0; i < files.length(); i++) { JSONObject file = files.optJSONObject(i); if (file != null && filename.equals(file.optString("filename"))) return true; }
         return false;

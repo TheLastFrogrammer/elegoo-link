@@ -12,7 +12,7 @@ import java.util.*;
  * being closed. Holds no access codes, PINs, addresses or serial numbers. Independent of Android.
  */
 final class Diagnostics {
-    static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan";
+    static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan", FILES = "Printer file downloads";
     static final int KEEP_PER_AREA = 40;
     private static final String SEPARATOR = "\u001f";
     private static final Map<String, Deque<String>> entries = new LinkedHashMap<>();
