@@ -549,6 +549,20 @@ public class SlicerIntegrationTest {
         assertEquals(View.GONE, hint.getVisibility());
     }
 
+    /** Two CANVAS trays of one material are told apart by their colour dots: the dropdown's data carries the colours, the text carries no hex. */
+    @Test public void trayDropdownShowsEachTraysColourDot() throws Exception {
+        SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        Object slot = ((List<?>) field(activity, "slots")).get(0);
+        setField(slot, "trayChoices", new ArrayList<>(Arrays.asList(new TrayPlan.Tray(0, 0, "PLA", "PLA Matte", "ELEGOO", "#D02828"), new TrayPlan.Tray(0, 1, "PLA", "", "ELEGOO", "#F0F0F0"))));
+        java.lang.reflect.Method show = SliceActivity.class.getDeclaredMethod("showTrayChoices", slot.getClass()); show.setAccessible(true);
+        show.invoke(activity, slot);
+        SliceActivity.DottedAdapter adapter = (SliceActivity.DottedAdapter) ((Spinner) field(slot, "tray")).getAdapter();
+        assertNull(adapter.colourAt(0)); // "No tray" has no dot
+        assertEquals("#D02828", adapter.colourAt(1)); assertEquals("#F0F0F0", adapter.colourAt(2));
+        assertEquals("CANVAS 0 · Tray 0 · PLA · PLA Matte", adapter.getItem(1)); assertEquals("CANVAS 0 · Tray 1 · PLA", adapter.getItem(2));
+    }
+
     /** Imports files as the Slice screen's picker does: the real import copies them and inspects them on the worker. */
     private static void importFiles(Object activity, File... files) throws Exception {
         List<android.net.Uri> uris = new ArrayList<>(); for (File file : files) uris.add(android.net.Uri.fromFile(file));

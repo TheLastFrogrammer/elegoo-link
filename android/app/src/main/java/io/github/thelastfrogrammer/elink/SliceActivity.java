@@ -116,6 +116,7 @@ public final class SliceActivity extends Activity {
     }
     private EditText infill;
     private Button chooseModels, slice, cancel, useInFiles, saveCopy;
+    private boolean choosePrimary = true;     // filled only while nothing is loaded: Slice is the main action after that
     private ProgressBar progress;
     private ImageView preview;
     private LinearLayout resultCard, resultPlateBox;
@@ -819,14 +820,13 @@ public final class SliceActivity extends Activity {
         ((LinearLayout.LayoutParams) heading.getLayoutParams()).topMargin = dp(14);
         for (int i = 0; i < models.size(); i++) {
             File model = models.get(i); int index = i;
-            List<String> choices = new ArrayList<>();
-            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Slot 1");
-            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) choices.add("Slot " + k + slotSummary(k));
-            if (!is3mf(model)) choices.set(0, "Slot 1" + slotSummary(1));
+            List<String> choices = new ArrayList<>(), colours = new ArrayList<>();
+            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Slot 1" + slotSummary(1)); colours.add(is3mf(model) ? null : slots.get(0).colour);
+            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) { choices.add("Slot " + k + slotSummary(k)); colours.add(slots.get(k - 1).colour); }
             label(modelAssign, model.getName(), 13, ink, false);
             Spinner spinner = spinner(modelAssign);
             int slot = Math.min(modelSlots.get(i), slots.size());
-            fill(spinner, choices, choices.get(is3mf(model) ? slot : Math.max(slot, 1) - 1));
+            fillColoured(spinner, choices, colours, choices.get(is3mf(model) ? slot : Math.max(slot, 1) - 1));
             spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { modelSlots.set(index, is3mf(model) ? position : position + 1); }
                 @Override public void onNothingSelected(AdapterView<?> p) { }
@@ -1171,15 +1171,21 @@ public final class SliceActivity extends Activity {
 
     private void fillTrayChoices(Slot slot) {
         slot.trayChoices = reportedTrays();
-        List<String> choices = new ArrayList<>(); choices.add(slot.trayChoices.isEmpty() && slot.source == null ? "No trays reported (choose at print start)" : "No tray (choose at print start)");
         // Keep a planned tray when the printer has not reported trays (yet).
         if (slot.source != null) {
             TrayPlan.Tray match = null;
             for (TrayPlan.Tray tray : slot.trayChoices) if (tray.same(slot.source.canvasId, slot.source.trayId)) match = tray;
             if (match == null) slot.trayChoices.add(slot.source); else slot.source = match;
         }
-        for (TrayPlan.Tray tray : slot.trayChoices) choices.add(trayChoice(tray));
-        fill(slot.tray, choices, slot.source == null ? choices.get(0) : trayChoice(slot.source));
+        showTrayChoices(slot);
+    }
+
+    /** The tray dropdown: a colour dot per tray, so trays of one material tell apart by colour. */
+    private void showTrayChoices(Slot slot) {
+        List<String> choices = new ArrayList<>(), colours = new ArrayList<>();
+        choices.add(slot.trayChoices.isEmpty() && slot.source == null ? "No trays reported (choose at print start)" : "No tray (choose at print start)"); colours.add(null);
+        for (TrayPlan.Tray tray : slot.trayChoices) { choices.add(trayChoice(tray)); colours.add(tray.colour); }
+        fillColoured(slot.tray, choices, colours, slot.source == null ? choices.get(0) : trayChoice(slot.source));
     }
 
     private void refreshTrays() {
@@ -1225,7 +1231,9 @@ public final class SliceActivity extends Activity {
         if (!busy && models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
         else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a process and a preset for each filament slot to slice.";
         sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
-        chooseModels.setEnabled(!busy);
+        chooseModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Change model files…");
+        boolean primary = models.isEmpty() && calibration == null;
+        if (primary != choosePrimary) { choosePrimary = primary; restyle(chooseModels, primary); }
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);
         for (Slot slot : slots) { slot.preset.setEnabled(!busy); slot.tray.setEnabled(!busy); slot.swatch.setEnabled(!busy); }
         editPlate.setEnabled(!busy && presetsReady && inspected != null && !models.isEmpty() && plate != ALL_PLATES); autoLayout.setEnabled(!busy);
@@ -1301,11 +1309,40 @@ public final class SliceActivity extends Activity {
     }
     private Button styled(String text, Runnable action, boolean primary) {
         Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setPadding(dp(10), dp(8), dp(10), dp(8));
+        restyle(button, primary); button.setOnClickListener(view -> action.run()); return button;
+    }
+    /** Filled teal (primary) or the soft secondary look, in place: the button keeps its text, listener and place. */
+    private void restyle(Button button, boolean primary) {
         ColorStateList disabledAware = new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, primary ? (dark ? 0xff00201c : Color.WHITE) : teal});
         GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
         shape.setColor(primary ? new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {buttonColor, teal}) : ColorStateList.valueOf(buttonColor));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
-        button.setTextColor(disabledAware); button.setOnClickListener(view -> action.run()); return button;
+        button.setTextColor(disabledAware);
+    }
+
+    /** A spinner whose rows can start with a filament colour dot; the text never shows the hex. */
+    final class DottedAdapter extends ArrayAdapter<String> {
+        private final List<String> colours;
+        DottedAdapter(List<String> values, List<String> colours) {
+            super(SliceActivity.this, android.R.layout.simple_spinner_item, values); this.colours = colours;
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        }
+        /** The row's colour as #RRGGBB, or null for a row without a colour. */
+        String colourAt(int position) { return colours.get(position); }
+        @Override public View getView(int position, View convert, android.view.ViewGroup parent) { return dotted((TextView) super.getView(position, convert, parent), colours.get(position), 2); }
+        @Override public View getDropDownView(int position, View convert, android.view.ViewGroup parent) { return dotted((TextView) super.getDropDownView(position, convert, parent), colours.get(position), 3); }
+    }
+    private TextView dotted(TextView view, String colour, int lines) {
+        view.setTextColor(ink); view.setSingleLine(false); view.setMaxLines(lines);
+        if (colour == null) { view.setCompoundDrawables(null, null, null, null); view.setCompoundDrawablePadding(0); return view; }
+        GradientDrawable dot = new GradientDrawable(); dot.setShape(GradientDrawable.OVAL); dot.setColor(Color.parseColor(colour)); dot.setStroke(dp(1), muted); dot.setSize(dp(14), dp(14));
+        view.setCompoundDrawablesWithIntrinsicBounds(dot, null, null, null); view.setCompoundDrawablePadding(dp(8));
+        return view;
+    }
+    /** Like fill(), with a colour per row; selects by text as fill() does. */
+    private void fillColoured(Spinner spinner, List<String> values, List<String> colours, String preferred) {
+        spinner.setAdapter(new DottedAdapter(values, colours));
+        int index = values.indexOf(preferred); if (index >= 0) spinner.setSelection(index);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }
