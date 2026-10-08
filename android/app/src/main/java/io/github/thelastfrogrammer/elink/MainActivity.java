@@ -67,7 +67,9 @@ public final class MainActivity extends Activity {
     private ImageView fileThumbnail;
     private Button graphs;
     private String fileThumbnailKey = "";
-    private Button cloudCamera;
+    private Button cloudCamera, cameraFix;
+    /** First run only: the three ways in. Hidden for good once the phone has connected or a model has been sliced. */
+    private LinearLayout getStarted, heroCard;
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
@@ -134,10 +136,15 @@ public final class MainActivity extends Activity {
             return insets;
         });
         // Header: printer name, connection chip, model/firmware line.
-        LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); content.addView(header);
-        title = new TextView(this); title.setText("Link Workshop"); title.setTextSize(24); title.setTextColor(INK); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); A11y.heading(title); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
-        summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4)); header.addView(summary);
+        // With large text the chip goes under the title, so the printer name gets the full width.
+        boolean largeText = getResources().getConfiguration().fontScale >= 1.3f;
+        LinearLayout header = new LinearLayout(this); header.setOrientation(largeText ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        header.setGravity(largeText ? Gravity.START : Gravity.CENTER_VERTICAL); content.addView(header);
+        title = new TextView(this); title.setText("Link Workshop");
+        title.setTextSize(24); title.setTextColor(INK); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); A11y.heading(title); header.addView(title, largeText ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1));
+        summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4));
+        LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(-2, -2); if (largeText) chipLayout.topMargin = dp(4); header.addView(summary, chipLayout);
         identity = label(content, "Centauri Carbon 2", 13, MUTED, false);
         // Results of actions show here, on every tab, until tapped away or replaced.
         feedback = new TextView(this); feedback.setTextSize(14); feedback.setTextColor(INK); feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -214,7 +221,19 @@ public final class MainActivity extends Activity {
         button(more, "Matrix coexistence test…", this::coexistenceHelp);
         setMore(settings.getBoolean("remoteVPN", false) || settings.getBoolean("pinProbe", false));
         currentSection = pages[0];
-        LinearLayout hero = card(null);
+        // Get started: one line on what the app does, then the three ways in, each with one button.
+        getStarted = card("Get started");
+        label(getStarted, "Link Workshop watches and controls your Centauri Carbon 2, and slices models on this phone. Choose one way to begin.", 14, INK, false);
+        label(getStarted, "1. At home, on Wi-Fi", 14, INK, true);
+        label(getStarted, "Turn the printer on and join the same Wi-Fi as this phone. Then look for the printer.", 13, MUTED, false);
+        rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { selectPage(3); scanPrinters(); }, true);
+        label(getStarted, "2. Away from home", 14, INK, true);
+        label(getStarted, "Sign in with your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
+        rowButton(row(getStarted), "Sign in with Elegoo…", this::cloudSignIn, false);
+        label(getStarted, "3. Just want a print", 14, INK, true);
+        label(getStarted, "Slice a model on this phone, then send the file to the printer.", 13, MUTED, false);
+        rowButton(row(getStarted), "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), false);
+        LinearLayout hero = card(null); heroCard = hero;
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
         ring = new ProgressRing(this, TRACK, TEAL, INK, MUTED); heroRow.addView(ring, new LinearLayout.LayoutParams(dp(116), dp(116)));
         LinearLayout heroText = new LinearLayout(this); heroText.setOrientation(LinearLayout.VERTICAL); heroText.setPadding(dp(16), 0, 0, 0); heroRow.addView(heroText, new LinearLayout.LayoutParams(0, -2, 1));
@@ -336,7 +355,7 @@ public final class MainActivity extends Activity {
         });
         cloudPrinters = button(account, "Cloud details…", () -> startActivity(new Intent(this, CloudStatusActivity.class)));
         cloudSignOut = button(account, "Sign out on this phone", this::cloudSignOut);
-        label(account, "Without a local connection, Monitor shows what your printer last sent to the Elegoo cloud, and Pause, Resume, Stop and the light go through the cloud. Your password goes only to Elegoo's own sign-in page. Background watching keeps a notification showing and sends completion and fault alerts.", 13, MUTED, false);
+        label(account, "Your password goes only to Elegoo's own sign-in page. Without a local connection, Monitor shows the cloud's last update.", 13, MUTED, false);
         renderCloudAccount();
         LinearLayout preferences = card("App preferences");
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
@@ -374,6 +393,7 @@ public final class MainActivity extends Activity {
         File file = new File(path), sliced = new File(getCacheDir(), "sliced");
         try { if (!file.getCanonicalFile().getParentFile().equals(sliced.getCanonicalFile()) || !file.isFile()) return; } catch (IOException error) { return; }
         pendingSlicedFile = path; pendingSlicedName = name; intent.removeExtra(SliceActivity.RESULT_FILE);
+        settings.edit().putBoolean("everSliced", true).apply();
         selectPage(1); takeSliced();
     }
     /** After "Upload and print" on the Slice screen: open Print setup once the upload is in the printer's file list. */
@@ -865,6 +885,7 @@ public final class MainActivity extends Activity {
     private void buildCamera() {
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
         cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
+        cameraFix = button(cloudCard, "Open Settings to sign in", () -> selectPage(3)); cameraFix.setVisibility(View.GONE);
         // Opening it asks for the one-time cloud-control agreement first, like every other cloud action.
         cloudCamera = rowButton(row(cloudCard), "Watch through the Elegoo cloud", () -> {
             if (printer == null || printer.cloudSerial.isEmpty()) return;
@@ -960,6 +981,7 @@ public final class MainActivity extends Activity {
         localCameraBody.setVisibility(showLocal ? View.VISIBLE : View.GONE);
         localToggle.setVisibility(ready || cameraPlayer != null ? View.GONE : View.VISIBLE);
         localToggle.setText(localCameraOpen ? "Hide local camera options" : "Use the printer's own camera on this network…");
+        cameraFix.setVisibility(!ready && !signedIn ? View.VISIBLE : View.GONE);
         if (ready != cameraLocalFirst) { cameraLocalFirst = ready; pages[2].removeView(cameraLocalCard); pages[2].addView(cameraLocalCard, ready ? 0 : 1); }
     }
     private void render() {
@@ -972,6 +994,10 @@ public final class MainActivity extends Activity {
         boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false);
         if (cloudFresh && !cloudOk && !cloudAsked) { cloudAsked = true; cloudGate(true, this::render); }
         boolean live = fresh || cloudFresh;
+        // "Seen" flags for the first-run card: once the phone has connected (locally or through the cloud), the card stays hidden.
+        if ((ready || cloudFresh) && !settings.getBoolean("everConnected", false)) settings.edit().putBoolean("everConnected", true).apply();
+        boolean firstRun = !settings.getBoolean("everConnected", false) && !settings.getBoolean("everSliced", false);
+        getStarted.setVisibility(firstRun ? View.VISIBLE : View.GONE);
         block = ControlState.block(ready, fresh, ready && printer.pinProbe(), connecting, cloud, cloudFresh, cloud && printer.cloudOnline == 0, cloudOk, cloud && printer.cloudCommandBusy);
         boolean canControl = block == ControlState.Block.NONE;
         snapshot = printer == null ? new JSONObject() : ready ? printer.status : cloud ? printer.cloudStatus : new JSONObject();
@@ -1004,6 +1030,10 @@ public final class MainActivity extends Activity {
         upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE);
         upkeepHint.setText(upkeepOk ? "Commands follow Elegoo's own printer page and are never repeated automatically." : upkeepReason + " Emergency stop stays available.");
         tuningCard.setVisibility(canControl ? View.VISIBLE : View.GONE); upkeepCard.setVisibility(canControl ? View.VISIBLE : View.GONE);
+        // On a new install the Get started card already offers Find, Sign in and Slice, so the empty Controls card waits.
+        controlsCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
+        // On first run the Get started card already says how to connect; the "Not connected" summary would repeat it.
+        heroCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
         canvasCard.setVisibility(noData ? View.GONE : View.VISIBLE); tilesRow.setVisibility(noData ? View.GONE : View.VISIBLE);
         printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData || !canControl ? View.GONE : View.VISIBLE);
         cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
@@ -1175,6 +1205,7 @@ public final class MainActivity extends Activity {
             else { pendingExportHash = ""; pendingExportUri = null; }
         }
         if (request == PICK_FILE && result == RESULT_OK && data != null && data.getData() != null && printer != null) printer.select(data.getData());
+        if (request == SLICE && result == RESULT_OK && data != null && data.getStringExtra(SliceActivity.RESULT_FILE) != null) settings.edit().putBoolean("everSliced", true).apply();
         if (request == SLICE && result == RESULT_OK && data != null && data.getStringExtra(SliceActivity.RESULT_PRINT_SETUP) != null) awaitPrintSetup(data.getStringExtra(SliceActivity.RESULT_PRINT_SETUP));
         if (request == SLICE && result == RESULT_OK && data != null && printer != null) {
             String path = data.getStringExtra(SliceActivity.RESULT_FILE), name = data.getStringExtra(SliceActivity.RESULT_NAME);

@@ -95,13 +95,16 @@ public final class RecordingsActivity extends Activity {
     private void showList() {
         content.removeAllViews();
         heading("Print recordings");
-        label("Each print the app watches is recorded automatically, newest first. Recording continues while the app is open, over your home network or through the Elegoo cloud. Unfinished means the app stopped watching before the print ended.", 13, muted, false);
         List<PrintRecorder.Recording> recordings = new PrintRecorder(directory(this)).list();
         if (recordings.isEmpty()) {
             label("No recordings yet.", 16, ink, true);
-            label("A print is recorded once the app is watching the printer. Start a print, then come back here. If nothing appears, check that Make print recordings is turned on in Settings.", 14, muted, false);
+            label("Each print is recorded while the app watches the printer, newest first. Connect to the printer, then start a print.", 14, muted, false);
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); content.addView(row);
+            action(row, "Open Settings to connect", () -> startActivity(new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_PAGE, 3)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
             return;
         }
+        label("Each print the app watches is recorded automatically, newest first. Unfinished means the app stopped watching before the print ended.", 13, muted, false);
         for (PrintRecorder.Recording recording : recordings) {
             LinearLayout card = card();
             TextView name = label(card, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")), 16, ink, true);
