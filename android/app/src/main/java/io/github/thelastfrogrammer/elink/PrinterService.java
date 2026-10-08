@@ -56,6 +56,7 @@ public final class PrinterService extends Service {
     private static final long CLOUD_VISIBLE_POLL_MS = 15_000, CLOUD_BACKGROUND_POLL_MS = 30_000;
     private final ScheduledExecutorService cloudWorker = Executors.newSingleThreadScheduledExecutor();
     private CloudAccountStore cloudAccounts;
+    private CloudFileMemory cloudFiles;
     private volatile CloudApi cloudApi;
     private CloudControl cloudControl;
     private PrintAlerts cloudAlerts = new PrintAlerts();
@@ -92,6 +93,7 @@ public final class PrinterService extends Service {
         manager.createNotificationChannel(new NotificationChannel(CHANNEL, "Printer connection", NotificationManager.IMPORTANCE_LOW));
         main.post(freshness);
         cloudAccounts = new CloudAccountStore(this);
+        cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         if (cloudBackground()) main.post(cloudPoll);
     }
@@ -323,6 +325,7 @@ public final class PrinterService extends Service {
         CloudUpload[] self = new CloudUpload[1];
         self[0] = new CloudUpload(api, new CloudApi.HttpUploader(), commands, files, cloudWorker, serial, file, name, new CloudUpload.Listener() {
             public void progress(int percent) { main.post(() -> { if (cloudUpload != self[0]) return; feedback = "Uploading " + name + " through the Elegoo cloud: " + percent + "%" + (percent >= 50 ? " (printer fetching)" : ""); changed(); updateNotification(false); }); }
+            public void stored(String objectName) { cloudFiles.remember(serial, name, objectName); }
             public void finished(boolean done, String message) { main.post(() -> {
                 if (cloudUpload != self[0]) return;
                 cloudUpload = null;
@@ -336,7 +339,12 @@ public final class PrinterService extends Service {
         cloudUpload = self[0];
         self[0].start();
     }
+    private final java.util.concurrent.atomic.AtomicBoolean cloudCancel = new java.util.concurrent.atomic.AtomicBoolean();
+    private boolean fileFieldsLogged;
+    /** How the app reaches Elegoo's storage over https (replaceable in tests). */
+    PrinterHttp.ConnectionFactory cloudConnections = url -> (java.net.HttpURLConnection) url.openConnection();
     public void cancelDownload() {
+        cloudCancel.set(true);
         if (session != null) session.cancelDownload();
         PrinterHttp direct = directHttp; if (direct != null) direct.cancel();
     }
@@ -349,10 +357,37 @@ public final class PrinterService extends Service {
     private void downloadDirect(String storage, String filename) {
         if (directDownloading) { feedback = "A download is already running."; changed(); return; }
         String serial = cloudSerial, knownHost = host;
-        directDownloading = true; feedback = "Looking for the printer on this Wi-Fi…"; changed();
+        // Through the cloud first when Elegoo's storage is known to hold this G-code (our own upload, or a field in the cloud's record).
+        CloudApi cloud = cloudApi;
+        boolean cloudCapable = "local".equals(storage) && usingCloud() && cloud != null && !cloud.needsSignIn() && !serial.isEmpty();
+        directDownloading = true; cloudCancel.set(false);
+        feedback = cloudCapable ? "Checking Elegoo's cloud for this file…" : "Looking for the printer on this Wi-Fi…"; changed();
         files.execute(() -> {
             File local = null; String failure = null; String[] reached = {null}; NetworkRoute[] via = {null};
-            try {
+            boolean cloudDone = false, cloudUnknown = false; String cloudFailure = null;
+            if (cloudCapable) {
+                try {
+                    CloudFileRoute.Choice choice = CloudFileRoute.choose(cloudFiles, serial, filename, cloud::fileRecord);
+                    if (!fileFieldsLogged) { fileFieldsLogged = true; cloud.logFileListShape(serial); }
+                    if (choice == null) { cloudUnknown = true; Diagnostics.note(Diagnostics.FILES, "cloud route: no G-code reference in our uploads or the cloud's record"); }
+                    else {
+                        main.post(() -> { feedback = "Downloading through the Elegoo cloud…"; changed(); });
+                        File target = File.createTempFile("download-", ".gcode", getCacheDir());
+                        try {
+                            CloudFileRoute.download(choice, cloud::signedLink, target, percent -> main.post(() -> { feedback = "Downloading G-code through the Elegoo cloud" + (percent < 0 ? "…" : ": " + percent + "%"); changed(); }), cloudConnections, cloudCancel);
+                            local = target; cloudDone = true;
+                        } catch (Exception error) {
+                            target.delete();
+                            String plain = FriendlyErrors.describe(error, "The cloud download");
+                            cloudFailure = plain != null ? plain : error.getMessage() == null ? "it failed" : error.getMessage();
+                            Diagnostics.note(Diagnostics.FILES, "cloud route failed: " + StatusPresentation.clean(cloudFailure));
+                        }
+                    }
+                } catch (Exception error) { Diagnostics.note(Diagnostics.FILES, "cloud route could not start: " + error.getClass().getSimpleName()); }
+                if (cloudCancel.get()) cloudFailure = "Download cancelled.";
+                if (!cloudDone && !cloudCancel.get()) main.post(() -> { feedback = "Looking for the printer on this Wi-Fi…"; changed(); });
+            }
+            if (!cloudDone && !cloudCancel.get()) try {
                 NetworkRoute route = NetworkRoute.local(getApplicationContext()); via[0] = route;
                 String address = null;
                 if (!serial.isEmpty()) {
@@ -385,6 +420,11 @@ public final class PrinterService extends Service {
                 String plain = FriendlyErrors.describe(error, "The download");
                 failure = plain != null ? plain : error instanceof IOException && error.getMessage() != null ? error.getMessage() : PrinterErrors.describe(error, "Download");
             } finally { directHttp = null; }
+            if (failure != null) {
+                if (cloudUnknown) failure += " " + CloudFileRoute.NO_COPY;
+                else if (cloudFailure != null) failure += " The Elegoo cloud route failed too: " + cloudFailure;
+            }
+            if (!cloudDone && cloudCancel.get()) failure = "Download cancelled.";
             File done = local; String problem = failure;
             main.post(() -> {
                 directDownloading = false;

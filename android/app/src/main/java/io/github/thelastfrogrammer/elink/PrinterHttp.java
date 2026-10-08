@@ -56,20 +56,44 @@ public final class PrinterHttp {
     static String query(String value) throws UnsupportedEncodingException { return URLEncoder.encode(value, "UTF-8").replace("+", "%20"); }
 
     private void fetch(String path, String filename, File destination, Progress progress, long maxBytes, boolean gcode) throws Exception {
-        HttpURLConnection connection = null; boolean success = false;
-        String what = path + " " + filename, report = "";
-        long copied = 0;
+        HttpURLConnection connection = null;
         try {
             checkCancelled();
             connection = open(path + "?X-Token=" + query(token) + "&file_name=" + query(filename));
             connection.setRequestMethod("GET"); connection.setReadTimeout(30000);
             connection.setRequestProperty("Accept", "application/octet-stream"); connection.setRequestProperty("Accept-Encoding", "identity");
+            receive(connection, destination, progress, maxBytes, gcode, path + " " + filename, true, cancelled);
+        } catch (Exception failure) {
+            destination.delete();
+            throw failure;
+        } finally {
+            if (connection != null) connection.disconnect(); active = null;
+        }
+    }
+
+    /**
+     * Reads an answered download into `destination`: status, length and encoding checks, error documents instead of the file, the size
+     * cap, gzip, progress, and the destination removed on any failure. Shared by the printer's own port and Elegoo's cloud storage
+     * (`fromPrinter` false), which differ only in what a refusal means.
+     */
+    static void receive(HttpURLConnection connection, File destination, Progress progress, long maxBytes, boolean gcode, String what, boolean fromPrinter, AtomicBoolean cancelled) throws Exception {
+        boolean success = false;
+        String report = "";
+        long copied = 0;
+        try {
+            if (cancelled.get()) throw new IOException("Operation cancelled");
             int code = connection.getResponseCode();
             String type = connection.getContentType(), encoding = connection.getContentEncoding();
             long total = connection.getContentLengthLong();
             report = "HTTP " + code + (type == null ? "" : ", " + type) + (encoding == null ? "" : ", " + encoding) + (total < 0 ? ", length not given" : ", " + total + " bytes");
-            if (code == 401 || code == 403) throw new PrinterErrors.Rejected(1000);
-            if (code != 200) throw new PrinterErrors.HttpStatus(code);
+            if (code == 401 || code == 403) {
+                if (fromPrinter) throw new PrinterErrors.Rejected(1000);
+                throw new IOException("Elegoo's storage refused the download link (HTTP " + code + "). It may have expired or the file may have been removed.");
+            }
+            if (code != 200) {
+                if (fromPrinter) throw new PrinterErrors.HttpStatus(code);
+                throw new IOException(code == 404 ? "Elegoo's storage no longer has this file (HTTP 404)." : "Elegoo's storage answered HTTP " + code + ".");
+            }
             // The body decides, not its labels: some firmware labels files oddly. Compressed bodies are unpacked.
             boolean gzip = encoding != null && encoding.toLowerCase(Locale.ROOT).contains("gzip");
             if (encoding != null && !gzip && !encoding.equalsIgnoreCase("identity")) throw new IOException("Printer sent the file in an unsupported encoding (" + encoding + ")");
@@ -80,9 +104,9 @@ public final class PrinterHttp {
                  OutputStream output = new BufferedOutputStream(new FileOutputStream(destination))) {
                 byte[] buffer = new byte[65536]; int count;
                 while ((count = input.read(buffer)) != -1) {
-                    checkCancelled(); if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
+                    if (cancelled.get()) throw new IOException("Operation cancelled"); if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException("Download cancelled");
                     if (first) for (int i = 0; i < count; i++) if (!Character.isWhitespace((char) (buffer[i] & 255))) {
-                        if (errorDocument(buffer, i, count)) throw new IOException("Printer answered with an error instead of the " + (gcode ? "G-code" : "video") + ": " + new String(buffer, i, Math.min(count - i, 160), "UTF-8").trim());
+                        if (errorDocument(buffer, i, count)) throw new IOException((fromPrinter ? "Printer" : "Elegoo's storage") + " answered with an error instead of the " + (gcode ? "G-code" : "video") + ": " + new String(buffer, i, Math.min(count - i, 160), "UTF-8").trim());
                         first = false; break;
                     }
                     copied += count; if (copied > maxBytes || total > 0 && copied > total) throw new IOException("Download exceeded expected size");
@@ -91,7 +115,7 @@ public final class PrinterHttp {
                     if (percent != last) { last = percent; progress.update(percent); }
                 }
             }
-            checkCancelled();
+            if (cancelled.get()) throw new IOException("Operation cancelled");
             if (copied == 0 || total > 0 && copied != total) throw new IOException("Download was empty or incomplete (" + copied + " of " + (total < 0 ? "?" : String.valueOf(total)) + " bytes)");
             progress.update(100); success = true;
             Diagnostics.note(Diagnostics.FILES, "downloaded " + what + " · " + report + " · " + copied + " bytes received");
@@ -99,7 +123,6 @@ public final class PrinterHttp {
             Diagnostics.note(Diagnostics.FILES, "download failed " + what + " · " + (report.isEmpty() ? "no response" : report) + " · " + copied + " bytes · " + failure);
             throw failure;
         } finally {
-            if (connection != null) connection.disconnect(); active = null;
             if (!success) destination.delete();
         }
     }

@@ -25,6 +25,8 @@ final class CloudUpload {
     }
     interface Listener {
         void progress(int percent);
+        /** The printer reported the file fetched: where it lives in Elegoo's storage (object name only, never the link). Scheduler thread, before finished(true). */
+        default void stored(String objectName) { }
         /** Called once, on the scheduler thread. */
         void finished(boolean done, String message);
     }
@@ -41,6 +43,7 @@ final class CloudUpload {
     private final long stallMs, settleMs;
     private volatile boolean cancelled, ended, fetching, putting;
     private volatile long lastBytesAt;
+    private volatile String storedObject = "";
     private ScheduledFuture<?> putWatchdog;
     private ScheduledFuture<?> stall;
     private int lastPercent = -1;
@@ -89,7 +92,7 @@ final class CloudUpload {
             int status = uploader.put(target.uploadUrl, headers, file, percent -> { lastBytesAt = System.nanoTime(); report(percent / 2); return !cancelled; });
             Diagnostics.note(Diagnostics.FILES, "cloud upload: storage answered HTTP " + status);
             if (status < 200 || status >= 300) failure = "Elegoo's storage refused the file (HTTP " + status + ").";
-            access = target.accessUrl;
+            access = target.accessUrl; storedObject = target.objectName;
         } catch (InterruptedIOException stopped) { failure = cancelled || !(stopped instanceof java.net.SocketTimeoutException) ? "Upload cancelled." : FriendlyErrors.message(stopped, "Sending the file to Elegoo", "Upload timed out.");
         } catch (IOException error) { failure = FriendlyErrors.message(error, "Sending the file to Elegoo", "Could not upload the file to Elegoo."); }
         putting = false;
@@ -130,7 +133,7 @@ final class CloudUpload {
         if (ended || !task.isEmpty() && !task.equals(serial)) return;
         if (status != 0 || progress == 0 || progress == 100) Diagnostics.note(Diagnostics.FILES, "cloud upload: printer reports " + progress + "% status " + status);
         restartStall();
-        if (status == 1) { report(100); finish(true, "Uploaded " + name + " through the Elegoo cloud."); }
+        if (status == 1) { report(100); if (!ended && !storedObject.isEmpty()) listener.stored(storedObject); finish(true, "Uploaded " + name + " through the Elegoo cloud."); }
         else if (status == 2) finish(false, "The printer cancelled the transfer of " + name + ".");
         else if (status == 3) finish(false, "The printer could not fetch " + name + " from Elegoo. Check its storage space and try again.");
         else report(50 + progress / 2);

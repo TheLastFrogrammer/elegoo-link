@@ -36,6 +36,8 @@ public class FailureCloudUploadTest {
     private static final class Outcome implements CloudUpload.Listener {
         final BlockingQueue<String> result = new LinkedBlockingQueue<>();
         public void progress(int percent) { }
+        final List<String> stored = new CopyOnWriteArrayList<>();
+        public void stored(String objectName) { stored.add(objectName); }
         public void finished(boolean done, String message) { result.add((done ? "done: " : "failed: ") + message); }
     }
 
@@ -172,5 +174,17 @@ public class FailureCloudUploadTest {
         assertEquals(1, Collections.frequency(methods, Cc2Codec.FETCH));
         assertEquals("the pre-fetch clear and the stall cancel", 2, Collections.frequency(methods, Cc2Codec.FETCH_CANCEL));
         assertTrue("the 1058 cancel is sent but the message says to check whether the file arrived", text.contains("Refresh Files"));
+    }
+
+    /** A finished upload reports where the file lives in Elegoo's storage (the object name only, never the link), so it can be fetched back. */
+    @Test public void aFinishedUploadReportsOnlyTheObjectName() throws Exception {
+        CloudControl control = control(); Outcome outcome = new Outcome();
+        new CloudUpload(api(), (url, headers, file, progress) -> 200, via(control), blocking, worker, SERIAL, gcode(), "part.gcode", outcome, 5_000, 10).start();
+        assertTrue(eventually(() -> !links.isEmpty() && links.get(0).methods.contains(Cc2Codec.FETCH), 3000));
+        FakeLink link = links.get(0);
+        link.events.message("12345" + SERIAL, new JSONObject().put("method", Cc2Codec.FETCH_STATUS).put("result", new JSONObject().put("taskID", SERIAL).put("progress", 100).put("status", 1)).toString());
+        assertTrue(outcome.result.poll(3, TimeUnit.SECONDS).startsWith("done:"));
+        assertEquals(Collections.singletonList("gcode/x"), outcome.stored);
+        assertFalse(outcome.stored.toString().contains("https"));
     }
 }

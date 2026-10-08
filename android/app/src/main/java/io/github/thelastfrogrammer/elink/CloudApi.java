@@ -164,8 +164,9 @@ public final class CloudApi {
 
     /** Where to put a file for a printer to fetch: a signed upload address and the address the printer downloads from. */
     public static final class UploadTarget {
-        public final String uploadUrl, accessUrl;
-        UploadTarget(String uploadUrl, String accessUrl) { this.uploadUrl = uploadUrl; this.accessUrl = accessUrl; }
+        public final String uploadUrl, accessUrl, objectName;
+        UploadTarget(String uploadUrl, String accessUrl) { this(uploadUrl, accessUrl, ""); }
+        UploadTarget(String uploadUrl, String accessUrl, String objectName) { this.uploadUrl = uploadUrl; this.accessUrl = accessUrl; this.objectName = objectName; }
     }
     /** Files from 500 MB use the SDK's multipart upload, which this app does not implement. */
     public static final long UPLOAD_LIMIT = 500L * 1024 * 1024 - 1;
@@ -189,7 +190,7 @@ public final class CloudApi {
             throw new CloudException("Elegoo did not provide a place to upload the file.", false);
         }
         Diagnostics.note(Diagnostics.FILES, "cloud upload: storage address received (upload " + origin(upload) + ", printer fetch " + origin(access) + ")");
-        return new UploadTarget(upload, access);
+        return new UploadTarget(upload, access, data.optString("objectName", ""));
     }
     /** Scheme and host of an address for diagnostics, never its path or signature; "none" when empty. */
     static String origin(String url) {
@@ -240,6 +241,90 @@ public final class CloudApi {
             }
             return connection.getResponseCode();
         } finally { connection.disconnect(); }
+    }
+
+    // ---- Files the printer reports to the cloud, and fetching a stored object ----
+
+    /** The cloud's record of one file on the printer (SDK getFileDetail). The field names and kinds go to the diagnostics, never the values. */
+    public JSONObject fileRecord(String serial, String filename) throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/local-file/filename?serialNo=" + URLEncoder.encode(serial, "UTF-8")
+            + "&filename=" + URLEncoder.encode(filename, "UTF-8"), null, true).optJSONObject("data");
+        if (data == null) throw new CloudException("Elegoo's cloud has no record of this file.", false);
+        Diagnostics.note(Diagnostics.FILES, "cloud file record fields: " + shape(data));
+        return data;
+    }
+
+    /** First item of the cloud's file list for the printer: only its field names and kinds are logged, once, to see what Elegoo returns. */
+    public void logFileListShape(String serial) {
+        try {
+            JSONObject data = authorized("GET", "/api/v1/device-management-server/local-file/page?serialNo=" + URLEncoder.encode(serial, "UTF-8") + "&pageNo=1&pageSize=1", null, false).optJSONObject("data");
+            JSONArray list = data == null ? null : data.optJSONArray("list");
+            JSONObject first = list == null ? null : list.optJSONObject(0);
+            Diagnostics.note(Diagnostics.FILES, "cloud file list: " + (data == null ? "no data" : "page fields: " + shape(data)) + (first == null ? "; no items" : "; first item fields: " + shape(first)));
+        } catch (IOException error) { Diagnostics.note(Diagnostics.FILES, "cloud file list unavailable: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
+    }
+
+    /** "name:kind" for each field of a JSON object, with kinds string, number, bool, null, object, array, url-like and object-name-like. No values. */
+    static String shape(JSONObject object) {
+        List<String> keys = new ArrayList<>();
+        for (Iterator<String> it = object.keys(); it.hasNext(); ) keys.add(it.next());
+        Collections.sort(keys);
+        StringBuilder text = new StringBuilder();
+        for (String key : keys) {
+            String name = key.length() > 40 || key.matches(".*[0-9a-fA-F]{12,}.*") ? "(long key)" : key.replaceAll("[^A-Za-z0-9_.-]", "?");
+            if (text.length() > 0) text.append(", ");
+            text.append(name).append(':').append(kind(object.opt(key)));
+        }
+        return text.toString();
+    }
+    private static String kind(Object value) {
+        if (value == null || value == JSONObject.NULL) return "null";
+        if (value instanceof Number) return "number";
+        if (value instanceof Boolean) return "bool";
+        if (value instanceof JSONObject) return "object";
+        if (value instanceof JSONArray) return "array";
+        String text = String.valueOf(value);
+        if (text.isEmpty()) return "empty-string";
+        if (text.contains("://")) return "url-like";
+        if (OBJECT_NAME.matcher(text).matches()) return "object-name-like";
+        return "string";
+    }
+    private static final Pattern OBJECT_NAME = Pattern.compile("[\\w.@%+-]+(/[\\w.@%+-]+)+");
+
+    /** What a file record clearly names as the G-code in Elegoo's storage: an object name, or a link on an Elegoo domain. */
+    public static final class Reference {
+        public final String objectName, url;
+        Reference(String objectName, String url) { this.objectName = objectName; this.url = url; }
+    }
+    /**
+     * Only fields that plainly point at a G-code are used: a string that is an object path ending in .gcode (or .gcode.gz), or an https
+     * link on an Elegoo domain whose path ends that way. The thumbnail and anything else are ignored. Null when there is none.
+     */
+    static Reference gcodeReference(JSONObject record) {
+        for (Iterator<String> it = record.keys(); it.hasNext(); ) {
+            String key = it.next(); Object value = record.opt(key);
+            if (!(value instanceof String) || key.toLowerCase(Locale.ROOT).contains("thumb")) continue;
+            String text = (String) value;
+            String lower = text.toLowerCase(Locale.ROOT);
+            if (text.startsWith("https://")) {
+                String host = hostOf(text);
+                String path = lower.contains("?") ? lower.substring(0, lower.indexOf('?')) : lower;
+                if (host != null && (host.equals("elegoo.com") || host.endsWith(".elegoo.com") || host.equals("elegoo.com.cn") || host.endsWith(".elegoo.com.cn")) && (path.endsWith(".gcode") || path.endsWith(".gcode.gz"))) return new Reference("", text);
+            } else if (OBJECT_NAME.matcher(text).matches() && (lower.endsWith(".gcode") || lower.endsWith(".gcode.gz"))) return new Reference(text, "");
+        }
+        return null;
+    }
+    static String hostOf(String url) {
+        try { String host = new java.net.URI(url).getHost(); return host == null ? null : host.toLowerCase(Locale.ROOT); } catch (Exception error) { return null; }
+    }
+
+    /** A time-limited https link for an object in Elegoo's private storage (the same call the SDK makes for thumbnails). */
+    public String signedLink(String objectName) throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/oss/generate-pre-access-url?bucketAlias=iot-private&objectName=" + URLEncoder.encode(objectName, "UTF-8"), null, true).optJSONObject("data");
+        String link = data == null ? "" : data.optString("accessUrl", "");
+        if (!link.startsWith("https://") || hostOf(link) == null) throw new CloudException("Elegoo did not provide a download link for this file.", false);
+        Diagnostics.note(Diagnostics.FILES, "cloud download link received from host " + hostOf(link));
+        return link;
     }
 
     public List<Device> devices() throws IOException {

@@ -166,3 +166,12 @@ not the G-code. Elegoo's own cloud printer page (ElegooSlicer `cloud_service_web
 HTTP port on the local network, `http://<ip>:80/download?X-Token=<access code, default 123456>&file_name=…`, the same
 request this app makes, so the printer is expected to serve files in cloud mode too. One attempt on the owner's CC2 in
 cloud mode, during a print, had its connection to port 80 refused; the cause is not known.
+## Fetching printer files through the cloud (v0.12.9)
+
+Files this app sends through the cloud are stored by Elegoo (`oss/biz-entrypoint`, module `gcode`); the app remembers
+each file's `objectName` (never the signed link) and later asks `oss/generate-pre-access-url?bucketAlias=iot-private&objectName=`
+for a fresh link to download it over https. For other files the app reads `local-file/filename` and logs only the
+record's field names and value kinds; it accepts a G-code reference only when a field is plainly an object path ending
+`.gcode`/`.gcode.gz` or an https link on an Elegoo host ending the same way. Neither the SDK nor ElegooSlicer's cloud page
+reads such a field: ElegooSlicer downloads from the printer's port 80 on the local network even for cloud printers. How
+Elegoo's phone app fetches G-code in cloud mode is not known.
