@@ -57,6 +57,28 @@ public final class FeatureData {
         }
         return text.toString();
     }
+    /** One {name, detail} pair per history entry, newest first (at most 50): the result, how long it took, and the timelapse state. */
+    public static java.util.List<String[]> historyEntries(JSONObject result) {
+        java.util.List<String[]> list = new java.util.ArrayList<>();
+        JSONArray rows = result == null ? null : result.optJSONArray("history_task_list");
+        if (rows == null) return list;
+        for (int i = rows.length() - 1; i >= Math.max(0, rows.length() - 50); i--) {
+            JSONObject row = rows.optJSONObject(i); if (row == null) continue;
+            int state = row.optInt("task_status", -1);
+            String took = "";
+            if (row.has("begin_time") && row.has("end_time")) { long elapsed = row.optLong("end_time") - row.optLong("begin_time"); if (elapsed >= 0) took = duration(elapsed); }
+            String video;
+            switch (row.optInt("time_lapse_video_status", 0)) {
+                case 1: video = "Timelapse recorded, video not made yet"; break;
+                case 2: video = "Timelapse ready" + videoSize(row); break;
+                case 3: video = "Timelapse video failed"; break;
+                default: video = ""; break;
+            }
+            list.add(new String[] {StatusPresentation.clean(row.optString("task_name", "Unnamed job")).replaceFirst("(?i)\\.gcode$", ""),
+                StatusPresentation.joinParts(state == 1 ? "Completed" : state == 2 ? "Cancelled" : "Reported state " + state, took, video)});
+        }
+        return list;
+    }
     /** History entries whose timelapse video is ready to download (time_lapse_video_status 2), newest first, at most 10. */
     public static java.util.List<JSONObject> timelapses(JSONObject result) {
         java.util.List<JSONObject> ready = new java.util.ArrayList<>();

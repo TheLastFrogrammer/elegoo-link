@@ -557,7 +557,7 @@ public class SlicerIntegrationTest {
         setField(slot, "trayChoices", new ArrayList<>(Arrays.asList(new TrayPlan.Tray(0, 0, "PLA", "PLA Matte", "ELEGOO", "#D02828"), new TrayPlan.Tray(0, 1, "PLA", "", "ELEGOO", "#F0F0F0"))));
         java.lang.reflect.Method show = SliceActivity.class.getDeclaredMethod("showTrayChoices", slot.getClass()); show.setAccessible(true);
         show.invoke(activity, slot);
-        SliceActivity.DottedAdapter adapter = (SliceActivity.DottedAdapter) ((Spinner) field(slot, "tray")).getAdapter();
+        WorkshopUi.DottedAdapter adapter = (WorkshopUi.DottedAdapter) ((Spinner) field(slot, "tray")).getAdapter();
         assertNull(adapter.colourAt(0)); // "No tray" has no dot
         assertEquals("#D02828", adapter.colourAt(1)); assertEquals("#F0F0F0", adapter.colourAt(2));
         assertEquals("CANVAS 0 · Tray 0 · PLA · PLA Matte", adapter.getItem(1)); assertEquals("CANVAS 0 · Tray 1 · PLA", adapter.getItem(2));

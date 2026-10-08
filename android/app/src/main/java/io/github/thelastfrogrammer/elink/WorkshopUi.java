@@ -94,4 +94,24 @@ final class WorkshopUi {
         if (subtitle != null) label(content, subtitle, 13, muted, false);
         return content;
     }
+
+    /** A spinner adapter whose rows can start with a filament colour dot; the text never shows the hex. Shared by the Slice screen and Print setup. */
+    static final class DottedAdapter extends ArrayAdapter<String> {
+        private final List<String> colours; private final int ink, muted; private final float density;
+        DottedAdapter(android.content.Context context, int ink, int muted, List<String> values, List<String> colours) {
+            super(context, android.R.layout.simple_spinner_item, values); this.colours = colours; this.ink = ink; this.muted = muted; density = context.getResources().getDisplayMetrics().density;
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        }
+        /** The row's colour as #RRGGBB, or null for a row without a colour. */
+        String colourAt(int position) { return colours.get(position); }
+        @Override public View getView(int position, View convert, android.view.ViewGroup parent) { return dotted((TextView) super.getView(position, convert, parent), colours.get(position), 2); }
+        @Override public View getDropDownView(int position, View convert, android.view.ViewGroup parent) { return dotted((TextView) super.getDropDownView(position, convert, parent), colours.get(position), 3); }
+        private TextView dotted(TextView view, String colour, int lines) {
+            view.setTextColor(ink); view.setSingleLine(false); view.setMaxLines(lines);
+            if (colour == null) { view.setCompoundDrawables(null, null, null, null); view.setCompoundDrawablePadding(0); return view; }
+            GradientDrawable dot = new GradientDrawable(); dot.setShape(GradientDrawable.OVAL); dot.setColor(Color.parseColor(colour)); dot.setStroke(Math.round(density), muted); dot.setSize(Math.round(14 * density), Math.round(14 * density));
+            view.setCompoundDrawablesWithIntrinsicBounds(dot, null, null, null); view.setCompoundDrawablePadding(Math.round(8 * density));
+            return view;
+        }
+    }
 }

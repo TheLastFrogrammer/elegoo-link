@@ -64,4 +64,14 @@ public class TrayPlanTest {
         assertNull(TrayPlan.parse("{\"count\":1,\"tools\":[{\"t\":1,\"canvas_id\":0,\"tray_id\":0}]}"));
         assertEquals(0, TrayPlan.parse("{\"count\":2}").tools.size());
     }
+
+    @Test public void defaultToolCountPrefersThePlanThenTheFilesToolsThenOne() {
+        assertEquals(3, TrayPlan.defaultToolCount(new TrayPlan(3, java.util.Collections.<TrayPlan.Tool>emptyList()), java.util.Arrays.asList(0)));
+        assertEquals(3, TrayPlan.defaultToolCount(null, java.util.Arrays.asList(0, 2)));
+        assertEquals(1, TrayPlan.defaultToolCount(null, java.util.Collections.<Integer>emptyList()));
+        assertEquals(1, TrayPlan.defaultToolCount(null, null));
+        // Selections outside T0-T7 are ignored, as the inspector report warns they may be sentinels.
+        assertEquals(2, TrayPlan.defaultToolCount(null, java.util.Arrays.asList(1, 99, -1)));
+        assertEquals(1, TrayPlan.defaultToolCount(null, java.util.Arrays.asList(99)));
+    }
 }

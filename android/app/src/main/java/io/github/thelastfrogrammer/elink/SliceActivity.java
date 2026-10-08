@@ -1320,28 +1320,9 @@ public final class SliceActivity extends Activity {
         button.setTextColor(disabledAware);
     }
 
-    /** A spinner whose rows can start with a filament colour dot; the text never shows the hex. */
-    final class DottedAdapter extends ArrayAdapter<String> {
-        private final List<String> colours;
-        DottedAdapter(List<String> values, List<String> colours) {
-            super(SliceActivity.this, android.R.layout.simple_spinner_item, values); this.colours = colours;
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-        }
-        /** The row's colour as #RRGGBB, or null for a row without a colour. */
-        String colourAt(int position) { return colours.get(position); }
-        @Override public View getView(int position, View convert, android.view.ViewGroup parent) { return dotted((TextView) super.getView(position, convert, parent), colours.get(position), 2); }
-        @Override public View getDropDownView(int position, View convert, android.view.ViewGroup parent) { return dotted((TextView) super.getDropDownView(position, convert, parent), colours.get(position), 3); }
-    }
-    private TextView dotted(TextView view, String colour, int lines) {
-        view.setTextColor(ink); view.setSingleLine(false); view.setMaxLines(lines);
-        if (colour == null) { view.setCompoundDrawables(null, null, null, null); view.setCompoundDrawablePadding(0); return view; }
-        GradientDrawable dot = new GradientDrawable(); dot.setShape(GradientDrawable.OVAL); dot.setColor(Color.parseColor(colour)); dot.setStroke(dp(1), muted); dot.setSize(dp(14), dp(14));
-        view.setCompoundDrawablesWithIntrinsicBounds(dot, null, null, null); view.setCompoundDrawablePadding(dp(8));
-        return view;
-    }
     /** Like fill(), with a colour per row; selects by text as fill() does. */
     private void fillColoured(Spinner spinner, List<String> values, List<String> colours, String preferred) {
-        spinner.setAdapter(new DottedAdapter(values, colours));
+        spinner.setAdapter(new WorkshopUi.DottedAdapter(this, ink, muted, values, colours));
         int index = values.indexOf(preferred); if (index >= 0) spinner.setSelection(index);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

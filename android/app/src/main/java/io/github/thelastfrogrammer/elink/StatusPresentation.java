@@ -88,5 +88,11 @@ public final class StatusPresentation {
         String text = String.format(java.util.Locale.ROOT, "%.1f°C", value.optDouble("temperature", 0));
         return value.has("target") ? text + String.format(java.util.Locale.ROOT, " / %.0f°C", value.optDouble("target", 0)) : text;
     }
+    /** The non-empty parts joined with " · ", so an empty part leaves no dangling separator. */
+    static String joinParts(String... parts) {
+        StringBuilder text = new StringBuilder();
+        for (String part : parts) if (part != null && !part.trim().isEmpty()) text.append(text.length() > 0 ? " · " : "").append(part.trim());
+        return text.toString();
+    }
     public static String clean(String value) { return value.replaceAll("[\\p{Cntrl}]", " ").substring(0, Math.min(value.length(), 160)); }
 }

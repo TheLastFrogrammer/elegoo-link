@@ -38,6 +38,8 @@ public final class MainActivity extends Activity {
     private Button controlFix, filesFix, moreToggle, localToggle;
     private TextView tuningHint, upkeepHint, cloudCameraHint, timelapseHint, fileHelp;
     private boolean moreOpen, localCameraOpen, cameraLocalFirst;
+    private LinearLayout historyButtons, historyList;
+    private JSONObject renderedHistoryList;
     private ControlState.Block block = ControlState.Block.DISCONNECTED;
     private String dismissedFeedback = "", renderedCanvas;
     private GcodeInspector.Report renderedReport;
@@ -531,15 +533,17 @@ public final class MainActivity extends Activity {
         if (block == ControlState.Block.CLOUD_AGREEMENT) cloudGate(true, this::render); else if (block == ControlState.Block.DISCONNECTED) selectPage(3);
     }
     /** One compact tappable row for a printer file: name, size and layers beneath, a chevron, and a hairline above all but the first. */
-    private void fileRow(String name, String detail, boolean divider, Runnable action) {
-        if (divider) { View line = new View(this); line.setBackgroundColor(TRACK); fileRows.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
+    private void fileRow(String name, String detail, boolean divider, Runnable action) { listRow(fileRows, name, detail, divider, action); }
+    /** A compact list row (name, muted detail line); tappable with a chevron when there is an action, plain otherwise. */
+    private void listRow(LinearLayout list, String name, String detail, boolean divider, Runnable action) {
+        if (divider) { View line = new View(this); line.setBackgroundColor(TRACK); list.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0, dp(10), 0, dp(10)); row.setMinimumHeight(dp(56));
-        row.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
+        if (action != null) row.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
         LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
         TextView first = new TextView(this); first.setText(name); first.setTextSize(15); first.setTextColor(INK); first.setSingleLine(true); first.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE); text.addView(first);
         TextView second = new TextView(this); second.setText(detail); second.setTextSize(12); second.setTextColor(MUTED); text.addView(second);
-        TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextSize(24); chevron.setTextColor(MUTED); chevron.setPadding(dp(12), 0, 0, 0); row.addView(chevron);
-        row.setContentDescription(name + ", " + detail); row.setOnClickListener(v -> action.run()); fileRows.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        if (action != null) { TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextSize(24); chevron.setTextColor(MUTED); chevron.setPadding(dp(12), 0, 0, 0); row.addView(chevron); row.setOnClickListener(v -> action.run()); }
+        row.setContentDescription(name + ", " + detail); list.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
     private void toggleMore() { setMore(!moreOpen); }
     private void setMore(boolean open) {
@@ -666,9 +670,11 @@ public final class MainActivity extends Activity {
         button(recordings, "Open recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
         LinearLayout storage = card("Storage & print history");
         diskInfo = label(storage, "Storage usage not loaded.", 14, MUTED, false);
-        loadDisk = button(storage, "Refresh storage usage", () -> { if (printer != null) printer.loadDisk(); });
-        loadHistory = button(storage, "Refresh print history", () -> { if (printer != null) printer.loadHistory(); });
+        LinearLayout refreshRow = row(storage); historyButtons = refreshRow;
+        loadDisk = rowButton(refreshRow, "Refresh storage", () -> { if (printer != null) printer.loadDisk(); }, false);
+        loadHistory = rowButton(refreshRow, "Refresh history", () -> { if (printer != null) printer.loadHistory(); }, false);
         historyInfo = label(storage, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
+        historyList = new LinearLayout(this); historyList.setOrientation(LinearLayout.VERTICAL); storage.addView(historyList);
         // Timelapse videos the printer made for recent prints: download over LAN, then save.
         timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); storage.addView(timelapseList);
         timelapseHint = label(storage, "", 12, MUTED, false);
@@ -741,15 +747,18 @@ public final class MainActivity extends Activity {
         if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: print start is disabled."); return; }
         if (printer == null || !printer.liveFresh() || !Cc2Codec.idle(printer.liveStatus()) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
         String name = file.optString("filename");
-        LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name) + "\nCheck the build plate, material and sliced printer profile before starting.", 14, INK, false);
-        CheckBox leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record timelapse on printer", false);
+        LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name), 16, INK, true);
+        label(body, "Check the build plate, material and sliced printer profile before starting.", 13, MUTED, false);
+        subheading(body, "1 · Checks");
+        CheckBox leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record a timelapse on the printer", false);
         force.setOnCheckedChangeListener((view, checked) -> { if (checked) leveling.setChecked(true); });
         leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
-        label(body, "Build plate selection (as reported by the protocol)", 13, MUTED, false);
+        subheading(body, "2 · Build plate");
         Spinner plate = spinner(body, new String[] {"Plate A", "Plate B"});
-        label(body, "Number of tools used in this sliced file", 13, MUTED, false);
+        subheading(body, "3 · Filament");
+        label(body, "Tools used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 tool", "2 tools", "3 tools", "4 tools", "5 tools", "6 tools", "7 tools", "8 tools"});
-        List<JSONObject> trays = new ArrayList<>(); List<String> choices = new ArrayList<>(); choices.add("Printer / G-code default");
+        List<JSONObject> trays = new ArrayList<>(); List<String> choices = new ArrayList<>(), dots = new ArrayList<>(); choices.add("Printer / G-code default"); dots.add(null);
         if (printer.canvasFresh()) {
             JSONArray units = printer.canvas.optJSONArray("canvas_list");
             if (units != null) for (int u = 0; u < units.length(); u++) {
@@ -759,15 +768,18 @@ public final class MainActivity extends Activity {
                     JSONObject slot = slots.optJSONObject(t); if (slot == null || slot.optString("filament_type").isEmpty() || unit.optInt("canvas_id", -1) < 0 || slot.optInt("tray_id", -1) < 0) continue;
                     try { trays.add(new JSONObject().put("canvas_id", unit.getInt("canvas_id")).put("tray_id", slot.getInt("tray_id"))); }
                     catch (Exception error) { continue; }
-                    choices.add("CANVAS " + unit.optInt("canvas_id") + " · Tray " + slot.optInt("tray_id") + " · " + StatusPresentation.clean(slot.optString("filament_type")) + " " + StatusPresentation.clean(slot.optString("filament_color")));
+                    choices.add("CANVAS " + unit.optInt("canvas_id") + " · Tray " + slot.optInt("tray_id") + " · " + StatusPresentation.clean(slot.optString("filament_type"))); dots.add(TrayPlan.colour(slot.optString("filament_color")));
                 }
             }
         }
         Spinner[] maps = new Spinner[8]; TextView[] labels = new TextView[8];
-        for (int t = 0; t < 8; t++) { labels[t] = label(body, "G-code tool " + t, 13, MUTED, false); maps[t] = spinner(body, choices.toArray(new String[0])); }
+        for (int t = 0; t < 8; t++) {
+            labels[t] = label(body, "Tool " + t + " prints from", 13, MUTED, false); maps[t] = spinner(body, new String[] {""});
+            maps[t].setAdapter(new WorkshopUi.DottedAdapter(this, INK, MUTED, choices, dots));
+        }
         toolCount.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { for (int t = 0; t < 8; t++) { maps[t].setVisibility(t <= position ? View.VISIBLE : View.GONE); labels[t].setVisibility(t <= position ? View.VISIBLE : View.GONE); } }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { for (int t = 0; t < 8; t++) { maps[t].setVisibility(t <= position && choices.size() > 1 ? View.VISIBLE : View.GONE); labels[t].setVisibility(t <= position && choices.size() > 1 ? View.VISIBLE : View.GONE); } }
         });
         // A file sliced on this phone carries its slot-to-tray plan: G-code tool t prints from the tray chosen for slot t + 1.
         TrayPlan plan = TrayPlan.parse(getSharedPreferences(SliceActivity.TRAY_PLANS, MODE_PRIVATE).getString(GcodeLibrary.safeName(name), null));
@@ -785,7 +797,14 @@ public final class MainActivity extends Activity {
                 : matched == plan.tools.size() ? "Tool count and trays prefilled from slicing this file on the phone."
                 : "Tool count prefilled from slicing this file on the phone; " + (plan.tools.size() - matched) + " planned tray(s) are not reported as loaded now. Refresh trays or choose them.", 13, TEAL, false);
         }
-        label(body, "Verify the tool count against your sliced file. Leave every tool at default to use the printer / G-code mapping, or explicitly map every tool to a reported tray. Timelapse records on the printer; export is not included yet.", 13, MUTED, false);
+        else {
+            // No stored plan: the file's own T selections (when this is the file inspected on the phone) are a starting point, not proof.
+            boolean sameFile = printer.selectedReport != null && GcodeLibrary.safeName(printer.selectedName) != null && GcodeLibrary.safeName(printer.selectedName).equals(GcodeLibrary.safeName(name));
+            int guess = TrayPlan.defaultToolCount(null, sameFile ? printer.selectedReport.tools : null);
+            if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); label(body, "Tool count taken from the file's own T commands (" + guess + "). Check it against your slice.", 13, TEAL, false); }
+        }
+        label(body, choices.size() > 1 ? "Leave every tool at Printer / G-code default, or map every tool to a loaded tray." : "No loaded CANVAS trays reported: the printer's own G-code mapping is used.", 13, MUTED, false);
+        label(body, "A timelapse is recorded on the printer; download it later from the Files tab (local connection).", 12, MUTED, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog setup = new AlertDialog.Builder(this).setTitle("Print setup").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Review start…", null).create();
         setup.setOnShowListener(d -> setup.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
@@ -893,10 +912,17 @@ public final class MainActivity extends Activity {
             }
         }
         diskInfo.setText(printer == null || printer.disk.length() == 0 ? "Storage usage not loaded." : FeatureData.disk(printer.disk));
-        historyInfo.setText(printer == null ? "History not loaded." : printer.history.length() == 0 ? printer.historyMessage : FeatureData.history(printer.history));
+        JSONObject historyNow = printer == null ? null : printer.history;
+        java.util.List<String[]> entries = historyNow == null ? new ArrayList<>() : FeatureData.historyEntries(historyNow);
+        historyInfo.setText(printer == null ? "History not loaded." : historyNow.length() == 0 ? printer.historyMessage : entries.isEmpty() ? FeatureData.history(historyNow) : "");
+        historyInfo.setVisibility(historyInfo.getText().length() == 0 ? View.GONE : View.VISIBLE);
+        if (historyNow != renderedHistoryList) {
+            renderedHistoryList = historyNow; historyList.removeAllViews();
+            for (int i = 0; i < entries.size(); i++) listRow(historyList, entries.get(i)[0], entries.get(i)[1], i > 0, null);
+        }
         boolean noStorage = !query && (printer == null || printer.disk.length() == 0), noHistory = !query && (printer == null || printer.history.length() == 0);
         if (noStorage) diskInfo.setText("Storage and print history load once the printer is reachable.");
-        loadDisk.setVisibility(query ? View.VISIBLE : View.GONE); loadHistory.setVisibility(query ? View.VISIBLE : View.GONE); historyInfo.setVisibility(noHistory ? View.GONE : View.VISIBLE);
+        historyButtons.setVisibility(query ? View.VISIBLE : View.GONE); if (noHistory) historyInfo.setVisibility(View.GONE);
         renderTimelapses();
         continueSaveAfterDownload();
         continuePrintSetup();
@@ -966,12 +992,13 @@ public final class MainActivity extends Activity {
         upkeepHint.setText(upkeepOk ? "Commands follow Elegoo's own printer page and are never repeated automatically." : upkeepReason + " Emergency stop stays available.");
         tuningCard.setVisibility(canControl ? View.VISIBLE : View.GONE); upkeepCard.setVisibility(canControl ? View.VISIBLE : View.GONE);
         canvasCard.setVisibility(noData ? View.GONE : View.VISIBLE); tilesRow.setVisibility(noData ? View.GONE : View.VISIBLE);
-        printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData ? View.GONE : View.VISIBLE);
+        printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData || !canControl ? View.GONE : View.VISIBLE);
         cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
         transferRow.setVisibility(cancelUpload.getVisibility() == View.VISIBLE || cancelDownload.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
         renderCamera(ready, cloud);
-        refill.setEnabled(canControl && printer.canvasFresh() && printer.canvas.has("auto_refill"));
+        boolean refillOk = canControl && printer.canvasFresh() && printer.canvas.has("auto_refill");
+        refill.setEnabled(refillOk); refill.setVisibility(refillOk ? View.VISIBLE : View.GONE);
         if ((ready || cloud) && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText(ready ? "Automatic refill unavailable" : "Automatic refill (refresh trays first)");
         boolean fileBusy = printer != null && printer.fileBusy();
@@ -995,7 +1022,8 @@ public final class MainActivity extends Activity {
         if (ready) {
             name = StatusPresentation.clean(printer.attributes.optString("hostname", profileName.getText().toString().isEmpty() ? "Centauri Carbon 2" : profileName.getText().toString()));
             JSONObject version = printer.attributes.optJSONObject("software_version");
-            model = StatusPresentation.clean(printer.attributes.optString("machine_model", "Centauri Carbon 2")) + (version == null ? "" : " · firmware " + StatusPresentation.clean(version.optString("ota_version"))) + " · " + printer.host();
+            String firmware = version == null ? "" : StatusPresentation.clean(version.optString("ota_version")).trim();
+            model = StatusPresentation.joinParts(StatusPresentation.clean(printer.attributes.optString("machine_model", "Centauri Carbon 2")), firmware.isEmpty() ? "" : "firmware " + firmware, printer.host());
         } else if (cloud) {
             name = printer.cloudName.isEmpty() ? "Cloud printer" : StatusPresentation.clean(printer.cloudName);
             String sn = printer.cloudSerial; model = StatusPresentation.clean(printer.cloudModel.isEmpty() ? "Centauri Carbon 2" : printer.cloudModel) + " · SN …" + (sn.length() > 4 ? sn.substring(sn.length() - 4) : sn);
@@ -1085,7 +1113,7 @@ public final class MainActivity extends Activity {
                 LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView first = new TextView(this); first.setTextColor(INK); first.setTextSize(15); first.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL);
                 first.setText("Tray " + trayId + " · " + (type.isEmpty() ? "Empty" : name.isEmpty() || name.equalsIgnoreCase(type) ? type : name)); text.addView(first);
-                String second = (type.isEmpty() ? "" : type + (colour == null ? "" : " · " + colour));
+                String second = type; // the dot shows the colour; the hex stays in the content description
                 if (tray.has("min_nozzle_temp") && tray.has("max_nozzle_temp")) second += (second.isEmpty() ? "" : " · ") + tray.optInt("min_nozzle_temp") + "–" + tray.optInt("max_nozzle_temp") + "°C";
                 if (!second.isEmpty()) { TextView detailLine = new TextView(this); detailLine.setText(second); detailLine.setTextColor(MUTED); detailLine.setTextSize(12); text.addView(detailLine); }
                 if (active) { TextView chip = new TextView(this); chip.setTextSize(12); chip.setTypeface(Typeface.DEFAULT, Typeface.BOLD); chip.setPadding(dp(10), dp(4), dp(10), dp(4)); chip(chip, "Active", TEAL); row.addView(chip); }

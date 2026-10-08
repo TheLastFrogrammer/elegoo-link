@@ -128,37 +128,7 @@ public class ScreenshotTest {
         String[] states = {"offline", "cloud-agree", "cloud-printing", "cloud-idle", "local-printing", "local-idle"};
         String[] tabs = {"monitor", "files", "camera", "settings"};
         for (String theme : new String[] {"light", "dark"}) for (String state : states) {
-            android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
-            context.getSharedPreferences("workshop-settings", 0).edit().clear().putInt("theme", theme.equals("dark") ? 2 : 1).putInt("page", 0)
-                .putBoolean("cloudControlUnderstood", !state.equals("cloud-agree") && !state.equals("offline")).commit();
-            PrinterService service = Robolectric.setupService(PrinterService.class);
-            org.robolectric.Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(
-                new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
-            MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
-            Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
-            Thread.sleep(500); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
-            boolean cloud = state.startsWith("cloud"), local = state.startsWith("local"), busy = state.endsWith("printing");
-            JSONObject status = busy ? printing() : idle();
-            if (cloud) {
-                service.cloudSignedIn = true; service.cloudSerial = "F01ABC0000R818"; service.cloudName = "Bedroom"; service.cloudModel = "Centauri Carbon 2";
-                service.cloudOnline = 1; service.cloudCheckedAt = System.currentTimeMillis() - 4000; service.cloudStatus = status;
-            }
-            if (local) {
-                Field wanted = PrinterService.class.getDeclaredField("wanted"); wanted.setAccessible(true); wanted.setBoolean(service, true);
-                Cc2Session session = new Cc2Session("192.168.1.50", "123456", null);
-                Field ready = Cc2Session.class.getDeclaredField("ready"); ready.setAccessible(true); ready.setBoolean(session, true);
-                Field at = Cc2Session.class.getDeclaredField("statusAt"); at.setAccessible(true); at.setLong(session, System.nanoTime());
-                Field sessionField = PrinterService.class.getDeclaredField("session"); sessionField.setAccessible(true); sessionField.set(service, session);
-                service.status = status; service.connection = "Connected to 192.168.1.50";
-                service.attributes = new JSONObject().put("hostname", "Bedroom").put("machine_model", "Centauri Carbon 2").put("software_version", new JSONObject().put("ota_version", "01.03.02.15"));
-                service.filePage = new JSONObject("{\"total\":3,\"file_list\":[{\"filename\":\"Benchy_PLA_0.2mm.gcode\",\"size\":4823044,\"layer\":212},{\"filename\":\"Calibration cube.gcode\",\"size\":912331,\"layer\":150},{\"filename\":\"Phone stand v3.gcode\",\"size\":2433102,\"layer\":340}]}");
-                service.filesAt = System.nanoTime(); service.fileMessage = "Files received from printer.";
-                service.disk = new JSONObject().put("used_bytes", 3_200_000_000L).put("total_bytes", 8_000_000_000L);
-                service.history = new JSONObject("{\"history_task_list\":[{\"task_name\":\"Benchy.gcode\",\"task_status\":1,\"begin_time\":1,\"end_time\":9000,\"time_lapse_video_status\":2}]}");
-            }
-            if (cloud || local) service.canvas = new JSONObject("{\"auto_refill\":true,\"active_canvas_id\":0,\"active_tray_id\":1,\"canvas_list\":[{\"canvas_id\":0,\"connected\":1,\"tray_list\":["
-                + "{\"tray_id\":0,\"filament_type\":\"PLA\",\"filament_name\":\"PLA Matte\",\"filament_color\":\"#D02828\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230},"
-                + "{\"tray_id\":1,\"filament_type\":\"PLA\",\"filament_name\":\"PLA\",\"filament_color\":\"#F0F0F0\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230}]}]}");
+            MainActivity activity = prepare(state, theme);
             Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
             Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
             Field pagesField = MainActivity.class.getDeclaredField("pages"); pagesField.setAccessible(true);
@@ -177,6 +147,78 @@ public class ScreenshotTest {
                 File file = new File(out, "state-" + state + "-" + tabs[i] + "-" + theme + ".png"); file.getParentFile().mkdirs();
                 try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
             }
+            activity.finish();
+        }
+    }
+
+    /** A MainActivity in one of the sample connection states with sample files, trays and history. */
+    private static MainActivity prepare(String state, String theme) throws Exception {
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        context.getSharedPreferences("workshop-settings", 0).edit().clear().putInt("theme", theme.equals("dark") ? 2 : 1).putInt("page", 0)
+            .putBoolean("cloudControlUnderstood", !state.equals("cloud-agree") && !state.equals("offline")).commit();
+        PrinterService service = Robolectric.setupService(PrinterService.class);
+        org.robolectric.Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(
+            new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
+        MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
+        Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
+        Thread.sleep(500); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        boolean cloud = state.startsWith("cloud"), local = state.startsWith("local"), busy = state.endsWith("printing");
+        JSONObject status = busy ? printing() : idle();
+        if (cloud) {
+            service.cloudSignedIn = true; service.cloudSerial = "F01ABC0000R818"; service.cloudName = "Bedroom"; service.cloudModel = "Centauri Carbon 2";
+            service.cloudOnline = 1; service.cloudCheckedAt = System.currentTimeMillis() - 4000; service.cloudStatus = status;
+        }
+        if (local) {
+            Field wanted = PrinterService.class.getDeclaredField("wanted"); wanted.setAccessible(true); wanted.setBoolean(service, true);
+            Cc2Session session = new Cc2Session("192.168.1.50", "123456", null);
+            Field ready = Cc2Session.class.getDeclaredField("ready"); ready.setAccessible(true); ready.setBoolean(session, true);
+            Field at = Cc2Session.class.getDeclaredField("statusAt"); at.setAccessible(true); at.setLong(session, System.nanoTime());
+            Field sessionField = PrinterService.class.getDeclaredField("session"); sessionField.setAccessible(true); sessionField.set(service, session);
+            service.status = status; service.connection = "Connected to 192.168.1.50";
+            service.attributes = new JSONObject().put("hostname", "Bedroom").put("machine_model", "Centauri Carbon 2").put("software_version", new JSONObject().put("ota_version", "01.03.02.15"));
+        }
+        if (local || cloud && !state.equals("cloud-agree")) {
+            service.filePage = new JSONObject("{\"total\":3,\"file_list\":[{\"filename\":\"Benchy_PLA_0.2mm.gcode\",\"size\":4823044,\"layer\":212},{\"filename\":\"Calibration cube.gcode\",\"size\":912331,\"layer\":150},{\"filename\":\"Phone stand v3.gcode\",\"size\":2433102,\"layer\":340}]}");
+            service.filesAt = System.nanoTime(); service.fileMessage = "Files received from printer.";
+            service.disk = new JSONObject().put("used_bytes", 3_200_000_000L).put("total_bytes", 8_000_000_000L);
+            service.history = new JSONObject("{\"history_task_list\":[{\"task_name\":\"Benchy.gcode\",\"task_status\":1,\"begin_time\":1,\"end_time\":9000,\"time_lapse_video_status\":2}]}");
+        }
+        if (cloud || local) service.canvas = new JSONObject("{\"auto_refill\":true,\"active_canvas_id\":0,\"active_tray_id\":1,\"canvas_list\":[{\"canvas_id\":0,\"connected\":1,\"tray_list\":["
+            + "{\"tray_id\":0,\"filament_type\":\"PLA\",\"filament_name\":\"PLA Matte\",\"filament_color\":\"#D02828\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230},"
+            + "{\"tray_id\":1,\"filament_type\":\"PLA\",\"filament_name\":\"PLA\",\"filament_color\":\"#F0F0F0\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230}]}]}");
+        Field canvasAt = PrinterService.class.getDeclaredField("canvasAt"); canvasAt.setAccessible(true); canvasAt.setLong(service, System.nanoTime());
+        return activity;
+    }
+
+    private static void draw(View root, int width, int height, File file) throws Exception {
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, width, height);
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+        root.draw(new Canvas(bitmap)); file.getParentFile().mkdirs();
+        try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+    }
+
+    /** The printer-file dialog and Print setup, local idle, cloud idle and not usable (printing): -Dscreenshots=DIR writes dialog-<state>-<file|setup>-<theme>.png. */
+    @Test public void renderDialogs() throws Exception {
+        String out = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
+        for (String theme : new String[] {"light", "dark"}) for (String state : new String[] {"local-idle", "cloud-idle", "local-printing"}) {
+            android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+            MainActivity activity = prepare(state, theme);
+            // Calibration cube carries a stored two-tool plan from the Slice screen; Benchy has none.
+            context.getSharedPreferences(SliceActivity.TRAY_PLANS, 0).edit().putString("Calibration cube.gcode", new TrayPlan(2, java.util.Arrays.asList(new TrayPlan.Tool(0, 0, 1), new TrayPlan.Tool(1, 0, 0))).toJson()).commit();
+            Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true); render.invoke(activity);
+            Method actions = MainActivity.class.getDeclaredMethod("fileActions", JSONObject.class, String.class); actions.setAccessible(true);
+            Method setup = MainActivity.class.getDeclaredMethod("startDialog", JSONObject.class, String.class); setup.setAccessible(true);
+            Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); PrinterService service = (PrinterService) printer.get(activity);
+            JSONObject file = service.filePage.getJSONArray("file_list").getJSONObject(1);
+            actions.invoke(activity, file, "local");
+            android.app.AlertDialog dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            draw(dialog.getWindow().getDecorView(), 1080, 2200, new File(out, "dialog-" + state + "-file-" + theme + ".png"));
+            dialog.dismiss();
+            setup.invoke(activity, file, "local");
+            dialog = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+            if (dialog != null && dialog.isShowing()) draw(dialog.getWindow().getDecorView(), 1080, 4600, new File(out, "dialog-" + state + "-setup-" + theme + ".png"));
             activity.finish();
         }
     }

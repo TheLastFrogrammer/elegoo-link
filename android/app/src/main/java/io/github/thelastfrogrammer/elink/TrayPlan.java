@@ -37,6 +37,14 @@ final class TrayPlan {
 
     TrayPlan(int count, List<Tool> tools) { this.count = count; this.tools = Collections.unmodifiableList(new ArrayList<>(tools)); }
 
+    /** Tool count to preselect: a stored plan's count, else the highest T0–T7 seen in the file plus one, else 1. A starting point the user must still verify. */
+    static int defaultToolCount(TrayPlan plan, Collection<Integer> seen) {
+        if (plan != null) return plan.count;
+        int highest = -1;
+        if (seen != null) for (int t : seen) if (t >= 0 && t < MAX_TOOLS) highest = Math.max(highest, t);
+        return highest + 1 < 1 ? 1 : highest + 1;
+    }
+
     /** The tray for tool t, or null. */
     Tool tool(int t) { for (Tool tool : tools) if (tool.t == t) return tool; return null; }
 

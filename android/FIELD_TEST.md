@@ -94,3 +94,9 @@ If the download fails, the error and the history entry help: share the diagnosti
    from left to right as the dialog said.
 3. **Calibration print…** → Input shaping frequency. Watch the printer's screen or console for an error about
    `SET_INPUT_SHAPER`: the app cannot tell whether the CC2 firmware accepts it. Report what happens.
+
+## 11. Layout pass (v0.12.1)
+
+1. Print setup: "Run printer / bed check" should start ticked. The test renderer draws it unticked; confirm it on the phone.
+2. In cloud mode before agreeing to cloud control, the Printer tab should show only the explanation, "Turn on cloud control…" and Refresh status.
+3. Slice a 3MF with all plates, then use the result's plate chooser: Preview and Save should follow the chosen plate.
