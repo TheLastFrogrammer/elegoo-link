@@ -14,6 +14,7 @@ import org.json.JSONObject;
 public final class CloudControl implements AutoCloseable {
     /** Agora app ID from the SDK (src/cloud/services/rtm_service.cpp). */
     public static final String AGORA_APP_ID = "d035320941e34cd5bc4ec106eff05580";
+    static final String OUTCOME_UNKNOWN = "The command may or may not have reached the printer; it was not repeated. Check the printer's status.";
     static final long REPLY_TIMEOUT_MS = 10_000, IDLE_CLOSE_MS = 120_000;
 
     public interface Link {
@@ -36,7 +37,11 @@ public final class CloudControl implements AutoCloseable {
     }
 
     /** Progress the printer reports unasked while it fetches a cloud upload (method 6006). */
-    public interface Transfers { void status(String serial, String task, int progress, int status); }
+    public interface Transfers {
+        void status(String serial, String task, int progress, int status);
+        /** The cloud control session ended from outside while transfers were being watched; reports will not arrive any more. */
+        default void ended(String reason) { }
+    }
 
     private final Credentials credentials;
     private final LinkFactory factory;
@@ -52,7 +57,7 @@ public final class CloudControl implements AutoCloseable {
     /** Serial whose transfer is being watched; keeps the session open until cleared. */
     private String watching;
 
-    private static final class Pending { int id; String publisher; Reply reply; ScheduledFuture<?> timeout; }
+    private static final class Pending { int id, method; String publisher; Reply reply; ScheduledFuture<?> timeout; }
 
     public CloudControl(Credentials credentials, LinkFactory factory, ScheduledExecutorService worker) {
         this(credentials, factory, worker, REPLY_TIMEOUT_MS, IDLE_CLOSE_MS);
@@ -101,7 +106,7 @@ public final class CloudControl implements AutoCloseable {
                 JSONObject message = new JSONObject(request.toString());
                 Pending wait = new Pending();
                 synchronized (this) {
-                    wait.id = nextId++; wait.publisher = userId + serial; wait.reply = reply;
+                    wait.id = nextId++; wait.method = method; wait.publisher = userId + serial; wait.reply = reply;
                     message.put("id", wait.id);
                     pending = wait;
                     // Slow commands (filament changes, homing) reply only when finished.
@@ -112,6 +117,7 @@ public final class CloudControl implements AutoCloseable {
             } catch (Exception error) {
                 Pending failed; synchronized (this) { failed = pending; }
                 String text = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
+                if (failed != null && Cc2Codec.changing(method)) text += " " + OUTCOME_UNKNOWN;
                 if (failed != null) finish(failed, false, text); else reply.done(false, text);
                 closeLink();
             }
@@ -163,9 +169,10 @@ public final class CloudControl implements AutoCloseable {
 
     private void endedOutside(Link which, String reason) {
         synchronized (this) { if (link != which) return; ended = reason; }
-        Pending wait; synchronized (this) { wait = pending; }
-        if (wait != null) finish(wait, false, reason);
+        Pending wait; Transfers watcher; synchronized (this) { wait = pending; watcher = watching == null ? null : transfers; }
+        if (wait != null) finish(wait, false, Cc2Codec.changing(wait.method) ? reason + " " + OUTCOME_UNKNOWN : reason);
         closeLink();
+        if (watcher != null) watcher.ended(reason);
     }
 
     private void scheduleIdleClose() {

@@ -11,9 +11,12 @@ public class CloudOnlineStateTest {
         assertEquals(0, PrinterService.onlineState(0, 1, NOW, NOW));
     }
 
-    @Test public void anUnknownAnswerKeepsWhatLiveUpdatesShowed() {
-        assertEquals(1, PrinterService.onlineState(-1, 1, 0, NOW));
+    @Test public void anUnknownAnswerKeepsOfflineButOnlyKeepsOnlineWhileThePrinterReports() {
+        assertEquals(1, PrinterService.onlineState(-1, 1, NOW - 30_000, NOW));
         assertEquals(0, PrinterService.onlineState(-1, 0, NOW, NOW));
+        assertEquals(0, PrinterService.onlineState(-1, 0, 0, NOW));
+        assertEquals("no report time: online cannot be kept", -1, PrinterService.onlineState(-1, 1, 0, NOW));
+        assertEquals(-1, PrinterService.onlineState(-1, 1, NOW - 10 * 60_000, NOW));
     }
 
     @Test public void otherwiseARecentStatusReportCountsAsOnline() {

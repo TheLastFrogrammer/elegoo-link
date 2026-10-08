@@ -128,7 +128,6 @@ public class FailureLocalTransferTest {
      * unwinds, so uploadFailed() is never delivered. PrinterService relies on uploadFailed() to clear its upload queue
      * (queuedName/queuedFile/uploadQueue), so after this the queue is never cleared and later uploads silently do nothing.
      */
-    @Ignore("demonstrates: HIGH - Wi-Fi drop mid local upload never calls uploadFailed(), so PrinterService.queueFailed() is skipped and queuedName stays set (uploadsPending() true forever, new uploads never start)")
     @Test public void connectionLossMidUploadStillReportsTheUploadAsFailed() throws Exception {
         File file = folder.newFile("part.gcode"); Files.write(file.toPath(), "G28\nG1 X10\n".getBytes(StandardCharsets.UTF_8));
         Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
@@ -145,6 +144,8 @@ public class FailureLocalTransferTest {
             assertNotNull("session reports the lost connection", take(listener.failures, 12));
             assertTrue("the transfer thread is gone", eventually(() -> !session.uploading()));
             assertEquals("the listener must hear that the upload failed", "part.gcode", take(listener.uploadFailures, 2));
+            String shown = null; for (String result; (result = take(listener.results, 1)) != null; ) shown = result;
+            assertEquals("Upload stopped: connection lost. A partial file may remain on the printer.", shown);
         } finally { session.close(); }
     }
 
@@ -187,6 +188,19 @@ public class FailureLocalTransferTest {
             assertTrue(eventually(() -> !session.downloading()));
             assertTrue(eventually(() -> !target.exists()));
             assertTrue(listener.downloads.isEmpty());
+        } finally { session.close(); }
+    }
+
+    /** An acknowledgement is not the new state: until a status newer than the ack arrives, Start/Delete/temperature are not allowed. */
+    @Test public void aStatusOlderThanTheAcknowledgementDoesNotKeepControlsFresh() throws Exception {
+        Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
+        Cc2Session session = session(listener, clients, url -> info(url, "{\"system_info\":{\"sn\":\"TEST\"}}"));
+        try {
+            session.connect(); assertNotNull(take(listener.statuses, 12));
+            assertTrue(session.fresh());
+            session.start("local", "a.gcode", false, false, false, "A", new org.json.JSONArray());
+            assertTrue("freshness is dropped when the printer acknowledges the start", eventually(() -> !session.fresh()));
+            assertTrue("and returns with the next status", eventually(session::fresh));
         } finally { session.close(); }
     }
 }

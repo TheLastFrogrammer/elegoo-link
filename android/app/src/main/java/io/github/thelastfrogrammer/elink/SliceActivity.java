@@ -14,6 +14,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -153,6 +154,7 @@ public final class SliceActivity extends Activity {
             return;
         }
         build();
+        if (Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::leave);
         bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         if (saved != null) restore(saved);
         else { List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) importModels(incoming); }
@@ -305,6 +307,16 @@ public final class SliceActivity extends Activity {
         showModels(); showProject(); showLayout(); showSettingsSummary();
         if (saved.getString("status") != null) status.setText(saved.getString("status"));
     }
+
+    /** Back: while a slice runs, leaving would cancel it and lose it, so ask first. */
+    void leave() {
+        if (!slicing) { finish(); return; }
+        new AlertDialog.Builder(this).setTitle("Stop slicing?").setMessage("Going back stops the slice that is running, and its result is lost.")
+            .setNegativeButton("Keep slicing", null).setPositiveButton("Stop and leave", (d, w) -> { cancelRequested.set(true); finish(); }).show();
+    }
+    /** Phones before Android 13 have no back-gesture callback API; the system calls this instead. */
+    @SuppressWarnings("deprecation") @android.annotation.SuppressLint("GestureBackNavigation")
+    @Override public void onBackPressed() { if (Build.VERSION.SDK_INT >= 33) super.onBackPressed(); else leave(); }
 
     @Override protected void onDestroy() {
         if (current == this) current = null;
@@ -777,10 +789,13 @@ public final class SliceActivity extends Activity {
 
     private void importModels(List<Uri> uris) {
         busy = true; status.setText("Reading model files…"); status.setTextColor(ink); updateButtons();
-        File inputDir = new File(getCacheDir(), "slice-input");
+        File inputRoot = new File(getCacheDir(), "slice-input"), meshRoot = new File(getCacheDir(), "slice-meshes");
+        // Each pick gets its own folders, so a pick that fails leaves the models and previews already chosen untouched.
+        String stamp = Long.toString(System.nanoTime());
+        File inputDir = new File(inputRoot, stamp), meshDir = new File(meshRoot, stamp);
         worker.execute(() -> {
             List<File> imported = new ArrayList<>(); String problem = null;
-            deleteChildren(inputDir); inputDir.mkdirs();
+            inputDir.mkdirs(); meshDir.mkdirs();
             for (Uri uri : uris) {
                 String name = displayName(uri), type = null;
                 try { type = getContentResolver().getType(uri); } catch (RuntimeException ignored) { }
@@ -801,22 +816,43 @@ public final class SliceActivity extends Activity {
             }
             // What the files hold: objects, 3MF plates and project settings, and simplified meshes for the plate view.
             org.json.JSONObject read = null;
-            File meshDir = new File(getCacheDir(), "slice-meshes");
-            deleteChildren(meshDir);
+            boolean unreadable = false;
             if (!imported.isEmpty()) {
                 try { read = engine(getApplicationContext()).inspect(imported, meshDir, PREVIEW_TRIANGLES); }
-                catch (IOException failure) { problem = "A model could not be read: " + failure.getMessage(); imported.clear(); }
+                catch (IOException failure) {
+                    unreadable = true;
+                    problem = unreadableMessage(imported, failure.getMessage());
+                }
             }
+            boolean keepPrevious = unreadable || imported.isEmpty();
+            if (keepPrevious) { deleteTree(inputDir); deleteTree(meshDir); }
+            else { deleteOthers(inputRoot, inputDir); deleteOthers(meshRoot, meshDir); }
             String shownProblem = problem;
             org.json.JSONObject shownRead = read;
             main.post(() -> {
                 if (isDestroyed()) return;
+                busy = slicing;
+                if (keepPrevious) {
+                    // Nothing new could be used: the earlier models, layout and settings stay as they were.
+                    status.setText((shownProblem == null ? "No model was added." : shownProblem) + (models.isEmpty() ? "" : " Your earlier models are still selected.")); status.setTextColor(error); updateButtons();
+                    return;
+                }
                 inspected = shownRead; plate = 0; placements = null; projectSettings = true; objectSettings.clear(); showObjectSettings();
-                busy = slicing; models.clear(); modelSlots.clear(); models.addAll(imported); showModels(); showProject(); showLayout();
+                models.clear(); modelSlots.clear(); models.addAll(imported); showModels(); showProject(); showLayout();
                 status.setText(shownProblem != null ? shownProblem : "Ready."); status.setTextColor(shownProblem != null ? error : ink);
                 resultCard.setVisibility(View.GONE); updateButtons();
             });
         });
+    }
+
+    /** Names the file the engine rejected: the engine's own message does not say which one of several it was. Runs on the slicer thread. */
+    private String unreadableMessage(List<File> files, String engineMessage) {
+        String reason = engineMessage == null || engineMessage.isEmpty() ? "it could not be read" : engineMessage;
+        if (files.size() > 1) for (File file : files) {
+            try { engine(getApplicationContext()).inspect(Collections.singletonList(file), null, 1); }
+            catch (IOException failure) { return file.getName() + " could not be read: " + failure.getMessage(); }
+        }
+        return files.get(0).getName() + " could not be read: " + reason;
     }
 
     private void showModels() {
@@ -1284,7 +1320,9 @@ public final class SliceActivity extends Activity {
         String path = uri.getLastPathSegment(); return path != null ? path : "model";
     }
 
-    private static void deleteChildren(File dir) { File[] files = dir.listFiles(); if (files != null) for (File file : files) file.delete(); }
+    private static void deleteTree(File file) { File[] children = file.listFiles(); if (children != null) for (File child : children) deleteTree(child); file.delete(); }
+    /** Removes everything in `root` except `keep` (the previous pick's folders and any flat files from older versions). */
+    private static void deleteOthers(File root, File keep) { File[] children = root.listFiles(); if (children != null) for (File child : children) if (!child.equals(keep)) deleteTree(child); }
     /** The last used preset when this printer offers it, otherwise the first one containing `fallback`. */
     private String remembered(String[] values, String key, String fallback) {
         String saved = settings.getString(key, null);

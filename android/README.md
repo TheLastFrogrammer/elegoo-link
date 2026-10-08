@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.12.6 (development):** accessibility: TalkBack names for switches, fields and dropdowns, headings, announced status changes, expand/collapse and tab states, colour names instead of hex; layouts that hold at large text; better contrast; 48dp targets; select and move models in the layout without gestures (More… → Select a model…, Move…, Reset view). A refused cloud-mode download no longer claims the printer's file server is off: Elegoo's own cloud page downloads the same way.
+**v0.12.7 (development):** failure handling: a printer that stops reporting through the cloud goes stale instead of looking live (fixes a 0.12.5 regression); a connection lost mid-upload ends the upload and keeps the sliced file in the Files tab; an unknown command outcome is said so; a lost connection mid-print raises an alert and retries for ten minutes; refused Elegoo sign-ins stop retrying and outages are not mistaken for an expired sign-in; a bad model pick keeps the earlier models; Back while slicing asks first; first-run Get started card.
+
+**v0.12.6:** accessibility: TalkBack names for switches, fields and dropdowns, headings, announced status changes, expand/collapse and tab states, colour names instead of hex; layouts that hold at large text; better contrast; 48dp targets; select and move models in the layout without gestures (More… → Select a model…, Move…, Reset view). A refused cloud-mode download no longer claims the printer's file server is off: Elegoo's own cloud page downloads the same way.
 
 **v0.12.5:** cloud uploads and controls no longer wait forever when Elegoo's online endpoint refuses the account (live updates and recent reports count as online), with a clearer upload hint and step-by-step upload diagnostics; one vocabulary across the app (Local / Cloud / Waiting for printer / Printer offline / Not connected, build plate vs project plate, Layout, Print profile, Printer controls, CANVAS 0 · tray 1).
 

@@ -65,6 +65,7 @@ public class FailureCloudUploadTest {
         return new CloudUpload.Commands() {
             public void send(JSONObject request, CloudControl.Reply reply) { control.send(SERIAL, request, reply); }
             public void watch(CloudControl.Transfers listener) { control.watchTransfers(SERIAL, listener); }
+            public boolean linkEnded() { return !control.endedReason().isEmpty(); }
         };
     }
     private static boolean eventually(java.util.function.BooleanSupplier condition, long ms) throws Exception {
@@ -122,7 +123,6 @@ public class FailureCloudUploadTest {
      * finishes a pending reply; the upload (which watches 6006 reports) is never told, so it waits for the full stall time and then
      * reports "stopped reporting" without the real reason.
      */
-    @Ignore("demonstrates: MEDIUM - Agora link ended by another login during the printer's fetch is not passed to CloudUpload; the user gets the generic stall message after the stall time")
     @Test public void linkEndedDuringTheFetchIsReportedAtOnceWithItsReason() throws Exception {
         CloudControl control = control(); Outcome outcome = new Outcome();
         new CloudUpload(api(), (url, headers, file, progress) -> 200, via(control), blocking, worker, SERIAL, gcode(), "part.gcode", outcome, 3_000, 10).start();
@@ -134,7 +134,6 @@ public class FailureCloudUploadTest {
     }
 
     /** Same event; then the stall handler's cancelFetch() calls CloudControl.send(), which logs in again and so signs ElegooSlicer out. */
-    @Ignore("demonstrates: MEDIUM - after the link was ended by another app, CloudUpload's stall handler logs in again (second Agora login) just to send the 1058 cancel, taking the identity back from ElegooSlicer")
     @Test public void aStallAfterTheLinkEndedDoesNotLogInAgain() throws Exception {
         CloudControl control = control(); Outcome outcome = new Outcome();
         new CloudUpload(api(), (url, headers, file, progress) -> 200, via(control), blocking, worker, SERIAL, gcode(), "part.gcode", outcome, 400, 10).start();

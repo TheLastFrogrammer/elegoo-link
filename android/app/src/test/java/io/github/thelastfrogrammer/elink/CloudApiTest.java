@@ -119,7 +119,7 @@ public class CloudApiTest {
         try { api.devices(); fail(); }
         catch (CloudApi.CloudException error) {
             assertTrue(error.unauthorized);
-            assertTrue(error.getMessage(), error.getMessage().startsWith("Renewing the Elegoo sign-in failed (Elegoo cloud error 400"));
+            assertTrue(error.getMessage(), error.getMessage().startsWith("Elegoo no longer accepts the saved sign-in.") && error.getMessage().contains("(Elegoo cloud error 400"));
         }
         List<String> trace = api.takeTrace();
         assertEquals(2, trace.size());

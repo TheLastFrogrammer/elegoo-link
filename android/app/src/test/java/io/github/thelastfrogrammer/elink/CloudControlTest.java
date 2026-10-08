@@ -107,7 +107,7 @@ public class CloudControlTest {
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.PAUSE), replies);
         take(waitForLink());
         links.get(0).events.ended("Another Elegoo app signed in");
-        assertEquals("fail: Another Elegoo app signed in", replies.take());
+        assertEquals("fail: Another Elegoo app signed in " + CloudControl.OUTCOME_UNKNOWN, replies.take());
         waitFor(() -> links.get(0).closed);
         assertFalse(control.connected()); assertEquals("Another Elegoo app signed in", control.endedReason());
         Thread.sleep(200); assertEquals(1, links.size());

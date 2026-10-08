@@ -49,12 +49,13 @@ public final class Cc2Session implements AutoCloseable {
     private final IdentityResolver identity;
     private final Cc2Codec codec = new Cc2Codec();
     private final AtomicInteger ids = new AtomicInteger(1);
-    private final Map<Integer, Pending> pending = new HashMap<>(); // worker thread only
-    private final Set<Integer> queued = new HashSet<>();
+    private final Map<Integer, Pending> pending = new ConcurrentHashMap<>(); // written on the worker thread; read by commandPending()
+    private final Set<Integer> queued = ConcurrentHashMap.newKeySet();
     private long nextRequestAt;
     private final Deque<JSONObject> requestQueue = new ArrayDeque<>();
     private ScheduledFuture<?> dispatch;
     private volatile boolean uploadCancelled;
+    private volatile String uploadName;
     private final CompletableFuture<JSONObject> registration = new CompletableFuture<>();
     private final RegistrationDiagnostics registrationFacts = new RegistrationDiagnostics();
     private volatile MqttClient mqtt;
@@ -88,6 +89,8 @@ public final class Cc2Session implements AutoCloseable {
     public boolean ready() { return ready && !closed; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
+    /** A printer-changing command has been sent and not yet answered. */
+    public boolean commandPending() { return pending.values().stream().anyMatch(p -> changing(p.method)) || queued.stream().anyMatch(Cc2Session::changing); }
     public boolean downloading() { return downloading; }
     public boolean readOnly() { return identity.readOnly(); }
     public void connect() { execute(this::connectOnWorker); }
@@ -338,6 +341,9 @@ public final class Cc2Session implements AutoCloseable {
                 }
                 if (changing(method)) {
                     emitResult("Printer acknowledged " + methodName(method) + ". Waiting for status update.");
+                    // An acknowledgement is not the new state: Start, Delete and temperature need a status newer than it, and a status
+                    // request already in flight may have been answered before the printer acted.
+                    statusAt = 0; pending.values().removeIf(p -> p.method == Cc2Codec.STATUS);
                     send(Cc2Codec.STATUS); return;
                 }
             } else if (!topic.equals(base + "api_status") || method != 6000) return;
@@ -367,7 +373,7 @@ public final class Cc2Session implements AutoCloseable {
     public synchronized void upload(File file, String name) {
         if (readOnly()) { emitResult("Read-only PIN probe: uploads are disabled; PINs are never used as HTTP tokens."); return; }
         if (!ready() || uploading || downloading) return;
-        uploading = true; uploadCancelled = false;
+        uploading = true; uploadCancelled = false; uploadName = name;
         PrinterHttp uploader = new PrinterHttp(http.host(), sessionToken, connections); uploadHttp = uploader;
         transfer.execute(() -> {
             try {
@@ -429,7 +435,13 @@ public final class Cc2Session implements AutoCloseable {
         ready = false; statusAt = 0;
         if (pending.values().stream().anyMatch(p -> changing(p.method))) emitResult("Connection lost with a command pending. Outcome unknown; commands will not be replayed.");
         boolean canRetry = !readOnly() && retryable;
-        Listener current = listener; close(); if (current != null) current.failure(message, canRetry);
+        Listener current = listener; boolean lostUpload = uploading; String lostName = uploadName;
+        if (lostUpload) emitResult("Upload stopped: connection lost. A partial file may remain on the printer.");
+        close();
+        if (current != null) {
+            if (lostUpload && lostName != null) current.uploadFailed(lostName);
+            current.failure(message, canRetry);
+        }
     }
     private static boolean changing(int method) { return Cc2Codec.changing(method); }
     static boolean background(int method) { return method == Cc2Codec.STATUS || method == Cc2Codec.CANVAS || method == Cc2Codec.ATTRIBUTES; }

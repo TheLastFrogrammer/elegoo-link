@@ -30,7 +30,10 @@ public final class CloudApi {
 
     public static final class CloudException extends IOException {
         final boolean unauthorized;
-        CloudException(String message, boolean unauthorized) { super(message); this.unauthorized = unauthorized; }
+        /** Elegoo's service failed (HTTP 5xx, rate limit, server-side code): trying again later may work; the sign-in itself is not at fault. */
+        final boolean serviceTrouble;
+        CloudException(String message, boolean unauthorized) { this(message, unauthorized, false); }
+        CloudException(String message, boolean unauthorized, boolean serviceTrouble) { super(message); this.unauthorized = unauthorized; this.serviceTrouble = serviceTrouble; }
     }
 
     public static final class Device {
@@ -48,6 +51,14 @@ public final class CloudApi {
     private String language = "en";
     private final Transport transport;
     private CloudLogin.Account account;
+    private volatile boolean signInRefused;
+    private volatile AccountListener accountListener;
+    static final String SIGN_IN_ENDED = "Elegoo no longer accepts the saved sign-in. Sign out and sign in again in Settings.";
+    /** Told after every successful renewal, so the new tokens are saved by whoever triggered it (poll, cloud control or upload). */
+    public interface AccountListener { void changed(CloudLogin.Account account); }
+    public void onAccountChanged(AccountListener listener) { accountListener = listener; }
+    /** The renewal was refused: nothing more is sent to Elegoo until the user signs in again (a new CloudApi). */
+    public boolean needsSignIn() { return signInRefused; }
     private final List<String> trace = new ArrayList<>();
 
     public CloudApi(boolean china, CloudLogin.Account account, String userAgent, Transport transport) {
@@ -73,23 +84,28 @@ public final class CloudApi {
 
     /** Exchanges the refresh token for new tokens. The caller persists {@link #account()} afterwards. */
     public void refresh() throws IOException {
-        if (account.refreshToken.isEmpty()) throw new CloudException("Elegoo sign-in has expired. Sign in again.", true);
+        if (signInRefused) throw new CloudException(SIGN_IN_ENDED, true);
+        if (account.refreshToken.isEmpty()) { signInRefused = true; throw new CloudException("Elegoo sign-in has expired. Sign in again.", true); }
         JSONObject data;
         try {
             // Like the account page: no Authorization header on renewal.
             data = call("POST", "/api/v1/account-center-server/account-auth/token/refresh",
                 new JSONObject().put("refreshToken", account.refreshToken).put("clientId", REFRESH_CLIENT_ID).toString(), false).optJSONObject("data");
         } catch (CloudException error) {
-            // Any refusal here means the saved sign-in cannot be renewed; only a new sign-in helps.
-            throw new CloudException("Renewing the Elegoo sign-in failed (" + error.getMessage() + "). Sign out and sign in again in Settings.", true);
+            // Only a real refusal (401/403) ends the sign-in; a server error or rate limit is Elegoo's trouble and is tried again later.
+            if (error.serviceTrouble) throw new CloudException("Elegoo's service is having trouble renewing the sign-in (" + error.getMessage() + "). The app will try again; nothing needs doing yet.", false, true);
+            signInRefused = true; // 401/403 or a client-side code such as "invalid refresh token": only a new sign-in helps
+            throw new CloudException(SIGN_IN_ENDED + " (" + error.getMessage() + ")", true);
         } catch (org.json.JSONException impossible) { throw new IOException(impossible); }
         String access = data == null ? "" : data.optString("token", data.optString("accessToken", ""));
-        if (access.isEmpty()) throw new CloudException("Elegoo returned no new sign-in token. Sign in again.", true);
+        if (access.isEmpty()) { signInRefused = true; throw new CloudException("Elegoo returned no new sign-in token. Sign in again.", true); }
         String userId = data.optString("accountId", "");
         // The page reads either naming for each field.
         long accessExpires = data.optLong("accessTokenExpireTime", data.optLong("expiresTime", 0));
         long refreshExpires = data.optLong("refreshTokenExpireTime", data.optLong("refreshExpiresTime", account.refreshExpires));
         account = account.withTokens(userId.isEmpty() ? account.userId : userId, access, data.optString("refreshToken", account.refreshToken), accessExpires, refreshExpires);
+        AccountListener listener = accountListener;
+        if (listener != null) try { listener.changed(account); } catch (RuntimeException ignored) { }
     }
 
     /** Checks the token against the account service only, without renewing it; the result is recorded in the trace. */
@@ -245,6 +261,7 @@ public final class CloudApi {
     }
 
     private JSONObject authorized(String method, String path, String body, boolean essential) throws IOException {
+        if (signInRefused) throw new CloudException(SIGN_IN_ENDED, true);
         if (needsRefresh(System.currentTimeMillis() / 1000)) {
             note("Access token expired " + when(account.accessExpires) + "; renewing before the request");
             refresh();
@@ -274,13 +291,13 @@ public final class CloudApi {
         catch (Exception ignored) { }
         note(result.trim());
         if (response.status == 401 || response.status == 403) throw new CloudException("Elegoo refused the sign-in (HTTP " + response.status + ").", true);
-        if (response.status < 200 || response.status >= 300) throw new CloudException("Elegoo cloud returned HTTP " + response.status + ".", false);
+        if (response.status < 200 || response.status >= 300) throw new CloudException("Elegoo cloud returned HTTP " + response.status + ".", false, response.status >= 500 || response.status == 429);
         JSONObject json;
         try { json = new JSONObject(response.body); } catch (Exception error) { throw new CloudException("Elegoo cloud returned an unreadable response.", false); }
         int code = json.optInt("code", -1);
         if (code != 0) {
             String message = StatusPresentation.clean(json.optString("message", json.optString("msg", "")));
-            throw new CloudException("Elegoo cloud error " + code + (message.isEmpty() ? "" : ": " + message), code == 401 || code == 403);
+            throw new CloudException("Elegoo cloud error " + code + (message.isEmpty() ? "" : ": " + message), code == 401 || code == 403, code >= 500 && code < 600);
         }
         return json;
     }

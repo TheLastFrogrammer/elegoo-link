@@ -4,7 +4,6 @@ import android.content.Context;
 import android.os.Looper;
 import org.junit.Assume;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -86,7 +85,6 @@ public class FailureModelInputTest {
      * Choosing a new model replaces the selection: importModels() clears `models` and per-object settings even when the new file
      * cannot be read, so one bad pick throws away a good selection (and with it the per-object settings and layout).
      */
-    @Ignore("demonstrates: MEDIUM - picking a model the engine rejects empties the Slice screen's model list, placements and per-object settings (importModels does models.clear() before checking the result)")
     @Test public void aRejectedModelPickKeepsThePreviousSelection() throws Exception {
         SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
         waitFor(() -> filled(activity, "processSpinner"));
@@ -97,6 +95,8 @@ public class FailureModelInputTest {
         importModels.invoke(activity, Collections.singletonList(android.net.Uri.fromFile(truncatedStl())));
         waitFor(() -> ((android.widget.TextView) field(activity, "status")).getText().toString().contains("could not be read"));
         assertEquals("the earlier model should still be selected", 1, models.size());
+        assertTrue("and its copy must not be deleted", kept.isFile());
+        assertTrue("the message names the failing file", ((android.widget.TextView) field(activity, "status")).getText().toString().contains("truncated.stl"));
     }
 
     private interface Condition { boolean met() throws Exception; }

@@ -14,6 +14,7 @@ public class ConnectionPolicyTest {
     @Test public void retriesAreBoundedAndResetOnlyAfterConnectionSuccess() {
         ReconnectPolicy policy = new ReconnectPolicy();
         for (int delay : new int[] {1, 2, 4, 8, 16}) assertEquals(delay, policy.nextDelaySeconds());
+        for (int i = 0; i < ReconnectPolicy.TAIL; i++) assertEquals("slow tail", 60, policy.nextDelaySeconds());
         assertEquals(-1, policy.nextDelaySeconds()); assertEquals(-1, policy.nextDelaySeconds());
         policy.connected(); assertEquals(1, policy.nextDelaySeconds());
     }

@@ -20,6 +20,8 @@ final class CloudUpload {
         void send(JSONObject request, CloudControl.Reply reply);
         /** Starts (listener) or stops (null) receiving the printer's transfer reports. */
         void watch(CloudControl.Transfers listener);
+        /** The cloud control session was ended from outside (another login); sending would log in again and take the identity back. */
+        default boolean linkEnded() { return false; }
     }
     interface Listener {
         void progress(int percent);
@@ -106,7 +108,10 @@ final class CloudUpload {
         try { request = Cc2Codec.fetchRequest(0, name, url, md5, serial); }
         catch (Exception error) { finish(false, error.getMessage() == null ? "Could not prepare the transfer." : error.getMessage()); return; }
         fetching = true;
-        commands.watch((who, task, progress, status) -> scheduler.execute(() -> transfer(task, progress, status)));
+        commands.watch(new CloudControl.Transfers() {
+            public void status(String who, String task, int progress, int status) { scheduler.execute(() -> transfer(task, progress, status)); }
+            public void ended(String reason) { scheduler.execute(() -> finish(false, reason + " The transfer of " + name + " was not cancelled; refresh Files in a minute to see whether it arrived.")); }
+        });
         restartStall();
         commands.send(request, (acknowledged, message) -> scheduler.execute(() -> {
             Diagnostics.note(Diagnostics.FILES, "cloud upload: fetch request (1057) " + (acknowledged ? "acknowledged" : "refused: " + message));
@@ -128,8 +133,9 @@ final class CloudUpload {
         if (stall != null) stall.cancel(false);
         stall = scheduler.schedule(() -> {
             if (ended) return;
-            cancelFetch(() -> { });
-            finish(false, "The printer stopped reporting the transfer of " + name + " for a minute. Refresh Files to see whether it arrived.");
+            boolean cancelling = !commands.linkEnded(); // never log in again just to cancel: that takes the identity back from the other app
+            if (cancelling) cancelFetch(() -> { });
+            finish(false, "The printer stopped reporting the transfer of " + name + " for a minute" + (cancelling ? ", so it was cancelled. Refresh Files before trying again; the file is unlikely to be there." : ". It was not cancelled; refresh Files to see whether it arrived."));
         }, stallMs, TimeUnit.MILLISECONDS);
     }
 

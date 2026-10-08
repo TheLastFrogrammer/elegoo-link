@@ -456,6 +456,11 @@ public final class MainActivity extends Activity {
             main.post(() -> { if (!isDestroyed()) { checking = false; diagnostics.setText(result); render(); } });
         });
     }
+    /** "Last report 3 min ago" from the printer's own report time (the poll time only when the cloud gave none). */
+    private String lastReport() {
+        long at = printer.cloudReportedAt > 0 ? printer.cloudReportedAt : printer.cloudCheckedAt;
+        return "Last report " + CloudStatusActivity.age(System.currentTimeMillis() - at) + " ago" + (printer.cloudLiveOn ? " · live" : "") + ".";
+    }
     private boolean viaCloud() { return printer != null && !printer.ready() && printer.usingCloud(); }
     private void confirmCommand(String title, int method) {
         boolean cloud = viaCloud();
@@ -1105,14 +1110,14 @@ public final class MainActivity extends Activity {
         setTile(tileNozzle, temperature("extruder")); setTile(tileBed, temperature("heater_bed")); setTile(tileChamber, temperature("ztemperature_sensor"));
         // Where controls go.
         switch (block) {
-            case NONE: controlSource.setText(ready ? "Commands go over your local network." : "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago" + (printer.cloudLiveOn ? " · live" : "") + "."); break;
+            case NONE: controlSource.setText(ready ? "Commands go over your local network." : "Commands go through the Elegoo cloud. " + lastReport() + (printer.cloudLiveOn ? " · live" : "") + "."); break;
             case PIN_PROBE: controlSource.setText("Read-only PIN probe: controls are disabled."); break;
             case STALE: controlSource.setText("Waiting for printer status. Controls unlock when it arrives."); break;
             case CONNECTING: controlSource.setText("Connecting on your local network…"); break;
             case CLOUD_AGREEMENT: controlSource.setText("You are watching through the Elegoo cloud. Controls stay off until you agree to cloud control."); break;
             case CLOUD_BUSY: controlSource.setText("Sending through the Elegoo cloud…"); break;
             case CLOUD_OFFLINE: controlSource.setText("Printer offline. The Elegoo cloud reports it offline."); break;
-            case CLOUD_WAITING: controlSource.setText(printer.cloudMessage.isEmpty() ? "Waiting for printer through the Elegoo cloud…" : printer.cloudMessage); break;
+            case CLOUD_WAITING: controlSource.setText(!printer.cloudMessage.isEmpty() ? printer.cloudMessage : printer.cloudReportedAt > 0 && !printer.cloudReportRecent() ? "The printer has not reported for a while. " + lastReport() + " Controls stay off until it reports again." : "Waiting for printer through the Elegoo cloud…"); break;
             default: controlSource.setText("Not connected. Connect on your network, or sign in with Elegoo to control through the cloud."); break;
         }
         boolean fix = block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED;
