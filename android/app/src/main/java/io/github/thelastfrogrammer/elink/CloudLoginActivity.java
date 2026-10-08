@@ -27,19 +27,28 @@ public final class CloudLoginActivity extends Activity implements CloudLogin.Hos
     private TextView status;
     private CloudAccountStore store;
     private boolean done;
+    private int ink, muted, error;
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         store = new CloudAccountStore(this);
         boolean dark = (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
+        ink = dark ? 0xffe4eff2 : 0xff142c3b; muted = dark ? 0xffa7bec6 : 0xff536976; error = dark ? 0xffffb4ab : 0xffba1a1a;
+        int pad = Math.round(12 * getResources().getDisplayMetrics().density);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(dark ? 0xff10191d : 0xffedf3f4); root.setFitsSystemWindows(true);
-        status = new TextView(this); status.setTextColor(dark ? 0xffa7bec6 : 0xff536976); status.setTextSize(13);
-        int pad = Math.round(12 * getResources().getDisplayMetrics().density); status.setPadding(pad, pad, pad, pad);
-        status.setText("Sign in on Elegoo's page. Link Workshop only receives the account tokens Elegoo hands to ElegooSlicer, and stores them encrypted on this phone.");
-        root.addView(status, new LinearLayout.LayoutParams(-1, -2));
+
+        // What signing in means, in plain words. Shown whatever the WebView state.
+        LinearLayout intro = new LinearLayout(this); intro.setOrientation(LinearLayout.VERTICAL); intro.setPadding(pad, pad, pad, 0);
+        text(intro, "Sign in to Elegoo", 18, ink, true);
+        text(intro, "1. Enter your Elegoo email and password on Elegoo's page below.\n2. Link Workshop never sees your password. It only receives the sign-in tokens that Elegoo's page hands over, and keeps them encrypted on this phone.", 13, muted, false);
+        text(intro, "With this account the app can show your printers' status through the Elegoo cloud and watch the camera away from home. Once you turn on cloud control (the app asks first), it can also pause, stop, send files and start prints without a local connection. It does not change your password or account details.", 13, muted, false);
+        text(intro, "To remove the account from this phone later, use Settings, then Sign out on this phone.", 13, muted, false);
+        root.addView(intro, new LinearLayout.LayoutParams(-1, -2));
+        status = text(root, "", 14, muted, false); status.setPadding(pad, pad / 2, pad, pad / 2);
+
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
-            status.setText("This phone's Android System WebView is too old for Elegoo sign-in. Update Android System WebView from the Play Store and try again.");
+            setStatus("This phone's Android System WebView is too old for Elegoo sign-in. Update Android System WebView from the Play Store, then reopen this screen.", true);
             setContentView(root); return;
         }
         web = new WebView(this); web.setBackgroundColor(Color.TRANSPARENT);
@@ -61,7 +70,7 @@ public final class CloudLoginActivity extends Activity implements CloudLogin.Hos
                 openExternal(request.getUrl().toString()); return true;
             }
             @Override public void onReceivedError(WebView view, int code, String description, String url) {
-                if (!done) status.setText("Elegoo's sign-in page could not be loaded: " + description + ". Check the phone's internet connection.");
+                if (!done) setStatus("Elegoo's sign-in page did not load. Check the phone's internet connection, then close this screen and open it again. [" + description + "]", true);
             }
         });
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -73,6 +82,13 @@ public final class CloudLoginActivity extends Activity implements CloudLogin.Hos
         String language = china ? "zh-CN" : locale.getLanguage().isEmpty() ? "en" : locale.getLanguage();
         web.loadUrl(CloudLogin.url(china, language, china ? "CN" : locale.getCountry(), store.deviceId(), dark));
     }
+    private TextView text(LinearLayout parent, String value, int size, int color, boolean bold) {
+        TextView view = new TextView(this); view.setText(value); view.setTextSize(size); view.setTextColor(color);
+        if (bold) view.setTypeface(null, android.graphics.Typeface.BOLD);
+        view.setPadding(0, 0, 0, Math.round(6 * getResources().getDisplayMetrics().density));
+        parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); return view;
+    }
+    private void setStatus(String value, boolean problem) { status.setText(value); status.setTextColor(problem ? error : muted); }
     private String version() {
         try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { return "dev"; }
     }
@@ -80,14 +96,14 @@ public final class CloudLoginActivity extends Activity implements CloudLogin.Hos
     @Override public void signedIn(CloudLogin.Account account) {
         try {
             store.save(account); done = true;
-            status.setText("Signed in: " + account.summary() + ". Tokens are stored encrypted on this phone.");
+            setStatus("Signed in as " + (account.nickname.isEmpty() ? "your Elegoo account" : account.nickname) + ". Returning to the app. Your sign-in stays encrypted on this phone.", false);
             setResult(RESULT_OK);
             status.postDelayed(this::finish, 1500);
-        } catch (Exception error) { status.setText("Signed in, but the account could not be saved securely on this phone. Nothing was stored."); }
+        } catch (Exception error) { setStatus("Signed in, but the account could not be saved securely on this phone, so nothing was stored. Try signing in again. If it keeps happening, restart the phone.", true); }
     }
-    @Override public void failed(String message) { if (!done) status.setText(message); }
+    @Override public void failed(String message) { if (!done) setStatus(message, true); }
     @Override public void openExternal(String url) {
-        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception error) { status.setText("No app can open that link."); }
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); } catch (Exception error) { setStatus("No app on this phone can open that link.", true); }
     }
 
     private void back() { if (web != null && web.canGoBack()) web.goBack(); else finish(); }

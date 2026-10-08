@@ -119,7 +119,7 @@ public final class CloudLogin {
                     case "report.userInfo":
                         Account account = Account.fromReport(params);
                         if (!account.complete()) {
-                            host.failed("Elegoo did not return a complete sign-in. Nothing was saved.");
+                            host.failed("Sign-in did not finish: Elegoo sent no account details, so nothing was saved. Try signing in again.");
                             replies.add(response(id, method, -1, "Incomplete account information"));
                         } else {
                             host.signedIn(account);
@@ -127,7 +127,7 @@ public final class CloudLogin {
                         }
                         break;
                     case "report.loginFailed":
-                        host.failed("Elegoo reported that sign-in failed.");
+                        host.failed("Sign-in did not work. Check the email and password on Elegoo's page and try again. Forgot the password? Use the reset link on that page. Made the account in China? Go back and choose the China region.");
                         replies.add(response(id, method, 0, "success"));
                         break;
                     case "report.websiteOpen":

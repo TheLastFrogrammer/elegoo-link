@@ -27,6 +27,8 @@ final class ChartView extends View {
     private final List<Series> series = new ArrayList<>();
     private double fixedMin = Double.NaN, fixedMax = Double.NaN;
     private int touched = -1;
+    /** Start of the print in epoch milliseconds, or 0 when the axis should show elapsed time only. */
+    private long clockStart;
 
     ChartView(Context context, int ink, int muted, int grid, int surface) {
         super(context);
@@ -48,6 +50,9 @@ final class ChartView extends View {
         setContentDescription(description.toString());
         invalidate();
     }
+
+    /** Shows the time axis and readout as clock times on this phone, counted from the print's start. */
+    void clock(long startMillis) { clockStart = startMillis; invalidate(); }
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
         setMeasuredDimension(MeasureSpec.getSize(widthSpec), resolveSize(Math.round(240 * density), heightSpec));
@@ -91,10 +96,16 @@ final class ChartView extends View {
             canvas.drawLine(left, y, right, y, rule);
             canvas.drawText(format(v), left - 6 * density, y + 4 * density, small);
         }
-        // Elapsed-time ticks.
+        // Time ticks: clock times on round hours and minutes when the print's start is known, otherwise elapsed time.
         small.setTextAlign(Paint.Align.CENTER);
         double xStep = niceTime((x1 - x0) / 4);
-        for (double t = Math.ceil(x0 / xStep) * xStep; t <= x1; t += xStep) {
+        if (clockStart > 0) {
+            double local0 = localSeconds(clockStart);
+            for (double local = Math.ceil((local0 + x0) / xStep) * xStep; local <= local0 + x1; local += xStep) {
+                float x = (float) (left + (local - local0 - x0) / (x1 - x0) * (right - left));
+                canvas.drawText(clockOfDay((long) local), x, bottom + 16 * density, small);
+            }
+        } else for (double t = Math.ceil(x0 / xStep) * xStep; t <= x1; t += xStep) {
             float x = (float) (left + (t - x0) / (x1 - x0) * (right - left));
             canvas.drawText(elapsed(t), x, bottom + 16 * density, small);
         }
@@ -131,7 +142,8 @@ final class ChartView extends View {
             float x = (float) (left + (seconds[touched] - x0) / (x1 - x0) * (right - left));
             rule.setColor(muted); canvas.drawLine(x, top, x, bottom, rule);
             List<String> rows = new ArrayList<>(); List<Integer> colors = new ArrayList<>();
-            rows.add(elapsed(seconds[touched])); colors.add(0);
+            rows.add(clockStart > 0 ? clockOfDay((long) (localSeconds(clockStart) + seconds[touched])) + " · " + spanWords(seconds[touched]) + " into the print" : elapsed(seconds[touched]));
+            colors.add(0);
             for (Series s : series) if (touched < s.values.length && !Double.isNaN(s.values[touched])) { rows.add(s.name + "  " + format(s.values[touched]) + unit); colors.add(s.color); }
             for (Series s : series) if (!s.dashed && touched < s.values.length && !Double.isNaN(s.values[touched])) {
                 float y = (float) (bottom - (s.values[touched] - lo) / (hi - lo) * (bottom - top));
@@ -194,6 +206,21 @@ final class ChartView extends View {
     static double niceTime(double raw) {
         for (double step : new double[] {60, 300, 600, 900, 1800, 3600, 7200, 10800, 21600, 43200}) if (raw <= step) return step;
         return 86400;
+    }
+    /** Epoch seconds shifted to this phone's time zone, so that seconds modulo a day give the local time of day. */
+    static double localSeconds(long millis) { return (millis + TimeZone.getDefault().getOffset(millis)) / 1000.0; }
+    /** Local time of day from local epoch seconds, as HH:mm. */
+    static String clockOfDay(long localSeconds) {
+        long day = ((localSeconds % 86400) + 86400) % 86400;
+        return String.format(Locale.ROOT, "%02d:%02d", day / 3600, (day % 3600) / 60);
+    }
+    /** A span in plain words, for example "45 min", "3 h 20 min" or "2 h". */
+    static String spanWords(double seconds) {
+        long minutes = Math.round(seconds / 60);
+        if (minutes < 1) return "under 1 min";
+        if (minutes < 60) return minutes + " min";
+        long hours = minutes / 60, rest = minutes % 60;
+        return rest == 0 ? hours + " h" : hours + " h " + rest + " min";
     }
     static String elapsed(double seconds) { long s = Math.round(seconds); return s / 3600 + ":" + String.format(Locale.ROOT, "%02d", (s % 3600) / 60); }
     static String format(double value) {

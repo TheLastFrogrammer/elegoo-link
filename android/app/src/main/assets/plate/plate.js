@@ -64,13 +64,17 @@
     }`, `#version 300 es
     precision mediump float;
     in vec3 vNormal; in vec3 vColor;
-    uniform vec3 uTint; uniform float uTintAmount;
+    uniform vec3 uTint; uniform float uTintAmount; uniform float uPeriod;
     out vec4 fragment;
     void main() {
       vec3 n = normalize(vNormal);
       vec3 key = normalize(vec3(0.35, 0.55, 0.75)), fill = normalize(vec3(-0.6, -0.2, 0.5));
       float light = 0.38 + 0.55 * max(dot(n, key), 0.0) + 0.2 * max(dot(n, fill), 0.0);
-      vec3 base = mix(vColor, uTint, uTintAmount);
+      // A model with a problem is striped, so it never reads as just "a red filament": the stripe is the problem colour,
+      // or, where the filament itself is close to that colour, white (dark red on a light filament).
+      vec3 stripe = distance(vColor, uTint) < 0.4 ? (dot(vColor, vec3(0.3, 0.6, 0.1)) > 0.5 ? vec3(0.5, 0.05, 0.05) : vec3(1.0)) : uTint;
+      float band = uTintAmount > 0.0 ? step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / uPeriod)) : 0.0;
+      vec3 base = mix(vColor, stripe, band * 0.9);
       fragment = vec4(min(base * light, vec3(1.0)), 1.0);
     }`);
 
@@ -341,12 +345,35 @@
       gl.uniformMatrix4fv(mesh.u.uModel, false, modelMatrix(p));
       gl.uniform1i(mesh.u.uSlot, object.slot || 0);
       const bad = issues[i].length > 0;
-      gl.uniform3fv(mesh.u.uTint, bad ? theme.problem : theme.selected);
-      gl.uniform1f(mesh.u.uTintAmount, bad ? 0.55 : i === selected ? 0.4 : 0);
+      gl.uniform3fv(mesh.u.uTint, theme.problem);
+      gl.uniform1f(mesh.u.uTintAmount, bad ? 1 : 0);
+      gl.uniform1f(mesh.u.uPeriod, 18 * devicePixelRatio);
       gl.bindVertexArray(object.vao); gl.drawArrays(gl.TRIANGLES, 0, object.count);
+    });
+    // Rings on the bed around the footprints: the selected model in the selection colour, one with a problem in the problem
+    // colour (wider), so neither depends on the filament colour of the model itself.
+    gl.useProgram(flat.p); gl.uniformMatrix4fv(flat.u.uViewProj, false, viewProj);
+    scene.placements.forEach((p, i) => {
+      if (!objectOf(p)) return;
+      const r = rect(p);
+      if (issues[i].length > 0) ring(r, 3.5, 1.8, theme.problem);
+      if (i === selected) ring(r, 1.2, 1.8, theme.selected);
     });
     gl.bindVertexArray(null);
     updateTags(issues, viewProj);
+  }
+  let ringVao, ringBuffer;
+  function ring(r, gap, width, colour) {
+    if (!ringVao) {
+      ringVao = gl.createVertexArray(); gl.bindVertexArray(ringVao);
+      ringBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, ringBuffer); gl.bufferData(gl.ARRAY_BUFFER, 24 * 3 * 4, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+    }
+    const x0 = r[0] - gap, y0 = r[1] - gap, x1 = r[2] + gap, y1 = r[3] + gap, w = width, z = 0.08, v = [];
+    [[x0 - w, y0 - w, x1 + w, y0], [x0 - w, y1, x1 + w, y1 + w], [x0 - w, y0, x0, y1], [x1, y0, x1 + w, y1]].forEach((q) => v.push(...quad(q, z)));
+    gl.bindVertexArray(ringVao); gl.bindBuffer(gl.ARRAY_BUFFER, ringBuffer); gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(v));
+    gl.uniform4f(flat.u.uColor, colour[0], colour[1], colour[2], 1);
+    gl.disable(gl.DEPTH_TEST); gl.drawArrays(gl.TRIANGLES, 0, 24); gl.enable(gl.DEPTH_TEST);
   }
   function redraw() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
 

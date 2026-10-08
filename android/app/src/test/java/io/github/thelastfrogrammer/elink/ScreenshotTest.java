@@ -306,6 +306,7 @@ public class ScreenshotTest {
             context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
             android.content.Intent intent = new android.content.Intent(context, PlateActivity.class)
                 .putExtra(PlateActivity.EXTRA_MODELS, new String[] {"/none/model.3mf"}).putExtra(PlateActivity.EXTRA_SELECTION, "{}").putExtra(PlateActivity.EXTRA_INSPECTED, inspected.toString());
+            PlateActivity.prepareEnabled = false;
             PlateActivity activity = Robolectric.buildActivity(PlateActivity.class, intent).setup().get();
             org.json.JSONArray placements = new org.json.JSONArray()
                 .put(new JSONObject().put("file", 0).put("object", 0).put("x", 120.5).put("y", 98.0).put("rotation", 45).put("scale", 1))
@@ -338,5 +339,53 @@ public class ScreenshotTest {
         java.nio.file.Files.write(new File(dir, "meta.json").toPath(), path.layersJson().getBytes("UTF-8"));
         java.nio.file.Files.write(new File(dir, "segments.bin").toPath(), path.segmentsBinary());
         java.nio.file.Files.write(new File(dir, "travels.bin").toPath(), path.travelsBinary());
+    }
+
+    private static void dialogShot(File out, String name) throws Exception {
+        android.app.AlertDialog d = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        draw(d.getWindow().getDecorView(), 1080, 1500, new File(out, name)); d.dismiss();
+    }
+
+    /** The plate's and the viewer's dialogs (More…, Scale, the problem check on Done, Show / hide), light and dark. */
+    @Test public void renderToolDialogs() throws Exception {
+        String dir = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", dir.isEmpty());
+        File out = new File(dir, "dialogs");
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        JSONObject inspected = new JSONObject().put("files", new org.json.JSONArray().put(new JSONObject().put("objects", new org.json.JSONArray()
+            .put(new JSONObject().put("name", "3DBenchy")).put(new JSONObject().put("name", "elegoo_cube")))));
+        File gcode = new File(context.getCacheDir(), "dialogs.gcode");
+        try (java.io.InputStream in = getClass().getResourceAsStream("/gcode/tolerance-cc2.gcode")) { java.nio.file.Files.copy(in, gcode.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        for (String theme : new String[] {"light", "dark"}) {
+            context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
+            android.content.Intent intent = new android.content.Intent(context, PlateActivity.class)
+                .putExtra(PlateActivity.EXTRA_MODELS, new String[] {"/none/model.3mf"}).putExtra(PlateActivity.EXTRA_SELECTION, "{}").putExtra(PlateActivity.EXTRA_INSPECTED, inspected.toString());
+            PlateActivity.prepareEnabled = false;
+            PlateActivity plate = Robolectric.buildActivity(PlateActivity.class, intent).setup().get();
+            setField(plate, "placements", new org.json.JSONArray()
+                .put(new JSONObject().put("file", 0).put("object", 0).put("x", 120.5).put("y", 98.0).put("rotation", 45).put("scale", 1))
+                .put(new JSONObject().put("file", 0).put("object", 1).put("x", 130.0).put("y", 100.0).put("rotation", 0).put("scale", 1)));
+            setField(plate, "selected", 0); setField(plate, "problemCount", 2);
+            Method shown = PlateActivity.class.getDeclaredMethod("showSelected"); shown.setAccessible(true); shown.invoke(plate);
+            Method buttons = PlateActivity.class.getDeclaredMethod("setButtons"); buttons.setAccessible(true); buttons.invoke(plate);
+            Field more = PlateActivity.class.getDeclaredField("more"); more.setAccessible(true); ((android.widget.Button) more.get(plate)).performClick();
+            dialogShot(out, "plate-more-" + theme + ".png");
+            Method scale = PlateActivity.class.getDeclaredMethod("scaleDialog"); scale.setAccessible(true); scale.invoke(plate);
+            dialogShot(out, "plate-scale-" + theme + ".png");
+            Field done = PlateActivity.class.getDeclaredField("done"); done.setAccessible(true); ((android.widget.Button) done.get(plate)).performClick();
+            dialogShot(out, "plate-fixit-" + theme + ".png");
+            android.content.Intent viewIntent = new android.content.Intent(context, GcodeViewerActivity.class)
+                .putExtra(GcodeViewerActivity.EXTRA_FILE, gcode.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, "ElegooToleranceTest.gcode");
+            GcodeViewerActivity viewer = Robolectric.buildActivity(GcodeViewerActivity.class, viewIntent).setup().get();
+            Field pathField = GcodeViewerActivity.class.getDeclaredField("path"); pathField.setAccessible(true);
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (pathField.get(viewer) == null && System.currentTimeMillis() < deadline) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(viewer, true);
+            Field viewerMore = GcodeViewerActivity.class.getDeclaredField("more"); viewerMore.setAccessible(true); ((android.widget.Button) viewerMore.get(viewer)).performClick();
+            dialogShot(out, "viewer-more-" + theme + ".png");
+            Method features = GcodeViewerActivity.class.getDeclaredMethod("featureDialog"); features.setAccessible(true); features.invoke(viewer);
+            dialogShot(out, "viewer-showhide-" + theme + ".png");
+            snapshot(viewer, new File(out, "viewer-panel-" + theme + ".png"));
+        }
     }
 }

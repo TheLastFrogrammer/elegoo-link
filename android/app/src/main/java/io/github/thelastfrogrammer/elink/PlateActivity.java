@@ -105,7 +105,7 @@ public final class PlateActivity extends Activity {
     private void finishWithResult() {
         if (problemCount > 0 && placements.length() > 0) {
             new android.app.AlertDialog.Builder(this).setTitle("Some models have a problem")
-                .setMessage(problemCount + " model(s) are off the bed, overlapping or in a no-print zone, as marked in red. Slicing like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
+                .setMessage((problemCount == 1 ? "One model has" : problemCount + " models have") + " a problem (striped red on the plate): off the bed, overlapping, or in a no-print zone. Slicing like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
                 .setNegativeButton("Fix it", null).setPositiveButton("Go back anyway", (d, w) -> leave()).show();
             return;
         }
@@ -128,7 +128,11 @@ public final class PlateActivity extends Activity {
     }
 
     /** Asks the engine for the bed and, unless given, the starting layout; then builds the page's scene. */
+    /** Tests that only exercise the panel switch the engine call off (it would run native code in the test JVM). */
+    static boolean prepareEnabled = true;
+
     private void prepare(String start) {
+        if (!prepareEnabled) return;
         SliceActivity.worker().execute(() -> {
             try {
                 NativeSlicer engine = SliceActivity.engine(getApplicationContext());

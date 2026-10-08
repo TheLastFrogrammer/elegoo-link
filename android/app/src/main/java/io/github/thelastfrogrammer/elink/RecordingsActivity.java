@@ -43,18 +43,70 @@ public final class RecordingsActivity extends Activity {
 
     static File directory(android.content.Context context) { return new File(context.getFilesDir(), "recordings"); }
 
+    // ---- Plain-language text (pure, tested on the JVM) ----
+
+    /** A span such as "45 min", "3 h 20 min" or "under 1 min". */
+    static String duration(long millis) { return ChartView.spanWords(millis / 1000.0); }
+
+    /** The result of a print, in words a hobbyist can act on. */
+    static String outcome(String outcome) {
+        switch (outcome) {
+            case "complete": return "Completed";
+            case "stopped": return "Stopped";
+            case "printing": return "Unfinished";
+            case "interrupted": return "Replaced by another print";
+            case "ended": return "Ended (printer went idle)";
+            default: return "Unknown";
+        }
+    }
+
+    /** Date, weekday and clock time, for example "Tue 6 Oct, 14:05". */
+    static String when(long millis, Locale locale, TimeZone zone) {
+        SimpleDateFormat format = new SimpleDateFormat("EEE d MMM, HH:mm", locale); format.setTimeZone(zone);
+        return format.format(new Date(millis));
+    }
+
+    /** One list row's second line: when, how long and the result. */
+    static String rowSummary(PrintRecorder.Recording recording, Locale locale, TimeZone zone) {
+        return when(recording.start, locale, zone) + " · " + duration(recording.duration()) + " · " + outcome(recording.outcome);
+    }
+
+    /** The last reading of a print in words: when, progress and the temperatures with their targets. Empty when there are no readings. */
+    static String lastReading(List<double[]> rows) {
+        if (rows.isEmpty()) return "";
+        double[] row = rows.get(rows.size() - 1);
+        List<String> parts = new ArrayList<>();
+        parts.add("Last reading " + ChartView.clockOfDay((long) ChartView.localSeconds((long) row[PrintRecorder.column("time_ms")])));
+        addValue(parts, "progress", row[PrintRecorder.column("progress")], " %", Double.NaN);
+        addValue(parts, "nozzle", row[PrintRecorder.column("nozzle_c")], " °C", row[PrintRecorder.column("nozzle_target_c")]);
+        addValue(parts, "bed", row[PrintRecorder.column("bed_c")], " °C", row[PrintRecorder.column("bed_target_c")]);
+        addValue(parts, "chamber", row[PrintRecorder.column("chamber_c")], " °C", Double.NaN);
+        return String.join(" · ", parts);
+    }
+    private static void addValue(List<String> parts, String name, double value, String unit, double target) {
+        if (Double.isNaN(value)) return;
+        String text = name + " " + ChartView.format(value) + unit;
+        if (!Double.isNaN(target)) text += " (target " + ChartView.format(target) + unit + ")";
+        parts.add(text);
+    }
+
+    // ---- Screens ----
+
     private void showList() {
         content.removeAllViews();
         heading("Print recordings");
-        label("Every print is recorded while the app is monitoring it, locally or through the Elegoo cloud. With the app closed, recording continues only during a local connection or with cloud background watching on.", 13, muted, false);
+        label("Each print the app watches is recorded automatically, newest first. Recording continues while the app is open, over your home network or through the Elegoo cloud. Unfinished means the app stopped watching before the print ended.", 13, muted, false);
         List<PrintRecorder.Recording> recordings = new PrintRecorder(directory(this)).list();
-        if (recordings.isEmpty()) { label("No recordings yet. Start or watch a print.", 15, ink, false); return; }
-        SimpleDateFormat date = new SimpleDateFormat("d MMM HH:mm", Locale.getDefault());
+        if (recordings.isEmpty()) {
+            label("No recordings yet.", 16, ink, true);
+            label("A print is recorded once the app is watching the printer. Start a print, then come back here. If nothing appears, check that Record prints for graphs is turned on in Settings.", 14, muted, false);
+            return;
+        }
         for (PrintRecorder.Recording recording : recordings) {
             LinearLayout card = card();
             TextView name = label(card, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")), 16, ink, true);
             name.setSingleLine(true); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            label(card, date.format(new Date(recording.start)) + " · " + duration(recording.duration()) + " · " + outcome(recording.outcome) + " · " + recording.samples + " samples", 13, muted, false);
+            label(card, rowSummary(recording, Locale.getDefault(), TimeZone.getDefault()), 13, muted, false);
             card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(EXTRA_META, recording.meta.getAbsolutePath())));
         }
     }
@@ -63,51 +115,58 @@ public final class RecordingsActivity extends Activity {
         content.removeAllViews();
         PrintRecorder.Recording recording; List<double[]> rows;
         try { recording = PrintRecorder.Recording.read(meta); rows = PrintRecorder.samples(recording); }
-        catch (Exception error) { heading("Recording"); label("This recording could not be read.", 15, ink, false); return; }
+        catch (Exception error) { heading("Recording"); label("This recording could not be opened. It may have been deleted or damaged. Go back and choose another one.", 15, ink, false); return; }
         shown = recording;
         heading(StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")));
-        label(new SimpleDateFormat("d MMM yyyy HH:mm", Locale.getDefault()).format(new Date(recording.start)) + " · " + StatusPresentation.clean(recording.printer), 13, muted, false);
-        // Summary tiles.
+        String details = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + " · " + StatusPresentation.clean(recording.printer);
+        if (recording.layers > 0) details += " · " + recording.layers + " layers";
+        label(details, 13, muted, false);
+        // Summary tiles: how long, how it ended, and when it ended on the clock.
+        long ended = recording.end > 0 ? recording.end : recording.lastSample;
         LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL); content.addView(tiles);
         tile(tiles, "Duration", duration(recording.duration()), 0);
-        tile(tiles, "Outcome", outcome(recording.outcome), dp(8));
-        tile(tiles, "Layers", recording.layers > 0 ? String.valueOf(recording.layers) : "—", dp(8));
+        tile(tiles, "Result", outcome(recording.outcome), dp(8));
+        tile(tiles, "Ended", ended > 0 ? when(ended, Locale.getDefault(), TimeZone.getDefault()) : "—", dp(8));
+        String last = lastReading(rows);
+        if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, last, 13, muted, false); }
         double[] t = column(rows, "elapsed_s");
         chart("Progress", " %", t, Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)), 0, 100);
-        chart("Layer", "", t, Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)), Double.NaN, Double.NaN);
+        chart("Layer number", "", t, Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)), Double.NaN, Double.NaN);
         chart("Temperatures", " °C", t, Arrays.asList(
             new ChartView.Series("Nozzle", blue, column(rows, "nozzle_c"), false), new ChartView.Series("Nozzle target", blue, column(rows, "nozzle_target_c"), true),
             new ChartView.Series("Bed", orange, column(rows, "bed_c"), false), new ChartView.Series("Bed target", orange, column(rows, "bed_target_c"), true),
             new ChartView.Series("Chamber", aqua, column(rows, "chamber_c"), false)), Double.NaN, Double.NaN);
-        chart("Fans", " %", t, Arrays.asList(
-            new ChartView.Series("Part", blue, column(rows, "part_fan_pct"), false), new ChartView.Series("Auxiliary", orange, column(rows, "aux_fan_pct"), false),
-            new ChartView.Series("Chamber", aqua, column(rows, "chamber_fan_pct"), false)), 0, 100);
-        label("Touch and drag on a chart to read values. Dashed lines are targets.", 12, muted, false);
+        chart("Fan speed", " %", t, Arrays.asList(
+            new ChartView.Series("Part fan", blue, column(rows, "part_fan_pct"), false), new ChartView.Series("Aux fan", orange, column(rows, "aux_fan_pct"), false),
+            new ChartView.Series("Chamber fan", aqua, column(rows, "chamber_fan_pct"), false)), 0, 100);
+        label("Touch and drag on a chart to read values. Times along the bottom are clock times on this phone. Dashed lines are targets.", 12, muted, false);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
-        action(actions, "Data table", () -> table(recording, rows));
+        action(actions, "All readings", () -> table(recording, rows));
         action(actions, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
             .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
     }
 
-    /** The table view: every sample's key values, for reading exact numbers and as the non-visual alternative to the charts. */
+    /** Every reading of the print: exact numbers, and the non-visual alternative to the charts. */
     private void table(PrintRecorder.Recording recording, List<double[]> rows) {
-        String[] columns = {"elapsed_s", "progress", "layer", "nozzle_c", "bed_c", "chamber_c", "part_fan_pct"};
-        String[] titles = {"Time", "%", "Layer", "Nozzle", "Bed", "Chamber", "Fan %"};
+        String[] columns = {"time_ms", "elapsed_s", "progress", "layer", "nozzle_c", "bed_c", "chamber_c", "part_fan_pct"};
+        String[] titles = {"Clock", "Elapsed", "%", "Layer", "Nozzle", "Bed", "Chamber", "Fan %"};
         StringBuilder text = new StringBuilder();
-        for (String title : titles) text.append(String.format(Locale.ROOT, "%-8s", title));
+        for (String title : titles) text.append(String.format(Locale.ROOT, "%-9s", title));
         for (double[] row : rows) {
             text.append('\n');
             for (int i = 0; i < columns.length; i++) {
                 double value = row[PrintRecorder.column(columns[i])];
-                text.append(String.format(Locale.ROOT, "%-8s", i == 0 ? ChartView.elapsed(value) : ChartView.format(value)));
+                String cell = i == 0 ? ChartView.clockOfDay((long) ChartView.localSeconds((long) value))
+                    : i == 1 ? ChartView.elapsed(value) : ChartView.format(value);
+                text.append(String.format(Locale.ROOT, "%-9s", cell));
             }
         }
         TextView view = new TextView(this); view.setTypeface(Typeface.MONOSPACE); view.setTextSize(12); view.setTextColor(ink); view.setText(text); view.setTextIsSelectable(true);
         view.setPadding(dp(16), dp(8), dp(16), dp(8));
         HorizontalScrollView wide = new HorizontalScrollView(this); wide.addView(view); ScrollView tall = new ScrollView(this); tall.addView(wide);
-        new AlertDialog.Builder(this).setTitle("Samples (" + rows.size() + ")").setView(tall).setPositiveButton("Close", null).show();
+        new AlertDialog.Builder(this).setTitle("All readings (" + rows.size() + ")").setView(tall).setPositiveButton("Close", null).show();
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
@@ -118,7 +177,7 @@ public final class RecordingsActivity extends Activity {
             if (output == null) throw new IOException();
             byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
             Toast.makeText(this, "CSV exported.", Toast.LENGTH_SHORT).show();
-        } catch (IOException error) { Toast.makeText(this, "Export failed.", Toast.LENGTH_SHORT).show(); }
+        } catch (IOException error) { Toast.makeText(this, "Export failed. Check that you chose a place you can write to.", Toast.LENGTH_SHORT).show(); }
     }
 
     @Override protected void onResume() { super.onResume(); if (getIntent().getStringExtra(EXTRA_META) == null) showList(); }
@@ -131,6 +190,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout card = card();
         ChartView view = new ChartView(this, ink, muted, grid, surface);
         view.set(title, unit, t, present, min, max);
+        if (shown != null && shown.start > 0) view.clock(shown.start);
         card.addView(view, new LinearLayout.LayoutParams(-1, dp(240)));
     }
 
@@ -138,13 +198,6 @@ public final class RecordingsActivity extends Activity {
         int index = PrintRecorder.column(name); double[] values = new double[rows.size()];
         for (int i = 0; i < values.length; i++) values[i] = rows.get(i)[index];
         return values;
-    }
-    static String duration(long millis) { long minutes = millis / 60000; return minutes >= 60 ? minutes / 60 + "h " + minutes % 60 + "m" : minutes + "m"; }
-    static String outcome(String outcome) {
-        switch (outcome) {
-            case "complete": return "Completed"; case "stopped": return "Stopped"; case "printing": return "In progress or interrupted";
-            case "interrupted": return "Replaced by another print"; case "ended": return "Ended"; default: return "Unknown";
-        }
     }
 
     private void heading(String text) { TextView view = label(text, 22, ink, true); view.setPadding(0, 0, 0, dp(4)); }
@@ -165,7 +218,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -1, 1); layout.leftMargin = gap; layout.topMargin = dp(8); row.addView(tile, layout);
     }
     private void action(LinearLayout row, String text, Runnable run) {
-        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setOnClickListener(v -> run.run());
+        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setOnClickListener(v -> run.run());
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(8); if (row.getChildCount() > 0) layout.leftMargin = dp(8); row.addView(button, layout);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

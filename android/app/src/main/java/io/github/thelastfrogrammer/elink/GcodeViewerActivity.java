@@ -26,6 +26,8 @@ import android.webkit.WebViewClient;
 import android.widget.*;
 import androidx.webkit.WebViewAssetLoader;
 import java.io.*;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -240,6 +242,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private void updateLabels() {
         if (path == null) return;
+        if (legendLayer != layer && legend != null) buildLegend();
         layerLabel.setText(String.format(Locale.getDefault(), "%sLayer %d of %d · %.2f mm high", following ? "● LIVE · " : "", layer + 1, path.layerCount, path.layerZ(layer)));
         moveLabel.setText(String.format(Locale.getDefault(), "Drawn so far in this layer: %,d of %,d lines", move, layerSize(layer)));
     }
@@ -445,24 +448,76 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     // ------------------------------------------------------------------ features and legend
+    /** What a line type is called on screen (the engine's "Custom" is the start and end G-code). */
+    static String displayName(int feature) {
+        String name = GcodeToolpath.FEATURES[feature];
+        switch (name) {
+            case "Custom": return "Start / end G-code";
+            case "Internal solid infill": return "Solid infill";
+            case "Support transition": return "Support (transition)";
+            case "Support interface": return "Support (top layers)";
+            default: return name;
+        }
+    }
+
+    /**
+     * Which types get a chip in the legend: those in the current layer, at most `max`, supports and the prime tower first
+     * (they are what people look for), then the longest; in palette order. `lengths` is per type in the current layer.
+     */
+    static int[] legendTypes(double[] lengths, int max) {
+        List<Integer> present = new ArrayList<>();
+        for (int i = 0; i < lengths.length; i++) if (lengths[i] > 0) present.add(i);
+        present.sort((a, b) -> {
+            boolean ra = a >= 11 && a <= 14, rb = b >= 11 && b <= 14;
+            if (ra != rb) return ra ? -1 : 1;
+            return Double.compare(lengths[b], lengths[a]);
+        });
+        List<Integer> chosen = new ArrayList<>(present.subList(0, Math.min(max, present.size())));
+        java.util.Collections.sort(chosen);
+        int[] out = new int[chosen.size()]; for (int i = 0; i < out.length; i++) out[i] = chosen.get(i); return out;
+    }
+
+    private int legendLayer = -1;
+
+    private double[] layerLengths(int index) {
+        double[] lengths = new double[GcodeToolpath.FEATURES.length];
+        for (int i = path.layerStart(index); i < path.layerEnd(index); i++) lengths[path.type[i]] += Math.hypot(path.x1[i] - path.x0[i], path.y1[i] - path.y0[i]);
+        return lengths;
+    }
+
+    /** A chip for the legend: a 48dp tall tap area around a smaller visible pill. */
+    private LinearLayout chip(String text, int color, boolean struck, String description, Runnable tap, Runnable hold) {
+        LinearLayout area = new LinearLayout(this); area.setOrientation(LinearLayout.HORIZONTAL); area.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        area.setMinimumHeight(dp(48)); area.setPadding(dp(2), 0, dp(2), 0); area.setContentDescription(description);
+        area.setOnClickListener(v -> tap.run());
+        if (hold != null) area.setOnLongClickListener(v -> { hold.run(); return true; });
+        LinearLayout pill = new LinearLayout(this); pill.setOrientation(LinearLayout.HORIZONTAL); pill.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        GradientDrawable back = new GradientDrawable(); back.setColor(buttonColor); back.setCornerRadius(dp(16)); pill.setBackground(back);
+        pill.setPadding(dp(10), 0, dp(12), 0);
+        if (color != 0) {
+            View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setColor(color); dot.setCornerRadius(dp(3)); swatch.setBackground(dot);
+            pill.addView(swatch, new LinearLayout.LayoutParams(dp(10), dp(10)));
+        }
+        TextView name = new TextView(this); name.setText(text); name.setTextSize(12); name.setTextColor(struck ? muted : ink); name.setPadding(color != 0 ? dp(6) : 0, 0, 0, 0);
+        if (struck) name.setPaintFlags(name.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
+        pill.addView(name);
+        area.addView(pill, new LinearLayout.LayoutParams(-2, dp(32)));
+        return area;
+    }
+
     private void buildLegend() {
         legend.removeAllViews();
-        double[] lengths = path.featureLengths();
-        for (int i = 0; i < lengths.length; i++) {
-            if (lengths[i] <= 0) continue;
-            final int feature = i;
-            LinearLayout chip = new LinearLayout(this); chip.setOrientation(LinearLayout.HORIZONTAL); chip.setPadding(dp(2), dp(4), dp(10), dp(4));
-            chip.setMinimumHeight(dp(32)); chip.setContentDescription(GcodeToolpath.FEATURES[i] + ((hidden >> i & 1) == 1 ? ", hidden. Tap to show." : ". Tap to hide, hold to show only this."));
-            chip.setOnClickListener(v -> { hidden ^= 1 << feature; buildLegend(); pushView(); });
-            chip.setOnLongClickListener(v -> { hidden = soloMask(feature); buildLegend(); pushView(); return true; });
-            chip.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setColor(Color.parseColor(PALETTE[i])); dot.setCornerRadius(dp(3)); swatch.setBackground(dot);
-            chip.addView(swatch, new LinearLayout.LayoutParams(dp(10), dp(10)));
-            TextView name = new TextView(this); name.setText(GcodeToolpath.FEATURES[i]); name.setTextSize(12); name.setTextColor((hidden >> i & 1) == 1 ? muted : ink);
-            if ((hidden >> i & 1) == 1) name.setPaintFlags(name.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG); name.setPadding(dp(5), 0, 0, 0);
-            chip.addView(name);
-            legend.addView(chip);
+        if (path == null) return;
+        legendLayer = layer;
+        double[] here = layerLengths(layer), all = path.featureLengths();
+        int[] shown = legendTypes(here, 4);
+        for (int i : shown) {
+            final int feature = i; boolean off = (hidden >> i & 1) == 1;
+            legend.addView(chip(displayName(i), Color.parseColor(PALETTE[i]), off, displayName(i) + (off ? ", hidden. Tap to show." : ". Tap to hide, hold to show only this."),
+                () -> { hidden ^= 1 << feature; buildLegend(); pushView(); }, () -> { hidden = soloMask(feature); buildLegend(); pushView(); }));
         }
+        int others = 0; for (int i = 0; i < all.length; i++) if (all[i] > 0) { boolean in = false; for (int k : shown) in |= k == i; if (!in) others++; }
+        if (others > 0) legend.addView(chip("+" + others + " more", 0, false, others + " more line types. Opens the show and hide list.", this::featureDialog, null));
     }
 
     /** Hides every feature that is in the file except `keep`; a second long-press on the only visible one shows all. */
@@ -480,7 +535,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if (lengths[i] <= 0) continue;
             final int feature = i;
             CheckBox box = new CheckBox(this);
-            box.setText(String.format(Locale.getDefault(), "%s · %.1f m", GcodeToolpath.FEATURES[i], lengths[i] / 1000));
+            box.setText(String.format(Locale.getDefault(), "%s · %.1f m", displayName(i), lengths[i] / 1000));
+            box.setMinHeight(dp(48));
             box.setTextColor(ink); box.setChecked((hidden >> i & 1) == 0); box.setButtonTintList(ColorStateList.valueOf(Color.parseColor(PALETTE[i])));
             box.setOnCheckedChangeListener((view, checked) -> { hidden = checked ? hidden & ~(1 << feature) : hidden | (1 << feature); buildLegend(); pushView(); });
             body.addView(box);
