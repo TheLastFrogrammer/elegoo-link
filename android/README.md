@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.12.1 (development):** layout pass on the Slice and main screens: numbered steps, compact filament slots with colour dots, a plate chooser for multi-plate results, controls that say why they are off with one fix button, compact file and history rows, and Print setup in three sections (checks, build plate, filament) with tray colours.
+**v0.12.2 (development):** clarity pass from a task-by-task usability audit: hints that say what is missing with a way to fix it (Open Settings keeps the sliced file in Files), connection fields that say where to find the IP and code on the printer, home Wi-Fi before the cloud sign-in, plainer cloud-control and error texts, "Filament 1 · T0" naming throughout, a red Stop, a confirm before trays replace filaments, and a heater control that says it does not change sliced files.
+
+**v0.12.1:** layout pass on the Slice and main screens: numbered steps, compact filament slots with colour dots, a plate chooser for multi-plate results, controls that say why they are off with one fix button, compact file and history rows, and Print setup in three sections (checks, build plate, filament) with tray colours.
 
 **v0.12.0:** **Upload and print…** and Files uploads also work through the Elegoo cloud: the file goes to Elegoo's storage and the printer fetches it, as ElegooSlicer does; **Settings for one model…** (on the Slice screen, or **Model settings…** in the plate view) gives one model and its copies its own walls, infill, speeds, supports and other object settings, like the desktop's per-object settings; four more **calibration prints**: pressure advance lines and pattern, input shaping frequency and damping; a cloud-mode download that the printer refuses now says why (its file server is off outside LAN Only).
 

@@ -36,7 +36,7 @@ public class ConnectionPolicyTest {
     @Test public void mqttNotAuthorizedDoesNotClaimPasswordWasNecessarilyWrong() {
         org.eclipse.paho.client.mqttv3.MqttException error = new org.eclipse.paho.client.mqttv3.MqttSecurityException(5);
         String message = PrinterErrors.describe(error, "MQTT (port 1883)");
-        assertTrue(message.contains("not authorized")); assertTrue(message.contains("does not specify"));
+        assertTrue(message.contains("not authorized")); assertTrue(message.contains("does not say which rule failed"));
         assertFalse(message.contains("access code rejected")); assertFalse(PrinterErrors.retryable(error));
         assertFalse(PrinterErrors.retryable(new PrinterErrors.CloudMode()));
     }

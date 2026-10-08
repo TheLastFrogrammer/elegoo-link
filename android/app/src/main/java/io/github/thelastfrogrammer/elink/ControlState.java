@@ -28,7 +28,7 @@ final class ControlState {
     /** One line saying which print settings apply in the current state. */
     static String tuningNote(JSONObject snapshot) {
         if (Cc2Codec.idle(snapshot)) return "Speed modes apply during a print.";
-        if (Cc2Codec.canPause(snapshot)) return "Temperature targets can only be set while the printer is idle.";
-        return "Temperature targets need an idle printer; speed modes need a running print.";
+        if (Cc2Codec.canPause(snapshot)) return "Heater temperatures can be set only while the printer is idle.";
+        return "Heater temperatures need an idle printer; speed needs a running print.";
     }
 }

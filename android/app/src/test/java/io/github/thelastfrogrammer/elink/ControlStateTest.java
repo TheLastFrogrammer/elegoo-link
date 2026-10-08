@@ -47,7 +47,7 @@ public class ControlStateTest {
     }
     @Test public void tuningNoteFollowsTheState() throws Exception {
         assertTrue(ControlState.tuningNote(status(1, 0)).startsWith("Speed"));
-        assertTrue(ControlState.tuningNote(status(2, 2075)).startsWith("Temperature targets can only"));
+        assertTrue(ControlState.tuningNote(status(2, 2075)).startsWith("Heater temperatures can be set only"));
         assertTrue(ControlState.tuningNote(status(2, 2502)).contains("running print"));
     }
 }

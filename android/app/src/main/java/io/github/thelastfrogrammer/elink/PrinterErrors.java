@@ -25,7 +25,7 @@ public final class PrinterErrors {
     public static String code(int code) {
         String reason;
         switch (code) {
-            case 1000: reason = "Access code rejected. Check the code under Settings → LAN Only"; break;
+            case 1000: reason = "Access code rejected. Check the code on the printer's screen, with LAN Only turned on"; break;
             case 1001: reason = "This firmware does not support that request"; break;
             case 1002: reason = "Printer could not open the folder"; break;
             case 1003: reason = "Printer rejected the request parameters"; break;
@@ -43,30 +43,30 @@ public final class PrinterErrors {
     public static String describe(Throwable error, String stage) {
         Throwable routeError = error;
         for (int i = 0; i < 8 && routeError != null; i++, routeError = routeError.getCause()) if (routeError instanceof VpnRouteGuard.Unavailable) return new VpnRouteGuard.Unavailable().getMessage();
-        if (error instanceof ModeMismatch) return "Printer reports LAN Only, but Cloud-mode PIN probe was selected. To test Matrix coexistence, leave the printer in cloud mode; otherwise select LAN access code in this app.";
-        if (error instanceof CloudMode) return "The printer reports cloud / WAN mode, but LAN access code was selected. To preserve Matrix, try the separate Cloud-mode PIN probe (read-only, experimental). LAN Only remains an optional alternative; a LAN code is not a pairing PIN.";
-        if (error instanceof IdentityUnavailable) return "Could not obtain the printer serial through UDP discovery or HTTP. Enter the exact Serial Number from Settings → Device in the optional serial field, then connect over MQTT.";
+        if (error instanceof ModeMismatch) return "Printer reports LAN Only, but Cloud-mode PIN probe was selected. To test Matrix coexistence, leave the printer in cloud mode; otherwise select the access code (LAN Only) in this app.";
+        if (error instanceof CloudMode) return "The printer reports cloud / WAN mode, but the access code (LAN Only) was selected. To preserve Matrix, try the separate Cloud-mode PIN probe (read-only, experimental). LAN Only remains an optional alternative; a LAN code is not a pairing PIN.";
+        if (error instanceof IdentityUnavailable) return "Could not get the printer's serial number automatically. Enter it from the printer's screen (Device) in the optional serial field, then connect. (UDP discovery and HTTP both failed.)";
         if (error instanceof Rejected) return error.getMessage();
         if (error instanceof HttpStatus) return stage + " replied with HTTP " + ((HttpStatus) error).status + ". Verify that this IP belongs to the CC2 and that its firmware exposes /system/info.";
         if (error instanceof MissingIdentity) return "HTTP connected, but the response did not contain the printer serial number. Check the IP and CC2 firmware/API compatibility.";
         if (error instanceof org.json.JSONException) return stage + " returned unexpected data. Verify that the IP belongs to the CC2, rather than another local device.";
         if (error instanceof MqttException) {
             int code = ((MqttException) error).getReasonCode();
-            if (code == 4) return "MQTT username or password was not accepted (code 4). Check the current LAN access code and code-protection setting.";
-            if (code == 5) return stage + " was not authorized (MQTT code 5). The printer does not specify which authorization rule failed. Verify LAN Only and its current access code; code protection off uses the default credential.";
-            return "MQTT connection failed (code " + code + "). Run Check connection; verify LAN Only and MQTT port 1883.";
+            if (code == 4) return "The printer did not accept the access code (MQTT code 4). Check the code on the printer's screen, and whether code protection is on.";
+            if (code == 5) return stage + " was not authorized. Check LAN Only and the access code on the printer's screen. The printer does not say which rule failed (MQTT code 5).";
+            return "Could not connect to the printer. Run Check connection, and check LAN Only on the printer's screen. (MQTT code " + code + ", port 1883.)";
         }
         Throwable cause = error;
         for (int i = 0; i < 8 && cause != null; i++, cause = cause.getCause()) {
             if (cause instanceof ConnectException || cause instanceof NoRouteToHostException)
-                return stage + " could not reach the printer. Check its current IP, LAN Only, and the selected connection route. Local mode needs home Wi-Fi; remote mode needs a working home VPN/subnet route.";
+                return stage + " could not reach the printer. Check the IP shown on the printer's screen, that LAN Only is on, and the selected connection route. Local mode needs home Wi-Fi; remote mode needs a working home VPN/subnet route.";
             if (cause instanceof SocketTimeoutException)
                 return stage + " timed out. Run Check connection to distinguish Wi-Fi reachability from printer authentication.";
         }
         if (error instanceof TimeoutException) return stage.equals("Printer registration")
             ? "Printer registration timed out. MQTT connected, but no usable registration reply arrived for this client. This does not establish PIN validity or firmware support."
             : stage + " timed out.";
-        return stage + " failed. Run Check connection and compare the IP with the printer's Network screen.";
+        return stage + " failed. Run Check connection and compare the IP with the one shown on the printer's screen.";
     }
     public static boolean retryable(Throwable error) {
         if (error instanceof Rejected || error instanceof IllegalArgumentException || error instanceof IllegalStateException) return false;

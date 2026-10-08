@@ -69,7 +69,7 @@ public final class SliceActivity extends Activity {
     private Bundle restored;
     private final List<File> slicedFiles = new ArrayList<>();
     private final List<String> slicedNames = new ArrayList<>();
-    private Button uploadPrint, objectButton;
+    private Button uploadPrint, objectButton, printerFix;
     private TextView printerHint, sliceHint;
     // What the model files hold (engine inspect: objects, 3MF plates, project settings, preview meshes).
     private org.json.JSONObject inspected;
@@ -338,7 +338,7 @@ public final class SliceActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         TextView filamentsHeading = label(filamentCard, "Filaments", 14, ink, true); ((LinearLayout.LayoutParams) filamentsHeading.getLayoutParams()).topMargin = dp(14);
-        label(filamentCard, "Slot 1 is tool T0, slot 2 is T1, and so on.", 13, muted, false);
+        label(filamentCard, "Each filament is one printer tool: Filament 1 is T0, Filament 2 is T1, and so on. T0 is the printer's tool number.", 13, muted, false);
         fillTrays = button(filamentCard, "Fill from CANVAS trays", this::fillFromTrays, false);
         traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
         slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
@@ -382,7 +382,8 @@ public final class SliceActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
         uploadPrint = button(resultCard, "Upload and print…", this::uploadAndPrint, true);
-        printerHint = label(resultCard, "", 12, muted, false); printerHint.setMaxLines(1); printerHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        printerHint = label(resultCard, "", 12, muted, false); printerHint.setMaxLines(2); printerHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        printerFix = button(resultCard, "Open Settings (the file waits in Files)", this::openSettingsTab, false);
         LinearLayout pair = new LinearLayout(this); pair.setOrientation(LinearLayout.HORIZONTAL); resultCard.addView(pair, new LinearLayout.LayoutParams(-1, -2));
         rowButton(pair, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
             .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
@@ -672,11 +673,23 @@ public final class SliceActivity extends Activity {
         preview.setVisibility(View.GONE); showPreview(sliced);
     }
 
+    /**
+     * Opens the Settings tab of the main screen, where the connection and cloud control are turned on. The sliced file
+     * goes to the Files tab first (as Send to Files tab does), so it is waiting there once the printer is connected.
+     */
+    private void openSettingsTab() {
+        Intent handOver = new Intent().putExtra(MainActivity.EXTRA_PAGE, 3);
+        if (sliced != null && sliced.isFile()) handOver.putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName);
+        if (getCallingActivity() != null) setResult(RESULT_OK, handOver);
+        else startActivity(handOver.setClass(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
+        finish();
+    }
+
     /** Uploads the result (locally, or through the cloud); for one file, Print setup opens when it is on the printer. */
     private void uploadAndPrint() {
         if (printer == null || slicedFiles.isEmpty()) return;
         boolean cloud = !printer.ready() && printer.cloudUploadReady() && settings.getBoolean("cloudControlUnderstood", false);
-        if (!cloud && (!printer.ready() || printer.pinProbe())) { status.setText("Uploading needs the local connection or the printer watched through the Elegoo cloud: see Settings, or use Send to Files tab."); status.setTextColor(error); return; }
+        if (!cloud && (!printer.ready() || printer.pinProbe())) { status.setText("Uploading needs a connection to the printer, or cloud control turned on. Open Settings, or use Send to Files tab."); status.setTextColor(error); return; }
         for (File file : slicedFiles) if (!file.isFile()) { status.setText("The sliced file is gone; slice again."); status.setTextColor(error); return; }
         if (!printer.uploadFiles(new ArrayList<>(slicedFiles), new ArrayList<>(slicedNames))) return;
         Intent back = new Intent();
@@ -817,12 +830,13 @@ public final class SliceActivity extends Activity {
         modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
         if (slots.size() < 2) return;
         TextView heading = label(modelAssign, "Filament for each model", 14, ink, true);
+        label(modelAssign, "STL, OBJ and STEP files use one filament each. A 3MF keeps its own colours and parts.", 13, muted, false);
         ((LinearLayout.LayoutParams) heading.getLayoutParams()).topMargin = dp(14);
         for (int i = 0; i < models.size(); i++) {
             File model = models.get(i); int index = i;
             List<String> choices = new ArrayList<>(), colours = new ArrayList<>();
-            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Slot 1" + slotSummary(1)); colours.add(is3mf(model) ? null : slots.get(0).colour);
-            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) { choices.add("Slot " + k + slotSummary(k)); colours.add(slots.get(k - 1).colour); }
+            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Filament 1" + slotSummary(1)); colours.add(is3mf(model) ? null : slots.get(0).colour);
+            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) { choices.add("Filament " + k + slotSummary(k)); colours.add(slots.get(k - 1).colour); }
             label(modelAssign, model.getName(), 13, ink, false);
             Spinner spinner = spinner(modelAssign);
             int slot = Math.min(modelSlots.get(i), slots.size());
@@ -902,7 +916,7 @@ public final class SliceActivity extends Activity {
         }
         for (int i = 0; i < modelSlots.size(); i++) if (is3mf(models.get(i))) modelSlots.set(i, 0);
         showModels(); updateButtons();
-        status.setText(missing.isEmpty() ? "Set up " + slots.size() + " slot(s) from the project." : "Set up " + slots.size() + " slot(s); this printer has no preset named " + String.join(", ", missing) + ", so those slots keep their preset.");
+        status.setText(missing.isEmpty() ? "Set up " + slots.size() + " filament(s) from the project." : "Set up " + slots.size() + " filament(s); this printer has no preset named " + String.join(", ", missing) + ", so those slots keep their preset.");
         status.setTextColor(missing.isEmpty() ? ink : error);
     }
 
@@ -989,14 +1003,14 @@ public final class SliceActivity extends Activity {
     /** ElegooSlicer's calibration prints for filament slot 1, with the ranges its Calibration menu starts from. */
     private static final String[][] CALIBRATIONS = {
         // mode, title, start label, end label, step label, how to read the result
-        {"temperature", "Temperature tower", "Hottest (°C, bottom)", "Coolest (°C, top)", "", "Each 10 mm block is 5 °C cooler than the one below, starting from the bottom. Pick the best-looking block and set the slot's nozzle temperature to it (the slot's Settings…)."},
-        {"flow", "Flow rate (pass 1)", "", "", "", "Each square changes the flow ratio by the number printed on it. Pick the smoothest top surface and add its number to the slot's flow ratio (the slot's Settings…). Then print pass 2 for a finer step."},
-        {"flow2", "Flow rate (pass 2, finer)", "", "", "", "As pass 1, in finer steps: add the number on the smoothest square to the slot's flow ratio."},
+        {"temperature", "Temperature tower", "Hottest (°C, bottom)", "Coolest (°C, top)", "", "Each 10 mm block is 5 °C cooler than the one below, starting from the bottom. Pick the best-looking block, open the filament's Settings… on this screen, set its nozzle temperature to that value, and slice again. The heater controls on the Monitor tab do not change the slice."},
+        {"flow", "Flow rate (pass 1)", "", "", "", "Each square changes the flow ratio by the number printed on it. Pick the smoothest top surface and add its number to the filament's flow ratio (the filament's Settings…). Then print pass 2 for a finer step."},
+        {"flow2", "Flow rate (pass 2, finer)", "", "", "", "As pass 1, in finer steps: add the number on the smoothest square to the filament's flow ratio."},
         {"pressure_advance", "Pressure advance tower", "Start", "End", "Step per mm", "Pressure advance rises by the step for every millimetre of height. Find the height where the corners look best and set pressure advance = start + step × height (mm)."},
         {"max_flow", "Max volumetric speed", "Start (mm³/s)", "End (mm³/s)", "Step per mm", "The flow rises by the step for every millimetre of height. Find the height where the walls start to fail and set max volumetric speed = start + step × height (mm), a little lower to be safe."},
         {"retraction", "Retraction tower", "Start (mm)", "End (mm)", "Step per mm", "Retraction grows by the step for every millimetre above the 1.4 mm base. Find the lowest section without strings and set retraction length = start + step × (height − 1.4 mm)."},
-        {"pa_line", "Pressure advance lines", "Start", "End", "Step per line", "One short line per value, pressure advance rising by the step from the front line, with values printed beside them. Pick the line whose width stays even where the speed changes and set the slot's pressure advance to its value (the slot's Settings…)."},
-        {"pa_pattern", "Pressure advance pattern", "Start", "End", "Step per pattern", "Nested corners, pressure advance rising by the step from left to right, values printed above. Pick the sharpest corner without a bulge or gap and set the slot's pressure advance to its value (the slot's Settings…)."},
+        {"pa_line", "Pressure advance lines", "Start", "End", "Step per line", "One short line per value, pressure advance rising by the step from the front line, with values printed beside them. Pick the line whose width stays even where the speed changes and set the filament's pressure advance to its value (the filament's Settings…)."},
+        {"pa_pattern", "Pressure advance pattern", "Start", "End", "Step per pattern", "Nested corners, pressure advance rising by the step from left to right, values printed above. Pick the sharpest corner without a bulge or gap and set the filament's pressure advance to its value (the filament's Settings…)."},
         {"shaping_freq", "Input shaping frequency", "Start (Hz)", "End (Hz)", "Damping (0 = printer's)", "The shaper frequency rises from start at the bottom to end at the top of the 60 mm tower. Find the height with the least ringing after corners: frequency = start + (end − start) × height ÷ 60. Then print the damping test with it. The printer must accept Klipper's SET_INPUT_SHAPER; not yet tried on a CC2."},
         {"shaping_damp", "Input shaping damping", "Start", "End", "Frequency (Hz)", "The damping ratio rises from start at the bottom to end at the top of the 60 mm tower, at the frequency you found. Find the height with the least ringing: damping = start + (end − start) × height ÷ 60. The printer must accept Klipper's SET_INPUT_SHAPER; not yet tried on a CC2."},
     };
@@ -1062,7 +1076,7 @@ public final class SliceActivity extends Activity {
             String range = calibrationSpec[2].isEmpty() ? "" : String.format(Locale.getDefault(), " · %s → %s%s", trimNumber(calibrationRange[0]), trimNumber(calibrationRange[1]),
                 calibrationSpec[4].isEmpty() ? "" : calibrationSpec[4].startsWith("Step") ? ", step " + trimNumber(calibrationRange[2])
                     : ", " + calibrationSpec[4].replaceFirst(" \\(.*", "").toLowerCase(Locale.ROOT) + " " + trimNumber(calibrationRange[2]));
-            calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nThe model files are set aside while this is on.");
+            calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nHow to read it: " + calibrationSpec[5] + "\nYour models are kept. Tap Back to my models to return to them.");
         }
         calibrate.setText(on ? "Back to my models" : "Calibration print…");
     }
@@ -1088,10 +1102,10 @@ public final class SliceActivity extends Activity {
         Slot slot = new Slot(); int number = slots.size() + 1;
         slot.row = new LinearLayout(this); slot.row.setOrientation(LinearLayout.VERTICAL); slot.row.setPadding(0, dp(6), 0, dp(6));
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        slot.title = new TextView(this); slot.title.setText("Slot " + number + " · T" + (number - 1)); slot.title.setTextColor(ink); slot.title.setTextSize(14); slot.title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        slot.title = new TextView(this); slot.title.setText("Filament " + number + " · T" + (number - 1)); slot.title.setTextColor(ink); slot.title.setTextSize(14); slot.title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         header.addView(slot.title, new LinearLayout.LayoutParams(0, -2, 1));
         slot.swatch = new TextView(this);
-        slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament colour for slot " + number);
+        slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament " + number + " colour");
         header.addView(slot.swatch, new LinearLayout.LayoutParams(dp(40), dp(40)));
         slot.settings = styled("Settings…", () -> openFilamentSettings(slots.indexOf(slot)), false);
         LinearLayout.LayoutParams settingsLayout = new LinearLayout.LayoutParams(-2, -2); settingsLayout.leftMargin = dp(8); header.addView(slot.settings, settingsLayout);
@@ -1152,7 +1166,7 @@ public final class SliceActivity extends Activity {
         if (busy) return;
         EditText hex = new EditText(this); hex.setSingleLine(true); hex.setHint("#RRGGBB"); hex.setText(slot.colour == null ? "" : slot.colour);
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0); body.addView(hex);
-        new AlertDialog.Builder(this).setTitle("Slot " + (slots.indexOf(slot) + 1) + " colour")
+        new AlertDialog.Builder(this).setTitle("Filament " + (slots.indexOf(slot) + 1) + " colour")
             .setMessage("Used for the preview image, the G-code's filament colours and the flushing volumes between colours.").setView(body)
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Preset colour", (d, w) -> { slot.colour = null; showSwatch(slot); showModels(); })
@@ -1203,12 +1217,22 @@ public final class SliceActivity extends Activity {
         if (printer != null) printer.refresh();
         List<TrayPlan.Tray> trays = reportedTrays();
         if (trays.isEmpty()) { refreshTrays(); status.setText("No loaded CANVAS trays reported yet. Connect to the printer, wait for its status, then try again."); status.setTextColor(error); return; }
+        // A fresh screen has one filament with nothing chosen: nothing to lose, so no question.
+        boolean changed = slots.size() > 1;
+        for (Slot slot : slots) if (slot.source != null || !slot.edits.isEmpty()) changed = true;
+        if (!changed) { replaceWithTrays(trays); return; }
+        new AlertDialog.Builder(this).setTitle("Replace these filaments with the trays?")
+            .setMessage("The filaments set up here, with their trays and any filament settings you changed, will be replaced by the CANVAS trays loaded in the printer.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Replace", (dialog, which) -> replaceWithTrays(trays)).show();
+    }
+
+    private void replaceWithTrays(List<TrayPlan.Tray> trays) {
         while (slots.size() > 1) removeLastSlot();
         for (Slot slot : slots) fillTrayChoices(slot);
         applyTray(slots.get(0), trays.get(0));
         for (int i = 1; i < trays.size() && i < TrayPlan.MAX_TOOLS; i++) addSlot(trays.get(i));
         refreshTrays();
-        status.setText("Filled " + slots.size() + " slot(s) from the CANVAS trays. Check each slot's preset."); status.setTextColor(ink);
+        status.setText("Filled " + slots.size() + " filament(s) from the CANVAS trays. Check each filament's preset."); status.setTextColor(ink);
         showModels(); updateButtons();
     }
 
@@ -1243,7 +1267,8 @@ public final class SliceActivity extends Activity {
         boolean canUpload = local || cloud;
         if (uploadPrint != null) uploadPrint.setEnabled(!busy && canUpload && !slicedFiles.isEmpty());
         if (printerHint != null) printerHint.setText(local ? "Uploads over the local connection." : cloud ? "Uploads through the Elegoo cloud."
-            : printer != null && printer.cloudUploadReady() ? "Turn on cloud controls (Printer tab) to upload." : "Connect to the printer or its cloud to upload.");
+            : printer != null && printer.cloudUploadReady() ? "Cloud control is off. Turn it on in Settings to upload." : "Not connected to the printer. Connect in Settings to upload.");
+        if (printerFix != null) printerFix.setVisibility(local || cloud ? View.GONE : View.VISIBLE);
         allSettings.setEnabled(!busy && presetsReady);
         addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);
         for (int i = 0; i < modelAssign.getChildCount(); i++) modelAssign.getChildAt(i).setEnabled(!busy);

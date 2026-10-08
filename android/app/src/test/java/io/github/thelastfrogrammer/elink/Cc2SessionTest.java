@@ -172,7 +172,7 @@ public class Cc2SessionTest {
         Cc2Session session = new Cc2Session("192.168.1.84", "code", listener,
             url -> { fail("HTTP must not open"); return null; }, null,
             (uri, id) -> { fail("Invalid identity must not open MQTT"); return null; }, http -> "#/wrong");
-        try { session.connect(); assertTrue(take(listener.failures).contains("Serial Number")); assertFalse(listener.retryable); }
+        try { session.connect(); assertTrue(take(listener.failures).contains("serial number")); assertFalse(listener.retryable); }
         finally { session.close(); }
     }
     @Test public void disabledCodeProtectionUsesDefaultForMqttDespiteEnteredCode() throws Exception {

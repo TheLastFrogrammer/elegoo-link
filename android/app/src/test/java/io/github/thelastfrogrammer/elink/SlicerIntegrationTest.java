@@ -534,6 +534,14 @@ public class SlicerIntegrationTest {
         assertEquals(1, ((android.widget.Spinner) field(again, "resultPlate")).getSelectedItemPosition());
         assertEquals("twoplate_project_plate2.gcode", field(again, "slicedName"));
         assertEquals("Send plate 2 to the Files tab", buttonText(again, "useInFiles"));
+        // Open Settings from the result keeps the chosen plate: it goes to the Files tab, and the main screen opens on Settings.
+        invoke(again, "openSettingsTab");
+        android.content.Intent next = Shadows.shadowOf(again).getNextStartedActivity();
+        assertNotNull(next);
+        assertEquals(3, next.getIntExtra(MainActivity.EXTRA_PAGE, -1));
+        assertEquals("twoplate_project_plate2.gcode", next.getStringExtra(SliceActivity.RESULT_NAME));
+        assertTrue(new File(next.getStringExtra(SliceActivity.RESULT_FILE)).isFile());
+        assertTrue(again.isFinishing());
     }
 
     /** The Slice bar's hint names what is missing; it stays hidden while presets load and once the slice can start. */
