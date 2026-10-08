@@ -100,6 +100,19 @@ public final class StatusPresentation {
     }
     public static String clean(String value) { return value.replaceAll("[\\p{Cntrl}]", " ").substring(0, Math.min(value.length(), 160)); }
 
+    /** The viewer's one plain line when the phone holds no copy of the G-code being printed. */
+    static final String NO_FILE_LINE = "The toolpath needs the G-code file. Files sent from this phone, or downloaded over the local connection, show here.";
+
+    /** "41% · layer 87 of 212 · 1h 15m left": what the printer reports about the running print, only the parts it reports. */
+    static String runningLine(JSONObject machine, JSONObject print) {
+        List<String> parts = new ArrayList<>();
+        if (machine != null && machine.has("progress")) parts.add(Math.max(0, Math.min(100, machine.optInt("progress"))) + "%");
+        if (print != null && print.optInt("total_layer", 0) > 0) parts.add("layer " + print.optInt("current_layer", 0) + " of " + print.optInt("total_layer"));
+        long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+        if (remaining >= 0) parts.add(remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left");
+        return parts.isEmpty() ? "Printing" : String.join(" · ", parts);
+    }
+
     /** "14:30" for a finish today, "Tue 14:30" on another day, from the printer's remaining seconds and the phone's clock. */
     static String doneAt(long nowMs, long remainingSec, Locale locale, TimeZone zone) {
         long end = nowMs + remainingSec * 1000;

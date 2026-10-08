@@ -422,6 +422,81 @@ public final class MainActivity extends Activity {
             if (file != null && pendingPrintSetup.equals(file.optString("filename"))) { pendingPrintSetup = null; startDialog(file, "local"); return; }
         }
     }
+    // ---- Print again: a history entry whose file the printer still holds opens the normal Print setup ----
+    private final List<Object[]> againRows = new ArrayList<>(); // {Button, TextView reason, JSONObject history row}
+    private PrintAgain againCheck(JSONObject row) {
+        return PrintAgain.check(row.optString("task_name"), printer.filePage, printer.storage, printer.fileOffset, printer.filesFresh());
+    }
+    private void addAgain(JSONObject row) {
+        Button again = button(historyList, "Print again", () -> printAgain(row));
+        TextView why = label(historyList, "", 12, MUTED, false);
+        againRows.add(new Object[] {again, why, row});
+    }
+    private void updateAgain(boolean query) {
+        for (Object[] item : againRows) {
+            Button again = (Button) item[0]; TextView why = (TextView) item[1];
+            if (printer == null || !query) { again.setEnabled(false); why.setText("Connect, or watch through the cloud, to print again."); why.setVisibility(View.VISIBLE); continue; }
+            PrintAgain check = againCheck((JSONObject) item[2]);
+            again.setText(check.state == PrintAgain.State.REFRESH ? "Refresh files first" : "Print again");
+            again.setEnabled(check.state == PrintAgain.State.READY || check.state == PrintAgain.State.REFRESH || check.state == PrintAgain.State.UNKNOWN);
+            if (check.state == PrintAgain.State.UNKNOWN) again.setText("Check the file list");
+            why.setText(check.reason); why.setVisibility(check.reason.isEmpty() ? View.GONE : View.VISIBLE);
+        }
+    }
+    /** Opens Print setup (all its checks and the final confirmation still apply), or refreshes the file list first. */
+    private void printAgain(JSONObject row) {
+        if (printer == null) return;
+        PrintAgain check = againCheck(row);
+        switch (check.state) {
+            case READY: startDialog(check.file, "local"); break;
+            case REFRESH: case UNKNOWN:
+                if (!printer.canQuery()) { message("Refresh status and files, then try again: the printer's data is out of date."); break; }
+                message("Refreshing the file list…"); printer.browse("local", 0); break;
+            default: message(check.reason); break;
+        }
+    }
+    private Bitmap decodeThumbnail(String data) {
+        if (data == null || data.isEmpty()) return null;
+        try {
+            byte[] bytes = android.util.Base64.decode(data.contains(",") ? data.substring(data.indexOf(',') + 1) : data, android.util.Base64.DEFAULT);
+            return android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.length);
+        } catch (IllegalArgumentException invalid) { return null; }
+    }
+    /** What the printer reports about one past print: its own record, a preview if the file is still there, and the detail query's answer. */
+    private void historyDetail(JSONObject row) {
+        if (printer == null) return;
+        String name = row.optString("task_name"), taskId = row.optString("task_id");
+        LinearLayout body = dialogBody(); ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(StatusPresentation.clean(name).replaceFirst("(?i)\\.gcode$", "")).setView(scroll).setPositiveButton("Close", null).create();
+        PrintAgain first = againCheck(row);
+        if (first.file != null) printer.thumbnail("local", name);
+        printer.historyDetail(taskId);
+        Runnable[] refresh = new Runnable[1]; String[] shown = {null};
+        refresh[0] = () -> {
+            if (!dialog.isShowing() || printer == null) return;
+            PrintAgain check = againCheck(row);
+            Bitmap picture = decodeThumbnail(printer.thumbnails.get("local/" + name));
+            JSONObject detail = printer.historyDetails.get(taskId); String missing = printer.historyDetailMessages.get(taskId);
+            String signature = check.state + "|" + (picture != null) + "|" + (detail != null) + "|" + missing + "|" + printer.busy(Cc2Codec.HISTORY_DETAIL);
+            if (!signature.equals(shown[0])) {
+                shown[0] = signature; body.removeAllViews();
+                if (picture != null) {
+                    ImageView image = new ImageView(this); image.setAdjustViewBounds(true); image.setScaleType(ImageView.ScaleType.FIT_CENTER); image.setImageBitmap(picture);
+                    image.setContentDescription("Preview image of this print file from the printer"); body.addView(image, new LinearLayout.LayoutParams(-1, dp(180)));
+                }
+                for (String[] line : FeatureData.historyDetail(row, detail, Locale.getDefault(), TimeZone.getDefault())) {
+                    LinearLayout pair = new LinearLayout(this); pair.setOrientation(LinearLayout.VERTICAL); pair.setPadding(0, dp(6), 0, dp(2)); body.addView(pair);
+                    label(pair, line[0], 12, MUTED, false); label(pair, line[1], 15, INK, false);
+                }
+                if (detail == null) label(body, missing != null ? missing : printer.busy(Cc2Codec.HISTORY_DETAIL) ? "Asking the printer for more details…" : "The printer reports only what is shown above.", 12, MUTED, false);
+                label(body, check.state == PrintAgain.State.READY || check.state == PrintAgain.State.REFRESH ? "The file is on the printer." : check.reason, 13, check.state == PrintAgain.State.MISSING ? MUTED : INK, false);
+                Button again = button(body, check.state == PrintAgain.State.REFRESH ? "Refresh files first" : check.state == PrintAgain.State.UNKNOWN ? "Check the file list" : "Print again", () -> { dialog.dismiss(); printAgain(row); });
+                again.setEnabled(check.state != PrintAgain.State.MISSING);
+            }
+            main.postDelayed(refresh[0], 700);
+        };
+        dialog.show(); refresh[0].run();
+    }
     /** Slices made on this phone are kept (SliceStore): choose one to upload or save, e.g. after a failed upload or a killed app. */
     private void chooseRecentSlice() {
         List<File> recent = SliceStore.list(this);
@@ -977,9 +1052,15 @@ public final class MainActivity extends Activity {
         historyInfo.setText(printer == null ? "History not loaded." : historyNow.length() == 0 ? printer.historyMessage : entries.isEmpty() ? FeatureData.history(historyNow) : "");
         historyInfo.setVisibility(historyInfo.getText().length() == 0 ? View.GONE : View.VISIBLE);
         if (historyNow != renderedHistoryList) {
-            renderedHistoryList = historyNow; historyList.removeAllViews();
-            for (int i = 0; i < entries.size(); i++) listRow(historyList, entries.get(i)[0], entries.get(i)[1], i > 0, null);
+            renderedHistoryList = historyNow; historyList.removeAllViews(); againRows.clear();
+            java.util.List<JSONObject> historyRows = historyNow == null ? new ArrayList<>() : FeatureData.historyRows(historyNow);
+            for (int i = 0; i < entries.size() && i < historyRows.size(); i++) {
+                JSONObject historyRow = historyRows.get(i);
+                listRow(historyList, entries.get(i)[0], entries.get(i)[1], i > 0, () -> historyDetail(historyRow));
+                addAgain(historyRow);
+            }
         }
+        updateAgain(query);
         boolean noStorage = !query && (printer == null || printer.disk.length() == 0), noHistory = !query && (printer == null || printer.history.length() == 0);
         if (noStorage) diskInfo.setText("Storage and print history load once the printer is reachable.");
         historyButtons.setVisibility(query ? View.VISIBLE : View.GONE); if (noHistory) historyInfo.setVisibility(View.GONE);

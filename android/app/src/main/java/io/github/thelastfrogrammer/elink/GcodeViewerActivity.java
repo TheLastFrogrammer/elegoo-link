@@ -132,9 +132,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
         int shown = hintsShown();
         if (shown < 3 || followMode) {
-            label(panel, followMode ? "Live view of the file, up to the nozzle. Grey = still to print on this layer."
+            liveCaption = label(panel, followMode ? "Live view of the file, up to the nozzle. Grey = still to print on this layer."
                 : "Drag to turn the view · two fingers to move and zoom · double-tap to reset", 11, muted, false);
         }
+        // The caption describes a drawn toolpath; it hides while there is no file to draw.
         missingCard = new LinearLayout(this); missingCard.setOrientation(LinearLayout.VERTICAL); missingCard.setVisibility(View.GONE); panel.addView(missingCard);
         layerLabel = label(panel, "Layer", 13, ink, false);
         layerBar = seekBar(panel); A11y.labelFor(layerLabel, layerBar);
@@ -198,7 +199,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void load(File file, String name) {
         if (name.equals(loadingName)) return;
         loadingName = name; title.setText(StatusPresentation.clean(name.replaceFirst("(?i)\\.gcode$", "")));
-        status.setText("Reading toolpath…"); missingCard.setVisibility(View.GONE); setControlsEnabled(false);
+        status.setText("Reading toolpath…"); missingCard.setVisibility(View.GONE); if (liveCaption != null) liveCaption.setVisibility(View.VISIBLE); setControlsEnabled(false);
         worker.execute(() -> {
             try {
                 GcodeToolpath read = GcodeToolpath.read(file);
@@ -363,7 +364,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (loadedName == null || !GcodeLibrary.safeName(filename).equals(GcodeLibrary.safeName(loadedName))) {
             File copy = library.find(filename);
             if (copy != null) { load(copy, filename); return; }
-            if (path == null) { showMissing(filename); return; }
+            if (path == null) { showMissing(filename, machine, print); return; }
         }
         if (!following || path == null) return;
         follow.setEnabled(false);
@@ -407,23 +408,34 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         Diagnostics.note(Diagnostics.FOLLOW, StatusPresentation.clean(print.optString("filename")) + ": " + line);
     }
 
-    private void showMissing(String filename) {
+    private ImageView missingPreview;
+    private void showMissing(String filename, JSONObject machine, JSONObject print) {
         title.setText(StatusPresentation.clean(filename.replaceFirst("(?i)\\.gcode$", "")));
         boolean fetching = printer != null && (printer.fileBusy() || printer.feedback != null && printer.feedback.startsWith("Looking for"));
         // A failed download's message can be long (what to try next); it goes in full under the buttons, not in the short status line.
         boolean failed = !fetching && printer != null && lastAttempt && printer.feedback != null && !printer.feedback.isEmpty();
-        status.setText(fetching ? StatusPresentation.clean(printer.feedback) : failed ? "The download did not work. Details below." : "This phone has no copy of the G-code being printed.");
+        // The running print's progress is the main message; a failed download goes in the detail under the buttons.
+        status.setText(fetching ? StatusPresentation.clean(printer.feedback) : StatusPresentation.runningLine(machine, print));
         if (missingCard.getVisibility() != View.VISIBLE) {
             missingCard.removeAllViews(); missingCard.setVisibility(View.VISIBLE);
-            label(missingCard, "Files uploaded, sliced or downloaded with this app are kept for the viewer. Download this one from the printer (the phone must be on the printer's Wi-Fi), or choose a copy on this phone.", 13, ink, false);
+            if (liveCaption != null) liveCaption.setVisibility(View.GONE);
+            missingPreview = new ImageView(this); missingPreview.setAdjustViewBounds(true); missingPreview.setScaleType(ImageView.ScaleType.FIT_CENTER); missingPreview.setVisibility(View.GONE);
+            missingPreview.setContentDescription("Preview image of the print that is running, from the printer");
+            missingCard.addView(missingPreview, new LinearLayout.LayoutParams(-1, dp(160)));
+            label(missingCard, StatusPresentation.NO_FILE_LINE, 13, ink, false);
             buildMissingActions(filename);
             missingDetail = A11y.polite(label(missingCard, "", 13, ink, false)); missingDetail.setTextIsSelectable(true);
         }
-        missingDetail.setText(failed ? StatusPresentation.clean(printer.feedback) : "");
+        if (printer != null) {
+            printer.thumbnail("local", filename);
+            android.graphics.Bitmap picture = ThumbnailDecoder.decodeBase64(printer.thumbnails.get("local/" + filename));
+            if (picture != null) { missingPreview.setImageBitmap(picture); missingPreview.setVisibility(View.VISIBLE); }
+        }
+        missingDetail.setText(failed ? "The download did not work: " + StatusPresentation.clean(printer.feedback) : "");
         missingDetail.setVisibility(failed ? View.VISIBLE : View.GONE);
     }
 
-    private TextView missingDetail;
+    private TextView missingDetail, liveCaption;
     private void buildMissingActions(String filename) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(row);
         Button download = rowButton(row, "Download from printer", () -> {

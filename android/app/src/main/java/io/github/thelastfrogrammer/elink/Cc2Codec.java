@@ -15,7 +15,7 @@ public final class Cc2Codec {
         FILES = 1044, DELETE = 1047, DISK = 1048, CANVAS = 2005, AUTO_REFILL = 2004;
     /** Maintenance commands, with formats taken from Elegoo's printer page (ElegooSlicer lan_service_web). */
     public static final int URGENT_STOP = 1007, FEED = 1024, RETREAT = 1025, HOME = 1026, MOVE = 1027, AUTO_LEVEL = 1032, VIBRATION = 1033,
-        SELF_CHECK = 1035, THUMBNAIL = 1045, CANVAS_LOAD = 2001, CANVAS_UNLOAD = 2002;
+        SELF_CHECK = 1035, HISTORY_DETAIL = 1037, THUMBNAIL = 1045, CANVAS_LOAD = 2001, CANVAS_UNLOAD = 2002;
     /**
      * Cloud uploads (SDK SET_PRINTER_DOWNLOAD_FILE / CANCEL_PRINTER_DOWNLOAD_FILE): the printer fetches a file from Elegoo's
      * storage and reports its progress unasked with method 6006 {taskID, progress, status 1 done, 2 cancelled, 3 failed}.
@@ -29,6 +29,15 @@ public final class Cc2Codec {
             && method != CANVAS && method != HISTORY && method != CAMERA && method != DISK)
             throw new IllegalArgumentException("Unverified command");
         return new JSONObject().put("id", id).put("method", method).put("params", new JSONObject());
+    }
+    /**
+     * Details of one print-history entry (1037 GetHistoryTaskDetail), a read. Elegoo's pages name the method but never call it for the
+     * CC2, so the parameter name task_id (the history rows' own key) is an assumption; a printer that does not know it answers with an
+     * error code, which the app shows as "not available".
+     */
+    public static JSONObject historyDetailRequest(int id, String taskId) throws JSONException {
+        if (taskId == null || !taskId.matches("[A-Za-z0-9._-]{1,64}")) throw new IllegalArgumentException("Invalid print history entry");
+        return envelope(id, HISTORY_DETAIL, new JSONObject().put("task_id", taskId));
     }
     public static JSONObject autoRefillRequest(int id, boolean enabled) throws JSONException {
         return new JSONObject().put("id", id).put("method", AUTO_REFILL).put("params", new JSONObject().put("auto_refill", enabled));
@@ -143,10 +152,11 @@ public final class Cc2Codec {
         if (mode < 0 || mode > 3) throw new IllegalArgumentException("Invalid speed mode");
         return envelope(id, SPEED, new JSONObject().put("mode", mode));
     }
-    public static boolean isQuery(int method) { return method == FILES || method == HISTORY || method == DISK || method == CAMERA || method == THUMBNAIL; }
+    public static boolean isQuery(int method) { return method == FILES || method == HISTORY || method == HISTORY_DETAIL || method == DISK || method == CAMERA || method == THUMBNAIL; }
     public static boolean queryShape(int method, JSONObject result) {
         if (method == FILES) return result.optJSONArray("file_list") != null;
         if (method == HISTORY) return result.optJSONArray("history_task_list") != null;
+        if (method == HISTORY_DETAIL) return result.length() > 0 && !(result.length() == 1 && result.has("error_code"));
         if (method == DISK) return result.opt("total_bytes") instanceof Number && result.opt("used_bytes") instanceof Number;
         if (method == CAMERA) return result.opt("url") instanceof String;
         if (method == THUMBNAIL) return result.opt("thumbnail") instanceof String;

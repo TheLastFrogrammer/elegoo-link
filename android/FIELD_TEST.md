@@ -100,3 +100,12 @@ If the download fails, the error and the history entry help: share the diagnosti
 1. Print setup: "Run printer / bed check" should start ticked. The test renderer draws it unticked; confirm it on the phone.
 2. In cloud mode before agreeing to cloud control, the Printer tab should show only the explanation, "Turn on cloud control…" and Refresh status.
 3. Slice a 3MF with all plates, then use the result's plate chooser: Preview and Save should follow the chosen plate.
+
+## 12. Print again and history details (v0.13.0)
+
+1. Files → Storage & print history → Refresh history. Tap an entry: check that the details match Elegoo's app
+   (times, duration). Share diagnostics afterwards: it lists the field names the printer's history detail (1037)
+   returned, so filament per tray, build plate and nozzle can be labelled properly.
+2. Print again on a file still on the printer: Print setup should open with its usual checks; nothing starts without
+   confirming. On a file you deleted, the button should say the file is no longer on the printer.
+3. Open Live toolpath for a print started from the official app: it should show progress and the thumbnail, not an error.

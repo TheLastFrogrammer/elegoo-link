@@ -79,6 +79,77 @@ public final class FeatureData {
         }
         return list;
     }
+    /** The history entries behind {@link #historyEntries}, in the same order (newest first, at most 50). */
+    public static java.util.List<JSONObject> historyRows(JSONObject result) {
+        java.util.List<JSONObject> list = new java.util.ArrayList<>();
+        JSONArray rows = result == null ? null : result.optJSONArray("history_task_list");
+        if (rows == null) return list;
+        for (int i = rows.length() - 1; i >= Math.max(0, rows.length() - 50); i--) { JSONObject row = rows.optJSONObject(i); if (row != null) list.add(row); }
+        return list;
+    }
+
+    /** "Mon 3 Nov, 14:05" for epoch seconds (the printer's begin_time/end_time), or "" when the printer gave none. */
+    static String when(long epochSeconds, java.util.Locale locale, java.util.TimeZone zone) {
+        if (epochSeconds <= 0) return "";
+        java.text.SimpleDateFormat format = new java.text.SimpleDateFormat("EEE d MMM, HH:mm", locale); format.setTimeZone(zone);
+        return format.format(new java.util.Date(epochSeconds * 1000));
+    }
+
+    /**
+     * Label/value lines for one history entry: what the entry itself (1036) reports, then whatever the printer answered to the detail
+     * query (1037) with. Only fields that are present are shown. The detail answer's layout is not documented anywhere, so its scalar
+     * fields are listed under the printer's own field names (readable, not interpreted); lists of objects, such as filament per tray,
+     * become one line per item. Links, long texts and the thumbnail are left out.
+     */
+    public static java.util.List<String[]> historyDetail(JSONObject row, JSONObject detail, java.util.Locale locale, java.util.TimeZone zone) {
+        java.util.List<String[]> lines = new java.util.ArrayList<>();
+        if (row != null) {
+            int state = row.optInt("task_status", -1);
+            if (row.has("task_status")) lines.add(new String[] {"Result", state == 1 ? "Completed" : state == 2 ? "Cancelled" : "Reported state " + state});
+            if (row.optLong("begin_time") > 0) lines.add(new String[] {"Started", when(row.optLong("begin_time"), locale, zone)});
+            if (row.optLong("end_time") > 0) lines.add(new String[] {"Ended", when(row.optLong("end_time"), locale, zone)});
+            if (row.has("begin_time") && row.has("end_time") && row.optLong("end_time") >= row.optLong("begin_time") && row.optLong("begin_time") > 0)
+                lines.add(new String[] {"Duration", duration(row.optLong("end_time") - row.optLong("begin_time"))});
+            int video = row.optInt("time_lapse_video_status", 0);
+            if (video == 1) lines.add(new String[] {"Timelapse", "Recorded, video not made yet"});
+            else if (video == 2) lines.add(new String[] {"Timelapse", ("Video ready" + videoSize(row)).trim()});
+            else if (video == 3) lines.add(new String[] {"Timelapse", "The printer could not make the video"});
+        }
+        if (detail != null) flatten(detail, "", lines, 0);
+        return lines;
+    }
+    private static final java.util.Set<String> HIDDEN = new java.util.HashSet<>(java.util.Arrays.asList("error_code", "error_msg", "thumbnail", "task_id", "id", "md5"));
+    private static void flatten(JSONObject object, String prefix, java.util.List<String[]> lines, int depth) {
+        java.util.List<String> keys = new java.util.ArrayList<>();
+        for (java.util.Iterator<String> it = object.keys(); it.hasNext(); ) keys.add(it.next());
+        java.util.Collections.sort(keys);
+        for (String key : keys) {
+            if (lines.size() >= 40 || HIDDEN.contains(key) || key.toLowerCase(java.util.Locale.ROOT).contains("thumb") || key.toLowerCase(java.util.Locale.ROOT).contains("url")) continue;
+            Object value = object.opt(key); String label = prefix + humanize(key);
+            if (value instanceof JSONObject && depth < 2) flatten((JSONObject) value, label + " · ", lines, depth + 1);
+            else if (value instanceof JSONArray && depth < 2) {
+                JSONArray items = (JSONArray) value;
+                for (int i = 0; i < items.length() && i < 12; i++) {
+                    Object item = items.opt(i);
+                    if (item instanceof JSONObject) {
+                        java.util.List<String[]> inner = new java.util.ArrayList<>(); flatten((JSONObject) item, "", inner, 2);
+                        StringBuilder text = new StringBuilder();
+                        for (String[] pair : inner) text.append(text.length() > 0 ? " · " : "").append(pair[0]).append(" ").append(pair[1]);
+                        if (text.length() > 0) lines.add(new String[] {label + " " + (i + 1), text.toString()});
+                    } else if (scalar(item)) lines.add(new String[] {label + " " + (i + 1), String.valueOf(item)});
+                }
+            } else if (scalar(value)) lines.add(new String[] {label, String.valueOf(value)});
+        }
+    }
+    private static boolean scalar(Object value) {
+        if (value instanceof Number || value instanceof Boolean) return true;
+        return value instanceof String && !((String) value).isEmpty() && ((String) value).length() <= 120 && !((String) value).contains("://");
+    }
+    private static String humanize(String key) {
+        String text = key.replace('_', ' ').replaceAll("([a-z])([A-Z])", "$1 $2").trim().toLowerCase(java.util.Locale.ROOT);
+        return text.isEmpty() ? key : Character.toUpperCase(text.charAt(0)) + text.substring(1);
+    }
+
     /** History entries whose timelapse video is ready to download (time_lapse_video_status 2), newest first, at most 10. */
     public static java.util.List<JSONObject> timelapses(JSONObject result) {
         java.util.List<JSONObject> ready = new java.util.ArrayList<>();

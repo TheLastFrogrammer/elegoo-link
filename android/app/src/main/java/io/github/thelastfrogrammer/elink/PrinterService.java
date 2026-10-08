@@ -185,6 +185,11 @@ public final class PrinterService extends Service {
             else feedback = StatusPresentation.clean(wanted) + " is not among the first printer files listed. Download it from the Files tab instead.";
         }
         if (method == Cc2Codec.HISTORY) { history = result; historyMessage = "History received from printer."; }
+        if (method == Cc2Codec.HISTORY_DETAIL) {
+            String task = params.optString("task_id");
+            historyDetails.put(task, result); historyDetailMessages.remove(task);
+            Diagnostics.note(Diagnostics.FILES, "print history detail fields: " + CloudApi.shape(result));
+        }
         if (method == Cc2Codec.DISK) disk = result;
         if (method == Cc2Codec.THUMBNAIL) {
             String name = params.optString("file_name").replaceFirst("^/", "");
@@ -197,7 +202,24 @@ public final class PrinterService extends Service {
         }
         if (method == Cc2Codec.DELETE) browse(storage, 0);
     }
-    private void handleQueryError(int method, String text) { queryBusy.remove(method); if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text; }
+    private void handleQueryError(int method, String text) {
+        queryBusy.remove(method);
+        if (method == Cc2Codec.HISTORY_DETAIL) { historyDetailMessages.put(lastDetailTask, "The printer did not give more details for this print (" + StatusPresentation.clean(text) + ")"); changed(); return; }
+        if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text;
+    }
+    /** What the printer answered to the detail query (1037), by history task id, and why it did not where it could not. */
+    public final Map<String, JSONObject> historyDetails = new HashMap<>();
+    public final Map<String, String> historyDetailMessages = new HashMap<>();
+    private String lastDetailTask = "";
+    /** Asks the printer for more about one history entry (a read, locally or through the cloud). */
+    public void historyDetail(String taskId) {
+        if (!canQuery() || busy(Cc2Codec.HISTORY_DETAIL) || taskId == null || historyDetails.containsKey(taskId)) return;
+        try {
+            JSONObject request = Cc2Codec.historyDetailRequest(0, taskId);
+            lastDetailTask = taskId; queryBusy.add(Cc2Codec.HISTORY_DETAIL);
+            if (ready()) session.request(request); else cloudSafe(() -> request);
+        } catch (Exception invalid) { queryBusy.remove(Cc2Codec.HISTORY_DETAIL); }
+    }
 
     // Each feature uses the local session when connected, otherwise the cloud (same printer requests, see CloudControl).
     /** Status from the local session, else from the cloud. */
@@ -560,7 +582,7 @@ public final class PrinterService extends Service {
     private void resetData() {
         status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
         filePage = new JSONObject(); disk = new JSONObject(); history = new JSONObject(); filesAt = 0; fileOffset = 0; cameraUrl = "";
-        queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
+        historyDetails.clear(); historyDetailMessages.clear(); queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
     }
     public void disconnect() {
         wanted = false; generation++; main.removeCallbacks(reconnect); clearRoute();

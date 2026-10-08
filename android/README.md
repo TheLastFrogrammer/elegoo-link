@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.12.9 (development):** printer files through the Elegoo cloud: files this app sent through the cloud are fetched back from Elegoo's storage with a signed link (no printer port needed); for other files the app checks Elegoo's file record and logs its field names (no values) so the next diagnostics show whether the cloud holds a copy, then falls back to the Wi-Fi download.
+**v0.13.0 (development):** Print again from print history (opens Print setup when the file is still on the printer, as Elegoo's Reprint does), history details (times, duration, result, timelapse, the printer's thumbnail, and whatever the printer's history detail reports), and a Live toolpath that shows progress and the thumbnail when the phone has no G-code, explaining that the toolpath needs the file.
+
+**v0.12.9:** printer files through the Elegoo cloud: files this app sent through the cloud are fetched back from Elegoo's storage with a signed link (no printer port needed); for other files the app checks Elegoo's file record and logs its field names (no values) so the next diagnostics show whether the cloud holds a copy, then falls back to the Wi-Fi download.
 
 **v0.12.8:** failure handling batch B: cloud uploads wait their turn instead of failing at 50%, stalled storage uploads time out and cancel cleanly, finished slices are kept on the phone (Files → Recent slices…), the screen stays on while slicing and a killed slice offers to restore its models and settings, very large models are flagged before import, storage-full and partial-file messages, no uploading over the file being printed or starting while a transfer runs, recordings that survive clock changes, plain network error messages, and finish times with the day.
 
