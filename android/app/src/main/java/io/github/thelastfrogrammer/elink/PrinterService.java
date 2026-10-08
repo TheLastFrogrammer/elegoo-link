@@ -33,7 +33,7 @@ public final class PrinterService extends Service {
     private boolean wanted, foreground, destroyed;
     private long generation;
     private String host = "", code = "", serial = "";
-    public String connection = "Disconnected", feedback = "Development build: printer behavior still needs hardware testing.";
+    public String connection = "Disconnected", feedback = "";
     public JSONObject status = new JSONObject(), attributes = new JSONObject(), canvas;
     public JSONObject filePage = new JSONObject(), disk = new JSONObject(), history = new JSONObject();
     public String storage = "local", cameraUrl = "", fileMessage = "Refresh to browse printer files.", historyMessage = "Refresh to load print history.";

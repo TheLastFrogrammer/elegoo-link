@@ -34,6 +34,11 @@ public final class MainActivity extends Activity {
     private Button saveTimelapse;
     private JSONObject renderedHistory;
     private LinearLayout fileDetails, transferRow, trayList, pageRow;
+    private LinearLayout printRow, lightRow, tilesRow, controlsCard, canvasCard, tuningCard, upkeepCard, upkeepButtons, moreOptions, cameraCloudCard, cameraLocalCard, localCameraBody;
+    private Button controlFix, filesFix, moreToggle, localToggle;
+    private TextView tuningHint, upkeepHint, cloudCameraHint, timelapseHint, fileHelp;
+    private boolean moreOpen, localCameraOpen, cameraLocalFirst;
+    private ControlState.Block block = ControlState.Block.DISCONNECTED;
     private String dismissedFeedback = "", renderedCanvas;
     private GcodeInspector.Report renderedReport;
     private Button materialDetails;
@@ -173,31 +178,35 @@ public final class MainActivity extends Activity {
         diagnostics = label(connectionCard, "Check connection tests whether the printer is reachable and how it is set up.", 13, MUTED, false);
         diagnostics.setTextIsSelectable(true);
         button(connectionCard, "Connection help…", this::connectionHelp);
-        subheading(connectionCard, "Save this printer");
-        profileName = input(connectionCard, "Printer profile name", false);
+        // Saved printers, route and authentication are rarely changed, so they sit behind one toggle (open already when the route or PIN probe is in use).
+        moreToggle = button(connectionCard, "", this::toggleMore);
+        LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.VERTICAL); connectionCard.addView(more); moreOptions = more;
+        subheading(more, "Save this printer");
+        profileName = input(more, "Printer profile name", false);
         serial.setText(profiles.find(host.getText().toString()).optString("serial"));
         profileName.setText(profiles.find(host.getText().toString()).optString("name"));
-        LinearLayout profileRow = row(connectionCard);
+        LinearLayout profileRow = row(more);
         saveProfile = rowButton(profileRow, "Save", this::savePrinter, false);
         removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
-        forget = button(connectionCard, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
-        subheading(connectionCard, "Advanced");
-        label(connectionCard, "Connection route", 13, MUTED, false);
-        routePicker = spinner(connectionCard, new String[] {"Local Wi-Fi / Ethernet", "Remote through home VPN"});
+        forget = button(more, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
+        subheading(more, "Advanced");
+        label(more, "Connection route", 13, MUTED, false);
+        routePicker = spinner(more, new String[] {"Local Wi-Fi / Ethernet", "Remote through home VPN"});
         routePicker.setSelection(settings.getBoolean("remoteVPN", false) ? 1 : 0);
         routePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("remoteVPN", position == 1).apply(); stopCamera(); if (connect != null) { diagnostics.setText("Connection route changed. Run Check connection before reconnecting."); render(); } }
         });
-        button(connectionCard, "Remote access setup…", this::remoteHelp);
-        label(connectionCard, "Printer authentication", 13, MUTED, false);
-        authPicker = spinner(connectionCard, new String[] {"LAN access code", "Cloud-mode PIN probe (read-only)"});
+        button(more, "Remote access setup…", this::remoteHelp);
+        label(more, "Printer authentication", 13, MUTED, false);
+        authPicker = spinner(more, new String[] {"LAN access code", "Cloud-mode PIN probe (read-only)"});
         authPicker.setSelection(settings.getBoolean("pinProbe", false) ? 1 : 0);
         authPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("pinProbe", position == 1).apply(); if (connect != null) { diagnostics.setText("Authentication mode changed. Run Check connection; PIN probe preserves the printer's cloud setting."); render(); } }
         });
-        button(connectionCard, "Matrix coexistence test…", this::coexistenceHelp);
+        button(more, "Matrix coexistence test…", this::coexistenceHelp);
+        setMore(settings.getBoolean("remoteVPN", false) || settings.getBoolean("pinProbe", false));
         currentSection = pages[0];
         LinearLayout hero = card(null);
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
@@ -215,42 +224,43 @@ public final class MainActivity extends Activity {
             if (current != null) intent.putExtra(RecordingsActivity.EXTRA_META, current.meta.getAbsolutePath());
             startActivity(intent);
         }, false);
-        LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL); tilesRow = tiles;
         LinearLayout.LayoutParams tilesLayout = new LinearLayout.LayoutParams(-1, -2); tilesLayout.topMargin = dp(12); currentSection.addView(tiles, tilesLayout);
         tileNozzle = tile(tiles, "Nozzle", 0); tileBed = tile(tiles, "Bed", dp(8)); tileChamber = tile(tiles, "Chamber", dp(8));
-        LinearLayout controls = card("Controls");
+        LinearLayout controls = card("Controls"); controlsCard = controls;
         controlSource = label(controls, "", 13, MUTED, false);
-        controlSource.setOnClickListener(v -> { if (viaCloud() && !settings.getBoolean("cloudControlUnderstood", false)) cloudGate(true, this::render); });
-        LinearLayout printRow = row(controls);
+        controlFix = rowButton(row(controls), "", this::fixControl, true); ((View) controlFix.getParent()).setVisibility(View.GONE);
+        printRow = row(controls);
         pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
         resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume after checking why the printer paused?", Cc2Codec.RESUME), true);
         stop = rowButton(printRow, "Stop", () -> confirmCommand("Stop the current print? It cannot be resumed.", Cc2Codec.STOP), false);
-        LinearLayout lightRow = row(controls);
+        lightRow = row(controls);
         lightOn = rowButton(lightRow, "Light on", () -> light(true), false);
         lightOff = rowButton(lightRow, "Light off", () -> light(false), false);
         refresh = button(controls, "Refresh status", () -> { if (printer == null) return; if (printer.ready()) printer.refresh(); else printer.cloudVisible(true); });
-        LinearLayout canvas = card("CANVAS filament trays");
+        LinearLayout canvas = card("CANVAS filament trays"); canvasCard = canvas;
         trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList);
         trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
-        LinearLayout tuning = card("Printer settings");
-        label(tuning, "Works locally or through the Elegoo cloud. Temperature targets need an idle printer; speed modes need an active print.", 13, MUTED, false);
+        LinearLayout tuning = card("Printer settings"); tuningCard = tuning;
+        tuningHint = label(tuning, "", 13, MUTED, false);
         heater = button(tuning, "Temperature targets…", this::temperatureDialog);
         fan = button(tuning, "Fan setting…", this::fanDialog);
         speed = button(tuning, "Print speed mode…", this::speedDialog);
-        LinearLayout upkeep = card("Maintenance");
-        label(upkeep, "Needs an idle printer without faults. Commands follow Elegoo's own printer page and are never repeated automatically.", 13, MUTED, false);
-        LinearLayout filamentRow = row(upkeep);
+        LinearLayout upkeep = card("Maintenance"); upkeepCard = upkeep;
+        upkeepHint = label(upkeep, "", 13, MUTED, false);
+        LinearLayout group = new LinearLayout(this); group.setOrientation(LinearLayout.VERTICAL); upkeep.addView(group); upkeepButtons = group;
+        LinearLayout filamentRow = row(group);
         loadFilament = rowButton(filamentRow, "Load filament", () -> maintenanceConfirm("Load filament?", "The printer heats the nozzle and feeds filament. This can take a few minutes.", Cc2Codec.FEED), false);
         unloadFilament = rowButton(filamentRow, "Unload filament", () -> maintenanceConfirm("Unload filament?", "The printer heats the nozzle and retracts the filament. This can take a few minutes.", Cc2Codec.RETREAT), false);
-        trayFilament = button(upkeep, "Load or unload a CANVAS tray…", this::trayDialog);
-        LinearLayout motionRow = row(upkeep);
+        trayFilament = button(group, "Load or unload a CANVAS tray…", this::trayDialog);
+        LinearLayout motionRow = row(group);
         homeAll = rowButton(motionRow, "Home all axes", () -> confirmRequest("Home all axes?", "The print head and bed move to their home positions. Keep the printer clear.", () -> Cc2Codec.homeRequest(0, "xyz")), false);
         jog = rowButton(motionRow, "Move axes…", this::jogDialog, false);
-        LinearLayout calibrationRow = row(upkeep);
+        LinearLayout calibrationRow = row(group);
         autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Run auto bed leveling?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration optimization?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
-        selfCheck = button(upkeep, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
+        selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
         urgentStop = button(upkeep, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
         urgentStop.setTextColor(ERROR);
         currentSection = pages[1];
@@ -517,6 +527,25 @@ public final class MainActivity extends Activity {
         }
         settings.edit().putInt("page", page).apply();
     }
+    private void fixControl() {
+        if (block == ControlState.Block.CLOUD_AGREEMENT) cloudGate(true, this::render); else if (block == ControlState.Block.DISCONNECTED) selectPage(3);
+    }
+    /** One compact tappable row for a printer file: name, size and layers beneath, a chevron, and a hairline above all but the first. */
+    private void fileRow(String name, String detail, boolean divider, Runnable action) {
+        if (divider) { View line = new View(this); line.setBackgroundColor(TRACK); fileRows.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0, dp(10), 0, dp(10)); row.setMinimumHeight(dp(56));
+        row.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
+        LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView first = new TextView(this); first.setText(name); first.setTextSize(15); first.setTextColor(INK); first.setSingleLine(true); first.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE); text.addView(first);
+        TextView second = new TextView(this); second.setText(detail); second.setTextSize(12); second.setTextColor(MUTED); text.addView(second);
+        TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextSize(24); chevron.setTextColor(MUTED); chevron.setPadding(dp(12), 0, 0, 0); row.addView(chevron);
+        row.setContentDescription(name + ", " + detail); row.setOnClickListener(v -> action.run()); fileRows.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+    private void toggleMore() { setMore(!moreOpen); }
+    private void setMore(boolean open) {
+        moreOpen = open; moreOptions.setVisibility(open ? View.VISIBLE : View.GONE);
+        moreToggle.setText(open ? "Fewer options ▴" : "More options: saved printers, route, authentication ▾");
+    }
     private boolean pinProbe() { return authPicker != null && authPicker.getSelectedItemPosition() == 1; }
     private boolean remoteMode() { return routePicker != null && routePicker.getSelectedItemPosition() == 1; }
     private void connectionHelp() {
@@ -556,7 +585,9 @@ public final class MainActivity extends Activity {
         try { account = cloudAccounts.load(); }
         catch (Exception error) { cloudAccounts.forget(); account = null; message("Saved Elegoo sign-in could not be decrypted. Sign in again."); }
         cloudStatus.setText(account == null ? "Not signed in." : "Signed in as " + account.summary() + ".");
-        cloudSignOut.setEnabled(account != null); cloudPrinters.setEnabled(account != null); cloudBackground.setEnabled(account != null);
+        // Signed out, these have nothing to act on, so they are not shown as dead buttons.
+        int signedIn = account != null ? View.VISIBLE : View.GONE;
+        cloudSignOut.setVisibility(signedIn); cloudPrinters.setVisibility(signedIn); cloudBackground.setVisibility(signedIn);
         if (printer != null) printer.cloudSettingsChanged();
     }
     private void appearanceDialog() {
@@ -615,18 +646,21 @@ public final class MainActivity extends Activity {
     }
     private void buildFileBrowser() {
         LinearLayout browser = card("Printer files");
-        storagePicker = spinner(browser, new String[] {"Internal storage", "USB drive"});
+        LinearLayout storageRow = row(browser); storageRow.setGravity(Gravity.CENTER_VERTICAL);
+        storagePicker = spinner(storageRow, new String[] {"Internal storage", "USB drive"}); storagePicker.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         storagePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { if (printer != null && printer.canQuery() && !printer.busy(Cc2Codec.FILES)) printer.browse(position == 0 ? "local" : "u-disk", 0); }
         });
-        listFiles = button(browser, "Refresh files", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
+        listFiles = button(storageRow, "Refresh", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
+        LinearLayout.LayoutParams refreshSize = new LinearLayout.LayoutParams(-2, -2); refreshSize.leftMargin = dp(8); listFiles.setLayoutParams(refreshSize); listFiles.setMinWidth(dp(96));
         fileInfo = label(browser, "Connect, then refresh to browse printer files.", 14, MUTED, false);
+        filesFix = rowButton(row(browser), "", this::fixControl, true); ((View) filesFix.getParent()).setVisibility(View.GONE);
         fileRows = new LinearLayout(this); fileRows.setOrientation(LinearLayout.VERTICAL); browser.addView(fileRows);
         pageRow = row(browser);
         previousFiles = rowButton(pageRow, "Previous 50", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); }, false);
         nextFiles = rowButton(pageRow, "Next 50", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); }, false);
-        label(browser, "Tap a file for details, print setup or deletion. The printer must be idle.", 13, MUTED, false);
+        fileHelp = label(browser, "Tap a file to start a print, download it or delete it. Printing and deleting need an idle printer.", 13, MUTED, false);
         LinearLayout recordings = card("Print recordings");
         label(recordings, "Graphs of progress, layers, temperatures and fans for each print this app has watched.", 13, MUTED, false);
         button(recordings, "Open recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
@@ -637,6 +671,7 @@ public final class MainActivity extends Activity {
         historyInfo = label(storage, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
         // Timelapse videos the printer made for recent prints: download over LAN, then save.
         timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); storage.addView(timelapseList);
+        timelapseHint = label(storage, "", 12, MUTED, false);
         saveTimelapse = button(storage, "Save timelapse…", () -> {
             if (printer == null || printer.timelapseFile == null) return;
             startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.timelapseName), SAVE_TIMELAPSE);
@@ -690,12 +725,16 @@ public final class MainActivity extends Activity {
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
         if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: print start and deletion are disabled.", 14, MUTED, false); dialog.show(); return; }
+        // Starting a print comes first; it and Delete need what PrinterService checks (fresh status, an idle printer, a fresh file list), so say when they are not available.
+        boolean usable = printer != null && printer.liveFresh() && Cc2Codec.idle(printer.liveStatus()) && printer.filesFresh();
+        Button setup = rowButton(row(body), "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); }, true); setup.setEnabled(usable);
+        if (!usable) label(body, printer == null || !printer.liveFresh() ? "Printing and deleting need a fresh printer status." : !Cc2Codec.idle(printer.liveStatus()) ? "The printer is busy. Printing and deleting are available when it is idle." : "The file list is out of date. Refresh files to print or delete.", 13, MUTED, false);
         Button save = button(body, "Download and save to phone…", () -> { dialog.dismiss(); if (printer != null) { saveAfterDownload = name; printer.download(storage, name); } });
         Button download = button(body, "Download to phone workspace", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
         save.setEnabled(printer != null && !printer.fileBusy()); download.setEnabled(printer != null && !printer.fileBusy());
-        button(body, "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); });
-        button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
+        Button delete = button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, which) -> { if (printer != null) printer.delete(storage, name); }).show(); });
+        delete.setEnabled(usable); delete.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, ERROR}));
         dialog.show();
     }
     private void startDialog(JSONObject file, String storage) {
@@ -792,14 +831,18 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the current print's speed mode. Filament changes may reset the mode on some firmware.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
     }).setNegativeButton("Cancel", null).show(); }
     private void buildCamera() {
-        LinearLayout cloudCard = card("Cloud camera");
-        cloudCamera = button(cloudCard, "Watch through the Elegoo cloud", () -> {
+        LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
+        cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
+        // Opening it asks for the one-time cloud-control agreement first, like every other cloud action.
+        cloudCamera = rowButton(row(cloudCard), "Watch through the Elegoo cloud", () -> {
             if (printer == null || printer.cloudSerial.isEmpty()) return;
-            stopCamera();
-            startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, printer.cloudSerial).putExtra(CloudCameraActivity.EXTRA_NAME, printer.cloudName));
-        });
-        label(cloudCard, "Works without LAN Only, from anywhere, the way Elegoo's apps show the camera.", 13, MUTED, false);
-        LinearLayout card = card("Local camera");
+            String serialNumber = printer.cloudSerial, printerName = printer.cloudName;
+            cloudGate(true, () -> { stopCamera(); startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName)); });
+        }, true);
+        cameraLocalCard = card("Local camera");
+        localToggle = button(cameraLocalCard, "", () -> { localCameraOpen = !localCameraOpen; render(); });
+        localCameraBody = new LinearLayout(this); localCameraBody.setOrientation(LinearLayout.VERTICAL); cameraLocalCard.addView(localCameraBody);
+        LinearLayout card = localCameraBody;
         cameraAddress = input(card, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         cameraQuery = button(card, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
         cameraInfo = label(card, "The printer's own video stream on your network (port 8080), or through your home VPN.", 14, MUTED, false);
@@ -834,29 +877,51 @@ public final class MainActivity extends Activity {
         nextFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES) && count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total")));
         boolean paged = offset > 0 || count >= 50 && (files.optInt("total", -1) < 0 || offset + count < files.optInt("total"));
         pageRow.setVisibility(paged ? View.VISIBLE : View.GONE); // only when there is another page
-        fileInfo.setText(printer == null ? "Connect to browse printer files." : printer.fileMessage + (rows == null ? "" : "\n" + (printer.storage.equals("local") ? "Internal" : "USB") + " · " + count + " file(s) · offset " + offset + (printer.filesFresh() ? "" : " · list stale")));
+        String filesWhy = query ? null : printer == null ? "Starting…" : block == ControlState.Block.CLOUD_AGREEMENT ? "Browsing printer files through the Elegoo cloud needs cloud control turned on."
+            : block == ControlState.Block.DISCONNECTED ? "Not connected. Connect on your network, or sign in with Elegoo, to browse the printer's files."
+            : block == ControlState.Block.CONNECTING ? "Connecting on your local network…" : "Files are unavailable until the printer is reachable (see Controls on the Monitor tab).";
+        fileInfo.setText(filesWhy != null ? filesWhy : FeatureData.fileSummary(printer.fileMessage, printer.storage, rows != null, count, offset, printer.filesFresh(), printer.busy(Cc2Codec.FILES)));
+        boolean filesFix1 = !query && (block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED);
+        filesFix.setText(block == ControlState.Block.CLOUD_AGREEMENT ? "Turn on cloud control…" : "Open Settings"); ((View) filesFix.getParent()).setVisibility(filesFix1 ? View.VISIBLE : View.GONE);
+        fileHelp.setVisibility(count > 0 ? View.VISIBLE : View.GONE);
+        listFiles.setVisibility(query || filesWhy == null ? View.VISIBLE : View.GONE);
         if (files != renderedFiles) {
             renderedFiles = files; fileRows.removeAllViews();
             if (rows != null) for (int i = 0; i < Math.min(rows.length(), 50); i++) {
                 JSONObject row = rows.optJSONObject(i); if (row == null) continue; String storage = printer.storage;
-                button(fileRows, StatusPresentation.clean(row.optString("filename", "Unnamed entry")), () -> fileActions(row, storage));
-                label(fileRows, FeatureData.size(row.optLong("size", -1)) + (row.has("layer") ? " · " + row.optInt("layer") + " layers" : ""), 12, MUTED, false);
+                fileRow(StatusPresentation.clean(row.optString("filename", "Unnamed entry")), FeatureData.size(row.optLong("size", -1)) + (row.has("layer") ? " · " + row.optInt("layer") + " layers" : ""), i > 0, () -> fileActions(row, storage));
             }
         }
         diskInfo.setText(printer == null || printer.disk.length() == 0 ? "Storage usage not loaded." : FeatureData.disk(printer.disk));
         historyInfo.setText(printer == null ? "History not loaded." : printer.history.length() == 0 ? printer.historyMessage : FeatureData.history(printer.history));
+        boolean noStorage = !query && (printer == null || printer.disk.length() == 0), noHistory = !query && (printer == null || printer.history.length() == 0);
+        if (noStorage) diskInfo.setText("Storage and print history load once the printer is reachable.");
+        loadDisk.setVisibility(query ? View.VISIBLE : View.GONE); loadHistory.setVisibility(query ? View.VISIBLE : View.GONE); historyInfo.setVisibility(noHistory ? View.GONE : View.VISIBLE);
         renderTimelapses();
         continueSaveAfterDownload();
         continuePrintSetup();
         for (int i = 0; i < timelapseList.getChildCount(); i++) timelapseList.getChildAt(i).setEnabled(ready && !printer.pinProbe() && !printer.fileBusy());
+        timelapseHint.setText(!ready ? "Timelapse downloads need the local connection (the printer's HTTP port 80)." : printer.pinProbe() ? "Timelapse downloads are disabled in read-only PIN probe mode." : "");
+        timelapseHint.setVisibility(timelapseList.getChildCount() > 0 && timelapseHint.getText().length() > 0 ? View.VISIBLE : View.GONE);
         saveTimelapse.setVisibility(printer != null && printer.timelapseFile != null ? View.VISIBLE : View.GONE);
         String selectedHost = host.getText().toString().trim();
         if (!cameraHost.equals(selectedHost)) { stopCamera(); cameraHost = selectedHost; cameraReported = ""; cameraAddress.setText(selectedHost.isEmpty() ? "" : "http://" + selectedHost + ":8080/?action=stream"); lastFrame = null; cameraImage.setImageDrawable(null); }
         if (ready && !printer.cameraUrl.isEmpty() && cameraPlayer == null && !printer.cameraUrl.equals(cameraReported)) { cameraAddress.setText(printer.cameraUrl); cameraReported = printer.cameraUrl; }
         cameraSnapshot.setEnabled(lastFrame != null);
-        boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false);
-        cloudCamera.setEnabled(printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1 && cloudOk);
-        cloudCamera.setText(printer != null && printer.cloudSignedIn && !cloudOk ? "Cloud camera (turn on cloud control first)" : "Watch through the Elegoo cloud");
+    }
+    /** Camera tab: the cloud camera says what it needs; the local camera collapses unless it is the likely way in (connected locally) or the user opens it. */
+    private void renderCamera(boolean ready, boolean cloud) {
+        boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false), signedIn = printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty();
+        boolean online = signedIn && printer.cloudOnline == 1;
+        cloudCamera.setEnabled(online);
+        cloudCameraHint.setText(!signedIn ? "Sign in with Elegoo in Settings to watch from anywhere, without LAN Only."
+            : !online ? "The Elegoo cloud does not show the printer online right now."
+            : "Works from anywhere, the way Elegoo's apps show the camera." + (cloudOk ? "" : " The first use asks you to turn on cloud control."));
+        boolean showLocal = ready || cameraPlayer != null || localCameraOpen;
+        localCameraBody.setVisibility(showLocal ? View.VISIBLE : View.GONE);
+        localToggle.setVisibility(ready || cameraPlayer != null ? View.GONE : View.VISIBLE);
+        localToggle.setText(localCameraOpen ? "Hide local camera options" : "Use the printer's own camera on this network…");
+        if (ready != cameraLocalFirst) { cameraLocalFirst = ready; pages[2].removeView(cameraLocalCard); pages[2].addView(cameraLocalCard, ready ? 0 : 1); }
     }
     private void render() {
         if (connect == null || isDestroyed()) return;
@@ -867,7 +932,9 @@ public final class MainActivity extends Activity {
         // Cloud actions share ElegooSlicer's cloud control identity, so they wait for a one-time agreement; monitoring does not.
         boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false);
         if (cloudFresh && !cloudOk && !cloudAsked) { cloudAsked = true; cloudGate(true, this::render); }
-        boolean live = fresh || cloudFresh, canControl = writable || cloudFresh && cloudOk && !printer.cloudCommandBusy;
+        boolean live = fresh || cloudFresh;
+        block = ControlState.block(ready, fresh, ready && printer.pinProbe(), connecting, cloud, cloudFresh, cloud && printer.cloudOnline == 0, cloudOk, cloud && printer.cloudCommandBusy);
+        boolean canControl = block == ControlState.Block.NONE;
         snapshot = printer == null ? new JSONObject() : ready ? printer.status : cloud ? printer.cloudStatus : new JSONObject();
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
         if (ready) chip(summary, printer.pinProbe() ? "Local · read-only" : "Local", TEAL);
@@ -879,20 +946,31 @@ public final class MainActivity extends Activity {
         routePicker.setEnabled(!connecting); authPicker.setEnabled(!connecting); host.setEnabled(!connecting); access.setEnabled(!connecting); pairingPin.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting && !pinProbe());
         access.setVisibility(pinProbe() ? View.GONE : View.VISIBLE); pairingPin.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); pinProbeHelp.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); remember.setVisibility(pinProbe() ? View.GONE : View.VISIBLE);
         connect.setEnabled(printer != null); connect.setText(connecting ? "Disconnect" : "Connect"); check.setEnabled(!checking);
-        boolean resumable = Cc2Codec.canResume(snapshot);
-        refresh.setEnabled(ready || cloud);
+        boolean resumable = Cc2Codec.canResume(snapshot), noData = snapshot.length() == 0, inJob = Cc2Codec.canStop(snapshot) || Cc2Codec.canResume(snapshot) || Cc2Codec.canPause(snapshot);
+        refresh.setEnabled(ready || cloud); refresh.setVisibility(ready || cloud ? View.VISIBLE : View.GONE);
         pause.setEnabled(canControl && Cc2Codec.canPause(snapshot)); resume.setEnabled(canControl && resumable); stop.setEnabled(canControl && Cc2Codec.canStop(snapshot));
         pause.setVisibility(resumable ? View.GONE : View.VISIBLE); resume.setVisibility(resumable ? View.VISIBLE : View.GONE);
         lightOn.setEnabled(canControl); lightOff.setEnabled(canControl);
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning…" : "Find on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
-        heater.setEnabled(canControl && Cc2Codec.idle(snapshot)); fan.setEnabled(canControl); speed.setEnabled(canControl && Cc2Codec.canPause(snapshot));
-        boolean upkeepOk = canControl && Cc2Codec.idle(snapshot) && StatusPresentation.faultCodes(snapshot).isEmpty();
+        // Only what can work right now is shown; the line above each group says what is missing. Nothing here is enabled in a state PrinterService refuses.
+        boolean idleNow = Cc2Codec.idle(snapshot), pausable = Cc2Codec.canPause(snapshot);
+        heater.setEnabled(canControl && idleNow); fan.setEnabled(canControl); speed.setEnabled(canControl && pausable);
+        heater.setVisibility(idleNow ? View.VISIBLE : View.GONE); speed.setVisibility(pausable ? View.VISIBLE : View.GONE);
+        tuningHint.setText(ControlState.tuningNote(snapshot));
+        String upkeepReason = ControlState.upkeepReason(snapshot);
+        boolean upkeepOk = canControl && upkeepReason.isEmpty();
         for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
         trayFilament.setEnabled(upkeepOk && printer.canvas != null); urgentStop.setEnabled(canControl);
+        upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE);
+        upkeepHint.setText(upkeepOk ? "Commands follow Elegoo's own printer page and are never repeated automatically." : upkeepReason + " Emergency stop stays available.");
+        tuningCard.setVisibility(canControl ? View.VISIBLE : View.GONE); upkeepCard.setVisibility(canControl ? View.VISIBLE : View.GONE);
+        canvasCard.setVisibility(noData ? View.GONE : View.VISIBLE); tilesRow.setVisibility(noData ? View.GONE : View.VISIBLE);
+        printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData ? View.GONE : View.VISIBLE);
         cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
         transferRow.setVisibility(cancelUpload.getVisibility() == View.VISIBLE || cancelDownload.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
+        renderCamera(ready, cloud);
         refill.setEnabled(canControl && printer.canvasFresh() && printer.canvas.has("auto_refill"));
         if ((ready || cloud) && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText(ready ? "Automatic refill unavailable" : "Automatic refill (refresh trays first)");
@@ -930,7 +1008,12 @@ public final class MainActivity extends Activity {
         String stateText = snapshot.length() == 0 ? (printer == null ? "Starting…" : connecting ? "Connecting…" : cloud ? "Waiting for the cloud" : "Not connected") : StatusPresentation.state(snapshot);
         if (snapshot.length() > 0 && !live) stateText += " · stale";
         state.setText(stateText);
-        ring.set(printing ? percent : -1, printing ? percent + "%" : snapshot.length() == 0 ? "—" : stateText.split(" ")[0], printing && print != null && print.optInt("total_layer", 0) > 0 ? "layer " + print.optInt("current_layer", 0) + "/" + print.optInt("total_layer", 0) : "");
+        // The title beside the ring already names the state, so the ring holds only progress (and stays empty while idle).
+        boolean inJobNow = machine != null && machine.optInt("status", -1) == 2;
+        ring.set(inJobNow ? percent : -1, inJobNow ? percent + "%" : "", inJobNow && print != null && print.optInt("total_layer", 0) > 0 ? "layer " + print.optInt("current_layer", 0) + "/" + print.optInt("total_layer", 0) : "");
+        if (!inJobNow) ring.setContentDescription(stateText);
+        // Without a print there is no progress to draw, so the ring gives its space to the title.
+        ring.setVisibility(inJobNow ? View.VISIBLE : View.GONE); ((View) state.getParent()).setPadding(inJobNow ? dp(16) : 0, 0, 0, 0);
         if (printing && print != null) {
             long remaining = print.optLong("remaining_time_sec", -1);
             job.setText(StatusPresentation.clean(print.optString("filename", "Current print")).replaceFirst("(?i)\\.gcode$", ""));
@@ -944,17 +1027,26 @@ public final class MainActivity extends Activity {
         graphs.setText(recordingNow != null ? "Graphs" : "Print recordings");
         JSONObject machineNow = snapshot.optJSONObject("machine_status");
         liveToolpath.setVisibility(machineNow != null && machineNow.optInt("status", -1) == 2 ? View.VISIBLE : View.GONE);
+        ((LinearLayout.LayoutParams) graphs.getLayoutParams()).leftMargin = liveToolpath.getVisibility() == View.VISIBLE ? dp(8) : 0;
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
         faults.setText(codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen.");
         faults.setVisibility(codes.isEmpty() ? View.GONE : View.VISIBLE);
         setTile(tileNozzle, temperature("extruder")); setTile(tileBed, temperature("heater_bed")); setTile(tileChamber, temperature("ztemperature_sensor"));
         // Where controls go.
-        if (ready) controlSource.setText(printer.pinProbe() ? "Read-only PIN probe: controls are disabled." : "Commands go over your local network.");
-        else if (cloud && cloudFresh && !cloudOk) controlSource.setText("Cloud control is off. Tap here to turn it on.");
-        else if (cloud) controlSource.setText(printer.cloudCommandBusy ? "Sending through the Elegoo cloud…" : cloudFresh ? "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago" + (printer.cloudLiveOn ? " · live" : "") + "."
-            : printer.cloudOnline == 0 ? "The Elegoo cloud reports the printer offline." : printer.cloudMessage.isEmpty() ? "Waiting for the Elegoo cloud…" : printer.cloudMessage);
-        else controlSource.setText(connecting ? "Connecting on your local network…" : "Connect in Settings, or sign in with Elegoo to control through the cloud.");
+        switch (block) {
+            case NONE: controlSource.setText(ready ? "Commands go over your local network." : "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago" + (printer.cloudLiveOn ? " · live" : "") + "."); break;
+            case PIN_PROBE: controlSource.setText("Read-only PIN probe: controls are disabled."); break;
+            case STALE: controlSource.setText("Waiting for a fresh status from the printer. Controls unlock when it arrives."); break;
+            case CONNECTING: controlSource.setText("Connecting on your local network…"); break;
+            case CLOUD_AGREEMENT: controlSource.setText("You are watching through the Elegoo cloud. Controls stay off until you agree to cloud control."); break;
+            case CLOUD_BUSY: controlSource.setText("Sending through the Elegoo cloud…"); break;
+            case CLOUD_OFFLINE: controlSource.setText("The Elegoo cloud reports the printer offline."); break;
+            case CLOUD_WAITING: controlSource.setText(printer.cloudMessage.isEmpty() ? "Waiting for the Elegoo cloud…" : printer.cloudMessage); break;
+            default: controlSource.setText("Not connected. Connect on your network, or sign in with Elegoo to control through the cloud."); break;
+        }
+        boolean fix = block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED;
+        controlFix.setText(block == ControlState.Block.CLOUD_AGREEMENT ? "Turn on cloud control…" : "Open Settings"); ((View) controlFix.getParent()).setVisibility(fix ? View.VISIBLE : View.GONE);
         JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
         renderTrays(canvasNow);
         if (canvasNow != null) {

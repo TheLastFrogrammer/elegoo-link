@@ -115,6 +115,72 @@ public class ScreenshotTest {
         }
     }
 
+    private static JSONObject idle() throws Exception {
+        return new JSONObject().put("machine_status", new JSONObject().put("status", 1).put("sub_status", 0).put("progress", 0))
+            .put("extruder", new JSONObject().put("temperature", 24.5).put("target", 0)).put("heater_bed", new JSONObject().put("temperature", 23.9).put("target", 0))
+            .put("ztemperature_sensor", new JSONObject().put("temperature", 24.0));
+    }
+
+    /** The main screen in each connection state, every tab at full height: -Dscreenshots=DIR writes state-<name>-<tab>-<theme>.png. */
+    @Test public void renderStates() throws Exception {
+        String out = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
+        String[] states = {"offline", "cloud-agree", "cloud-printing", "cloud-idle", "local-printing", "local-idle"};
+        String[] tabs = {"monitor", "files", "camera", "settings"};
+        for (String theme : new String[] {"light", "dark"}) for (String state : states) {
+            android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+            context.getSharedPreferences("workshop-settings", 0).edit().clear().putInt("theme", theme.equals("dark") ? 2 : 1).putInt("page", 0)
+                .putBoolean("cloudControlUnderstood", !state.equals("cloud-agree") && !state.equals("offline")).commit();
+            PrinterService service = Robolectric.setupService(PrinterService.class);
+            org.robolectric.Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(
+                new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
+            MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
+            Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
+            Thread.sleep(500); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            boolean cloud = state.startsWith("cloud"), local = state.startsWith("local"), busy = state.endsWith("printing");
+            JSONObject status = busy ? printing() : idle();
+            if (cloud) {
+                service.cloudSignedIn = true; service.cloudSerial = "F01ABC0000R818"; service.cloudName = "Bedroom"; service.cloudModel = "Centauri Carbon 2";
+                service.cloudOnline = 1; service.cloudCheckedAt = System.currentTimeMillis() - 4000; service.cloudStatus = status;
+            }
+            if (local) {
+                Field wanted = PrinterService.class.getDeclaredField("wanted"); wanted.setAccessible(true); wanted.setBoolean(service, true);
+                Cc2Session session = new Cc2Session("192.168.1.50", "123456", null);
+                Field ready = Cc2Session.class.getDeclaredField("ready"); ready.setAccessible(true); ready.setBoolean(session, true);
+                Field at = Cc2Session.class.getDeclaredField("statusAt"); at.setAccessible(true); at.setLong(session, System.nanoTime());
+                Field sessionField = PrinterService.class.getDeclaredField("session"); sessionField.setAccessible(true); sessionField.set(service, session);
+                service.status = status; service.connection = "Connected to 192.168.1.50";
+                service.attributes = new JSONObject().put("hostname", "Bedroom").put("machine_model", "Centauri Carbon 2").put("software_version", new JSONObject().put("ota_version", "01.03.02.15"));
+                service.filePage = new JSONObject("{\"total\":3,\"file_list\":[{\"filename\":\"Benchy_PLA_0.2mm.gcode\",\"size\":4823044,\"layer\":212},{\"filename\":\"Calibration cube.gcode\",\"size\":912331,\"layer\":150},{\"filename\":\"Phone stand v3.gcode\",\"size\":2433102,\"layer\":340}]}");
+                service.filesAt = System.nanoTime(); service.fileMessage = "Files received from printer.";
+                service.disk = new JSONObject().put("used_bytes", 3_200_000_000L).put("total_bytes", 8_000_000_000L);
+                service.history = new JSONObject("{\"history_task_list\":[{\"task_name\":\"Benchy.gcode\",\"task_status\":1,\"begin_time\":1,\"end_time\":9000,\"time_lapse_video_status\":2}]}");
+            }
+            if (cloud || local) service.canvas = new JSONObject("{\"auto_refill\":true,\"active_canvas_id\":0,\"active_tray_id\":1,\"canvas_list\":[{\"canvas_id\":0,\"connected\":1,\"tray_list\":["
+                + "{\"tray_id\":0,\"filament_type\":\"PLA\",\"filament_name\":\"PLA Matte\",\"filament_color\":\"#D02828\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230},"
+                + "{\"tray_id\":1,\"filament_type\":\"PLA\",\"filament_name\":\"PLA\",\"filament_color\":\"#F0F0F0\",\"min_nozzle_temp\":190,\"max_nozzle_temp\":230}]}]}");
+            Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
+            Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
+            Field pagesField = MainActivity.class.getDeclaredField("pages"); pagesField.setAccessible(true);
+            for (int i = 0; i < 4; i++) {
+                page.invoke(activity, i); render.invoke(activity);
+                View root = activity.getWindow().getDecorView();
+                int width = 1080, height = 7000;
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+                root.layout(0, 0, width, height);
+                View shown = ((android.widget.LinearLayout[]) pagesField.get(activity))[i];
+                height = Math.min(7000, ((View) shown.getParent()).getTop() + shown.getBottom() + 600);
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+                root.layout(0, 0, width, height);
+                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                root.draw(new Canvas(bitmap));
+                File file = new File(out, "state-" + state + "-" + tabs[i] + "-" + theme + ".png"); file.getParentFile().mkdirs();
+                try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+            }
+            activity.finish();
+        }
+    }
+
     /** The toolpath viewer's controls with the Benchy-sized fixture; the WebGL area (blank here) is recorded in viewer-<theme>.json. */
     @Test public void renderViewer() throws Exception {
         String out = System.getProperty("screenshots", "");

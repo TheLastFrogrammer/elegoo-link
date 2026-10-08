@@ -22,6 +22,16 @@ public final class FeatureData {
         if (file.has("color_map")) text.append("\nSliced filament information: ").append(StatusPresentation.clean(file.opt("color_map").toString()));
         return text.toString();
     }
+    /** Header for the printer file list: storage, count, page offset, and a warning when the list may be out of date. A benign "received" message is not repeated. */
+    public static String fileSummary(String message, String storage, boolean haveList, int count, int offset, boolean fresh, boolean refreshing) {
+        if (!haveList) return message;
+        StringBuilder text = new StringBuilder();
+        if (!message.isEmpty() && !message.equals("Files received from printer.") && !message.startsWith("Loading")) text.append(message).append("\n");
+        text.append(storage.equals("local") ? "Internal storage" : "USB drive").append(" · ").append(count).append(count == 1 ? " file" : " files");
+        if (offset > 0) text.append(" · from ").append(offset + 1);
+        if (refreshing) text.append(" · refreshing…"); else if (!fresh) text.append(" · may be out of date, refresh before starting or deleting");
+        return text.toString();
+    }
     public static String duration(long seconds) { return seconds < 0 ? "Not reported" : seconds / 3600 + "h " + seconds % 3600 / 60 + "m"; }
     public static String history(JSONObject result) {
         JSONArray rows = result.optJSONArray("history_task_list");
