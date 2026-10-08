@@ -21,7 +21,7 @@ final class TrayPlan {
         }
         String label() {
             String material = name.isEmpty() || name.equalsIgnoreCase(type) ? type : type + " · " + name;
-            return "CANVAS " + canvasId + " · Tray " + trayId + " · " + material + (colour == null ? "" : " " + colour);
+            return "CANVAS " + canvasId + " · tray " + trayId + " · " + material + (colour == null ? "" : " " + colour);
         }
         boolean same(int canvas, int tray) { return canvasId == canvas && trayId == tray; }
     }

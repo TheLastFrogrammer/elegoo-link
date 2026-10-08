@@ -59,7 +59,7 @@ public final class CloudCameraActivity extends Activity {
         title.setText((name == null || name.isEmpty() ? "Printer" : StatusPresentation.clean(name)) + " · camera through the Elegoo cloud");
         status = new TextView(this); status.setTextColor(NORMAL); status.setTextSize(15); status.setPadding(pad, pad / 2, pad, pad);
         root.addView(title); root.addView(status);
-        if (serial == null || !Cc2Discovery.validSerial(serial)) { showProblem("No printer was chosen for the camera. Close this screen and choose the printer on the Camera page."); setContentView(root); return; }
+        if (serial == null || !Cc2Discovery.validSerial(serial)) { showProblem("No printer was chosen for the camera. Close this screen and choose the printer on the Camera tab."); setContentView(root); return; }
         if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
             showProblem("The camera needs a newer Android System WebView. Update Android System WebView from the Play Store, then open the camera again.");
             setContentView(root); return;
@@ -81,7 +81,7 @@ public final class CloudCameraActivity extends Activity {
         });
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout buttons = new LinearLayout(this); buttons.setGravity(Gravity.CENTER); buttons.setPadding(pad, pad / 2, pad, pad / 2);
-        snapshot = new Button(this); snapshot.setText("Save snapshot"); snapshot.setAllCaps(false); snapshot.setEnabled(false);
+        snapshot = new Button(this); snapshot.setText("Save snapshot to phone…"); snapshot.setAllCaps(false); snapshot.setEnabled(false);
         snapshot.setOnClickListener(v -> web.evaluateJavascript("snapshot()", null));
         retry = new Button(this); retry.setText("Try again"); retry.setAllCaps(false); retry.setVisibility(View.GONE); retry.setOnClickListener(v -> retry(serial));
         Button close = new Button(this); close.setText("Close camera"); close.setAllCaps(false); close.setOnClickListener(v -> finish());

@@ -105,7 +105,7 @@ public final class PlateActivity extends Activity {
     private void finishWithResult() {
         if (problemCount > 0 && placements.length() > 0) {
             new android.app.AlertDialog.Builder(this).setTitle("Some models have a problem")
-                .setMessage((problemCount == 1 ? "One model has" : problemCount + " models have") + " a problem (striped red on the plate): off the bed, overlapping, or in a no-print zone. Slicing like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
+                .setMessage((problemCount == 1 ? "One model has" : problemCount + " models have") + " a problem (striped red in the layout): off the bed, overlapping, or in a no-print zone. Slicing like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
                 .setNegativeButton("Fix it", null).setPositiveButton("Go back anyway", (d, w) -> leave()).show();
             return;
         }
@@ -113,7 +113,7 @@ public final class PlateActivity extends Activity {
     }
 
     private void leave() {
-        if (placements.length() == 0) { status.setText("Put at least one model on the plate, or go back to the Slice screen with Arrange."); status.setTextColor(ui.error); return; }
+        if (placements.length() == 0) { status.setText("Put at least one model in the layout, or go back to the Slice screen with Arrange."); status.setTextColor(ui.error); return; }
         setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
         finish();
     }
@@ -147,7 +147,7 @@ public final class PlateActivity extends Activity {
                     load();
                 });
             } catch (Exception failure) {
-                main.post(() -> { if (!isDestroyed()) { status.setText("The plate could not be prepared: " + failure.getMessage()); status.setTextColor(ui.error); } });
+                main.post(() -> { if (!isDestroyed()) { status.setText("The layout could not be prepared: " + failure.getMessage()); status.setTextColor(ui.error); } });
             }
         });
     }
@@ -240,7 +240,7 @@ public final class PlateActivity extends Activity {
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
             b.setEnabled(on && (i != 1 || placements.length() > 0));
         }
-        if (!on) ui.label(body, "Select a model first: tap it on the plate.", 13, ui.muted, false);
+        if (!on) ui.label(body, "Select a model first: tap it in the layout.", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
     }
@@ -291,7 +291,7 @@ public final class PlateActivity extends Activity {
                     String summary = summarize(found);
                     problemCount = 0; for (List<String> issues : found) if (!issues.isEmpty()) problemCount++;
                     int n = placements.length();
-                    status.setText(summary != null ? summary : n == 1 ? "1 model on the plate, inside the bed." : n + " models on the plate, all inside the bed and apart.");
+                    status.setText(summary != null ? summary : n == 1 ? "1 model in the layout, inside the bed." : n + " models in the layout, all inside the bed and apart.");
                     status.setTextColor(summary != null ? ui.error : ui.muted);
                     showSelected(); setButtons();
                 } catch (JSONException ignored) { }

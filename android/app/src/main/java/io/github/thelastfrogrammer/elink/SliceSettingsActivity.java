@@ -136,9 +136,9 @@ public final class SliceSettingsActivity extends Activity {
         String objectName = getIntent().getStringExtra(EXTRA_OBJECT_NAME);
         if (objectName != null && !objectName.isEmpty()) objectLabel = objectName;
         content = object != null ? ui.page("Settings for " + objectLabel,
-                "Only " + objectLabel + " and its copies use these changes; the rest of the plate keeps the print settings.")
-            : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament slot on top of its preset. \u201cPrinter's value\u201d means the printer preset decides.")
-            : ui.page("Print settings", "Changes apply to this slice on top of the process preset. The preset's value is shown under each setting.");
+                "Only " + objectLabel + " and its copies use these changes; the other models keep the print settings.")
+            : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament on top of its filament profile. \u201cPrinter's value\u201d means the printer preset decides.")
+            : ui.page("Print settings", "Changes apply to this slice on top of the print profile. The print profile's value is shown under each setting.");
         if (saved != null && saved.getStringArrayList(EXPANDED) != null) expanded = new HashSet<>(saved.getStringArrayList(EXPANDED));
         try {
             selection = new JSONObject(getIntent().getStringExtra(EXTRA_SELECTION));
@@ -167,7 +167,7 @@ public final class SliceSettingsActivity extends Activity {
         LinearLayout buttons = ui.row(top);
         ui.rowButton(buttons, "Saved sets…", this::chooseSaved, false);
         ui.rowButton(buttons, "Save these…", this::saveSet, false);
-        ui.button(top, object != null ? "Reset all to the plate's settings" : "Reset all to the preset", () -> { overrides.clear(); load(); }, false);
+        ui.button(top, object != null ? "Reset all to the print settings" : slot >= 0 ? "Reset all to the filament profile" : "Reset all to the print profile", () -> { overrides.clear(); load(); }, false);
         list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); content.addView(list);
         LinearLayout done = ui.card(content, null);
         ui.button(done, "Use these settings", this::finishWithResult, true);
@@ -324,13 +324,13 @@ public final class SliceSettingsActivity extends Activity {
         TextView reset = new TextView(this); reset.setText("Reset"); reset.setTextSize(13); reset.setTextColor(ui.teal);
         reset.setTypeface(Typeface.DEFAULT, Typeface.BOLD); reset.setMinHeight(ui.dp(40)); reset.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         reset.setPadding(ui.dp(10), 0, 0, 0); reset.setVisibility(View.GONE);
-        reset.setContentDescription("Reset " + label + " to the " + (object != null ? "plate's" : slot >= 0 ? "filament preset's" : "preset's") + " value");
+        reset.setContentDescription("Reset " + label + " to the " + (object != null ? "print settings'" : slot >= 0 ? "filament profile's" : "print profile's") + " value");
         reset.setOnClickListener(v -> { overrides.remove(key); build(); });
         header.addView(reset, new LinearLayout.LayoutParams(-2, -2));
         TextView note = ui.label(row, "", 12, ui.muted, false); note.setPadding(0, 0, 0, ui.dp(2));
         Runnable showNote = () -> {
             boolean changed = overrides.containsKey(key);
-            note.setText((object != null ? (changed ? "Changed · plate: " : "Plate: ") : changed ? "Changed · preset: " : "Preset: ") + display(definition, preset));
+            note.setText((object != null ? (changed ? "Changed · print settings: " : "Print settings: ") : slot >= 0 ? (changed ? "Changed · filament profile: " : "Filament profile: ") : (changed ? "Changed · print profile: " : "Print profile: ")) + display(definition, preset));
             note.setTextColor(changed ? ui.teal : ui.muted);
             title.setTypeface(Typeface.DEFAULT, changed ? Typeface.BOLD : Typeface.NORMAL);
             reset.setVisibility(changed ? View.VISIBLE : View.GONE);
@@ -439,10 +439,10 @@ public final class SliceSettingsActivity extends Activity {
         if (summary == null) return;
         keepResult();
         int n = overrides.size();
-        if (object != null) summary.setText(n == 0 ? objectLabel + " follows the plate's settings."
-            : changedNames(n + (n == 1 ? " setting differs" : " settings differ") + " from the plate for " + objectLabel + ":"));
-        else if (n == 0) summary.setText(slot >= 0 ? "All settings follow this filament's preset." : "All settings follow the process preset.");
-        else summary.setText(changedNames(n + (n == 1 ? " setting" : " settings") + " changed from the " + (slot >= 0 ? "filament's preset:" : "preset:")));
+        if (object != null) summary.setText(n == 0 ? objectLabel + " follows the print settings."
+            : changedNames(n + (n == 1 ? " setting differs" : " settings differ") + " from the print settings for " + objectLabel + ":"));
+        else if (n == 0) summary.setText(slot >= 0 ? "All settings follow this filament profile." : "All settings follow the print profile.");
+        else summary.setText(changedNames(n + (n == 1 ? " setting" : " settings") + " changed from the " + (slot >= 0 ? "filament profile:" : "print profile:")));
         summary.setTextColor(ui.ink);
     }
 
@@ -452,7 +452,7 @@ public final class SliceSettingsActivity extends Activity {
         else if (object == null) { for (String key : meant) if (FILAMENT_KEYS.contains(key)) return "That is set per filament. Open a filament's Settings… on the Slice screen."; }
         else {
             for (String key : meant) if (FILAMENT_KEYS.contains(key)) return "That is set per filament, not per model.";
-            for (String key : meant) if (PROCESS_KEYS.contains(key)) return "That applies to the whole plate. Change it in All settings… on the Slice screen.";
+            for (String key : meant) if (PROCESS_KEYS.contains(key)) return "That applies to the whole print. Change it in All settings… on the Slice screen.";
         }
         return null;
     }
@@ -504,7 +504,7 @@ public final class SliceSettingsActivity extends Activity {
         if (overrides.isEmpty()) { Toast.makeText(this, "Change a setting first.", Toast.LENGTH_SHORT).show(); return; }
         EditText name = new EditText(this); name.setSingleLine(true); name.setHint("Name, e.g. Strong parts");
         LinearLayout body = new LinearLayout(this); body.setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0); body.addView(name, new LinearLayout.LayoutParams(-1, -2));
-        new AlertDialog.Builder(this).setTitle("Save these changes").setMessage("Saved on this phone. They can be used with any process preset.").setView(body)
+        new AlertDialog.Builder(this).setTitle("Save these changes").setMessage("Saved on this phone. They can be used with any print profile.").setView(body)
             .setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
                 String title = name.getText().toString().trim();
                 if (title.isEmpty()) return;

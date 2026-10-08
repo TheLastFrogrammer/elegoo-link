@@ -168,9 +168,17 @@ public final class CloudApi {
         JSONObject data = authorized("GET", "/api/v1/device-management-server/oss/biz-entrypoint?filename=" + URLEncoder.encode(storageName, "UTF-8")
             + "&bucketAlias=iot-private&module=gcode&fileMd5=" + URLEncoder.encode(md5Base64, "UTF-8"), null, true).optJSONObject("data");
         String upload = data == null ? "" : data.optString("entrypoint", ""), access = data == null ? "" : data.optString("accessUrl", "");
-        if (!upload.startsWith("https://") || !access.startsWith("https://") || data.optString("objectName", "").isEmpty())
+        if (!upload.startsWith("https://") || !access.startsWith("https://") || data.optString("objectName", "").isEmpty()) {
+            Diagnostics.note(Diagnostics.FILES, "cloud upload: storage address refused (upload " + origin(upload) + ", printer fetch " + origin(access) + ", object name " + (data != null && !data.optString("objectName", "").isEmpty() ? "present" : "missing") + ")");
             throw new CloudException("Elegoo did not provide a place to upload the file.", false);
+        }
+        Diagnostics.note(Diagnostics.FILES, "cloud upload: storage address received (upload " + origin(upload) + ", printer fetch " + origin(access) + ")");
         return new UploadTarget(upload, access);
+    }
+    /** Scheme and host of an address for diagnostics, never its path or signature; "none" when empty. */
+    static String origin(String url) {
+        if (url == null || url.isEmpty()) return "none";
+        try { java.net.URI uri = new java.net.URI(url); return uri.getScheme() + "://" + uri.getHost(); } catch (Exception error) { return "unreadable"; }
     }
     /** MD5 of a file as {hex, base64}: the printer checks the hex form, the storage service the base64 one. */
     static String[] md5(File file) throws IOException {

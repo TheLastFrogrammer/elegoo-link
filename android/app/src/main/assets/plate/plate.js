@@ -18,7 +18,7 @@
     message.textContent = text; message.style.display = "flex";
     if (android && android.onError) android.onError(String(text));
   }
-  if (!gl) { fail("This device's WebView has no WebGL 2, which the plate view needs."); return; }
+  if (!gl) { fail("This device's WebView has no WebGL 2, which the layout view needs."); return; }
 
   const theme = { background: [0.95, 0.96, 0.965], plate: [0.86, 0.89, 0.9, 1], grid: [0.7, 0.75, 0.77, 1],
     excluded: [0.85, 0.3, 0.25, 0.35], tower: [0.4, 0.45, 0.5, 0.45], selected: [0.0, 0.47, 0.42], problem: [0.86, 0.2, 0.16] };
@@ -580,7 +580,7 @@
       await Promise.all(scene.objects.map((o, i) => fetch("/data/mesh/" + i).then((r) => r.arrayBuffer()).then((b) => setupMesh(o, b))));
       setupBed(); select(scene.placements.length === 1 ? 0 : -1); changed(); showHint();
       if (android && android.onLoaded) android.onLoaded(scene.objects.length);
-    } catch (error) { fail("The plate could not be shown: " + error.message); }
+    } catch (error) { fail("The layout could not be shown: " + error.message); }
   }
   function current() { return selected >= 0 && selected < scene.placements.length ? scene.placements[selected] : null; }
   const api = {

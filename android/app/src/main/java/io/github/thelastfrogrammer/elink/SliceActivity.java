@@ -282,7 +282,7 @@ public final class SliceActivity extends Activity {
             ArrayList<String> files = saved.getStringArrayList("slicedFiles"), names = saved.getStringArrayList("slicedNames");
             if (files != null && names != null && files.size() == names.size()) for (int i = 0; i < files.size(); i++) { slicedFiles.add(new File(files.get(i))); slicedNames.add(names.get(i)); }
             if (slicedFiles.isEmpty()) { slicedFiles.add(sliced); slicedNames.add(slicedName); }
-            uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " plates" : "Upload and print…");
+            uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " project plates" : "Upload and print…");
             showResultPlates(Math.max(0, slicedFiles.indexOf(sliced)));
         }
         try {
@@ -315,7 +315,7 @@ public final class SliceActivity extends Activity {
 
     private void build() {
         LinearLayout modelCard = card("1 · Models");
-        modelsLabel = label(modelCard, "Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged on one plate.", 14, muted, false);
+        modelsLabel = label(modelCard, "Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged in one layout.", 14, muted, false);
         chooseModels = button(modelCard, "Choose model files", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
@@ -323,7 +323,7 @@ public final class SliceActivity extends Activity {
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
-        editPlate = rowButton(layoutRow, "Edit plate…", this::openPlate, false);
+        editPlate = rowButton(layoutRow, "Edit layout…", this::openPlate, false);
         objectButton = rowButton(layoutRow, "Model settings…", this::chooseObjectSettings, false);
         autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
@@ -332,7 +332,7 @@ public final class SliceActivity extends Activity {
 
         LinearLayout filamentCard = card("2 · Printer and filaments");
         label(filamentCard, "Printer", 12, muted, false); printerSpinner = spinner(filamentCard);
-        label(filamentCard, "Process", 12, muted, false); processSpinner = spinner(filamentCard);
+        label(filamentCard, "Print profile", 12, muted, false); processSpinner = spinner(filamentCard);
         printerSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { loadCompatible(selected(printerSpinner)); }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
@@ -349,7 +349,7 @@ public final class SliceActivity extends Activity {
         addSlot(null);
 
         LinearLayout settingsCard = card("3 · Print settings");
-        label(settingsCard, "Leave a setting on “Preset” to use the process preset's value.", 13, muted, false);
+        label(settingsCard, "Leave a setting on “Preset” to use the print profile's value.", 13, muted, false);
         label(settingsCard, "Infill density (%)", 12, muted, false);
         infill = new EditText(this); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
         infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); settingsCard.addView(infill, new LinearLayout.LayoutParams(-1, dp(52)));
@@ -375,7 +375,7 @@ public final class SliceActivity extends Activity {
         preview.setVisibility(View.GONE); resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
         resultText = label(resultCard, "", 14, ink, false); resultText.setTextIsSelectable(true);
         resultPlateBox = new LinearLayout(this); resultPlateBox.setOrientation(LinearLayout.VERTICAL); resultPlateBox.setVisibility(View.GONE); resultCard.addView(resultPlateBox);
-        label(resultPlateBox, "Plate to preview, save or send", 12, muted, false);
+        label(resultPlateBox, "Project plate to preview, save or send", 12, muted, false);
         resultPlate = spinner(resultPlateBox);
         resultPlate.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { if (position < slicedFiles.size() && !slicedFiles.get(position).equals(sliced)) showResultPlate(position); }
@@ -387,7 +387,7 @@ public final class SliceActivity extends Activity {
         LinearLayout pair = new LinearLayout(this); pair.setOrientation(LinearLayout.HORIZONTAL); resultCard.addView(pair, new LinearLayout.LayoutParams(-1, -2));
         rowButton(pair, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
             .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
-        saveCopy = rowButton(pair, "Save G-code…", () -> {
+        saveCopy = rowButton(pair, "Save to phone…", () -> {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/octet-stream"); intent.putExtra(Intent.EXTRA_TITLE, slicedName); startActivityForResult(intent, SAVE);
         }, false);
@@ -492,7 +492,7 @@ public final class SliceActivity extends Activity {
     }
 
     private void showSettingsSummary() {
-        settingsSummary.setText(customOverrides.isEmpty() ? "Everything else follows the process preset." : customOverrides.size() + " more setting(s) changed in All settings.");
+        settingsSummary.setText(customOverrides.isEmpty() ? "Everything else follows the print profile." : customOverrides.size() + " more setting(s) changed in All settings.");
         settingsSummary.setTextColor(customOverrides.isEmpty() ? muted : teal);
     }
 
@@ -549,7 +549,7 @@ public final class SliceActivity extends Activity {
         ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
         if (need != null && need.risky(memory.availMem) && !largeConfirmed) {
             new AlertDialog.Builder(this).setTitle("This is a big slice")
-                .setMessage(String.format(Locale.getDefault(), "Slicing this plate may need %s of memory; the phone has about %d MB free. Android may close the app while it slices.\n\nClose other apps, use fewer copies or a smaller scale, or try anyway.",
+                .setMessage(String.format(Locale.getDefault(), "Slicing these models may need %s of memory; the phone has about %d MB free. Android may close the app while it slices.\n\nClose other apps, use fewer copies or a smaller scale, or try anyway.",
                     need.describe(), memory.availMem / (1024 * 1024)))
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Slice anyway", (d, w) -> { largeConfirmed = true; startSlice(); largeConfirmed = false; }).show();
@@ -577,7 +577,7 @@ public final class SliceActivity extends Activity {
         StringBuilder inputs = new StringBuilder();
         for (File model : input) inputs.append(inputs.length() > 0 ? ", " : "").append(model.getName()).append(" (").append(size(model.length())).append(")");
         String setup = inputs + " · " + process + " · " + filaments.size() + " filament(s)" + (selection.overrides.isEmpty() ? "" : " · " + selection.overrides.size() + " override(s)")
-            + (plate == ALL_PLATES ? " · all " + plates.size() + " plates" : selection.plate > 0 ? " · plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
+            + (plate == ALL_PLATES ? " · all " + plates.size() + " project plates" : selection.plate > 0 ? " · project plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
             + (need == null ? "" : " · estimated " + need.describe());
         markRunning(setup);
         long started = System.currentTimeMillis();
@@ -585,7 +585,7 @@ public final class SliceActivity extends Activity {
             try {
                 List<NativeSlicer.Result> results = new ArrayList<>();
                 for (int i = 0; i < plates.size(); i++) {
-                    String prefix = plates.size() > 1 ? "Plate " + plates.get(i) + " of " + plates.size() + " · " : "";
+                    String prefix = plates.size() > 1 ? "Project plate " + plates.get(i) + " of " + plates.size() + " · " : "";
                     int part = i, count = plates.size();
                     if (plates.size() > 1 || plate == ALL_PLATES) selection.plate = plates.get(i);
                     results.add(engine.slice(input, selection, outputs.get(i), (percent, text) -> {
@@ -631,11 +631,11 @@ public final class SliceActivity extends Activity {
         SharedPreferences.Editor plans = getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit();
         for (String name : names) plans.putString(GcodeLibrary.safeName(name), plan.toJson());
         plans.apply();
-        status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " plates " : "", elapsedMs / 1000.0));
+        status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " project plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < results.size(); i++) {
             NativeSlicer.Result result = results.get(i);
-            if (results.size() > 1) text.append("Plate ").append(plates.get(i)).append(": ");
+            if (results.size() > 1) text.append("Project plate ").append(plates.get(i)).append(": ");
             text.append(names.get(i)).append("\n");
             text.append("Estimated print time: ").append(duration(result.printSeconds)).append("\n");
             text.append(String.format(Locale.getDefault(), "Filament: %.1f g (%.2f m)\n", result.filamentGrams, result.filamentMm / 1000.0));
@@ -651,7 +651,7 @@ public final class SliceActivity extends Activity {
         }
         if (calibration != null && calibrationSpec != null) text.insert(0, "How to read it: " + calibrationSpec[5] + "\n\n");
         resultText.setText(text.toString());
-        uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " plates" : "Upload and print…");
+        uploadPrint.setText(slicedFiles.size() > 1 ? "Upload all " + slicedFiles.size() + " project plates" : "Upload and print…");
         resultCard.setVisibility(View.VISIBLE);
         scroll.post(() -> scroll.smoothScrollTo(0, resultCard.getTop() - dp(12)));
         showResultPlates(0);
@@ -661,7 +661,7 @@ public final class SliceActivity extends Activity {
     /** The plate chooser of a multi-plate result (hidden for one plate); Preview, Save and Send act on the chosen plate. */
     private void showResultPlates(int chosen) {
         List<String> labels = new ArrayList<>();
-        for (int i = 0; i < slicedNames.size(); i++) labels.add("Plate " + (i + 1) + " · " + slicedNames.get(i));
+        for (int i = 0; i < slicedNames.size(); i++) labels.add("Project plate " + (i + 1) + " · " + slicedNames.get(i));
         resultPlateBox.setVisibility(slicedFiles.size() > 1 ? View.VISIBLE : View.GONE);
         fill(resultPlate, labels, labels.get(chosen));
         showResultPlate(chosen);
@@ -669,7 +669,7 @@ public final class SliceActivity extends Activity {
 
     private void showResultPlate(int index) {
         sliced = slicedFiles.get(index); slicedName = slicedNames.get(index);
-        useInFiles.setText(slicedFiles.size() > 1 ? "Send plate " + (index + 1) + " to the Files tab" : "Send to Files tab");
+        useInFiles.setText(slicedFiles.size() > 1 ? "Send project plate " + (index + 1) + " to the Files tab" : "Send to Files tab");
         preview.setVisibility(View.GONE); showPreview(sliced);
     }
 
@@ -824,7 +824,7 @@ public final class SliceActivity extends Activity {
         while (modelSlots.size() > models.size()) modelSlots.remove(modelSlots.size() - 1);
         // New models: 3MF files keep their own assignment; others take the next slot in turn.
         while (modelSlots.size() < models.size()) { int i = modelSlots.size(); modelSlots.add(is3mf(models.get(i)) ? 0 : i % Math.max(1, slots.size()) + 1); }
-        if (models.isEmpty()) { modelsLabel.setText("Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged on one plate."); modelsLabel.setTextColor(muted); return; }
+        if (models.isEmpty()) { modelsLabel.setText("Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged in one layout."); modelsLabel.setTextColor(muted); return; }
         StringBuilder names = new StringBuilder();
         for (File file : models) names.append(names.length() > 0 ? "\n" : "").append(file.getName()).append(" (").append(size(file.length())).append(")");
         modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
@@ -868,16 +868,16 @@ public final class SliceActivity extends Activity {
         ((LinearLayout.LayoutParams) heading.getLayoutParams()).topMargin = dp(10);
         org.json.JSONArray plates = file.optJSONArray("plates");
         if (plates != null && plates.length() > 1) {
-            if (models.size() > 1) label(projectBox, "With other model files added, the project's objects are arranged with them; pick its plate below.", 12, muted, false);
+            if (models.size() > 1) label(projectBox, "With other model files added, the project's objects are arranged with them; pick its project plate below.", 12, muted, false);
             List<String> names = new ArrayList<>();
             for (int i = 0; i < plates.length(); i++) {
                 org.json.JSONObject entry = plates.optJSONObject(i);
                 int count = entry.optJSONArray("objects") == null ? 0 : entry.optJSONArray("objects").length();
                 String name = entry.optString("name");
-                names.add("Plate " + (i + 1) + (name.isEmpty() ? "" : " · " + name) + " · " + count + " object" + (count == 1 ? "" : "s"));
+                names.add("Project plate " + (i + 1) + (name.isEmpty() ? "" : " · " + name) + " · " + count + " object" + (count == 1 ? "" : "s"));
             }
-            names.add("All " + plates.length() + " plates · one G-code each");
-            label(projectBox, "Plate to slice", 12, muted, false);
+            names.add("All " + plates.length() + " project plates · one G-code each");
+            label(projectBox, "Project plate to slice", 12, muted, false);
             Spinner plates_ = spinner(projectBox); fill(plates_, names, names.get(plate == ALL_PLATES ? names.size() - 1 : Math.max(0, Math.min(plate, names.size() - 1) - 1)));
             plates_.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
@@ -894,7 +894,7 @@ public final class SliceActivity extends Activity {
             use.setChecked(projectSettings); use.setOnCheckedChangeListener((v, checked) -> projectSettings = checked); projectBox.addView(use);
             String printer = settingsOf.optString("printer");
             label(projectBox, "Saved with " + settingsOf.optString("process") + (settingsOf.has("layer_height") ? String.format(Locale.getDefault(), " (%.2f mm layers)", settingsOf.optDouble("layer_height")) : "")
-                + (printer.isEmpty() ? "" : " for " + printer) + ". They apply on top of the process preset; your changes below still win.", 12, muted, false);
+                + (printer.isEmpty() ? "" : " for " + printer) + ". They apply on top of the print profile; your changes below still win.", 12, muted, false);
             org.json.JSONArray filaments = settingsOf.optJSONArray("filaments");
             if (filaments != null && filaments.length() > 0)
                 button(projectBox, "Use the project's " + filaments.length() + " filament" + (filaments.length() == 1 ? "" : "s"), this::useProjectFilaments, false);
@@ -916,7 +916,7 @@ public final class SliceActivity extends Activity {
         }
         for (int i = 0; i < modelSlots.size(); i++) if (is3mf(models.get(i))) modelSlots.set(i, 0);
         showModels(); updateButtons();
-        status.setText(missing.isEmpty() ? "Set up " + slots.size() + " filament(s) from the project." : "Set up " + slots.size() + " filament(s); this printer has no preset named " + String.join(", ", missing) + ", so those slots keep their preset.");
+        status.setText(missing.isEmpty() ? "Set up " + slots.size() + " filament(s) from the project." : "Set up " + slots.size() + " filament(s); this printer has no filament profile named " + String.join(", ", missing) + ", so those filaments keep their profile.");
         status.setTextColor(missing.isEmpty() ? ink : error);
     }
 
@@ -924,7 +924,7 @@ public final class SliceActivity extends Activity {
     private void showLayout() {
         boolean custom = placements != null;
         layoutLabel.setVisibility(models.isEmpty() ? View.GONE : View.VISIBLE);
-        layoutLabel.setText(custom ? "Your layout: " + placements.length() + " cop" + (placements.length() == 1 ? "y" : "ies") + " placed in the plate view."
+        layoutLabel.setText(custom ? "Your layout: " + placements.length() + " cop" + (placements.length() == 1 ? "y" : "ies") + " placed in the Layout screen."
             : project() != null && models.size() == 1 ? "Placed as in the project." : "Placed automatically.");
         layoutLabel.setTextColor(custom ? teal : muted);
         autoLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
@@ -1053,7 +1053,7 @@ public final class SliceActivity extends Activity {
             fields[i] = new EditText(this); fields[i].setSingleLine(true); fields[i].setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
             fields[i].setText(range[i] == Math.rint(range[i]) ? String.valueOf((long) range[i]) : String.valueOf(range[i])); body.addView(fields[i]);
         }
-        new AlertDialog.Builder(this).setTitle(spec[1]).setMessage("Prints with filament slot 1 (" + (slots.isEmpty() ? "" : selected(slots.get(0).preset)) + ").").setView(body)
+        new AlertDialog.Builder(this).setTitle(spec[1]).setMessage("Prints with filament 1 (" + (slots.isEmpty() ? "" : selected(slots.get(0).preset)) + ").").setView(body)
             .setNegativeButton("Cancel", null).setPositiveButton("Use", (d, w) -> {
                 double[] chosen = range.clone();
                 try { for (int i = 0; i < 3; i++) if (fields[i] != null) chosen[i] = Double.parseDouble(fields[i].getText().toString().trim()); }
@@ -1157,8 +1157,8 @@ public final class SliceActivity extends Activity {
     private void showSwatch(Slot slot) {
         GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(10)); shape.setStroke(dp(1), slot.colour != null ? muted : teal);
         int number = slots.indexOf(slot) + 1;
-        if (slot.colour != null) { shape.setColor(Color.parseColor(slot.colour)); slot.swatch.setContentDescription("Filament colour " + slot.colour + " for slot " + number); }
-        else { shape.setColor(buttonColor); slot.swatch.setContentDescription("Filament colour from the preset for slot " + number); }
+        if (slot.colour != null) { shape.setColor(Color.parseColor(slot.colour)); slot.swatch.setContentDescription("Filament colour " + slot.colour + " for filament " + number); }
+        else { shape.setColor(buttonColor); slot.swatch.setContentDescription("Filament colour from the filament profile for filament " + number); }
         slot.swatch.setBackground(shape);
     }
 
@@ -1169,7 +1169,7 @@ public final class SliceActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Filament " + (slots.indexOf(slot) + 1) + " colour")
             .setMessage("Used for the preview image, the G-code's filament colours and the flushing volumes between colours.").setView(body)
             .setNegativeButton("Cancel", null)
-            .setNeutralButton("Preset colour", (d, w) -> { slot.colour = null; showSwatch(slot); showModels(); })
+            .setNeutralButton("Filament profile colour", (d, w) -> { slot.colour = null; showSwatch(slot); showModels(); })
             .setPositiveButton("Use", (d, w) -> {
                 String colour = TrayPlan.colour(hex.getText().toString());
                 if (colour == null) { status.setText("Colours are six hex digits, like #D02828."); status.setTextColor(error); return; }
@@ -1208,8 +1208,8 @@ public final class SliceActivity extends Activity {
         List<TrayPlan.Tray> trays = reportedTrays();
         boolean fresh = printer != null && printer.canvasFresh();
         traysNote.setVisibility(View.VISIBLE);
-        traysNote.setText(trays.isEmpty() ? "No CANVAS trays reported. Connect to the printer (Status tab) to fill slots from its trays."
-            : trays.size() + " loaded tray(s) reported" + (fresh ? "." : "; refresh status on the printer tab for the latest."));
+        traysNote.setText(trays.isEmpty() ? "No CANVAS trays reported. Connect to the printer (Monitor tab) to fill filaments from its trays."
+            : trays.size() + " loaded tray(s) reported" + (fresh ? "." : "; refresh status on the Monitor tab for the latest."));
         updateButtons();
     }
 
@@ -1232,7 +1232,7 @@ public final class SliceActivity extends Activity {
         applyTray(slots.get(0), trays.get(0));
         for (int i = 1; i < trays.size() && i < TrayPlan.MAX_TOOLS; i++) addSlot(trays.get(i));
         refreshTrays();
-        status.setText("Filled " + slots.size() + " filament(s) from the CANVAS trays. Check each filament's preset."); status.setTextColor(ink);
+        status.setText("Filled " + slots.size() + " filament(s) from the CANVAS trays. Check each filament's profile."); status.setTextColor(ink);
         showModels(); updateButtons();
     }
 
@@ -1253,7 +1253,7 @@ public final class SliceActivity extends Activity {
         boolean loaded = processSpinner.getAdapter() != null && processSpinner.getAdapter().getCount() > 0; // presets have arrived, not still loading
         String reason = null;
         if (!busy && models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
-        else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a process and a preset for each filament slot to slice.";
+        else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a print profile and a filament profile for each filament to slice.";
         sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
         chooseModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Change model files…");
         boolean primary = models.isEmpty() && calibration == null;
@@ -1267,7 +1267,10 @@ public final class SliceActivity extends Activity {
         boolean canUpload = local || cloud;
         if (uploadPrint != null) uploadPrint.setEnabled(!busy && canUpload && !slicedFiles.isEmpty());
         if (printerHint != null) printerHint.setText(local ? "Uploads over the local connection." : cloud ? "Uploads through the Elegoo cloud."
-            : printer != null && printer.cloudUploadReady() ? "Cloud control is off. Turn it on in Settings to upload." : "Not connected to the printer. Connect in Settings to upload.");
+            : printer != null && printer.cloudUploadReady() ? "Cloud control is off. Turn it on in Settings to upload."
+            : printer != null && !printer.ready() && printer.usingCloud() ? (printer.cloudOnline == 0 ? "The Elegoo cloud reports the printer offline. Upload works once it is back online."
+                : "Waiting for a fresh status from the printer through the Elegoo cloud. Upload works once it arrives.")
+            : "Not connected to the printer. Connect in Settings to upload.");
         if (printerFix != null) printerFix.setVisibility(local || cloud ? View.GONE : View.VISIBLE);
         allSettings.setEnabled(!busy && presetsReady);
         addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);

@@ -73,7 +73,7 @@ public final class Cc2Codec {
     public static JSONObject startRequest(int id, String storage, String filename, boolean leveling, boolean forceLeveling,
                                          boolean timelapse, String plate, JSONArray mappings) throws JSONException {
         storage(storage); filename(filename);
-        if (!"A".equals(plate) && !"B".equals(plate)) throw new IllegalArgumentException("Choose plate A or B");
+        if (!"A".equals(plate) && !"B".equals(plate)) throw new IllegalArgumentException("Choose build plate A or B");
         if (forceLeveling && !leveling) throw new IllegalArgumentException("Forced leveling requires a printer check");
         if (mappings == null || mappings.length() > 8) throw new IllegalArgumentException("Invalid tool mappings");
         boolean[] used = new boolean[8];

@@ -54,7 +54,7 @@ public final class CloudLive implements AutoCloseable {
             String uri = brokerUri(credential.host);
             MqttClient created = factory.create(uri, credential.clientId);
             created.setCallback(new MqttCallback() {
-                public void connectionLost(Throwable cause) { if (!closed) listener.state("Live updates disconnected; using periodic checks.", false); }
+                public void connectionLost(Throwable cause) { if (!closed) listener.state("Live updates not connected; using periodic checks.", false); }
                 public void messageArrived(String topic, MqttMessage message) { handle(topic, new String(message.getPayload(), java.nio.charset.StandardCharsets.UTF_8)); }
                 public void deliveryComplete(IMqttDeliveryToken token) { }
             });

@@ -248,7 +248,7 @@ public final class MainActivity extends Activity {
         trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList);
         trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
-        LinearLayout tuning = card("Printer settings"); tuningCard = tuning;
+        LinearLayout tuning = card("Printer controls"); tuningCard = tuning;
         tuningHint = label(tuning, "", 13, MUTED, false);
         heater = button(tuning, "Set heater temperatures now…", this::temperatureDialog);
         fan = button(tuning, "Fan setting…", this::fanDialog);
@@ -283,7 +283,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams previewLayout = new LinearLayout.LayoutParams(-1, dp(180)); previewLayout.topMargin = dp(10); fileDetails.addView(filePreview, previewLayout); filePreview.setVisibility(View.GONE);
         previewInfo = label(fileDetails, "", 12, MUTED, false);
         LinearLayout uploadRow = row(fileDetails);
-        upload = rowButton(uploadRow, "Upload to printer", () -> {
+        upload = rowButton(uploadRow, "Upload", () -> {
             if (printer == null || printer.selectedName == null) return;
             new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
                 .setMessage("This sends the file only. A file with the same name may be replaced. Refresh Files after upload and choose Print setup to start it.")
@@ -313,12 +313,12 @@ public final class MainActivity extends Activity {
             Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, StatusPresentation.clean(printer.selectedName) + "\n" + printer.selectedReport.text());
             startActivity(Intent.createChooser(send, "Share G-code inspection"));
         }, false);
-        saveCopy = rowButton(keepRow, "Save copy…", this::saveSelected, false);
+        saveCopy = rowButton(keepRow, "Save G-code to phone…", this::saveSelected, false);
         clearCopy = rowButton(keepRow, "Remove", () -> { if (printer != null) printer.clearPhoneCopy(); }, false);
         transferRow = row(files);
         cancelUpload = rowButton(transferRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
         cancelDownload = rowButton(transferRow, "Cancel download", () -> { if (printer != null) printer.cancelDownload(); }, false);
-        label(fileDetails, "Uploads and downloads need the local connection (the printer's HTTP port 80). Downloads become phone copies; Save copy keeps one. The report reads slicer comments only; it does not simulate a print.", 12, MUTED, false);
+        label(fileDetails, "Uploads and downloads need the local connection (the printer's HTTP port 80). Downloads are kept in this app; Save to phone… exports a copy. The report reads slicer comments only; it does not simulate a print.", 12, MUTED, false);
         buildFileBrowser();
         currentSection = pages[2]; buildCamera();
         currentSection = pages[3];
@@ -340,7 +340,7 @@ public final class MainActivity extends Activity {
         renderCloudAccount();
         LinearLayout preferences = card("App preferences");
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
-        CheckBox record = checkbox(preferences, "Record prints for graphs", settings.getBoolean("recordPrints", true));
+        CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
@@ -468,7 +468,7 @@ public final class MainActivity extends Activity {
             for (int t = 0; t < trays.length(); t++) {
                 JSONObject tray = trays.optJSONObject(t); if (tray == null) continue;
                 slots.add(new int[] {unit.optInt("canvas_id"), tray.optInt("tray_id")});
-                names.add("CANVAS " + unit.optInt("canvas_id") + " · Tray " + tray.optInt("tray_id") + " · " + StatusPresentation.clean(tray.optString("filament_type", "empty")) + " " + StatusPresentation.clean(tray.optString("filament_color")));
+                names.add("CANVAS " + unit.optInt("canvas_id") + " · tray " + tray.optInt("tray_id") + " · " + StatusPresentation.clean(tray.optString("filament_type", "empty")) + " " + StatusPresentation.clean(tray.optString("filament_color")));
             }
         }
         if (slots.isEmpty()) { message("No CANVAS trays reported."); return; }
@@ -686,7 +686,7 @@ public final class MainActivity extends Activity {
         // Timelapse videos the printer made for recent prints: download over LAN, then save.
         timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); storage.addView(timelapseList);
         timelapseHint = label(storage, "", 12, MUTED, false);
-        saveTimelapse = button(storage, "Save timelapse…", () -> {
+        saveTimelapse = button(storage, "Save timelapse to phone…", () -> {
             if (printer == null || printer.timelapseFile == null) return;
             startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.timelapseName), SAVE_TIMELAPSE);
         });
@@ -762,7 +762,7 @@ public final class MainActivity extends Activity {
         force.setOnCheckedChangeListener((view, checked) -> { if (checked) leveling.setChecked(true); });
         leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
         subheading(body, "2 · Build plate");
-        Spinner plate = spinner(body, new String[] {"Plate A", "Plate B"});
+        Spinner plate = spinner(body, new String[] {"Build plate A", "Build plate B"});
         subheading(body, "3 · Filament");
         label(body, "Filaments used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 filament", "2 filaments", "3 filaments", "4 filaments", "5 filaments", "6 filaments", "7 filaments", "8 filaments"});
@@ -776,7 +776,7 @@ public final class MainActivity extends Activity {
                     JSONObject slot = slots.optJSONObject(t); if (slot == null || slot.optString("filament_type").isEmpty() || unit.optInt("canvas_id", -1) < 0 || slot.optInt("tray_id", -1) < 0) continue;
                     try { trays.add(new JSONObject().put("canvas_id", unit.getInt("canvas_id")).put("tray_id", slot.getInt("tray_id"))); }
                     catch (Exception error) { continue; }
-                    choices.add("CANVAS " + unit.optInt("canvas_id") + " · Tray " + slot.optInt("tray_id") + " · " + StatusPresentation.clean(slot.optString("filament_type"))); dots.add(TrayPlan.colour(slot.optString("filament_color")));
+                    choices.add("CANVAS " + unit.optInt("canvas_id") + " · tray " + slot.optInt("tray_id") + " · " + StatusPresentation.clean(slot.optString("filament_type"))); dots.add(TrayPlan.colour(slot.optString("filament_color")));
                 }
             }
         }
@@ -822,7 +822,7 @@ public final class MainActivity extends Activity {
                 if (explicit != 0 && explicit != count) { message("Map every used filament, or leave all filaments at Printer / G-code default."); new AlertDialog.Builder(this).setMessage("Map every used filament, or leave all filaments at default.").setPositiveButton("OK", null).show(); return; }
             } catch (Exception error) { message("Could not prepare tool mappings. Refresh trays."); return; }
             setup.dismiss();
-            String text = StatusPresentation.clean(name) + "\nStorage: " + (storage.equals("local") ? "Internal" : "USB") + "\nPlate " + (plate.getSelectedItemPosition() == 0 ? "A" : "B")
+            String text = StatusPresentation.clean(name) + "\nStorage: " + (storage.equals("local") ? "Internal" : "USB") + "\nBuild plate " + (plate.getSelectedItemPosition() == 0 ? "A" : "B")
                 + " · Run printer / bed check " + (leveling.isChecked() ? "on" : "off") + " · Force bed leveling " + (force.isChecked() ? "on" : "off") + "\nTimelapse " + (timelapse.isChecked() ? "on" : "off")
                 + "\n" + count + " filament(s): " + (mapping.length() == 0 ? "printer / G-code default mapping" : "explicit reported tray mappings") + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
             new AlertDialog.Builder(this).setTitle("Start this print?").setMessage(text).setNegativeButton("Cancel", null).setPositiveButton("Start print", (confirm, which) -> {
@@ -875,7 +875,7 @@ public final class MainActivity extends Activity {
         cameraInfo = label(card, "The printer's own video stream on your network (port 8080), or through your home VPN.", 14, MUTED, false);
         cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
         cameraStart = button(card, "Start camera", this::toggleCamera);
-        cameraSnapshot = button(card, "Save snapshot…", () -> {
+        cameraSnapshot = button(card, "Save snapshot to phone…", () -> {
             if (lastFrame == null) return; pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
         });
@@ -975,7 +975,7 @@ public final class MainActivity extends Activity {
         else if (connecting) chip(summary, "Connecting…", AMBER);
         else if (cloudFresh) chip(summary, "Cloud", TEAL);
         else if (cloud && printer.cloudOnline == 0) chip(summary, "Printer offline", MUTED);
-        else chip(summary, cloud ? "Cloud · waiting" : "Offline", MUTED);
+        else chip(summary, cloud ? "Waiting for printer" : "Not connected", MUTED);
         if (connecting && !printer.host().equals(host.getText().toString())) { host.setText(printer.host()); access.setText(""); }
         routePicker.setEnabled(!connecting); authPicker.setEnabled(!connecting); host.setEnabled(!connecting); access.setEnabled(!connecting); pairingPin.setEnabled(!connecting); serial.setEnabled(!connecting); remember.setEnabled(!connecting && !pinProbe());
         access.setVisibility(pinProbe() ? View.GONE : View.VISIBLE); lanHint.setVisibility(access.getVisibility()); pairingPin.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); pinProbeHelp.setVisibility(pinProbe() ? View.VISIBLE : View.GONE); remember.setVisibility(pinProbe() ? View.GONE : View.VISIBLE);
@@ -1041,7 +1041,7 @@ public final class MainActivity extends Activity {
         JSONObject machine = snapshot.optJSONObject("machine_status"), print = snapshot.optJSONObject("print_status");
         boolean printing = machine != null && machine.optInt("status", -1) == 2;
         int percent = machine == null ? 0 : Math.max(0, Math.min(100, machine.optInt("progress", 0)));
-        String stateText = snapshot.length() == 0 ? (printer == null ? "Starting…" : connecting ? "Connecting…" : cloud ? "Waiting for the cloud" : "Not connected") : StatusPresentation.state(snapshot);
+        String stateText = snapshot.length() == 0 ? (printer == null ? "Starting…" : connecting ? "Connecting…" : cloud ? "Waiting for printer" : "Not connected") : StatusPresentation.state(snapshot);
         if (snapshot.length() > 0 && !live) stateText += " · stale";
         state.setText(stateText);
         // The title beside the ring already names the state, so the ring holds only progress (and stays empty while idle).
@@ -1072,12 +1072,12 @@ public final class MainActivity extends Activity {
         switch (block) {
             case NONE: controlSource.setText(ready ? "Commands go over your local network." : "Commands go through the Elegoo cloud. Updated " + CloudStatusActivity.age(System.currentTimeMillis() - printer.cloudCheckedAt) + " ago" + (printer.cloudLiveOn ? " · live" : "") + "."); break;
             case PIN_PROBE: controlSource.setText("Read-only PIN probe: controls are disabled."); break;
-            case STALE: controlSource.setText("Waiting for a fresh status from the printer. Controls unlock when it arrives."); break;
+            case STALE: controlSource.setText("Waiting for printer status. Controls unlock when it arrives."); break;
             case CONNECTING: controlSource.setText("Connecting on your local network…"); break;
             case CLOUD_AGREEMENT: controlSource.setText("You are watching through the Elegoo cloud. Controls stay off until you agree to cloud control."); break;
             case CLOUD_BUSY: controlSource.setText("Sending through the Elegoo cloud…"); break;
-            case CLOUD_OFFLINE: controlSource.setText("The Elegoo cloud reports the printer offline."); break;
-            case CLOUD_WAITING: controlSource.setText(printer.cloudMessage.isEmpty() ? "Waiting for the Elegoo cloud…" : printer.cloudMessage); break;
+            case CLOUD_OFFLINE: controlSource.setText("Printer offline. The Elegoo cloud reports it offline."); break;
+            case CLOUD_WAITING: controlSource.setText(printer.cloudMessage.isEmpty() ? "Waiting for printer through the Elegoo cloud…" : printer.cloudMessage); break;
             default: controlSource.setText("Not connected. Connect on your network, or sign in with Elegoo to control through the cloud."); break;
         }
         boolean fix = block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED;
@@ -1105,7 +1105,7 @@ public final class MainActivity extends Activity {
             int id = unit.optInt("canvas_id", -1);
             Object connected = unit.opt("connected");
             boolean online = connected == null || Boolean.TRUE.equals(connected) || unit.optInt("connected", 0) == 1;
-            if (units.length() > 1 || !online) label(trayList, "CANVAS " + id + (online ? "" : " · not connected"), 12, MUTED, true);
+            if (units.length() > 1 || !online) label(trayList, "CANVAS " + id + (online ? "" : " · Not connected"), 12, MUTED, true);
             for (int t = 0; t < Math.min(list.length(), 16); t++) {
                 JSONObject tray = list.optJSONObject(t); if (tray == null) continue;
                 int trayId = tray.optInt("tray_id", -1);

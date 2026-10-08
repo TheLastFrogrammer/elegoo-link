@@ -130,7 +130,7 @@ public final class CloudStatusActivity extends Activity {
             String serial = device.serial.length() > 4 ? "…" + device.serial.substring(device.serial.length() - 4) : device.serial;
             text.append(device.name.isEmpty() ? "Printer" : StatusPresentation.clean(device.name)).append(" · ").append(StatusPresentation.clean(device.model)).append(" · Serial ").append(serial);
             int online = api.online(device.serial);
-            text.append("\nCloud connection: ").append(online == 1 ? "online" : online == 0 ? "offline" : "not known yet");
+            text.append("\n").append(online == 1 ? "Printer online" : online == 0 ? "Printer offline" : "Printer status not known yet");
             CloudApi.Snapshot snapshot;
             try { snapshot = api.status(device.serial); }
             catch (CloudApi.CloudException error) { text.append("\nStatus unavailable: ").append(error.getMessage()); continue; }

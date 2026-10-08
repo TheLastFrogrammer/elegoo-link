@@ -99,7 +99,7 @@
             </intent-filter>
         </activity>
         <activity android:name=".SliceSettingsActivity" android:exported="false" android:label="Print settings" />
-        <activity android:name=".PlateActivity" android:exported="false" android:label="Plate"
+        <activity android:name=".PlateActivity" android:exported="false" android:label="Layout"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <activity android:name=".GcodeViewerActivity" android:exported="false" android:label="Toolpath" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />

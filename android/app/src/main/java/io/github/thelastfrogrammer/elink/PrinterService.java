@@ -33,7 +33,7 @@ public final class PrinterService extends Service {
     private boolean wanted, foreground, destroyed;
     private long generation;
     private String host = "", code = "", serial = "";
-    public String connection = "Disconnected", feedback = "";
+    public String connection = "Not connected", feedback = "";
     public JSONObject status = new JSONObject(), attributes = new JSONObject(), canvas;
     public JSONObject filePage = new JSONObject(), disk = new JSONObject(), history = new JSONObject();
     public String storage = "local", cameraUrl = "", fileMessage = "Refresh to browse printer files.", historyMessage = "Refresh to load print history.";
@@ -156,7 +156,7 @@ public final class PrinterService extends Service {
             public void timelapseDownloaded(File file, String url) { deliver(() -> {
                 File previous = timelapseFile; if (previous != null && !previous.equals(file)) previous.delete();
                 timelapseFile = file; timelapseName = timelapseRequested == null ? "timelapse.mp4" : timelapseRequested; timelapseRequested = null;
-                feedback = "Timelapse downloaded. Save it with Save timelapse… on the Files tab.";
+                feedback = "Timelapse downloaded. Save it with Save to phone… on the Files tab.";
             }); }
             public void downloaded(File file, String name) { main.post(() -> {
                 if (destroyed || generation != current) { file.delete(); return; }
@@ -234,7 +234,7 @@ public final class PrinterService extends Service {
     public boolean cloudUploadReady() { return !ready() && viaCloud() && cloudApi != null; }
     /** Uploads the files under the given printer names, in order: locally when connected, otherwise through the cloud. */
     public boolean uploadFiles(java.util.List<File> sources, java.util.List<String> names) {
-        if (!canUpload()) { feedback = "Uploading needs the local connection, or the printer watched through the Elegoo cloud (Settings)."; changed(); return false; }
+        if (!canUpload()) { Diagnostics.note(Diagnostics.FILES, "upload not started: local " + (ready() ? (pinProbe ? "read-only PIN probe" : "ready") : "not connected") + ", cloud " + (!usingCloud() ? "not in use" : "online=" + cloudOnline + ", status age " + (cloudCheckedAt == 0 ? "none" : ((System.currentTimeMillis() - cloudCheckedAt) / 1000) + " s") + (cloudApi == null ? ", no account session" : ""))); feedback = "Uploading needs the local connection, or the printer watched through the Elegoo cloud (Settings)."; changed(); return false; }
         for (int i = 0; i < sources.size(); i++) uploadQueue.add(new Object[] {sources.get(i), names.get(i)});
         uploadedCount = 0; pumpUploads(); return true;
     }
@@ -422,14 +422,14 @@ public final class PrinterService extends Service {
     }
     /** A downloaded printer file: kept for the viewer, inspected and shown in the Files workspace. */
     private void received(File file, String name) {
-        importing = true; feedback = "Download received. Inspecting phone copy…"; changed();
+        importing = true; feedback = "Download received. Inspecting kept copy…"; changed();
                 files.execute(() -> {
                     keep(file, name);
                     GcodeInspector.Report report = null;
                     try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
                     GcodeInspector.Report result = report;
                     android.graphics.Bitmap preview = report == null ? null : ThumbnailDecoder.decode(report.thumbnail);
-                    main.post(() -> finishFile(file, name, result, preview, "Downloaded to the phone. Save copy… keeps it in your files; the printer's copy is unchanged."));
+                    main.post(() -> finishFile(file, name, result, preview, "Downloaded and kept in this app. Save to phone… exports a copy; the printer's copy is unchanged."));
                 });
     }
     /** Keeps a copy in the viewer's library; failures only cost the viewer that file. */
@@ -485,7 +485,7 @@ public final class PrinterService extends Service {
         wanted = false; generation++; main.removeCallbacks(reconnect); clearRoute();
         if (session != null) session.close(); session = null; code = "";
         resetData();
-        connection = "Disconnected"; stopMonitoring(); changed();
+        connection = "Not connected"; stopMonitoring(); changed();
         main.removeCallbacks(cloudPoll); main.post(cloudPoll);
     }
     public void select(Uri uri) {
@@ -517,7 +517,7 @@ public final class PrinterService extends Service {
                 if (local.length() == 0) throw new IOException("File is empty");
                 File readyFile = local; String readyName = name; GcodeInspector.Report report = GcodeInspector.inspect(local);
                 android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
-                main.post(() -> finishFile(readyFile, readyName, report, preview, "Phone copy inspected. Uploading does not start a print."));
+                main.post(() -> finishFile(readyFile, readyName, report, preview, "Kept copy inspected. Uploading does not start a print."));
             } catch (Exception error) {
                 if (local != null) local.delete();
                 main.post(() -> { if (!destroyed) { importing = false; feedback = "File import failed. Choose a nonempty .gcode file (up to 512 MiB) with a simple filename."; changed(); } });
@@ -560,17 +560,17 @@ public final class PrinterService extends Service {
         feedback = "Phone cache copy removed. Original documents and printer files are unchanged."; changed();
     }
     public void exportPhoneCopy(Uri uri, String expectedHash) {
-        if (fileBusy() || selectedFile == null || selectedReport == null || !selectedReport.sha256.equals(expectedHash)) { feedback = "Phone copy changed or is unavailable. Choose Save phone copy again."; changed(); return; }
-        File file = selectedFile; exporting = true; feedback = "Saving phone copy…"; changed();
+        if (fileBusy() || selectedFile == null || selectedReport == null || !selectedReport.sha256.equals(expectedHash)) { feedback = "The kept copy changed or is unavailable. Choose Save to phone… again."; changed(); return; }
+        File file = selectedFile; exporting = true; feedback = "Saving to phone…"; changed();
         files.execute(() -> {
             String text;
             try (InputStream input = new FileInputStream(file); OutputStream output = getContentResolver().openOutputStream(uri, "wt")) {
                 if (output == null) throw new IOException("Document unavailable");
                 byte[] buffer = new byte[65536]; int count; long copied = 0;
                 while ((count = input.read(buffer)) != -1) { if (Thread.currentThread().isInterrupted()) throw new InterruptedIOException(); output.write(buffer, 0, count); copied += count; }
-                if (copied != file.length()) throw new IOException("Phone copy changed");
-                text = "Phone copy saved. Printer files are unchanged.";
-            } catch (Exception error) { text = "Phone copy could not be saved. A partial destination document may remain; choose Save again."; }
+                if (copied != file.length()) throw new IOException("Kept copy changed");
+                text = "Saved to phone. Printer files are unchanged.";
+            } catch (Exception error) { text = "Could not save to phone. A partial destination document may remain; choose Save to phone… again."; }
             String done = text; main.post(() -> { if (!destroyed) { exporting = false; feedback = done; changed(); } });
         });
     }
@@ -592,6 +592,16 @@ public final class PrinterService extends Service {
     }
     private boolean cloudAccountPresent() { try { return cloudAccounts != null && cloudAccounts.load() != null; } catch (Exception error) { return false; } }
     /** A successful cloud read in the last minute, with the printer online. */
+    /**
+     * The printer's cloud online state after a poll: the online endpoint's answer (1 online, 0 offline) when it gives one.
+     * That endpoint refuses some accounts' tokens (answer -1, unknown), so an unknown answer keeps what live updates last
+     * showed, or counts a status report from the last two minutes as online.
+     */
+    static int onlineState(int reported, int previous, long reportedAt, long nowMs) {
+        if (reported == 0 || reported == 1) return reported;
+        if (previous == 0 || previous == 1) return previous;
+        return reportedAt > 0 && nowMs - CloudApi.seconds(reportedAt) * 1000 < 120_000 ? 1 : -1;
+    }
     public boolean cloudFresh() { return cloudOnline == 1 && cloudCheckedAt != 0 && System.currentTimeMillis() - cloudCheckedAt < 60_000 && cloudStatus.length() > 0; }
     /** Cloud data is shown only when there is no local session. */
     public boolean usingCloud() { return !wanted && cloudSignedIn && !cloudSerial.isEmpty(); }
@@ -631,12 +641,16 @@ public final class PrinterService extends Service {
                 cloudSignedIn = true; cloudMessage = text;
                 if (found != null) {
                     if (!found.serial.equals(cloudSerial)) cloudAlerts = new PrintAlerts();
-                    cloudName = found.name; cloudModel = found.model; cloudSerial = found.serial; cloudOnline = reportedOnline;
+                    boolean same = found.serial.equals(cloudSerial);
+                    cloudName = found.name; cloudModel = found.model; cloudSerial = found.serial;
+                    int onlineBefore = cloudOnline;
+                    cloudOnline = onlineState(reportedOnline, same ? cloudOnline : -1, reported == null ? 0 : reported.reportedAt, System.currentTimeMillis());
+                    if (cloudOnline != onlineBefore) Diagnostics.note(Diagnostics.FILES, "cloud printer online state " + onlineBefore + " -> " + cloudOnline + " (online endpoint said " + reportedOnline + ")");
                 }
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
                     // Local alerts take precedence while connected locally.
-                    if (!wanted && reportedOnline == 1) { showAlert(cloudAlerts.update(reported.status), cloudName); record(reported.status, "cloud", cloudName); }
+                    if (!wanted && cloudOnline == 1) { showAlert(cloudAlerts.update(reported.status), cloudName); record(reported.status, "cloud", cloudName); }
                 } else if (found == null) { cloudSerial = ""; cloudStatus = new JSONObject(); }
                 changed(); updateNotification(false);
             });
@@ -658,6 +672,8 @@ public final class PrinterService extends Service {
                 try {
                     JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
                     cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis();
+                    // A live report from the printer itself shows it is online.
+                    cloudOnline = 1;
                     if (cloudOnline == 1) { showAlert(cloudAlerts.update(merged), cloudName); record(merged, "cloud", cloudName); }
                     changed(); updateNotification(false);
                 } catch (Exception ignored) { }
@@ -728,7 +744,7 @@ public final class PrinterService extends Service {
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent view = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         PendingIntent disconnect = PendingIntent.getService(this, 1, new Intent(this, PrinterService.class).setAction(DISCONNECT), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        String text = !ready() ? connection.split("\n")[0] : !fresh() ? "Status stale · awaiting printer" : StatusPresentation.state(status);
+        String text = !ready() ? connection.split("\n")[0] : !fresh() ? "Waiting for printer" : StatusPresentation.state(status);
         if (!wanted && cloudFresh()) text = "Cloud · " + StatusPresentation.overview(cloudStatus).split("\n")[0];
         if (ready() && fresh() && !StatusPresentation.faultCodes(status).isEmpty()) text += " · Printer reports a fault";
         if (uploading()) text = feedback;

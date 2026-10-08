@@ -191,8 +191,8 @@ public class SlicerIntegrationTest {
         assertEquals(Arrays.asList("twoplate_project_plate1.gcode", "twoplate_project_plate2.gcode"), names);
         String first = new String(Files.readAllBytes(files.get(0).toPath()), StandardCharsets.UTF_8), second = new String(Files.readAllBytes(files.get(1).toPath()), StandardCharsets.UTF_8);
         assertTrue(first.contains("; total layers count = 15")); assertTrue(second.contains("; total layers count = 22"));
-        assertTrue(((android.widget.TextView) field(activity, "resultText")).getText().toString().contains("Plate 2: twoplate_project_plate2.gcode"));
-        assertEquals("Upload all 2 plates", ((android.widget.Button) field(activity, "uploadPrint")).getText().toString());
+        assertTrue(((android.widget.TextView) field(activity, "resultText")).getText().toString().contains("Project plate 2: twoplate_project_plate2.gcode"));
+        assertEquals("Upload all 2 project plates", ((android.widget.Button) field(activity, "uploadPrint")).getText().toString());
     }
 
     @Test public void placesTurnsScalesAndCopies() throws Exception {
@@ -502,7 +502,7 @@ public class SlicerIntegrationTest {
         input.setText("5");
         input.getOnFocusChangeListener().onFocusChange(input, false);
         Shadows.shadowOf(Looper.getMainLooper()).idle();
-        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the preset:"));
+        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the print profile:"));
         assertTrue(summaryOf(screen), summaryOf(screen).contains("Walls (wall loops)"));
         assertEquals(View.VISIBLE, textViewNamed(rowsOf(screen).get("wall_loops"), "Reset").getVisibility());
     }
@@ -520,7 +520,7 @@ public class SlicerIntegrationTest {
             if (changed) visible++;
         }
         assertEquals(2, visible);
-        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("2 settings changed from the preset:"));
+        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("2 settings changed from the print profile:"));
         assertTrue(summaryOf(screen), summaryOf(screen).contains("Walls (wall loops)") && summaryOf(screen).contains("Infill pattern (sparse infill)"));
     }
 
@@ -534,7 +534,7 @@ public class SlicerIntegrationTest {
         org.json.JSONObject result = new org.json.JSONObject(Shadows.shadowOf(screen).getResultIntent().getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
         assertFalse(result.has("wall_loops"));
         assertEquals("gyroid", result.getString("sparse_infill_pattern"));
-        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the preset:") && summaryOf(screen).contains("Infill pattern (sparse infill)"));
+        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the print profile:") && summaryOf(screen).contains("Infill pattern (sparse infill)"));
     }
 
     /** Stringing is set per filament: in process mode the search says where it is instead of showing nothing. */
@@ -654,12 +654,12 @@ public class SlicerIntegrationTest {
         android.widget.Spinner chooser = (android.widget.Spinner) field(activity, "resultPlate");
         assertEquals(View.VISIBLE, ((View) field(activity, "resultPlateBox")).getVisibility());
         assertEquals(2, chooser.getAdapter().getCount());
-        assertEquals("Send plate 1 to the Files tab", buttonText(activity, "useInFiles"));
+        assertEquals("Send project plate 1 to the Files tab", buttonText(activity, "useInFiles"));
         chooser.setSelection(1); layOut(chooser); Shadows.shadowOf(Looper.getMainLooper()).idle();
         @SuppressWarnings("unchecked") List<File> files = (List<File>) field(activity, "slicedFiles");
         assertEquals(files.get(1), field(activity, "sliced"));
         assertEquals("twoplate_project_plate2.gcode", field(activity, "slicedName"));
-        assertEquals("Send plate 2 to the Files tab", buttonText(activity, "useInFiles"));
+        assertEquals("Send project plate 2 to the Files tab", buttonText(activity, "useInFiles"));
 
         controller.recreate();
         SliceActivity again = controller.get();
@@ -667,7 +667,7 @@ public class SlicerIntegrationTest {
         Shadows.shadowOf(Looper.getMainLooper()).idle();
         assertEquals(1, ((android.widget.Spinner) field(again, "resultPlate")).getSelectedItemPosition());
         assertEquals("twoplate_project_plate2.gcode", field(again, "slicedName"));
-        assertEquals("Send plate 2 to the Files tab", buttonText(again, "useInFiles"));
+        assertEquals("Send project plate 2 to the Files tab", buttonText(again, "useInFiles"));
         // Open Settings from the result keeps the chosen plate: it goes to the Files tab, and the main screen opens on Settings.
         invoke(again, "openSettingsTab");
         android.content.Intent next = Shadows.shadowOf(again).getNextStartedActivity();
@@ -702,7 +702,7 @@ public class SlicerIntegrationTest {
         WorkshopUi.DottedAdapter adapter = (WorkshopUi.DottedAdapter) ((Spinner) field(slot, "tray")).getAdapter();
         assertNull(adapter.colourAt(0)); // "No tray" has no dot
         assertEquals("#D02828", adapter.colourAt(1)); assertEquals("#F0F0F0", adapter.colourAt(2));
-        assertEquals("CANVAS 0 · Tray 0 · PLA · PLA Matte", adapter.getItem(1)); assertEquals("CANVAS 0 · Tray 1 · PLA", adapter.getItem(2));
+        assertEquals("CANVAS 0 · tray 0 · PLA · PLA Matte", adapter.getItem(1)); assertEquals("CANVAS 0 · tray 1 · PLA", adapter.getItem(2));
     }
 
     /** Imports files as the Slice screen's picker does: the real import copies them and inspects them on the worker. */

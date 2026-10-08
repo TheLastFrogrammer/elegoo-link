@@ -27,7 +27,7 @@ public class TrayPlanTest {
         List<TrayPlan.Tray> trays = TrayPlan.trays(canvas);
         assertEquals(3, trays.size());
         assertEquals("#44AA33", trays.get(0).colour);
-        assertEquals("CANVAS 0 · Tray 0 · PLA · PLA Matte #44AA33", trays.get(0).label());
+        assertEquals("CANVAS 0 · tray 0 · PLA · PLA Matte #44AA33", trays.get(0).label());
         assertEquals(2, trays.get(1).trayId); assertEquals("#FFFFFF", trays.get(1).colour);
         assertNull(trays.get(2).colour);
         assertTrue(TrayPlan.trays(null).isEmpty());

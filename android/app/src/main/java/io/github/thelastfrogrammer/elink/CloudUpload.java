@@ -79,6 +79,7 @@ final class CloudUpload {
             headers.put("Content-Type", "application/octet-stream");
             headers.put("Content-MD5", sums[1]);
             int status = uploader.put(target.uploadUrl, headers, file, percent -> { report(percent / 2); return !cancelled; });
+            Diagnostics.note(Diagnostics.FILES, "cloud upload: storage answered HTTP " + status);
             if (status < 200 || status >= 300) failure = "Elegoo's storage refused the file (HTTP " + status + ").";
             access = target.accessUrl;
         } catch (InterruptedIOException stopped) { failure = "Upload cancelled.";
@@ -94,7 +95,7 @@ final class CloudUpload {
     }
 
     private void cancelFetch(Runnable then) {
-        try { commands.send(Cc2Codec.fetchCancelRequest(0, serial), (acknowledged, message) -> scheduler.execute(then)); }
+        try { commands.send(Cc2Codec.fetchCancelRequest(0, serial), (acknowledged, message) -> { Diagnostics.note(Diagnostics.FILES, "cloud upload: clear earlier transfer (1058) " + (acknowledged ? "acknowledged" : "not acknowledged: " + message)); scheduler.execute(then); }); }
         catch (Exception error) { scheduler.execute(then); }
     }
 
@@ -108,12 +109,14 @@ final class CloudUpload {
         commands.watch((who, task, progress, status) -> scheduler.execute(() -> transfer(task, progress, status)));
         restartStall();
         commands.send(request, (acknowledged, message) -> scheduler.execute(() -> {
+            Diagnostics.note(Diagnostics.FILES, "cloud upload: fetch request (1057) " + (acknowledged ? "acknowledged" : "refused: " + message));
             if (!acknowledged) finish(false, "The printer did not accept the transfer: " + message);
         }));
     }
 
     private void transfer(String task, int progress, int status) {
         if (ended || !task.isEmpty() && !task.equals(serial)) return;
+        if (status != 0 || progress == 0 || progress == 100) Diagnostics.note(Diagnostics.FILES, "cloud upload: printer reports " + progress + "% status " + status);
         restartStall();
         if (status == 1) { report(100); finish(true, "Uploaded " + name + " through the Elegoo cloud."); }
         else if (status == 2) finish(false, "The printer cancelled the transfer of " + name + ".");

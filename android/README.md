@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.12.4 (development):** plate view problems no longer rely on colour (striped models with a ring on the bed; labels anchored to their model, pinned with an arrow when it is out of view, tap to go to it); a compact viewer legend with plain names; clearer sign-in, cloud details, cloud camera and print recordings (weekday, time, duration and result; clock-time charts).
+**v0.12.5 (development):** cloud uploads and controls no longer wait forever when Elegoo's online endpoint refuses the account (live updates and recent reports count as online), with a clearer upload hint and step-by-step upload diagnostics; one vocabulary across the app (Local / Cloud / Waiting for printer / Printer offline / Not connected, build plate vs project plate, Layout, Print profile, Printer controls, CANVAS 0 · tray 1).
+
+**v0.12.4:** plate view problems no longer rely on colour (striped models with a ring on the bed; labels anchored to their model, pinned with an arrow when it is out of view, tap to go to it); a compact viewer legend with plain names; clearer sign-in, cloud details, cloud camera and print recordings (weekday, time, duration and result; clock-time charts).
 
 **v0.12.3:** usability pass on the settings editor (everyday-word search, plain names, collapsible groups, changed settings named with Show changed only and per-row Reset), the plate view (problems written on the model, a compact panel with the 3D view taking most of the screen, More… for rarer actions) and the toolpath viewer (First layer, tap-to-hide legend, Live explained, model fitted to the frame).
 

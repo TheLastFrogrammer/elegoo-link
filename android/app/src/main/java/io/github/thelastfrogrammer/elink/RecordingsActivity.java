@@ -99,7 +99,7 @@ public final class RecordingsActivity extends Activity {
         List<PrintRecorder.Recording> recordings = new PrintRecorder(directory(this)).list();
         if (recordings.isEmpty()) {
             label("No recordings yet.", 16, ink, true);
-            label("A print is recorded once the app is watching the printer. Start a print, then come back here. If nothing appears, check that Record prints for graphs is turned on in Settings.", 14, muted, false);
+            label("A print is recorded once the app is watching the printer. Start a print, then come back here. If nothing appears, check that Make print recordings is turned on in Settings.", 14, muted, false);
             return;
         }
         for (PrintRecorder.Recording recording : recordings) {
