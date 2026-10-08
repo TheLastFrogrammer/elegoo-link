@@ -410,10 +410,21 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void showMissing(String filename) {
         title.setText(StatusPresentation.clean(filename.replaceFirst("(?i)\\.gcode$", "")));
         boolean fetching = printer != null && (printer.fileBusy() || printer.feedback != null && printer.feedback.startsWith("Looking for"));
-        status.setText(fetching ? StatusPresentation.clean(printer.feedback) : printer != null && lastAttempt && printer.feedback != null ? StatusPresentation.clean(printer.feedback) : "This phone has no copy of the G-code being printed.");
-        if (missingCard.getVisibility() == View.VISIBLE) return;
-        missingCard.removeAllViews(); missingCard.setVisibility(View.VISIBLE);
-        label(missingCard, "Files uploaded, sliced or downloaded with this app are kept for the viewer. Download this one from the printer (the phone must be on the printer's Wi-Fi), or choose a copy on this phone.", 13, ink, false);
+        // A failed download's message can be long (what to try next); it goes in full under the buttons, not in the short status line.
+        boolean failed = !fetching && printer != null && lastAttempt && printer.feedback != null && !printer.feedback.isEmpty();
+        status.setText(fetching ? StatusPresentation.clean(printer.feedback) : failed ? "The download did not work. Details below." : "This phone has no copy of the G-code being printed.");
+        if (missingCard.getVisibility() != View.VISIBLE) {
+            missingCard.removeAllViews(); missingCard.setVisibility(View.VISIBLE);
+            label(missingCard, "Files uploaded, sliced or downloaded with this app are kept for the viewer. Download this one from the printer (the phone must be on the printer's Wi-Fi), or choose a copy on this phone.", 13, ink, false);
+            buildMissingActions(filename);
+            missingDetail = A11y.polite(label(missingCard, "", 13, ink, false)); missingDetail.setTextIsSelectable(true);
+        }
+        missingDetail.setText(failed ? StatusPresentation.clean(printer.feedback) : "");
+        missingDetail.setVisibility(failed ? View.VISIBLE : View.GONE);
+    }
+
+    private TextView missingDetail;
+    private void buildMissingActions(String filename) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(row);
         Button download = rowButton(row, "Download from printer", () -> {
             if (printer == null) return;

@@ -316,9 +316,9 @@ public final class PrinterService extends Service {
         String serial = cloudSerial, knownHost = host;
         directDownloading = true; feedback = "Looking for the printer on this Wi-Fi…"; changed();
         files.execute(() -> {
-            File local = null; String failure = null;
+            File local = null; String failure = null; String[] reached = {null}; NetworkRoute[] via = {null};
             try {
-                NetworkRoute route = NetworkRoute.local(getApplicationContext());
+                NetworkRoute route = NetworkRoute.local(getApplicationContext()); via[0] = route;
                 String address = null;
                 if (!serial.isEmpty()) {
                     try (Cc2Discovery scanner = route.discovery()) {
@@ -327,6 +327,7 @@ public final class PrinterService extends Service {
                 }
                 if (address == null && !knownHost.isEmpty() && serial.isEmpty()) address = knownHost;
                 if (address == null) throw new IOException("The printer did not answer on this Wi-Fi. Downloads come from the printer itself, so the phone must be on the same network.");
+                reached[0] = address;
                 String token = "";
                 try { CredentialStore credentials = new CredentialStore(this); if (credentials.remembers(address)) token = credentials.load(address); } catch (Exception ignored) { }
                 Diagnostics.note(Diagnostics.FILES, "direct download from " + (serial.isEmpty() ? "the last printer" : "cloud printer found on Wi-Fi") + (token.isEmpty() ? " with the default token" : " with the saved access code"));
@@ -340,9 +341,11 @@ public final class PrinterService extends Service {
             } catch (java.net.ConnectException refused) {
                 // Seen once on a CC2 in cloud mode while printing. Elegoo's own cloud printer page downloads from the same port,
                 // so the cause is not known: the printer's state, the phone's network path, or the firmware.
-                Diagnostics.note(Diagnostics.FILES, "direct download: connection to the printer's HTTP port refused while " + (usingCloud() ? "watching through the cloud" : "not connected") + ", printer state " + StatusPresentation.state(cloudStatus));
+                Diagnostics.note(Diagnostics.FILES, "direct download: connection to the printer's HTTP port refused while " + (usingCloud() ? "watching through the cloud" : "not connected") + ", printer state " + StatusPresentation.state(cloudStatus)
+                    + " · reason: " + PrinterHttp.causes(refused));
+                if (reached[0] != null && via[0] != null) Diagnostics.note(Diagnostics.FILES, "printer ports from this phone: " + PrinterHttp.probePorts(via[0].sockets(), reached[0], new int[] {80, 1883, 9001, 8080, 3030}));
                 failure = "The printer was found on this Wi-Fi, but it refused the connection to its file server (port 80). Try again in a minute; if it keeps failing, "
-                    + "open http://<printer IP>/ in the phone's browser: if that also fails, the printer is not serving files right now. Downloading also works over the local connection (LAN Only).";
+                    + "open http://" + (reached[0] == null ? "<printer IP>" : reached[0]) + "/ in the phone's browser: if that also fails, the printer is not serving files right now. Downloading also works over the local connection (LAN Only).";
             } catch (Exception error) {
                 failure = error instanceof IOException && error.getMessage() != null ? error.getMessage() : PrinterErrors.describe(error, "Download");
             } finally { directHttp = null; }

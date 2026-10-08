@@ -184,4 +184,37 @@ public final class PrinterHttp {
             return new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
         }
     }
+
+    /** The exception and its causes as "Class: message" pairs, for diagnostics (no addresses beyond what the messages hold). */
+    static String causes(Throwable error) {
+        StringBuilder text = new StringBuilder();
+        for (Throwable t = error; t != null && text.length() < 400; t = t.getCause()) {
+            if (text.length() > 0) text.append(" <- ");
+            text.append(t.getClass().getSimpleName()).append(t.getMessage() == null ? "" : ": " + t.getMessage().replaceAll("/?\\d+\\.\\d+\\.\\d+\\.\\d+", "<printer>"));
+            if (t.getCause() == t) break;
+        }
+        return text.toString();
+    }
+
+    /**
+     * Whether each TCP port on the printer accepts a connection: opened and closed at once, nothing sent. Distinguishes a
+     * closed port ("refused") from a phone that cannot reach the printer at all ("unreachable" or "timeout").
+     */
+    static String probePorts(javax.net.SocketFactory sockets, String host, int[] ports) {
+        StringBuilder text = new StringBuilder();
+        for (int port : ports) {
+            String result; long started = System.nanoTime();
+            try (java.net.Socket socket = sockets.createSocket()) {
+                socket.connect(new java.net.InetSocketAddress(host, port), 2000);
+                result = "open";
+            } catch (java.net.SocketTimeoutException timeout) { result = "timeout";
+            } catch (java.net.ConnectException refused) {
+                String message = String.valueOf(refused.getMessage());
+                result = message.contains("ECONNREFUSED") || message.contains("refused") ? "refused" : message.contains("EHOSTUNREACH") || message.contains("ENETUNREACH") ? "unreachable" : "failed";
+            } catch (Exception error) { result = error.getClass().getSimpleName(); }
+            if (text.length() > 0) text.append(", ");
+            text.append(port).append(' ').append(result).append(" (").append((System.nanoTime() - started) / 1_000_000).append(" ms)");
+        }
+        return text.toString();
+    }
 }
