@@ -255,12 +255,35 @@ public class ScreenshotTest {
             java.lang.reflect.Field webField = GcodeViewerActivity.class.getDeclaredField("web"); webField.setAccessible(true);
             View web = (View) webField.get(activity); int[] at = new int[2]; web.getLocationInWindow(at);
             java.nio.file.Files.write(new File(out, "viewer-" + theme + ".json").toPath(), new JSONObject().put("x", at[0]).put("y", at[1]).put("w", web.getWidth()).put("h", web.getHeight())
-                .put("layerStart", path.layerStart(19)).put("layerEnd", path.layerEnd(19)).put("move", move.getInt(activity)).toString().getBytes("UTF-8"));
+                .put("panelTop", panelTop(activity)).put("panelTopAfterHints", steadyPanelTop(context, intent)).put("screen", 2340).put("layerStart", path.layerStart(19)).put("layerEnd", path.layerEnd(19)).put("move", move.getInt(activity)).toString().getBytes("UTF-8"));
         }
     }
 
     private static void setField(Object target, String name, Object value) throws Exception {
         Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
+    }
+
+    /** Where the native panel starts, in px of the 1080x2340 render: everything above it is the 3D page. */
+    private static int panelTop(android.app.Activity activity) {
+        android.view.ViewGroup content = (android.view.ViewGroup) ((android.view.ViewGroup) activity.findViewById(android.R.id.content)).getChildAt(0);
+        return content.getChildAt(content.getChildCount() - 1).getTop();
+    }
+
+    /** The panel's top once the one-time hints are gone (after the third visit), for the steady-state 3D share. */
+    private static int steadyPanelTop(android.content.Context context, android.content.Intent intent) {
+        context.getSharedPreferences("viewer-hints", 0).edit().putInt("shown", 3).commit();
+        GcodeViewerActivity other = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
+        try {
+            Field pathField = GcodeViewerActivity.class.getDeclaredField("path"); pathField.setAccessible(true);
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (pathField.get(other) == null && System.currentTimeMillis() < deadline) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+        } catch (Exception e) { throw new IllegalStateException(e); }
+        View root = other.getWindow().getDecorView();
+        root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 1080, 2340);
+        int top = panelTop(other); other.finish();
+        context.getSharedPreferences("viewer-hints", 0).edit().clear().commit();
+        return top;
     }
 
     private static void snapshot(android.app.Activity activity, File file) throws Exception {
@@ -291,8 +314,11 @@ public class ScreenshotTest {
             Method shown = PlateActivity.class.getDeclaredMethod("showSelected"); shown.setAccessible(true); shown.invoke(activity);
             Method buttons = PlateActivity.class.getDeclaredMethod("setButtons"); buttons.setAccessible(true); buttons.invoke(activity);
             Field status = PlateActivity.class.getDeclaredField("status"); status.setAccessible(true);
-            ((android.widget.TextView) status.get(activity)).setText("3DBenchy - Overlapping another model: drag them apart or tap Arrange\nelegoo_cube - Overlapping another model: drag them apart or tap Arrange");
+            ((android.widget.TextView) status.get(activity)).setText(PlateActivity.summarize(java.util.Arrays.asList(java.util.Arrays.asList("touching another copy"), java.util.Arrays.asList("touching another copy"))));
             snapshot(activity, new File(out, "plate-panel-" + theme + ".png"));
+            Field webField = PlateActivity.class.getDeclaredField("web"); webField.setAccessible(true);
+            View web = (View) webField.get(activity);
+            java.nio.file.Files.write(new File(out, "plate-" + theme + ".json").toPath(), new JSONObject().put("panelTop", panelTop(activity)).put("screen", 2340).toString().getBytes("UTF-8"));
         }
     }
 

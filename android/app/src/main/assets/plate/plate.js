@@ -205,11 +205,11 @@
   // Each issue as a short title and what to do about it, for the labels over the models and the panel's status.
   function advice(issue) {
     switch (issue) {
-      case "off the bed": return ["Off the bed", "drag it back or tap Arrange"];
+      case "off the bed": return ["Off the bed", "drag it back or tap Arrange all"];
       case "in the excluded area": return ["In a no-print zone (red)", "drag it clear"];
-      case "on the prime tower": return ["On the prime tower", "drag it clear or tap Arrange"];
-      case "taller than the printer": return ["Too tall (max " + Math.round(scene.height) + " mm)", "scale it down or lay it on a face"];
-      case "touching another copy": return ["Overlapping another model", "drag them apart or tap Arrange"];
+      case "on the prime tower": return ["On the prime tower", "drag it clear or tap Arrange all"];
+      case "taller than the printer": return ["Too tall (max " + Math.round(scene.height) + " mm)", "scale it down, or More… > Lay flat"];
+      case "touching another copy": return ["Overlapping another model", "drag them apart or tap Arrange all"];
       default: return [issue, ""];
     }
   }
@@ -250,7 +250,7 @@
     if (n >= 3) return;
     try { localStorage.setItem("plateHints", String(n + 1)); } catch (e) { }
     hint.style.whiteSpace = "pre-line";
-    hint.textContent = "Drag a model to move it\nDrag empty space to turn the view \u00B7 two fingers to zoom \u00B7 double-tap empty space to reset it";
+    hint.textContent = "Drag a model to move it\nDrag empty space to turn the view \u00B7 two fingers to move and zoom \u00B7 double-tap to reset";
     hint.style.display = "block";
   }
   function hideHint() { hint.style.display = "none"; }

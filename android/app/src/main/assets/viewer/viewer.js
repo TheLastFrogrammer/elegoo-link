@@ -244,12 +244,21 @@
   function redraw() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
 
   // ---------------------------------------------------------------- camera control
+  // Frames the whole model: the distance at which all eight corners of its bounds sit inside the view for the
+  // current angle and screen shape (with a margin), so a long model is not cut off at the edge.
   function fit() {
     const box = data.box || [0, 0, 0, 256, 256, 10];
-    const size = Math.max(box[3] - box[0], box[4] - box[1], (box[5] - box[2]) * 1.4, 20);
     camera.target = [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
-    camera.distance = size * 0.62 / Math.tan(camera.fov * Math.PI / 360);
-    camera.yaw = -55; camera.pitch = 32;
+    camera.yaw = -55; camera.pitch = 32; camera.distance = 100;
+    const m = lookAt(eye(), camera.target, [0, 0, 1]);
+    const f = 1 / Math.tan(camera.fov * Math.PI / 360), aspect = Math.max(0.2, canvas.clientWidth / Math.max(1, canvas.clientHeight)), k = 0.9;
+    let d = 20;
+    for (let i = 0; i < 8; i++) {
+      const o = [(i & 1 ? box[3] : box[0]) - camera.target[0], (i & 2 ? box[4] : box[1]) - camera.target[1], (i & 4 ? box[5] : box[2]) - camera.target[2]];
+      const cx = o[0] * m[0] + o[1] * m[4] + o[2] * m[8], cy = o[0] * m[1] + o[1] * m[5] + o[2] * m[9], cz = o[0] * m[2] + o[1] * m[6] + o[2] * m[10];
+      d = Math.max(d, Math.abs(cx) * f / (aspect * k) + cz, Math.abs(cy) * f / k + cz);
+    }
+    camera.distance = d;
     redraw();
   }
   const pointers = new Map();

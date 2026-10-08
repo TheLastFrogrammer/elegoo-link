@@ -435,6 +435,127 @@ public class SlicerIntegrationTest {
         assertEquals(PROCESS, ((Spinner) field(again, "processSpinner")).getSelectedItem());
     }
 
+    // ------------------------------------------------------------ the settings screen, driven as a user drives it
+    private static NativeSlicer.Selection processSelection(String... keyValues) {
+        NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+        for (int i = 0; i < keyValues.length; i += 2) selection.overrides.put(keyValues[i], keyValues[i + 1]);
+        return selection;
+    }
+    /** The screen for a selection, process settings (slot -1) or one filament slot, once its rows are built. */
+    private static SliceSettingsActivity openSettings(NativeSlicer.Selection selection, int slot) throws Exception {
+        android.content.Intent intent = new android.content.Intent(context(), SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson());
+        if (slot >= 0) intent.putExtra(SliceSettingsActivity.EXTRA_FILAMENT_SLOT, slot);
+        SliceSettingsActivity screen = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
+        waitFor(() -> field(screen, "definitions") != null);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        return screen;
+    }
+    private static void typeInSearch(SliceSettingsActivity screen, String text) throws Exception {
+        ((android.widget.EditText) field(screen, "search")).setText(text); Shadows.shadowOf(Looper.getMainLooper()).idle();
+    }
+    @SuppressWarnings("unchecked") private static Map<String, View> rowsOf(SliceSettingsActivity screen) throws Exception { return (Map<String, View>) field(screen, "rows"); }
+    private static String summaryOf(SliceSettingsActivity screen) throws Exception { return ((android.widget.TextView) field(screen, "summary")).getText().toString(); }
+    private static String hintOf(SliceSettingsActivity screen) throws Exception { return ((android.widget.TextView) field(screen, "searchHint")).getText().toString(); }
+    /** The first view of this type under root, depth first, or null. */
+    private static <T extends View> T descendant(View root, Class<T> type) {
+        if (type.isInstance(root)) return type.cast(root);
+        if (!(root instanceof android.view.ViewGroup)) return null;
+        android.view.ViewGroup group = (android.view.ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) { T found = descendant(group.getChildAt(i), type); if (found != null) return found; }
+        return null;
+    }
+    /** The TextView under root with this text, or null. */
+    private static android.widget.TextView textViewNamed(View root, String text) {
+        if (root instanceof android.widget.TextView && text.equals(((android.widget.TextView) root).getText().toString())) return (android.widget.TextView) root;
+        if (!(root instanceof android.view.ViewGroup)) return null;
+        android.view.ViewGroup group = (android.view.ViewGroup) root;
+        for (int i = 0; i < group.getChildCount(); i++) { android.widget.TextView found = textViewNamed(group.getChildAt(i), text); if (found != null) return found; }
+        return null;
+    }
+
+    /** Opening the screen: the first group and the groups with changes are open, the others are closed. */
+    @Test public void settingsGroupsOpenByDefault() throws Exception {
+        SliceSettingsActivity screen = openSettings(processSelection("wall_loops", "4"), -1);
+        @SuppressWarnings("unchecked") Set<String> open = (Set<String>) field(screen, "expanded");
+        assertEquals(new HashSet<>(Arrays.asList("Quality", "Walls and shells")), open);
+        Map<String, View> rows = rowsOf(screen);
+        assertEquals(View.GONE, ((View) rows.get("sparse_infill_density").getParent()).getVisibility());
+        assertEquals(View.VISIBLE, ((View) rows.get("wall_loops").getParent()).getVisibility());
+    }
+
+    /** Typing "walls" finds the wall setting and opens its closed group; an unrelated row is hidden. */
+    @Test public void searchingWallsFindsWallLoopsAndOpensItsGroup() throws Exception {
+        SliceSettingsActivity screen = openSettings(processSelection(), -1);
+        Map<String, View> rows = rowsOf(screen);
+        assertEquals(View.GONE, ((View) rows.get("wall_loops").getParent()).getVisibility());
+        typeInSearch(screen, "walls");
+        assertEquals(View.VISIBLE, rows.get("wall_loops").getVisibility());
+        assertEquals(View.VISIBLE, ((View) rows.get("wall_loops").getParent()).getVisibility());
+        assertEquals(View.GONE, rows.get("seam_position").getVisibility());
+        assertEquals(View.GONE, rows.get("layer_height").getVisibility());
+    }
+
+    /** A change is named in the summary, and its row shows the Reset control. */
+    @Test public void changingASettingNamesItInTheSummary() throws Exception {
+        SliceSettingsActivity screen = openSettings(processSelection(), -1);
+        android.widget.EditText input = descendant(rowsOf(screen).get("wall_loops"), android.widget.EditText.class);
+        input.setText("5");
+        input.getOnFocusChangeListener().onFocusChange(input, false);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the preset:"));
+        assertTrue(summaryOf(screen), summaryOf(screen).contains("Walls (wall loops)"));
+        assertEquals(View.VISIBLE, textViewNamed(rowsOf(screen).get("wall_loops"), "Reset").getVisibility());
+    }
+
+    /** Show changed only leaves exactly the changed rows visible, whatever their group. */
+    @Test public void showChangedOnlyKeepsOnlyChangedRows() throws Exception {
+        SliceSettingsActivity screen = openSettings(processSelection("wall_loops", "4", "sparse_infill_pattern", "gyroid"), -1);
+        @SuppressWarnings("unchecked") Map<String, String> overrides = (Map<String, String>) field(screen, "overrides");
+        ((android.widget.Switch) field(screen, "changedOnly")).setChecked(true);
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        int visible = 0;
+        for (Map.Entry<String, View> row : rowsOf(screen).entrySet()) {
+            boolean changed = overrides.containsKey(row.getKey());
+            assertEquals(row.getKey(), changed ? View.VISIBLE : View.GONE, row.getValue().getVisibility());
+            if (changed) visible++;
+        }
+        assertEquals(2, visible);
+        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("2 settings changed from the preset:"));
+        assertTrue(summaryOf(screen), summaryOf(screen).contains("Walls (wall loops)") && summaryOf(screen).contains("Infill pattern (sparse infill)"));
+    }
+
+    /** Reset on a changed row takes that one setting out of the result; the others stay. */
+    @Test public void resetRemovesOnlyThatSettingFromTheResult() throws Exception {
+        SliceSettingsActivity screen = openSettings(processSelection("wall_loops", "4", "sparse_infill_pattern", "gyroid"), -1);
+        android.widget.TextView reset = textViewNamed(rowsOf(screen).get("wall_loops"), "Reset");
+        assertEquals(View.VISIBLE, reset.getVisibility());
+        reset.performClick();
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.json.JSONObject result = new org.json.JSONObject(Shadows.shadowOf(screen).getResultIntent().getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
+        assertFalse(result.has("wall_loops"));
+        assertEquals("gyroid", result.getString("sparse_infill_pattern"));
+        assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the preset:") && summaryOf(screen).contains("Infill pattern (sparse infill)"));
+    }
+
+    /** Stringing is set per filament: in process mode the search says where it is instead of showing nothing. */
+    @Test public void stringingInProcessModePointsToFilamentSettings() throws Exception {
+        SliceSettingsActivity screen = openSettings(processSelection(), -1);
+        typeInSearch(screen, "stringing");
+        assertEquals("That is set per filament. Open a filament's Settings… on the Slice screen.", hintOf(screen));
+        assertEquals(View.GONE, rowsOf(screen).get("seam_position").getVisibility());
+    }
+
+    /** In filament mode the same search finds the retraction settings, and each mode's hint names searches that work there. */
+    @Test public void stringingInFilamentModeFindsRetraction() throws Exception {
+        SliceSettingsActivity filament = openSettings(processSelection(), 0);
+        assertEquals("Try “stringing”, “first layer” or “adhesion”. Tap ? on a setting for what it does.", hintOf(filament));
+        typeInSearch(filament, "stringing");
+        assertEquals(View.VISIBLE, rowsOf(filament).get("filament_retraction_length").getVisibility());
+        assertEquals(View.VISIBLE, rowsOf(filament).get("filament_z_hop").getVisibility());
+        SliceSettingsActivity process = openSettings(processSelection(), -1);
+        assertEquals("Try “walls”, “adhesion” or “strong”. Tap ? on a setting for what it does.", hintOf(process));
+    }
+
     /** With -Dscreenshots=<dir>: the settings screen in process, filament and object mode, light and dark. */
     @Test public void renderSettingsScreen() throws Exception {
         String out = System.getProperty("screenshots", "");

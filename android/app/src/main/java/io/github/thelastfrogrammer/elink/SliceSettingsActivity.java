@@ -113,6 +113,15 @@ public final class SliceSettingsActivity extends Activity {
     private EditText search;
     private Switch changedOnly;
     private String objectLabel = "this model";
+    /** One settings group on screen: its card, the header that opens it, the rows, and the keys in it. */
+    private static final class Section {
+        final String name; final LinearLayout card, body; final TextView header; final List<String> keys = new ArrayList<>();
+        Section(String name, LinearLayout card, LinearLayout body, TextView header) { this.name = name; this.card = card; this.body = body; this.header = header; }
+    }
+    private final List<Section> sections = new ArrayList<>();
+    /** Groups the user has opened; null until the first list is built (then the defaults apply). Kept across recreation. */
+    private Set<String> expanded;
+    private static final String EXPANDED = "expandedGroups";
     private JSONObject selection, definitions;
     private List<File> models = new ArrayList<>();
     private final Map<String, String> overrides = new LinkedHashMap<>();
@@ -130,6 +139,7 @@ public final class SliceSettingsActivity extends Activity {
                 "Only " + objectLabel + " and its copies use these changes; the rest of the plate keeps the print settings.")
             : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament slot on top of its preset. \u201cPrinter's value\u201d means the printer preset decides.")
             : ui.page("Print settings", "Changes apply to this slice on top of the process preset. The preset's value is shown under each setting.");
+        if (saved != null && saved.getStringArrayList(EXPANDED) != null) expanded = new HashSet<>(saved.getStringArrayList(EXPANDED));
         try {
             selection = new JSONObject(getIntent().getStringExtra(EXTRA_SELECTION));
             JSONObject start = saved != null && saved.getString(EXTRA_OVERRIDES) != null ? new JSONObject(saved.getString(EXTRA_OVERRIDES))
@@ -167,6 +177,7 @@ public final class SliceSettingsActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
         state.putString(EXTRA_OVERRIDES, new JSONObject(overrides).toString());
+        if (expanded != null) state.putStringArrayList(EXPANDED, new ArrayList<>(expanded));
     }
 
     // The result is kept current, so leaving with Back (or a back gesture) keeps the changes too.
@@ -216,18 +227,40 @@ public final class SliceSettingsActivity extends Activity {
     }
 
     private void build() {
-        list.removeAllViews(); rows.clear();
+        list.removeAllViews(); rows.clear(); sections.clear();
         for (String[] group : groups()) {
-            LinearLayout card = null;
+            Section section = null;
             for (int i = 1; i < group.length; i++) {
                 JSONObject definition = definitions.optJSONObject(group[i]);
                 if (definition == null || !supported(definition.optString("type"))) continue;
                 if (LABELS.containsKey(group[i])) try { definition.put("label", LABELS.get(group[i])); } catch (JSONException ignored) { }
-                if (card == null) card = ui.card(list, group[0]);
-                rows.put(group[i], row(card, group[0], group[i], definition));
+                if (section == null) section = section(group[0]);
+                rows.put(group[i], row(section.body, group[0], group[i], definition));
+                section.keys.add(group[i]);
             }
         }
+        if (expanded == null) { // first list: the first group, and any group with changed settings
+            expanded = new HashSet<>();
+            for (int i = 0; i < sections.size(); i++) if (i == 0 || changedIn(sections.get(i)) > 0) expanded.add(sections.get(i).name);
+        }
         updateSummary(); filter();
+    }
+
+    /** A settings group: a header that opens or closes it, and the body holding its rows. */
+    private Section section(String name) {
+        LinearLayout card = ui.card(list, null);
+        TextView header = ui.label(card, "", 17, ui.ink, true);
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); card.addView(body);
+        Section section = new Section(name, card, body, header);
+        header.setOnClickListener(v -> { if (!expanded.remove(name)) expanded.add(name); filter(); });
+        sections.add(section);
+        return section;
+    }
+
+    private int changedIn(Section section) {
+        int changed = 0;
+        for (String key : section.keys) if (overrides.containsKey(key)) changed++;
+        return changed;
     }
 
     /** Object mode: only settings an object can have, measured against the plate's value rather than the preset. */
@@ -305,7 +338,9 @@ public final class SliceSettingsActivity extends Activity {
         };
         switch (type) {
             case "bool": {
-                Switch toggle = new Switch(this); toggle.setChecked("1".equals(value)); toggle.setText(""); row.addView(toggle, 1);
+                Switch toggle = new Switch(this); toggle.setChecked("1".equals(value)); toggle.setText("");
+                LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-2, -2); toggleLayout.leftMargin = ui.dp(8);
+                header.addView(toggle, 1, toggleLayout); // on the title line, before the ? badge
                 toggle.setOnCheckedChangeListener((v, checked) -> { set(key, checked ? "1" : "0", preset); showNote.run(); });
                 break;
             }
@@ -435,21 +470,27 @@ public final class SliceSettingsActivity extends Activity {
         String query = search.getText().toString().trim().toLowerCase(Locale.ROOT);
         boolean onlyChanged = changedOnly != null && changedOnly.isChecked();
         Set<String> meant = termKeys(query);
+        boolean searching = !query.isEmpty() || onlyChanged;
         int shown = 0;
-        for (Map.Entry<String, View> entry : rows.entrySet()) {
-            View row = entry.getValue();
-            boolean matches = query.isEmpty() || String.valueOf(row.getTag()).contains(query) || meant.contains(entry.getKey());
-            boolean visible = matches && (!onlyChanged || overrides.containsKey(entry.getKey()));
-            row.setVisibility(visible ? View.VISIBLE : View.GONE);
-            if (visible) shown++;
-        }
-        for (int i = 0; i < list.getChildCount(); i++) {
-            LinearLayout card = (LinearLayout) list.getChildAt(i); boolean any = false;
-            for (int j = 1; j < card.getChildCount(); j++) any |= card.getChildAt(j).getVisibility() == View.VISIBLE;
-            card.setVisibility(any ? View.VISIBLE : View.GONE);
+        for (Section section : sections) {
+            int matches = 0;
+            for (String key : section.keys) {
+                View row = rows.get(key);
+                boolean match = (query.isEmpty() || String.valueOf(row.getTag()).contains(query) || meant.contains(key)) && (!onlyChanged || overrides.containsKey(key));
+                row.setVisibility(match ? View.VISIBLE : View.GONE);
+                if (match) matches++;
+            }
+            shown += matches;
+            // While searching, a group with matches opens by itself and one without is left out; otherwise the user's choice holds.
+            boolean open = searching ? matches > 0 : expanded.contains(section.name);
+            section.card.setVisibility(searching && matches == 0 ? View.GONE : View.VISIBLE);
+            section.body.setVisibility(open ? View.VISIBLE : View.GONE);
+            int changed = changedIn(section);
+            section.header.setText((open ? "▾ " : "▸ ") + section.name + (changed > 0 ? "   " + changed + " changed" : ""));
         }
         if (searchHint == null) return;
-        String defaultHint = "Try “walls”, “stringing”, “adhesion” or “strong”. Tap ? on a setting for what it does.";
+        String defaultHint = slot >= 0 ? "Try “stringing”, “first layer” or “adhesion”. Tap ? on a setting for what it does."
+            : "Try “walls”, “adhesion” or “strong”. Tap ? on a setting for what it does.";
         if (shown > 0 || (query.isEmpty() && !onlyChanged)) searchHint.setText(defaultHint);
         else if (query.isEmpty()) searchHint.setText("No settings are changed yet.");
         else if (onlyChanged) searchHint.setText("No changed setting matches “" + query + "”. Turn off Show changed only to search every setting.");

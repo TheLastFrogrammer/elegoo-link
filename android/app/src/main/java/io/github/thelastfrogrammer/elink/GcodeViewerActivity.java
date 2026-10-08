@@ -52,8 +52,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private WebView web;
     private TextView title, status, layerLabel, moveLabel;
     private SeekBar layerBar, moveBar;
-    private Button play, features, travel, follow, firstLayer;
-    private LinearLayout legend, missingCard;
+    private Button play, follow, firstLayer, more;
+    private Flow legend;
+    private LinearLayout missingCard;
     private GcodeToolpath path;
     private byte[] segments, travels, meta;
     private String loadedName, loadingName;
@@ -121,17 +122,23 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         back.setContentDescription("Back"); back.setOnClickListener(v -> finish());
         header.addView(back);
         title = new TextView(this); title.setText(followMode ? "Live toolpath" : "Toolpath"); title.setTextSize(16); title.setTextColor(ink); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        LinearLayout titles = new LinearLayout(this); titles.setOrientation(LinearLayout.VERTICAL); titles.addView(title);
+        header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
-        status = label(panel, "Reading G-code…", 13, muted, false);
-        HorizontalScrollView legendScroll = new HorizontalScrollView(this); legendScroll.setHorizontalScrollBarEnabled(false);
-        legend = new LinearLayout(this); legend.setOrientation(LinearLayout.HORIZONTAL); legendScroll.addView(legend); panel.addView(legendScroll);
-        label(panel, "Colours show what each line is. Tap one to hide it, hold to see only that.", 11, muted, false);
+        status = label(titles, "Reading G-code…", 12, muted, false); status.setPadding(0, 0, 0, 0);
+        legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
+        int shown = hintsShown();
+        if (shown < 3 || followMode) {
+            label(panel, followMode ? "Live view of the file, up to the nozzle. Grey = still to print on this layer."
+                : "Drag to turn the view · two fingers to move and zoom · double-tap to reset", 11, muted, false);
+        }
         missingCard = new LinearLayout(this); missingCard.setOrientation(LinearLayout.VERTICAL); missingCard.setVisibility(View.GONE); panel.addView(missingCard);
         layerLabel = label(panel, "Layer", 13, ink, false);
         layerBar = seekBar(panel);
         moveLabel = label(panel, "Moves", 13, ink, false);
         moveBar = seekBar(panel);
+        moveLabel.setVisibility(View.GONE); moveBar.setVisibility(View.GONE);
         SeekBar.OnSeekBarChangeListener scrub = new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
                 if (!fromUser || path == null) return;
@@ -146,13 +153,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); panel.addView(row);
         play = rowButton(row, "Play", () -> { stopFollowing(); setPlaying(!playing); });
         firstLayer = rowButton(row, "First layer", this::showFirstLayer);
-        features = rowButton(row, "Show / hide…", this::featureDialog);
-        LinearLayout row2 = new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL); panel.addView(row2);
-        travel = rowButton(row2, "Travel moves: off", () -> { showTravel = !showTravel; travel.setText(showTravel ? "Travel moves: on" : "Travel moves: off"); pushView(); });
-        if (followMode) follow = rowButton(row2, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); changed(); });
-        rowButton(row2, "What am I seeing?", this::helpDialog);
-        label(panel, followMode ? "Live: the file's toolpath up to where the printer says the nozzle is. Grey = still to print on this layer."
-            : "Drag to rotate · two fingers to move and zoom · double-tap to fit", 12, muted, false);
+        if (followMode) follow = rowButton(row, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); changed(); });
+        more = rowButton(row, "More…", this::moreDialog);
         setContentView(root);
         setControlsEnabled(false);
         setupWeb();
@@ -281,19 +283,64 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         status.setText("First layer, from above. It should be solid, even lines touching edge to edge, with no gaps. Drag the Layer bar to go up.");
     }
 
+    private int hintsShown() {
+        android.content.SharedPreferences prefs = getSharedPreferences("viewer-hints", MODE_PRIVATE);
+        int n = prefs.getInt("shown", 0); prefs.edit().putInt("shown", n + 1).apply(); return n;
+    }
+
+    /** The less used controls, kept out of the panel so the 3D view stays large. */
+    private void moreDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(4), dp(20), dp(8));
+        AlertDialog[] dialog = new AlertDialog[1];
+        String[] names = {"Show / hide line types…", showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)",
+            moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…", "What am I seeing?"};
+        Runnable[] actions = {this::featureDialog, () -> { showTravel = !showTravel; pushView(); },
+            () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); }, this::helpDialog};
+        for (int i = 0; i < names.length; i++) {
+            Runnable action = actions[i];
+            Button b = rowButton(body, names[i], () -> { dialog[0].dismiss(); action.run(); });
+            ((LinearLayout.LayoutParams) b.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) b.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) b.getLayoutParams()).leftMargin = 0;
+            b.setEnabled(path != null);
+        }
+        dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(body).setNegativeButton("Close", null).show();
+    }
+
+    /** Wraps its children onto as many lines as the width needs. */
+    private static final class Flow extends android.view.ViewGroup {
+        Flow(android.content.Context context) { super(context); }
+        @Override protected void onMeasure(int widthSpec, int heightSpec) {
+            int width = MeasureSpec.getSize(widthSpec), x = 0, y = 0, line = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i); child.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.UNSPECIFIED);
+                if (x > 0 && x + child.getMeasuredWidth() > width) { x = 0; y += line; line = 0; }
+                x += child.getMeasuredWidth(); line = Math.max(line, child.getMeasuredHeight());
+            }
+            setMeasuredDimension(width, y + line);
+        }
+        @Override protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            int width = r - l, x = 0, y = 0, line = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (x > 0 && x + child.getMeasuredWidth() > width) { x = 0; y += line; line = 0; }
+                child.layout(x, y, x + child.getMeasuredWidth(), y + child.getMeasuredHeight());
+                x += child.getMeasuredWidth(); line = Math.max(line, child.getMeasuredHeight());
+            }
+        }
+    }
+
     private void helpDialog() {
         StringBuilder text = new StringBuilder();
         text.append("Each coloured line is a stretch of plastic the printer lays down; the colour says what it is (outer wall, infill, support…). The coloured chips list the types in this file.\n\n")
             .append("Pale grey: layers below the one you are looking at, and, in the current layer, what is still to print.\n")
             .append("Blue lines (Travel moves): the nozzle moving without printing.\n")
             .append("Teal dot: the nozzle.\n\n")
-            .append("Use “Show / hide…” or tap a colour chip to hide a type. To find the supports or prime tower, hold their chip to see only that.");
+            .append("Gestures: drag to turn the view, two fingers to move and zoom, double-tap to reset.\n\nTap a colour chip to hide that type; hold it to see only that type (the quickest way to find supports or the prime tower). More… > Show / hide line types does the same from a list.");
         if (followMode) text.append("\n\nLive: the phone shows this G-code file, not a camera. The printer reports its current layer and nozzle position, and the viewer shows the file printed up to there. Scrubbing the bars leaves live mode; “Back to live” returns.");
         new AlertDialog.Builder(this).setTitle("What am I seeing?").setMessage(text).setPositiveButton("Got it", null).show();
     }
 
     private void setControlsEnabled(boolean on) {
-        for (View view : new View[] {layerBar, moveBar, play, firstLayer, features, travel}) if (view != null) view.setEnabled(on);
+        for (View view : new View[] {layerBar, moveBar, play, firstLayer, more}) if (view != null) view.setEnabled(on);
         if (follow != null) follow.setEnabled(on && !following);
     }
 
@@ -404,15 +451,15 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         for (int i = 0; i < lengths.length; i++) {
             if (lengths[i] <= 0) continue;
             final int feature = i;
-            LinearLayout chip = new LinearLayout(this); chip.setOrientation(LinearLayout.HORIZONTAL); chip.setPadding(0, dp(10), dp(14), dp(10));
-            chip.setMinimumHeight(dp(48)); chip.setContentDescription(GcodeToolpath.FEATURES[i] + ((hidden >> i & 1) == 1 ? ", hidden. Tap to show." : ". Tap to hide, hold to show only this."));
+            LinearLayout chip = new LinearLayout(this); chip.setOrientation(LinearLayout.HORIZONTAL); chip.setPadding(dp(2), dp(4), dp(10), dp(4));
+            chip.setMinimumHeight(dp(32)); chip.setContentDescription(GcodeToolpath.FEATURES[i] + ((hidden >> i & 1) == 1 ? ", hidden. Tap to show." : ". Tap to hide, hold to show only this."));
             chip.setOnClickListener(v -> { hidden ^= 1 << feature; buildLegend(); pushView(); });
             chip.setOnLongClickListener(v -> { hidden = soloMask(feature); buildLegend(); pushView(); return true; });
             chip.setGravity(android.view.Gravity.CENTER_VERTICAL);
             View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setColor(Color.parseColor(PALETTE[i])); dot.setCornerRadius(dp(3)); swatch.setBackground(dot);
-            chip.addView(swatch, new LinearLayout.LayoutParams(dp(12), dp(12)));
-            TextView name = new TextView(this); name.setText(GcodeToolpath.FEATURES[i]); name.setTextSize(13); name.setTextColor((hidden >> i & 1) == 1 ? muted : ink);
-            if ((hidden >> i & 1) == 1) name.setPaintFlags(name.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG); name.setPadding(dp(6), 0, 0, 0);
+            chip.addView(swatch, new LinearLayout.LayoutParams(dp(10), dp(10)));
+            TextView name = new TextView(this); name.setText(GcodeToolpath.FEATURES[i]); name.setTextSize(12); name.setTextColor((hidden >> i & 1) == 1 ? muted : ink);
+            if ((hidden >> i & 1) == 1) name.setPaintFlags(name.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG); name.setPadding(dp(5), 0, 0, 0);
             chip.addView(name);
             legend.addView(chip);
         }

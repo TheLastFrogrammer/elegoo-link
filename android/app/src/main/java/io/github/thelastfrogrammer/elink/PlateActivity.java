@@ -34,8 +34,8 @@ public final class PlateActivity extends Activity {
     private WorkshopUi ui;
     private WebView web;
     private TextView status, selectedLabel;
-    private EditText scale;
-    private Button rotateLeft, rotateRight, rotate45, rotate90, copy, remove, arrange, done, layFace, upright, modelSettings;
+    private double scalePercent = 100;
+    private Button rotateLeft, rotateRight, rotate45, more, arrange, done;
     private boolean laying;
     private int problemCount;
     private final List<File> models = new ArrayList<>();
@@ -64,40 +64,21 @@ public final class PlateActivity extends Activity {
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(12));
         panel.setBackgroundColor(ui.surface); panel.setElevation(ui.dp(8)); root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
         status = ui.label(panel, "Placing the models…", 13, ui.muted, false);
-        selectedLabel = ui.label(panel, "Tap a model to select it. The buttons below work on the selected model.", 14, ui.ink, true);
+        selectedLabel = ui.label(panel, "Tap a model to select it.", 14, ui.ink, true);
+        selectedLabel.setSingleLine(true); selectedLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        status.setPadding(0, ui.dp(2), 0, ui.dp(2)); selectedLabel.setPadding(0, ui.dp(2), 0, ui.dp(2));
         LinearLayout turn = ui.row(panel);
         rotateLeft = ui.rowButton(turn, "Left 15°", () -> js("plate.rotate(15)"), false);
         rotateRight = ui.rowButton(turn, "Right 15°", () -> js("plate.rotate(-15)"), false);
         rotate45 = ui.rowButton(turn, "Left 45°", () -> js("plate.rotate(45)"), false);
-        rotate90 = ui.rowButton(turn, "Left 90°", () -> js("plate.rotate(90)"), false);
-        for (Button b : new Button[] {rotateLeft, rotateRight, rotate45, rotate90}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(12); }
+        more = ui.rowButton(turn, "More…", this::moreDialog, false);
+        for (Button b : new Button[] {rotateLeft, rotateRight, rotate45, more}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(12); }
         rotateLeft.setContentDescription("Turn 15 degrees left"); rotateRight.setContentDescription("Turn 15 degrees right");
-        rotate45.setContentDescription("Turn 45 degrees left"); rotate90.setContentDescription("Turn 90 degrees left");
-        LinearLayout lay = ui.row(panel);
-        layFace = ui.rowButton(lay, "Lay flat on a face", () -> {
-            laying = !laying; js("plate.setLayMode(" + laying + ")");
-            layFace.setText(laying ? "Cancel" : "Lay flat on a face");
-            if (laying) { status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); }
-        }, false);
-        upright = ui.rowButton(lay, "Upright again", () -> js("plate.upright()"), false);
-        LinearLayout edit = ui.row(panel);
-        TextView scaleName = new TextView(this); scaleName.setText("Scale"); scaleName.setTextColor(ui.ink); scaleName.setTextSize(14);
-        scale = new EditText(this); scale.setHint("100"); scale.setHintTextColor(ui.muted); scale.setTextColor(ui.ink); scale.setSingleLine(true);
-        scale.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL); scale.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        scale.setBackgroundTintList(android.content.res.ColorStateList.valueOf(ui.teal)); scale.setContentDescription("Scale in percent");
-        LinearLayout scaleBox = new LinearLayout(this); scaleBox.setOrientation(LinearLayout.HORIZONTAL); scaleBox.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        TextView percent = new TextView(this); percent.setText("%"); percent.setTextColor(ui.ink); percent.setTextSize(14);
-        scaleBox.addView(scaleName); scaleBox.addView(scale, new LinearLayout.LayoutParams(0, ui.dp(52), 1)); scaleBox.addView(percent);
-        scaleName.setPadding(0, 0, ui.dp(8), 0); percent.setPadding(ui.dp(4), 0, ui.dp(8), 0);
-        LinearLayout.LayoutParams scaleLayout = new LinearLayout.LayoutParams(0, -2, 1); scaleLayout.topMargin = ui.dp(6); edit.addView(scaleBox, scaleLayout);
-        scale.setOnEditorActionListener((v, action, event) -> { applyScale(); return false; });
-        scale.setOnFocusChangeListener((v, focused) -> { if (!focused) applyScale(); });
-        copy = ui.rowButton(edit, "Copy", () -> js("plate.duplicate()"), false);
-        remove = ui.rowButton(edit, "Remove", () -> js("plate.remove()"), false);
+        rotate45.setContentDescription("Turn 45 degrees left"); more.setContentDescription("More: copy, lay flat, scale, remove, model settings");
         LinearLayout finish = ui.row(panel);
         arrange = ui.rowButton(finish, "Arrange all", this::arrangeAll, false);
-        modelSettings = ui.rowButton(finish, "Model settings…", this::editSelectedSettings, false);
-        done = ui.button(panel, "Done · back to Slice", this::finishWithResult, true);
+        done = ui.rowButton(finish, "Done · back to Slice", this::finishWithResult, true);
+        ((LinearLayout.LayoutParams) done.getLayoutParams()).weight = 1.6f;
         setContentView(root);
         setButtons();
 
@@ -222,14 +203,42 @@ public final class PlateActivity extends Activity {
 
     private void js(String script) { if (web != null && pageReady) web.evaluateJavascript(script, null); }
 
-    private void applyScale() {
+    private void scaleDialog() {
+        EditText input = new EditText(this); input.setSingleLine(true); input.setText(String.format(Locale.ROOT, "%.0f", scalePercent));
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL); input.setImeOptions(EditorInfo.IME_ACTION_DONE);
+        input.setContentDescription("Scale in percent"); input.setSelectAllOnFocus(true);
+        FrameLayout box = new FrameLayout(this); box.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0); box.addView(input);
+        new android.app.AlertDialog.Builder(this).setTitle("Scale (percent of the original size)").setView(box)
+            .setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> applyScale(input.getText().toString())).show();
+    }
+
+    private void applyScale(String text) {
         if (selected < 0) return;
-        String text = scale.getText().toString().trim();
         try {
-            double percent = Double.parseDouble(text);
+            double percent = Double.parseDouble(text.trim());
             if (percent < 1 || percent > 2000) { status.setText("Scale between 1% and 2000%."); status.setTextColor(ui.error); return; }
             js("plate.setScale(" + (percent / 100) + ")");
         } catch (NumberFormatException ignored) { }
+    }
+
+    /** The less used actions on the selected model, kept out of the panel so the 3D view stays large. */
+    private void moreDialog() {
+        if (laying) { laying = false; js("plate.setLayMode(false)"); more.setText("More…"); status.setText("Lay flat cancelled."); status.setTextColor(ui.muted); return; }
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), ui.dp(8));
+        android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
+        boolean on = selected >= 0;
+        String[] names = {"Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"};
+        Runnable[] actions = {() -> js("plate.duplicate()"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
+                status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
+            () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings};
+        for (int i = 0; i < names.length; i++) {
+            Runnable action = actions[i];
+            Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
+            b.setEnabled(on && (i != 1 || placements.length() > 0));
+        }
+        if (!on) ui.label(body, "Select a model first: tap it on the plate.", 13, ui.muted, false);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
     }
 
     /** Lets the engine arrange the current copies (with their turns, scales and duplicates). */
@@ -250,8 +259,8 @@ public final class PlateActivity extends Activity {
 
     private void setButtons() {
         boolean on = selected >= 0;
-        for (View view : new View[] {rotateLeft, rotateRight, rotate45, rotate90, copy, remove, scale, upright, modelSettings}) view.setEnabled(on);
-        layFace.setEnabled(placements.length() > 0);
+        for (View view : new View[] {rotateLeft, rotateRight, rotate45}) view.setEnabled(on);
+        more.setEnabled(true);
     }
 
     private final class Bridge {
@@ -259,7 +268,7 @@ public final class PlateActivity extends Activity {
         @JavascriptInterface public void onLoaded(int count) { }
         @JavascriptInterface public void onLayDone(boolean laid) {
             main.post(() -> {
-                laying = false; layFace.setText("Lay flat on a face");
+                laying = false; more.setText("More…");
                 if (laid && problemCount == 0) { status.setText("Laid flat on that face. “Upright again” undoes it."); status.setTextColor(ui.teal); }
             });
         }
@@ -272,27 +281,51 @@ public final class PlateActivity extends Activity {
                     placements = state.getJSONArray("placements"); selected = state.optInt("selected", -1);
                     // Kept current, so leaving with Back (or a back gesture) keeps the layout too.
                     if (placements.length() > 0) setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
-                    JSONArray problems = state.getJSONArray("problems"), advice = state.optJSONArray("advice");
-                    List<String> lines = new ArrayList<>();
-                    for (int i = 0; i < problems.length(); i++) {
-                        JSONArray issues = problems.getJSONArray(i);
-                        if (issues.length() > 0) lines.add(name(i) + " - " + String.join("; ", toList(advice != null && advice.optJSONArray(i) != null ? advice.getJSONArray(i) : issues)));
-                    }
-                    problemCount = lines.size();
+                    JSONArray problems = state.getJSONArray("problems");
+                    List<List<String>> found = new ArrayList<>();
+                    for (int i = 0; i < problems.length(); i++) found.add(toList(problems.getJSONArray(i)));
+                    String summary = summarize(found);
+                    problemCount = 0; for (List<String> issues : found) if (!issues.isEmpty()) problemCount++;
                     int n = placements.length();
-                    status.setText(lines.isEmpty() ? (n == 1 ? "1 model on the plate, inside the bed." : n + " models on the plate, all inside the bed and apart.") : String.join("\n", lines));
-                    status.setTextColor(lines.isEmpty() ? ui.muted : ui.error);
+                    status.setText(summary != null ? summary : n == 1 ? "1 model on the plate, inside the bed." : n + " models on the plate, all inside the bed and apart.");
+                    status.setTextColor(summary != null ? ui.error : ui.muted);
                     showSelected(); setButtons();
                 } catch (JSONException ignored) { }
             });
         }
     }
 
+    /**
+     * One line for the panel about everything wrong on the plate, from the page's issue keys per model; null when all is
+     * well. The per-model detail is on the labels over the models in the page.
+     */
+    static String summarize(List<List<String>> issuesPerModel) {
+        String[][] kinds = {{"off the bed", "off the bed"}, {"in the excluded area", "in a no-print zone"}, {"on the prime tower", "on the prime tower"},
+            {"taller than the printer", "too tall for the printer"}, {"touching another copy", "overlap"}};
+        List<String> parts = new ArrayList<>();
+        boolean movable = false, tall = false;
+        for (String[] kind : kinds) {
+            int count = 0;
+            for (List<String> issues : issuesPerModel) if (issues.contains(kind[0])) count++;
+            if (count == 0) continue;
+            if (kind[0].startsWith("taller")) tall = true; else movable = true;
+            String noun = count == 1 ? "1 model" : count + " models";
+            parts.add(kind[1].equals("overlap") ? noun + (count == 1 ? " overlaps another" : " overlap") : noun + (count == 1 ? " is " : " are ") + kind[1]);
+        }
+        if (parts.isEmpty()) return null;
+        String line = String.join(" · ", parts) + ".";
+        int affected = 0;
+        for (List<String> issues : issuesPerModel) for (String issue : issues) if (!issue.startsWith("taller")) { affected++; break; }
+        if (movable) line += (affected == 1 ? " Drag it clear" : " Drag them clear") + " or tap Arrange all.";
+        if (tall) line += " For a tall one: scale it down, or More… > Lay flat.";
+        return line;
+    }
+
     private void showSelected() {
-        if (selected < 0 || selected >= placements.length()) { selectedLabel.setText("Tap a model to select it. The buttons below work on the selected model."); scale.setText(""); return; }
+        if (selected < 0 || selected >= placements.length()) { selectedLabel.setText("Tap a model to select it."); return; }
         JSONObject p = placements.optJSONObject(selected);
-        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s\nX %.1f · Y %.1f mm · turned %.0f°", name(selected), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation")));
-        if (!scale.hasFocus()) scale.setText(String.format(Locale.ROOT, "%.0f", p.optDouble("scale", 1) * 100));
+        scalePercent = p.optDouble("scale", 1) * 100;
+        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s · turned %.0f° · %.0f%%", name(selected), p.optDouble("rotation"), scalePercent));
     }
 
     private String name(int index) {
