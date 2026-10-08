@@ -486,10 +486,18 @@ public class SlicerIntegrationTest {
             ((android.widget.EditText) field(activity, "infill")).setText("20");
             invoke(activity, "startSlice");
             waitFor(() -> ((View) field(activity, "resultCard")).getVisibility() == View.VISIBLE);
+            waitFor(() -> ((View) field(activity, "preview")).getVisibility() == View.VISIBLE); // the embedded preview, so both themes match
             View root = activity.getWindow().getDecorView();
             String plan = context().getSharedPreferences(SliceActivity.TRAY_PLANS, 0).getString("calibration_box_plate.gcode", null);
             assertEquals("{\"count\":2,\"tools\":[{\"t\":0,\"canvas_id\":0,\"tray_id\":0},{\"t\":1,\"canvas_id\":0,\"tray_id\":1}]}", plan);
-            int width = 1080, height = 6200;
+            // The whole form from its top (the result scroll leaves the form scrolled), with the sticky Slice bar below it.
+            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            ((android.widget.ScrollView) field(activity, "scroll")).scrollTo(0, 0);
+            View form = (View) field(activity, "content"), bar = (View) field(activity, "actionBar");
+            int width = 1080;
+            form.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+            bar.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+            int height = form.getMeasuredHeight() + bar.getMeasuredHeight();
             root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
             root.layout(0, 0, width, height);
             Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
