@@ -5,7 +5,11 @@ import org.json.JSONObject;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
+import java.util.Locale;
+import java.util.TimeZone;
 
 /** Read-only presentation of actual reported fields; unknown states and fault codes remain explicit. */
 public final class StatusPresentation {
@@ -95,4 +99,14 @@ public final class StatusPresentation {
         return text.toString();
     }
     public static String clean(String value) { return value.replaceAll("[\\p{Cntrl}]", " ").substring(0, Math.min(value.length(), 160)); }
+
+    /** "14:30" for a finish today, "Tue 14:30" on another day, from the printer's remaining seconds and the phone's clock. */
+    static String doneAt(long nowMs, long remainingSec, Locale locale, TimeZone zone) {
+        long end = nowMs + remainingSec * 1000;
+        java.text.SimpleDateFormat time = new java.text.SimpleDateFormat("HH:mm", locale), day = new java.text.SimpleDateFormat("EEE HH:mm", locale);
+        time.setTimeZone(zone); day.setTimeZone(zone);
+        Calendar a = Calendar.getInstance(zone), b = Calendar.getInstance(zone); a.setTimeInMillis(nowMs); b.setTimeInMillis(end);
+        boolean today = a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR);
+        return (today ? time : day).format(new Date(end));
+    }
 }

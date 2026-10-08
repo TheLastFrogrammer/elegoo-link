@@ -381,7 +381,7 @@ public final class Cc2Session implements AutoCloseable {
                 emitResult("Upload acknowledged by printer. Refresh Files to review print setup.");
                 Listener current = listener; if (current != null && !closed) current.uploaded(name);
             } catch (Exception exception) {
-                if (!closed && !uploadCancelled) emitResult(PrinterErrors.describe(exception, "Upload"));
+                if (!closed && !uploadCancelled) emitResult(PrinterErrors.describe(exception, "Upload") + " A partial file may remain on the printer.");
                 Listener current = listener; if (current != null && !closed) current.uploadFailed(name);
             }
             finally { uploading = false; uploadHttp = null; }

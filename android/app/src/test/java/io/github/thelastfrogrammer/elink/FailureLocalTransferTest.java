@@ -164,7 +164,7 @@ public class FailureLocalTransferTest {
             assertEquals("full.gcode", take(listener.uploadFailures, 5));
             String shown = null; for (String result; (result = take(listener.results, 1)) != null; ) shown = result;
             // What the user reads for a printer whose storage is full (the SDK table lists 1004/9002 only as "File write failed").
-            assertEquals("Printer could not write the file (code 9002).", shown);
+            assertEquals("Printer could not write the file; the printer's storage may be full. Delete files on the printer and try again (code 9002). A partial file may remain on the printer.", shown);
             assertEquals("no automatic retry", 1, puts.get());
             assertTrue(eventually(() -> !session.uploading()));
         } finally { session.close(); }

@@ -93,13 +93,30 @@ public class CloudControlTest {
         take(links.get(0));
     }
 
-    @Test public void oneCommandAtATime() throws Exception {
+    @Test public void oneCommandAtATimeTheSecondWaitsUnsentAndNothingIsSentTwice() throws Exception {
         CloudControl control = control(5000, 60000); Replies first = new Replies(), second = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.PAUSE), first);
+        String[] pause = take(waitForLink());
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.STOP), second);
+        Thread.sleep(300);
+        assertNull("the second command is not sent while the first is pending", links.get(0).published.poll());
+        assertEquals(2, control.outstanding());
+        FakeLink link = links.get(0);
+        link.events.message("12345SN818", new JSONObject().put("id", new JSONObject(pause[1]).getInt("id")).put("method", Cc2Codec.PAUSE).put("result", new JSONObject().put("error_code", 0)).toString());
+        assertTrue(first.take().startsWith("ok:"));
+        String[] stop = take(link);
+        assertEquals(Cc2Codec.STOP, new JSONObject(stop[1]).getInt("method"));
+        assertNull("the first command was not sent again", link.published.poll(300, TimeUnit.MILLISECONDS));
+    }
+
+    @Test public void aWaitingCommandThatNeverGetsItsTurnIsReportedAsNotSent() throws Exception {
+        CloudControl control = control(60000, 120000); Replies first = new Replies(), second = new Replies();
+        control.send("SN818", Cc2Codec.request(1, Cc2Codec.PAUSE), first);
         take(waitForLink());
-        assertEquals("fail: Waiting for the previous cloud command to finish.", second.take());
-        assertTrue(first.results.isEmpty());
+        control.send("SN818", Cc2Codec.request(1, Cc2Codec.STOP), second);
+        control.close();
+        String text = second.take();
+        assertTrue(text, text.startsWith("fail:") && text.contains("not sent"));
     }
 
     @Test public void sessionTakenOverElsewhereFailsThePendingCommandAndReconnectsOnlyOnTheNextCommand() throws Exception {

@@ -29,7 +29,10 @@ public final class PrinterErrors {
             case 1001: reason = "This firmware does not support that request"; break;
             case 1002: reason = "Printer could not open the folder"; break;
             case 1003: reason = "Printer rejected the request parameters"; break;
-            case 1004: case 9002: reason = "Printer could not write the file"; break;
+            case 1004: case 9002: reason = "Printer could not write the file; the printer's storage may be full. Delete files on the printer and try again"; break;
+            case 9001: reason = "Printer could not open the file for writing"; break;
+            case 9003: reason = "Printer could not position within the file"; break;
+            case 9007: reason = "The upload folder does not exist on the printer"; break;
             case 1009: reason = "Printer is busy"; break;
             case 1010: reason = "Printer is not currently printing"; break;
             case 1012: reason = "Print task was not found"; break;

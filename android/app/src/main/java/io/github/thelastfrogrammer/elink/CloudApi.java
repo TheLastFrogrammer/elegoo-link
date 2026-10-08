@@ -207,11 +207,23 @@ public final class CloudApi {
     }
     /** Upload progress in percent; return false to cancel. */
     public interface Progress { boolean update(int percent); }
-    public interface Uploader { int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException; }
+    public interface Uploader {
+        int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException;
+        /** Closes the live connection from another thread, which is the only way to end a socket write that is stuck. */
+        default void abort() { }
+    }
+    /** One upload's HTTPS PUT, abortable from outside. */
+    public static final class HttpUploader implements Uploader {
+        private volatile HttpURLConnection active;
+        public int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException { return CloudApi.put(url, headers, file, progress, connection -> active = connection); }
+        public void abort() { HttpURLConnection connection = active; if (connection != null) connection.disconnect(); }
+    }
     /** PUT of a file to the signed address, as the SDK does (octet-stream, Content-MD5). Returns the HTTP status. */
-    public static int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException {
+    public static int put(String url, Map<String, String> headers, File file, Progress progress) throws IOException { return put(url, headers, file, progress, connection -> { }); }
+    static int put(String url, Map<String, String> headers, File file, Progress progress, java.util.function.Consumer<HttpURLConnection> sink) throws IOException {
         if (!url.startsWith("https://")) throw new IOException("Cloud uploads must use https");
         HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        sink.accept(connection);
         try {
             connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15_000); connection.setReadTimeout(60_000);
             connection.setRequestMethod("PUT"); connection.setDoOutput(true);
@@ -222,7 +234,8 @@ public final class CloudApi {
                 while ((read = in.read(buffer)) != -1) {
                     out.write(buffer, 0, read); sent += read;
                     int percent = size == 0 ? 100 : (int) (sent * 100 / size);
-                    if (percent != last) { last = percent; if (!progress.update(percent)) throw new InterruptedIOException("Upload cancelled."); }
+                    // Reported on every write, not only when the percentage changes: it is also the "bytes are still moving" signal.
+                    if (!progress.update(percent)) throw new InterruptedIOException("Upload cancelled.");
                 }
             }
             return connection.getResponseCode();

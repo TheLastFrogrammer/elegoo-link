@@ -116,7 +116,7 @@ public final class SliceActivity extends Activity {
         final Map<String, String> edits = new LinkedHashMap<>(); // this slot's filament settings changes
     }
     private EditText infill;
-    private Button chooseModels, slice, cancel, useInFiles, saveCopy;
+    private Button chooseModels, slice, cancel, useInFiles, saveCopy, restoreLast;
     private boolean choosePrimary = true;     // filled only while nothing is loaded: Slice is the main action after that
     private ProgressBar progress;
     private ImageView preview;
@@ -158,7 +158,7 @@ public final class SliceActivity extends Activity {
         bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         if (saved != null) restore(saved);
         else { List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) importModels(incoming); }
-        if (slicing) { busy = true; progress.setVisibility(View.VISIBLE); progress.setProgress(slicingPercent); status.setText(slicingText); updateButtons(); }
+        if (slicing) { busy = true; keepAwake(true); progress.setVisibility(View.VISIBLE); progress.setProgress(slicingPercent); status.setText(slicingText); updateButtons(); }
         else checkInterrupted();
         loadPresets();
     }
@@ -168,7 +168,37 @@ public final class SliceActivity extends Activity {
     private void markRunning(String setup) {
         try (java.io.Writer out = new java.io.OutputStreamWriter(new FileOutputStream(runningMarker()), "UTF-8")) { out.write(setup); } catch (IOException ignored) { }
     }
-    private void clearRunning() { runningMarker().delete(); }
+    private void clearRunning() { runningMarker().delete(); selectionFile().delete(); hasSavedSelection = false; }
+    // The models and settings of the slice that is running, kept beside the marker so a killed app can offer them back.
+    private File selectionFile() { return new File(getFilesDir(), "slice-selection.bin"); }
+    private boolean hasSavedSelection;
+    private void saveSelection() {
+        if (slotList == null) return;
+        Bundle state = new Bundle(); saveState(state);
+        android.os.Parcel parcel = android.os.Parcel.obtain();
+        try { state.writeToParcel(parcel, 0); try (OutputStream out = new FileOutputStream(selectionFile())) { out.write(parcel.marshall()); } hasSavedSelection = true; }
+        catch (IOException | RuntimeException ignored) { }
+        finally { parcel.recycle(); }
+    }
+    private Bundle loadSelection() {
+        File file = selectionFile(); if (!file.isFile()) return null;
+        android.os.Parcel parcel = android.os.Parcel.obtain();
+        try {
+            byte[] bytes = java.nio.file.Files.readAllBytes(file.toPath());
+            parcel.unmarshall(bytes, 0, bytes.length); parcel.setDataPosition(0);
+            return Bundle.CREATOR.createFromParcel(parcel);
+        } catch (IOException | RuntimeException failure) { return null; }
+        finally { parcel.recycle(); }
+    }
+    private void restoreLastSelection() {
+        Bundle saved = loadSelection(); selectionFile().delete(); hasSavedSelection = false;
+        if (saved == null) { status.setText("The earlier models and settings could not be restored."); status.setTextColor(error); updateButtons(); return; }
+        restore(saved); loadPresets();
+        status.setTextColor(ink); status.setText(models.isEmpty() ? "Settings restored. The earlier model files are no longer on the phone: choose them again." : "Restored your last models and settings.");
+    }
+    private void keepAwake(boolean on) {
+        if (on) getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); else getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+    }
     private void checkInterrupted() {
         File marker = runningMarker();
         if (!marker.isFile()) return;
@@ -177,8 +207,11 @@ public final class SliceActivity extends Activity {
             byte[] buffer = new byte[4096]; int count; while ((count = in.read(buffer)) != -1) bytes.write(buffer, 0, count); setup = bytes.toString("UTF-8");
         } catch (IOException ignored) { }
         marker.delete();
-        Diagnostics.note(Diagnostics.SLICER, "the previous slice did not finish: the app was closed while slicing (" + setup + ")");
-        status.setText("The last slice did not finish: Android closed the app while it was slicing, most likely for memory. Try fewer copies, a smaller scale or a thicker layer height.");
+        hasSavedSelection = selectionFile().isFile();
+        boolean reading = setup.startsWith("Reading model files");
+        Diagnostics.note(Diagnostics.SLICER, "the previous " + (reading ? "model import" : "slice") + " did not finish: the app was closed (" + setup + ")");
+        status.setText(reading ? "The last model could not be read: Android closed the app while it was reading it, most likely for memory. Try a smaller or simpler model."
+            : "The last slice did not finish: Android closed the app while it was slicing, most likely for memory. Try fewer copies, a smaller scale or a thicker layer height.");
         status.setTextColor(error);
     }
 
@@ -212,8 +245,8 @@ public final class SliceActivity extends Activity {
         }
     }
 
-    @Override protected void onSaveInstanceState(Bundle state) {
-        super.onSaveInstanceState(state);
+    @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); saveState(state); }
+    private void saveState(Bundle state) {
         if (slotList == null) return; // slicer not included
         ArrayList<String> paths = new ArrayList<>(); for (File file : models) paths.add(file.getAbsolutePath());
         state.putStringArrayList("models", paths);
@@ -332,6 +365,7 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
         }, true);
+        restoreLast = button(modelCard, "Restore your last models and settings", this::restoreLastSelection, false); restoreLast.setVisibility(View.GONE);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
@@ -591,7 +625,7 @@ public final class SliceActivity extends Activity {
         String setup = inputs + " · " + process + " · " + filaments.size() + " filament(s)" + (selection.overrides.isEmpty() ? "" : " · " + selection.overrides.size() + " override(s)")
             + (plate == ALL_PLATES ? " · all " + plates.size() + " project plates" : selection.plate > 0 ? " · project plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
             + (need == null ? "" : " · estimated " + need.describe());
-        markRunning(setup);
+        markRunning(setup); saveSelection(); keepAwake(true);
         long started = System.currentTimeMillis();
         worker.execute(() -> {
             try {
@@ -615,7 +649,13 @@ public final class SliceActivity extends Activity {
                 Diagnostics.note(Diagnostics.SLICER, String.format(Locale.ROOT, "sliced in %.1f s · %s · estimate %s, %.1f g · %s",
                     elapsed / 1000.0, setup, duration(seconds), grams, Diagnostics.memory()));
                 clearRunning();
-                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(results, plates, names, elapsed, printer, process, filaments, colours, plan); });
+                // Out of the cache at once: a clean-up, a kill or a failed upload later cannot take a finished slice away.
+                List<File> kept = new ArrayList<>();
+                for (int i = 0; i < results.size(); i++) {
+                    try { kept.add(SliceStore.keep(getApplicationContext(), results.get(i).gcode, names.get(i))); }
+                    catch (IOException failure) { kept.add(results.get(i).gcode); }
+                }
+                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(results, kept, plates, names, elapsed, printer, process, filaments, colours, plan); });
             } catch (IOException failure) {
                 long elapsed = System.currentTimeMillis() - started;
                 boolean cancelled = cancelRequested.get();
@@ -633,11 +673,11 @@ public final class SliceActivity extends Activity {
         });
     }
 
-    private void finished(List<NativeSlicer.Result> results, List<Integer> plates, List<String> names, long elapsedMs, String printer, String process,
+    private void finished(List<NativeSlicer.Result> results, List<File> files, List<Integer> plates, List<String> names, long elapsedMs, String printer, String process,
                           List<String> filaments, List<String> colours, TrayPlan plan) {
         busy = false; progress.setVisibility(View.GONE);
         slicedFiles.clear(); slicedNames.clear();
-        for (int i = 0; i < results.size(); i++) { slicedFiles.add(results.get(i).gcode); slicedNames.add(names.get(i)); }
+        for (int i = 0; i < results.size(); i++) { slicedFiles.add(files.get(i)); slicedNames.add(names.get(i)); }
         sliced = slicedFiles.get(0); slicedName = slicedNames.get(0);
         // The print setup dialog offers this plan for a printer file of the same name.
         SharedPreferences.Editor plans = getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit();
@@ -787,7 +827,35 @@ public final class SliceActivity extends Activity {
         }
     }
 
+    private boolean largeImportConfirmed;
+    /** Bytes of a model before it is read: a file:// path or the provider's reported size. 0 when unknown. */
+    private long sizeOf(Uri uri) {
+        if ("file".equals(uri.getScheme()) && uri.getPath() != null) return new File(uri.getPath()).length();
+        try (Cursor cursor = getContentResolver().query(uri, new String[] {OpenableColumns.SIZE}, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst() && !cursor.isNull(0)) return cursor.getLong(0);
+        } catch (RuntimeException ignored) { }
+        return 0;
+    }
+    /** Memory the engine needs just to read these files, guessed from their size: binary STL is 50 bytes a triangle; other formats are compressed or textual, so 40 bytes is used as a rough guide. */
+    static SliceEstimate importEstimate(long stlBytes, long otherBytes) { return new SliceEstimate(stlBytes / 50 + otherBytes / 40, 0, 0.2); }
     private void importModels(List<Uri> uris) {
+        if (!largeImportConfirmed) {
+            long stl = 0, other = 0;
+            for (Uri uri : uris) { String name = displayName(uri); long size = sizeOf(uri); if ("stl".equals(modelExtension(name, null))) stl += size; else other += size; }
+            SliceEstimate guess = importEstimate(stl, other);
+            android.app.ActivityManager.MemoryInfo memory = new android.app.ActivityManager.MemoryInfo();
+            ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
+            if (guess.risky(memory.availMem)) {
+                new AlertDialog.Builder(this).setTitle("This is a big model")
+                    .setMessage(String.format(Locale.getDefault(), "Reading these files may need about %.0f MB of memory; the phone has about %d MB free. Android may close the app while it reads them. Your current models and settings are kept.\n\nClose other apps, or try anyway.",
+                        guess.megabytes, memory.availMem / (1024 * 1024)))
+                    .setNegativeButton("Cancel", null)
+                    .setPositiveButton("Read anyway", (d, w) -> { largeImportConfirmed = true; importModels(uris); largeImportConfirmed = false; }).show();
+                return;
+            }
+        }
+        // Reading and inspecting a model is as memory-hungry as slicing it, so it is covered by the same marker.
+        markRunning("Reading model files: " + uris.size() + " file(s)"); if (!models.isEmpty()) saveSelection();
         busy = true; status.setText("Reading model files…"); status.setTextColor(ink); updateButtons();
         File inputRoot = new File(getCacheDir(), "slice-input"), meshRoot = new File(getCacheDir(), "slice-meshes");
         // Each pick gets its own folders, so a pick that fails leaves the models and previews already chosen untouched.
@@ -824,6 +892,7 @@ public final class SliceActivity extends Activity {
                     problem = unreadableMessage(imported, failure.getMessage());
                 }
             }
+            clearRunning();
             boolean keepPrevious = unreadable || imported.isEmpty();
             if (keepPrevious) { deleteTree(inputDir); deleteTree(meshDir); }
             else { deleteOthers(inputRoot, inputDir); deleteOthers(meshRoot, meshDir); }
@@ -1291,6 +1360,8 @@ public final class SliceActivity extends Activity {
         if (!busy && models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
         else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a print profile and a filament profile for each filament to slice.";
         sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
+        restoreLast.setVisibility(!busy && models.isEmpty() && calibration == null && hasSavedSelection ? View.VISIBLE : View.GONE);
+        keepAwake(SliceActivity.slicing);
         chooseModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Change model files…");
         boolean primary = models.isEmpty() && calibration == null;
         if (primary != choosePrimary) { choosePrimary = primary; restyle(chooseModels, primary); }

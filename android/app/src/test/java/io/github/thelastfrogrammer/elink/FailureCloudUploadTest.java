@@ -2,7 +2,6 @@ package io.github.thelastfrogrammer.elink;
 
 import org.json.JSONObject;
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -43,13 +42,14 @@ public class FailureCloudUploadTest {
     /** Fake Agora link that acknowledges every request except those whose method is in `silent`. */
     private static final class FakeLink implements CloudControl.Link {
         final List<Integer> methods = new CopyOnWriteArrayList<>();
+        final Map<Integer, Integer> ids = new ConcurrentHashMap<>();
         final Set<Integer> silent = ConcurrentHashMap.newKeySet();
         volatile Events events;
         public void login(String appId, String rtmUserId, String token, Events events) { this.events = events; }
         public void subscribe(String channel) { }
         public void publish(String channel, String text) {
             try {
-                JSONObject request = new JSONObject(text); int method = request.getInt("method"); methods.add(method);
+                JSONObject request = new JSONObject(text); int method = request.getInt("method"); methods.add(method); ids.put(method, request.getInt("id"));
                 if (silent.contains(method)) return;
                 events.message(channel, new JSONObject().put("id", request.getInt("id")).put("method", method).put("result", new JSONObject().put("error_code", 0)).toString());
             } catch (Exception error) { throw new AssertionError(error); }
@@ -77,7 +77,6 @@ public class FailureCloudUploadTest {
      * The storage PUT has no stall watchdog: restartStall() first runs in fetch(). A PUT whose socket write blocks (Wi-Fi gone; Java
      * socket writes have no timeout) shows a frozen percentage until the kernel gives up.
      */
-    @Ignore("demonstrates: MEDIUM - no stall timer during the storage PUT; a hung PUT leaves 'Uploading ... N%' frozen with no message (stallMs only starts in fetch())")
     @Test public void aHungStoragePutIsEndedByTheStallTimer() throws Exception {
         CountDownLatch release = new CountDownLatch(1); Outcome outcome = new Outcome();
         new CloudUpload(api(), (url, headers, file, progress) -> { progress.update(30); try { release.await(5, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new IOException(e); } return 200; },
@@ -90,7 +89,6 @@ public class FailureCloudUploadTest {
      * disconnects the connection. PrinterService passes its single-thread `files` executor as the blocking executor, so choosing
      * or inspecting a G-code file afterwards waits behind the stuck PUT.
      */
-    @Ignore("demonstrates: MEDIUM - cancelling a cloud upload whose PUT is blocked leaves the shared single-thread file executor occupied; Files-tab import/inspect/export wait behind it")
     @Test public void cancellingAHungPutFreesTheFileExecutor() throws Exception {
         CountDownLatch release = new CountDownLatch(1), putting = new CountDownLatch(1); Outcome outcome = new Outcome();
         CloudUpload upload = new CloudUpload(api(), (url, headers, file, progress) -> { putting.countDown(); try { release.await(10, TimeUnit.SECONDS); } catch (InterruptedException e) { throw new java.io.InterruptedIOException(); } return 200; },
@@ -105,17 +103,35 @@ public class FailureCloudUploadTest {
     }
 
     /**
-     * The whole file is in Elegoo's storage; then the 1057 fetch request is refused locally because some other cloud command (a
-     * Refresh, a thumbnail, a file list) is still waiting for its reply. The upload ends and the next try uploads the file again.
+     * The whole file is in Elegoo's storage; then some other cloud command (a Refresh, a thumbnail, a file list) is still waiting for
+     * its reply when the 1057 fetch request is made. The fetch waits its turn instead of being refused, and nothing already sent is sent again.
      */
-    @Ignore("demonstrates: MEDIUM - a pending cloud command makes CloudControl refuse the 1057 fetch after the full storage PUT; upload fails and must be redone from zero")
     @Test public void aPendingCloudCommandDoesNotFailAFinishedStoragePut() throws Exception {
-        CloudControl control = control(Cc2Codec.STATUS); // the printer never answers the status read, so it stays pending
+        CloudControl control = control(Cc2Codec.STATUS); // the printer answers the status read late, so it is pending when the upload needs to send
         control.send(SERIAL, Cc2Codec.request(0, Cc2Codec.STATUS), (acknowledged, message) -> { });
         assertTrue(eventually(() -> !links.isEmpty() && links.get(0).methods.contains(Cc2Codec.STATUS), 3000));
         Outcome outcome = new Outcome();
         new CloudUpload(api(), (url, headers, file, progress) -> 200, via(control), blocking, worker, SERIAL, gcode(), "part.gcode", outcome, 5_000, 10).start();
-        assertTrue("the fetch request should reach the printer", eventually(() -> links.get(0).methods.contains(Cc2Codec.FETCH), 3000));
+        Thread.sleep(300);
+        assertFalse("nothing is sent while the status read is pending", links.get(0).methods.contains(Cc2Codec.FETCH));
+        FakeLink link = links.get(0);
+        link.events.message("12345" + SERIAL, new JSONObject().put("id", link.ids.get(Cc2Codec.STATUS)).put("method", Cc2Codec.STATUS).put("result", new JSONObject().put("error_code", 0)).toString());
+        assertTrue("the fetch request goes out right after", eventually(() -> link.methods.contains(Cc2Codec.FETCH), 3000));
+        assertEquals("the status read was sent once", 1, Collections.frequency(link.methods, Cc2Codec.STATUS));
+        assertNull("the upload has not failed", outcome.result.peek());
+    }
+
+    /** More waiting commands than the queue holds are refused, and the refusal says they were not sent. */
+    @Test public void aFullQueueRefusesNewCommandsAsNotSent() throws Exception {
+        CloudControl control = control(Cc2Codec.STATUS);
+        BlockingQueue<String> replies = new LinkedBlockingQueue<>();
+        control.send(SERIAL, Cc2Codec.request(0, Cc2Codec.STATUS), (acknowledged, message) -> replies.add("first: " + message));
+        assertTrue(eventually(() -> !links.isEmpty() && links.get(0).methods.contains(Cc2Codec.STATUS), 3000));
+        for (int i = 0; i < CloudControl.MAX_WAITING + 1; i++) control.send(SERIAL, Cc2Codec.request(0, Cc2Codec.DISK), (acknowledged, message) -> replies.add("queued: " + message));
+        String refused = replies.poll(2, TimeUnit.SECONDS);
+        assertNotNull(refused);
+        assertTrue(refused, refused.startsWith("queued: Waiting for the previous cloud command") && refused.contains("not sent"));
+        assertEquals("pending plus three waiting plus the refused one were all counted until answered", CloudControl.MAX_WAITING + 1, control.outstanding());
     }
 
     /**

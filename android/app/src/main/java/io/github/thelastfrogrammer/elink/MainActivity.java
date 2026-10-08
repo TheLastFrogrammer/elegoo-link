@@ -89,7 +89,7 @@ public final class MainActivity extends Activity {
     private EditText host, access, serial;
     private CheckBox remember;
     private TextView connection, state, job, feedback, selected, faults, trays, identity, diagnostics;
-    private Button connect, pause, stop, refresh, upload, pick, refill, check, forget;
+    private Button connect, pause, stop, refresh, upload, pick, refill, check, forget, recentSlices;
     private ProgressRing ring;
     private TextView title, detail, controlSource, tileNozzle, tileBed, tileChamber;
     private CredentialStore credentials;
@@ -296,6 +296,7 @@ public final class MainActivity extends Activity {
         pick = rowButton(startRow, "Choose G-code…", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
         }, false);
+        recentSlices = button(files, "Recent slices…", this::chooseRecentSlice);
         // The chosen file: preview, actions and the offline report, shown once there is one.
         fileDetails = new LinearLayout(this); fileDetails.setOrientation(LinearLayout.VERTICAL); files.addView(fileDetails);
         filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -305,7 +306,7 @@ public final class MainActivity extends Activity {
         upload = rowButton(uploadRow, "Upload", () -> {
             if (printer == null || printer.selectedName == null) return;
             new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
-                .setMessage("This sends the file only. A file with the same name may be replaced. Refresh Files after upload and choose Print setup to start it.")
+                .setMessage("This sends the file only. " + (printer.nameOnPrinter(printer.selectedName) ? "A file with this name is already on the printer: uploading will replace the file of the same name. " : "A file with the same name would be replaced. ") + "Refresh Files after upload and choose Print setup to start it.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         }, true);
         LinearLayout viewRow = row(fileDetails);
@@ -397,12 +398,22 @@ public final class MainActivity extends Activity {
         selectPage(1); takeSliced();
     }
     /** After "Upload and print" on the Slice screen: open Print setup once the upload is in the printer's file list. */
+    private static final long PRINT_SETUP_WAIT_MS = 5 * 60_000L;
+    private long printSetupStarted;
     private void awaitPrintSetup(String name) {
-        pendingPrintSetup = name; printSetupUntil = System.currentTimeMillis() + 5 * 60_000; selectPage(1);
+        pendingPrintSetup = name; printSetupStarted = System.currentTimeMillis(); printSetupUntil = printSetupStarted + PRINT_SETUP_WAIT_MS; selectPage(1);
     }
     private void continuePrintSetup() {
         if (pendingPrintSetup == null || printer == null) return;
-        if (System.currentTimeMillis() > printSetupUntil) { pendingPrintSetup = null; return; }
+        long now = System.currentTimeMillis();
+        boolean uploading = printer.uploading() || printer.uploadsPending();
+        // A big upload can take far longer than the usual wait: keep waiting while it runs, for up to an hour.
+        if (uploading && now - printSetupStarted < 60 * 60_000L) printSetupUntil = Math.max(printSetupUntil, now + PRINT_SETUP_WAIT_MS);
+        if (now > printSetupUntil) {
+            pendingPrintSetup = null;
+            message(uploading ? "The upload is still running; open Print setup from Files when it finishes." : "Print setup did not open by itself. Refresh Files and choose Print setup on the uploaded file.");
+            return;
+        }
         if (printer.uploadsPending() || !printer.filesFresh() || !"local".equals(printer.storage)) return;
         org.json.JSONArray list = printer.filePage.optJSONArray("file_list");
         if (list == null) return;
@@ -410,6 +421,15 @@ public final class MainActivity extends Activity {
             JSONObject file = list.optJSONObject(i);
             if (file != null && pendingPrintSetup.equals(file.optString("filename"))) { pendingPrintSetup = null; startDialog(file, "local"); return; }
         }
+    }
+    /** Slices made on this phone are kept (SliceStore): choose one to upload or save, e.g. after a failed upload or a killed app. */
+    private void chooseRecentSlice() {
+        List<File> recent = SliceStore.list(this);
+        if (printer == null || recent.isEmpty()) { message("No recent slices yet."); return; }
+        String[] titles = new String[recent.size()];
+        for (int i = 0; i < titles.length; i++) titles[i] = recent.get(i).getName() + "\n" + (recent.get(i).length() / 1024) + " KB · " + android.text.format.DateUtils.getRelativeTimeSpanString(recent.get(i).lastModified());
+        new AlertDialog.Builder(this).setTitle("Recent slices").setItems(titles, (d, which) -> { if (printer != null) printer.selectSliced(recent.get(which), recent.get(which).getName()); })
+            .setNegativeButton("Close", null).show();
     }
     private void takeSliced() {
         if (printer == null || pendingSlicedFile == null) return;
@@ -783,6 +803,7 @@ public final class MainActivity extends Activity {
     }
     private void startDialog(JSONObject file, String storage) {
         if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: print start is disabled."); return; }
+        if (printer != null && printer.fileBusy()) { message("A file is being sent or received. Wait for it to finish before starting a print."); return; }
         if (printer == null || !printer.liveFresh() || !Cc2Codec.idle(printer.liveStatus()) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
         String name = file.optString("filename");
         LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name), 16, INK, true);
@@ -1003,7 +1024,7 @@ public final class MainActivity extends Activity {
         if ((ready || cloudFresh) && !settings.getBoolean("everConnected", false)) settings.edit().putBoolean("everConnected", true).apply();
         boolean firstRun = !settings.getBoolean("everConnected", false) && !settings.getBoolean("everSliced", false);
         getStarted.setVisibility(firstRun ? View.VISIBLE : View.GONE);
-        block = ControlState.block(ready, fresh, ready && printer.pinProbe(), connecting, cloud, cloudFresh, cloud && printer.cloudOnline == 0, cloudOk, cloud && printer.cloudCommandBusy);
+        block = ControlState.block(ready, fresh, ready && printer.pinProbe(), connecting, cloud, cloudFresh, cloud && printer.cloudOnline == 0, cloudOk, cloud && printer.cloudCommandBusy());
         boolean canControl = block == ControlState.Block.NONE;
         snapshot = printer == null ? new JSONObject() : ready ? printer.status : cloud ? printer.cloudStatus : new JSONObject();
         connection.setText(printer == null ? "Preparing connection service…" : printer.connection);
@@ -1050,8 +1071,8 @@ public final class MainActivity extends Activity {
         if ((ready || cloud) && printer.canvas != null && printer.canvas.has("auto_refill")) refill.setText(printer.canvas.optBoolean("auto_refill") ? "Disable automatic refill…" : "Enable automatic refill…");
         else refill.setText(ready ? "Automatic refill unavailable" : "Automatic refill (refresh trays first)");
         boolean fileBusy = printer != null && printer.fileBusy();
-        upload.setEnabled((ready && !printer.pinProbe() || cloudFresh && cloudOk && printer.cloudUploadReady() && !printer.cloudCommandBusy) && printer.selectedFile != null && !fileBusy);
-        upload.setText(ready || !cloud ? "Upload to printer" : "Upload through the cloud"); pick.setEnabled(printer != null && !fileBusy);
+        upload.setEnabled((ready && !printer.pinProbe() || cloudFresh && cloudOk && printer.cloudUploadReady() && !printer.cloudCommandBusy()) && printer.selectedFile != null && !fileBusy && !printer.replacesActivePrint(printer.selectedName));
+        upload.setText(printer != null && printer.replacesActivePrint(printer.selectedName) ? "Being printed: cannot replace" : ready || !cloud ? "Upload to printer" : "Upload through the cloud"); pick.setEnabled(printer != null && !fileBusy); recentSlices.setEnabled(printer != null && !fileBusy && !SliceStore.list(this).isEmpty());
         boolean hasReport = printer != null && printer.selectedFile != null && printer.selectedReport != null;
         saveCopy.setEnabled(hasReport && !fileBusy); shareInspection.setEnabled(hasReport && !fileBusy); clearCopy.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
         GcodeInspector.Report report = hasReport ? printer.selectedReport : null;
@@ -1094,7 +1115,7 @@ public final class MainActivity extends Activity {
             long remaining = print.optLong("remaining_time_sec", -1);
             job.setText(StatusPresentation.clean(print.optString("filename", "Current print")).replaceFirst("(?i)\\.gcode$", ""));
             detail.setText(remaining < 0 ? "Time remaining unavailable" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left · done ≈ "
-                + new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new Date(System.currentTimeMillis() + remaining * 1000)));
+                + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault()) + (live ? "" : " · stale"));
         } else {
             job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in with Elegoo to watch through the cloud.") : "No active print.");
             detail.setText("");

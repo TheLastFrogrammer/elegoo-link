@@ -32,13 +32,16 @@ final class CloudUpload {
     private final CloudApi api;
     private final CloudApi.Uploader uploader;
     private final Commands commands;
+    /** Kept for the callers; the storage PUT runs on its own thread (see start()), never on a shared executor. */
     private final Executor blocking;
     private final ScheduledExecutorService scheduler;
     private final String serial, name;
     private final File file;
     private final Listener listener;
     private final long stallMs, settleMs;
-    private volatile boolean cancelled, ended, fetching;
+    private volatile boolean cancelled, ended, fetching, putting;
+    private volatile long lastBytesAt;
+    private ScheduledFuture<?> putWatchdog;
     private ScheduledFuture<?> stall;
     private int lastPercent = -1;
 
@@ -59,12 +62,14 @@ final class CloudUpload {
         } catch (IllegalArgumentException invalid) { scheduler.execute(() -> finish(false, invalid.getMessage())); return; }
         if (!file.isFile() || file.length() == 0) { scheduler.execute(() -> finish(false, "The file to upload is missing or empty.")); return; }
         if (file.length() > CloudApi.UPLOAD_LIMIT) { scheduler.execute(() -> finish(false, "Files of 500 MB or more cannot be sent through the cloud yet. Use the local connection.")); return; }
-        blocking.execute(this::store);
+        // The PUT can block for minutes in a socket write; it gets its own thread so the shared file executor is never held by it.
+        Thread thread = new Thread(this::store, "cloud-upload"); thread.setDaemon(true); thread.start();
     }
 
     /** Stops the upload; once the printer is fetching, its transfer is cancelled too. */
     void cancel() {
         cancelled = true;
+        uploader.abort(); // ends a write that is stuck; the PUT thread then unwinds on its own
         scheduler.execute(() -> {
             if (ended) return;
             if (fetching) cancelFetch(() -> { });
@@ -80,12 +85,14 @@ final class CloudUpload {
             Map<String, String> headers = new LinkedHashMap<>();
             headers.put("Content-Type", "application/octet-stream");
             headers.put("Content-MD5", sums[1]);
-            int status = uploader.put(target.uploadUrl, headers, file, percent -> { report(percent / 2); return !cancelled; });
+            lastBytesAt = System.nanoTime(); putting = true; startPutWatchdog();
+            int status = uploader.put(target.uploadUrl, headers, file, percent -> { lastBytesAt = System.nanoTime(); report(percent / 2); return !cancelled; });
             Diagnostics.note(Diagnostics.FILES, "cloud upload: storage answered HTTP " + status);
             if (status < 200 || status >= 300) failure = "Elegoo's storage refused the file (HTTP " + status + ").";
             access = target.accessUrl;
-        } catch (InterruptedIOException stopped) { failure = "Upload cancelled.";
-        } catch (IOException error) { failure = error.getMessage() == null ? "Could not upload the file to Elegoo." : error.getMessage(); }
+        } catch (InterruptedIOException stopped) { failure = cancelled || !(stopped instanceof java.net.SocketTimeoutException) ? "Upload cancelled." : FriendlyErrors.message(stopped, "Sending the file to Elegoo", "Upload timed out.");
+        } catch (IOException error) { failure = FriendlyErrors.message(error, "Sending the file to Elegoo", "Could not upload the file to Elegoo."); }
+        putting = false;
         String problem = failure, checksum = md5, url = access;
         scheduler.execute(() -> {
             if (ended) return;
@@ -129,6 +136,19 @@ final class CloudUpload {
         else report(50 + progress / 2);
     }
 
+    /** No bytes written for the stall time: the connection is closed and the upload ends with a plain message. */
+    private void startPutWatchdog() {
+        long interval = Math.max(50, Math.min(1_000, stallMs / 4));
+        synchronized (this) {
+            putWatchdog = scheduler.scheduleWithFixedDelay(() -> {
+                if (ended || !putting) return;
+                if ((System.nanoTime() - lastBytesAt) / 1_000_000 < stallMs) return;
+                putting = false; uploader.abort();
+                finish(false, "Elegoo's storage stopped accepting " + name + ". Check the Wi-Fi and try again.");
+            }, interval, interval, TimeUnit.MILLISECONDS);
+        }
+    }
+
     private void restartStall() {
         if (stall != null) stall.cancel(false);
         stall = scheduler.schedule(() -> {
@@ -146,8 +166,9 @@ final class CloudUpload {
 
     private void finish(boolean done, String message) {
         if (ended) return;
-        ended = true;
+        ended = true; putting = false;
         if (stall != null) stall.cancel(false);
+        synchronized (this) { if (putWatchdog != null) putWatchdog.cancel(false); }
         if (fetching) commands.watch(null);
         listener.finished(done, message);
     }
