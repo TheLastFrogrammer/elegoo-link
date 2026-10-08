@@ -4,12 +4,15 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Typeface;
+import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
+import android.view.Gravity;
 import android.view.View;
 import android.view.inputmethod.EditorInfo;
 import android.widget.*;
@@ -52,18 +55,51 @@ public final class SliceSettingsActivity extends Activity {
         {"Prime tower and multi-material", "enable_prime_tower", "prime_tower_width", "prime_volume", "flush_into_infill", "flush_into_support"},
         {"Special", "spiral_mode", "print_sequence", "fuzzy_skin", "fuzzy_skin_thickness", "reduce_crossing_wall", "enable_arc_fitting"},
     };
+    private static Set<String> keysOf(String[][] groups) {
+        Set<String> keys = new HashSet<>();
+        for (String[] group : groups) keys.addAll(Arrays.asList(group).subList(1, group.length));
+        return keys;
+    }
+    static final Set<String> PROCESS_KEYS = keysOf(GROUPS), FILAMENT_KEYS = keysOf(FILAMENT_GROUPS);
+
+    /**
+     * Everyday words and the settings they usually mean, for a search that a label does not answer. A word matches
+     * when it contains what was typed (at least three letters), so "strong" and "stro" both find the strength words.
+     */
+    static final Map<String, String[]> SEARCH_TERMS = new LinkedHashMap<>();
+    static {
+        String[][] terms = {
+            {"walls perimeters perimeter", "wall_loops"},
+            {"strong strength stronger sturdy tough durable", "wall_loops sparse_infill_density top_shell_layers top_shell_thickness bottom_shell_layers bottom_shell_thickness"},
+            {"solid", "sparse_infill_density top_shell_layers bottom_shell_layers internal_solid_infill_pattern"},
+            {"dense density denser", "sparse_infill_density"},
+            {"shell shells thick thicker", "top_shell_layers top_shell_thickness bottom_shell_layers bottom_shell_thickness"},
+            {"stringing string strings stringy oozing ooze", "filament_retraction_length filament_retraction_speed filament_deretraction_speed filament_z_hop"},
+            {"adhesion adhere stick sticking stuck warp warping curl peel", "brim_type brim_width brim_object_gap initial_layer_print_height initial_layer_speed nozzle_temperature_initial_layer textured_plate_temp_initial_layer textured_plate_temp"},
+            {"first", "initial_layer_print_height initial_layer_speed nozzle_temperature_initial_layer textured_plate_temp_initial_layer"},
+            {"bed", "textured_plate_temp_initial_layer textured_plate_temp"},
+            {"vase", "spiral_mode"},
+            {"smooth smoother shiny", "ironing_type"},
+        };
+        for (String[] term : terms) SEARCH_TERMS.put(term[0], term[1].split(" "));
+    }
 
     /** Names for settings whose ElegooSlicer label only makes sense inside its desktop panel ("Enable", "Width", "Outer wall"). */
     static final Map<String, String> LABELS = new HashMap<>();
     static {
-        String[][] names = {{"line_width", "Line width"}, {"default_acceleration", "Acceleration"}, {"enable_prime_tower", "Prime tower"},
+        String[][] names = {{"line_width", "Line width"}, {"default_acceleration", "Acceleration (normal printing)"}, {"enable_prime_tower", "Prime tower"},
+            {"wall_loops", "Walls (wall loops)"}, {"sparse_infill_density", "Infill amount (sparse infill density)"},
+            {"sparse_infill_pattern", "Infill pattern (sparse infill)"}, {"infill_wall_overlap", "Infill overlap with walls (infill/wall overlap)"},
+            {"top_shell_layers", "Top solid layers (top shell)"}, {"bottom_shell_layers", "Bottom solid layers (bottom shell)"},
+            {"seam_gap", "Seam gap (loop cut-off)"}, {"ironing_type", "Ironing (smooths top surfaces)"}, {"brim_type", "Brim type (adhesion)"},
+            {"spiral_mode", "Spiral vase (vase mode)"},
             {"prime_tower_width", "Prime tower width"}, {"support_type", "Support type"}, {"support_style", "Support style"},
             {"support_threshold_angle", "Support threshold angle"}, {"support_top_z_distance", "Support top Z distance"},
             {"support_interface_top_layers", "Support top interface layers"}, {"support_base_pattern_spacing", "Support base pattern spacing"},
             {"support_on_build_plate_only", "Support on build plate only"}, {"initial_layer_speed", "First layer speed"},
             {"outer_wall_speed", "Outer wall speed"}, {"inner_wall_speed", "Inner wall speed"}, {"sparse_infill_speed", "Sparse infill speed"},
             {"internal_solid_infill_speed", "Internal solid infill speed"}, {"top_surface_speed", "Top surface speed"},
-            {"gap_infill_speed", "Gap infill speed"}, {"travel_speed", "Travel speed"}, {"fuzzy_skin", "Fuzzy skin"}, {"ironing_type", "Ironing"},
+            {"gap_infill_speed", "Gap infill speed"}, {"travel_speed", "Travel speed"}, {"fuzzy_skin", "Fuzzy skin"},
             {"fan_min_speed", "Minimum fan speed"}, {"fan_max_speed", "Maximum fan speed"}, {"textured_plate_temp", "Bed temperature (textured plate)"},
             {"textured_plate_temp_initial_layer", "First layer bed temperature (textured plate)"}, {"filament_retraction_length", "Retraction length"},
             {"filament_retraction_speed", "Retraction speed"}, {"filament_deretraction_speed", "De-retraction speed"}, {"slow_down_layer_time", "Slow down for layers under"}};
@@ -73,8 +109,10 @@ public final class SliceSettingsActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     private WorkshopUi ui;
     private LinearLayout content, list;
-    private TextView summary;
+    private TextView summary, searchHint;
     private EditText search;
+    private Switch changedOnly;
+    private String objectLabel = "this model";
     private JSONObject selection, definitions;
     private List<File> models = new ArrayList<>();
     private final Map<String, String> overrides = new LinkedHashMap<>();
@@ -87,8 +125,9 @@ public final class SliceSettingsActivity extends Activity {
         object = getIntent().getIntArrayExtra(EXTRA_OBJECT);
         if (object != null && object.length != 2) object = null;
         String objectName = getIntent().getStringExtra(EXTRA_OBJECT_NAME);
-        content = object != null ? ui.page("Settings for " + (objectName == null || objectName.isEmpty() ? "this model" : objectName),
-                "Changes apply to this model and its copies only, on top of the print settings for the whole plate.")
+        if (objectName != null && !objectName.isEmpty()) objectLabel = objectName;
+        content = object != null ? ui.page("Settings for " + objectLabel,
+                "Only " + objectLabel + " and its copies use these changes; the rest of the plate keeps the print settings.")
             : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament slot on top of its preset. \u201cPrinter's value\u201d means the printer preset decides.")
             : ui.page("Print settings", "Changes apply to this slice on top of the process preset. The preset's value is shown under each setting.");
         try {
@@ -110,6 +149,11 @@ public final class SliceSettingsActivity extends Activity {
             public void onTextChanged(CharSequence s, int a, int b, int c) { filter(); }
             public void afterTextChanged(Editable s) { }
         });
+        searchHint = ui.label(top, "", 12, ui.muted, false);
+        changedOnly = new Switch(this); changedOnly.setText("Show changed only"); changedOnly.setTextColor(ui.ink); changedOnly.setTextSize(14);
+        changedOnly.setPadding(0, ui.dp(6), 0, ui.dp(6));
+        top.addView(changedOnly, new LinearLayout.LayoutParams(-1, -2));
+        changedOnly.setOnCheckedChangeListener((v, checked) -> filter());
         LinearLayout buttons = ui.row(top);
         ui.rowButton(buttons, "Saved sets…", this::chooseSaved, false);
         ui.rowButton(buttons, "Save these…", this::saveSet, false);
@@ -180,7 +224,7 @@ public final class SliceSettingsActivity extends Activity {
                 if (definition == null || !supported(definition.optString("type"))) continue;
                 if (LABELS.containsKey(group[i])) try { definition.put("label", LABELS.get(group[i])); } catch (JSONException ignored) { }
                 if (card == null) card = ui.card(list, group[0]);
-                rows.put(group[i], row(card, group[i], definition));
+                rows.put(group[i], row(card, group[0], group[i], definition));
             }
         }
         updateSummary(); filter();
@@ -219,22 +263,44 @@ public final class SliceSettingsActivity extends Activity {
         return Arrays.asList("float", "int", "percent", "float_or_percent", "bool", "enum", "string").contains(type);
     }
 
-    private View row(LinearLayout card, String key, JSONObject definition) {
+    private View row(LinearLayout card, String group, String key, JSONObject definition) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.VERTICAL); row.setPadding(0, ui.dp(4), 0, ui.dp(8));
-        row.setTag(definition.optString("label").toLowerCase(Locale.ROOT) + " " + key);
+        row.setTag((group + " " + definition.optString("label") + " " + key).toLowerCase(Locale.ROOT));
         card.addView(row);
-        String unit = definition.optString("unit"), type = definition.optString("type");
+        String unit = definition.optString("unit"), type = definition.optString("type"), label = definition.optString("label");
         String preset = definition.optString("preset"), value = overrides.containsKey(key) ? overrides.get(key) : preset;
-        TextView title = ui.label(row, definition.optString("label") + (unit.isEmpty() || type.equals("percent") ? "" : " (" + unit + ")"), 14, ui.ink, overrides.containsKey(key));
-        title.setPadding(0, ui.dp(2), 0, 0);
+        // The unit goes in the name only for a plain name; a name with its own brackets already says what it is.
+        boolean unitInName = !unit.isEmpty() && !type.equals("percent") && !label.contains("(");
+        String heading = label + (unitInName ? " (" + unit + ")" : "");
+        LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL);
+        row.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        TextView title = new TextView(this); title.setText(heading); title.setTextSize(14); title.setTextColor(ui.ink);
+        title.setPadding(0, ui.dp(2), 0, ui.dp(2));
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         String tooltip = definition.optString("tooltip");
-        if (!tooltip.isEmpty()) title.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(definition.optString("label")).setMessage(tooltip).setPositiveButton("Close", null).show());
+        Runnable showHelp = () -> new AlertDialog.Builder(this).setTitle(label).setMessage(tooltip).setPositiveButton("Close", null).show();
+        if (!tooltip.isEmpty()) {
+            title.setOnClickListener(v -> showHelp.run());
+            TextView help = new TextView(this); help.setText("?"); help.setGravity(Gravity.CENTER); help.setTextSize(14);
+            help.setTypeface(Typeface.DEFAULT, Typeface.BOLD); help.setTextColor(ui.teal); help.setContentDescription("What is " + label + "?");
+            GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(ui.dp(2), ui.teal); help.setBackground(ring);
+            help.setOnClickListener(v -> showHelp.run());
+            LinearLayout.LayoutParams helpLayout = new LinearLayout.LayoutParams(ui.dp(30), ui.dp(30)); helpLayout.leftMargin = ui.dp(8);
+            header.addView(help, helpLayout);
+        }
+        TextView reset = new TextView(this); reset.setText("Reset"); reset.setTextSize(13); reset.setTextColor(ui.teal);
+        reset.setTypeface(Typeface.DEFAULT, Typeface.BOLD); reset.setMinHeight(ui.dp(40)); reset.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        reset.setPadding(ui.dp(10), 0, 0, 0); reset.setVisibility(View.GONE);
+        reset.setContentDescription("Reset " + label + " to the " + (object != null ? "plate's" : slot >= 0 ? "filament preset's" : "preset's") + " value");
+        reset.setOnClickListener(v -> { overrides.remove(key); build(); });
+        header.addView(reset, new LinearLayout.LayoutParams(-2, -2));
         TextView note = ui.label(row, "", 12, ui.muted, false); note.setPadding(0, 0, 0, ui.dp(2));
         Runnable showNote = () -> {
             boolean changed = overrides.containsKey(key);
-            note.setText((object != null ? (changed ? "Changed · plate: " : "Plate: ") : changed ? "Changed · preset: " : "Preset: ") + display(definition, preset) + (tooltip.isEmpty() ? "" : " · tap the name for help"));
+            note.setText((object != null ? (changed ? "Changed · plate: " : "Plate: ") : changed ? "Changed · preset: " : "Preset: ") + display(definition, preset));
             note.setTextColor(changed ? ui.teal : ui.muted);
-            title.setTypeface(android.graphics.Typeface.DEFAULT, changed ? android.graphics.Typeface.BOLD : android.graphics.Typeface.NORMAL);
+            title.setTypeface(Typeface.DEFAULT, changed ? Typeface.BOLD : Typeface.NORMAL);
+            reset.setVisibility(changed ? View.VISIBLE : View.GONE);
             updateSummary();
         };
         switch (type) {
@@ -318,22 +384,76 @@ public final class SliceSettingsActivity extends Activity {
 
     private static String trim(double value) { return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value); }
 
+    /** The name shown for a setting, as the engine labels it after LABELS. */
+    private String labelOf(String key) {
+        JSONObject definition = definitions == null ? null : definitions.optJSONObject(key);
+        return definition == null || definition.optString("label").isEmpty() ? key : definition.optString("label");
+    }
+
+    /** The changed settings by name, the first few, then how many more. */
+    private String changedNames(String lead) {
+        List<String> names = new ArrayList<>();
+        for (String key : overrides.keySet()) names.add(labelOf(key));
+        StringBuilder text = new StringBuilder(lead);
+        for (int i = 0; i < names.size() && i < 4; i++) text.append(i == 0 ? " " : ", ").append(names.get(i));
+        if (names.size() > 4) text.append(" and ").append(names.size() - 4).append(" more");
+        return text.toString();
+    }
+
     private void updateSummary() {
         if (summary == null) return;
         keepResult();
-        if (object != null) summary.setText(overrides.isEmpty() ? "This model follows the plate's settings." : overrides.size() + " setting(s) differ for this model.");
-        else summary.setText(overrides.isEmpty() ? "All settings follow the process preset." : overrides.size() + " setting(s) changed from the preset.");
+        int n = overrides.size();
+        if (object != null) summary.setText(n == 0 ? objectLabel + " follows the plate's settings."
+            : changedNames(n + (n == 1 ? " setting differs" : " settings differ") + " from the plate for " + objectLabel + ":"));
+        else if (n == 0) summary.setText(slot >= 0 ? "All settings follow this filament's preset." : "All settings follow the process preset.");
+        else summary.setText(changedNames(n + (n == 1 ? " setting" : " settings") + " changed from the " + (slot >= 0 ? "filament's preset:" : "preset:")));
         summary.setTextColor(ui.ink);
     }
 
+    /** The settings a search word means that this screen leaves out, with a pointer to where they are; null if none. */
+    private String elsewhere(Set<String> meant) {
+        if (slot >= 0) { for (String key : meant) if (PROCESS_KEYS.contains(key)) return "That is a print setting. Use All settings… on the Slice screen."; }
+        else if (object == null) { for (String key : meant) if (FILAMENT_KEYS.contains(key)) return "That is set per filament. Open a filament's Settings… on the Slice screen."; }
+        else {
+            for (String key : meant) if (FILAMENT_KEYS.contains(key)) return "That is set per filament, not per model.";
+            for (String key : meant) if (PROCESS_KEYS.contains(key)) return "That applies to the whole plate. Change it in All settings… on the Slice screen.";
+        }
+        return null;
+    }
+
+    /** Settings a search word means, for words that name the settings (see SEARCH_TERMS). */
+    static Set<String> termKeys(String query) {
+        Set<String> keys = new HashSet<>();
+        if (query.length() < 3) return keys;
+        for (Map.Entry<String, String[]> term : SEARCH_TERMS.entrySet()) if (term.getKey().contains(query)) keys.addAll(Arrays.asList(term.getValue()));
+        return keys;
+    }
+
     private void filter() {
+        if (list == null || search == null) return;
         String query = search.getText().toString().trim().toLowerCase(Locale.ROOT);
-        for (View row : rows.values()) row.setVisibility(query.isEmpty() || String.valueOf(row.getTag()).contains(query) ? View.VISIBLE : View.GONE);
+        boolean onlyChanged = changedOnly != null && changedOnly.isChecked();
+        Set<String> meant = termKeys(query);
+        int shown = 0;
+        for (Map.Entry<String, View> entry : rows.entrySet()) {
+            View row = entry.getValue();
+            boolean matches = query.isEmpty() || String.valueOf(row.getTag()).contains(query) || meant.contains(entry.getKey());
+            boolean visible = matches && (!onlyChanged || overrides.containsKey(entry.getKey()));
+            row.setVisibility(visible ? View.VISIBLE : View.GONE);
+            if (visible) shown++;
+        }
         for (int i = 0; i < list.getChildCount(); i++) {
             LinearLayout card = (LinearLayout) list.getChildAt(i); boolean any = false;
             for (int j = 1; j < card.getChildCount(); j++) any |= card.getChildAt(j).getVisibility() == View.VISIBLE;
             card.setVisibility(any ? View.VISIBLE : View.GONE);
         }
+        if (searchHint == null) return;
+        String defaultHint = "Try “walls”, “stringing”, “adhesion” or “strong”. Tap ? on a setting for what it does.";
+        if (shown > 0 || (query.isEmpty() && !onlyChanged)) searchHint.setText(defaultHint);
+        else if (query.isEmpty()) searchHint.setText("No settings are changed yet.");
+        else if (onlyChanged) searchHint.setText("No changed setting matches “" + query + "”. Turn off Show changed only to search every setting.");
+        else searchHint.setText(elsewhere(meant) != null ? elsewhere(meant) : "Nothing matches “" + query + "”. Try a word like walls, stringing or adhesion.");
     }
 
     // ------------------------------------------------------------------ saved sets of changes

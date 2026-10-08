@@ -435,26 +435,39 @@ public class SlicerIntegrationTest {
         assertEquals(PROCESS, ((Spinner) field(again, "processSpinner")).getSelectedItem());
     }
 
-    /** With -Dscreenshots=<dir>: the print settings screen with two changes. */
+    /** With -Dscreenshots=<dir>: the settings screen in process, filament and object mode, light and dark. */
     @Test public void renderSettingsScreen() throws Exception {
         String out = System.getProperty("screenshots", "");
         Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
         for (String theme : new String[] {"light", "dark"}) {
             context().getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
-            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
-            selection.overrides.put("wall_loops", "4"); selection.overrides.put("sparse_infill_pattern", "gyroid");
-            android.content.Intent intent = new android.content.Intent(context(), SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson());
-            SliceSettingsActivity activity = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
-            waitFor(() -> field(activity, "definitions") != null);
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
-            View root = activity.getWindow().getDecorView();
-            int width = 1080, height = 4200;
-            root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
-            root.layout(0, 0, width, height);
-            Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            root.draw(new Canvas(bitmap));
-            File file = new File(out, "settings-" + theme + ".png"); file.getParentFile().mkdirs();
-            try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+            for (String mode : new String[] {"process", "filament", "object"}) {
+                NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+                android.content.Intent intent = new android.content.Intent(context(), SliceSettingsActivity.class);
+                if (mode.equals("process")) {
+                    selection.overrides.put("wall_loops", "4"); selection.overrides.put("sparse_infill_pattern", "gyroid");
+                } else if (mode.equals("filament")) {
+                    selection.filamentOverrides.add(Collections.singletonMap("filament_retraction_length", "0.8"));
+                    intent.putExtra(SliceSettingsActivity.EXTRA_FILAMENT_SLOT, 0);
+                } else {
+                    selection.objectSettings.put("1,0", Collections.singletonMap("wall_loops", "5"));
+                    intent.putExtra(SliceSettingsActivity.EXTRA_OBJECT, new int[] {1, 0}).putExtra(SliceSettingsActivity.EXTRA_OBJECT_NAME, "box");
+                }
+                intent.putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson());
+                SliceSettingsActivity activity = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
+                waitFor(() -> field(activity, "definitions") != null);
+                Shadows.shadowOf(Looper.getMainLooper()).idle();
+                View root = activity.getWindow().getDecorView();
+                int width = 1080;
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+                int height = Math.max(root.getMeasuredHeight(), 400);
+                root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+                root.layout(0, 0, width, height);
+                Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
+                root.draw(new Canvas(bitmap));
+                File file = new File(out, "settings-" + mode + "-" + theme + ".png"); file.getParentFile().mkdirs();
+                try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+            }
         }
     }
 

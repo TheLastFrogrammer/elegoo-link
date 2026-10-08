@@ -9,10 +9,20 @@
   canvas { display: block; width: 100%; height: 100%; }
   #message { position: absolute; inset: 0; display: none; align-items: center; justify-content: center; padding: 24px;
     font: 15px/1.4 sans-serif; color: var(--ink, #17252c); text-align: center; }
+  #tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .tag { position: absolute; transform: translate(-50%, -100%); width: max-content; max-width: 70vw; padding: 6px 10px; border-radius: 12px; font: 600 13px/1.25 sans-serif;
+    text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .banner { position: absolute; left: 12px; right: 12px; display: none; padding: 10px 14px; border-radius: 14px; font: 14px/1.35 sans-serif;
+    text-align: center; pointer-events: none; background: rgba(20,28,32,.82); color: #fff; }
+  #hint { bottom: 12px; }
+  #mode { top: 12px; background: #00796b; font-weight: 600; }
 </style>
 </head>
 <body>
 <canvas id="view"></canvas>
+<div id="tags"></div>
+<div id="mode" class="banner" role="status"></div>
+<div id="hint" class="banner" role="note"></div>
 <div id="message"></div>
 <script src="plate.js"></script>
 </body>

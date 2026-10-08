@@ -52,7 +52,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private WebView web;
     private TextView title, status, layerLabel, moveLabel;
     private SeekBar layerBar, moveBar;
-    private Button play, features, travel, follow;
+    private Button play, features, travel, follow, firstLayer;
     private LinearLayout legend, missingCard;
     private GcodeToolpath path;
     private byte[] segments, travels, meta;
@@ -115,10 +115,18 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadii(new float[] {dp(20), dp(20), dp(20), dp(20), 0, 0, 0, 0}); panel.setBackground(shape);
         root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
-        title = label(panel, followMode ? "Following the print" : "Toolpath", 16, ink, true); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        Button back = new Button(this); back.setText("‹ Back"); back.setAllCaps(false); back.setTextSize(14); back.setTextColor(teal); back.setBackground(null);
+        back.setMinHeight(dp(48)); back.setMinimumHeight(dp(48)); back.setMinWidth(dp(64)); back.setMinimumWidth(dp(64)); back.setPadding(0, 0, dp(8), 0);
+        back.setContentDescription("Back"); back.setOnClickListener(v -> finish());
+        header.addView(back);
+        title = new TextView(this); title.setText(followMode ? "Live toolpath" : "Toolpath"); title.setTextSize(16); title.setTextColor(ink); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
         status = label(panel, "Reading G-code…", 13, muted, false);
         HorizontalScrollView legendScroll = new HorizontalScrollView(this); legendScroll.setHorizontalScrollBarEnabled(false);
         legend = new LinearLayout(this); legend.setOrientation(LinearLayout.HORIZONTAL); legendScroll.addView(legend); panel.addView(legendScroll);
+        label(panel, "Colours show what each line is. Tap one to hide it, hold to see only that.", 11, muted, false);
         missingCard = new LinearLayout(this); missingCard.setOrientation(LinearLayout.VERTICAL); missingCard.setVisibility(View.GONE); panel.addView(missingCard);
         layerLabel = label(panel, "Layer", 13, ink, false);
         layerBar = seekBar(panel);
@@ -137,10 +145,14 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         layerBar.setOnSeekBarChangeListener(scrub); moveBar.setOnSeekBarChangeListener(scrub);
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); panel.addView(row);
         play = rowButton(row, "Play", () -> { stopFollowing(); setPlaying(!playing); });
-        features = rowButton(row, "Features…", this::featureDialog);
-        travel = rowButton(row, "Travel off", () -> { showTravel = !showTravel; travel.setText(showTravel ? "Travel on" : "Travel off"); pushView(); });
-        if (followMode) follow = rowButton(row, "Follow", () -> { following = true; lastLocated = -1; setPlaying(false); changed(); });
-        label(panel, "Drag to rotate · two fingers to move and zoom · double-tap to fit", 12, muted, false);
+        firstLayer = rowButton(row, "First layer", this::showFirstLayer);
+        features = rowButton(row, "Show / hide…", this::featureDialog);
+        LinearLayout row2 = new LinearLayout(this); row2.setOrientation(LinearLayout.HORIZONTAL); panel.addView(row2);
+        travel = rowButton(row2, "Travel moves: off", () -> { showTravel = !showTravel; travel.setText(showTravel ? "Travel moves: on" : "Travel moves: off"); pushView(); });
+        if (followMode) follow = rowButton(row2, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); changed(); });
+        rowButton(row2, "What am I seeing?", this::helpDialog);
+        label(panel, followMode ? "Live: the file's toolpath up to where the printer says the nozzle is. Grey = still to print on this layer."
+            : "Drag to rotate · two fingers to move and zoom · double-tap to fit", 12, muted, false);
         setContentView(root);
         setControlsEnabled(false);
         setupWeb();
@@ -185,16 +197,14 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         status.setText("Reading toolpath…"); missingCard.setVisibility(View.GONE); setControlsEnabled(false);
         worker.execute(() -> {
             try {
-                long started = System.currentTimeMillis();
                 GcodeToolpath read = GcodeToolpath.read(file);
                 byte[] s = read.segmentsBinary(), t = read.travelsBinary(), m = read.layersJson().getBytes("UTF-8");
-                long elapsed = System.currentTimeMillis() - started;
                 main.post(() -> {
                     if (isDestroyed()) return;
                     synchronized (this) { path = read; segments = s; travels = t; meta = m; }
                     loadedName = name; layer = Math.max(0, read.layerCount - 1); move = layerSize(layer); lastLocated = -1;
-                    status.setText(String.format(Locale.getDefault(), "%,d moves in %d layers%s · read in %.1f s", read.count, read.layerCount,
-                        read.truncated ? " (first part only: very large file)" : "", elapsed / 1000.0));
+                    status.setText(String.format(Locale.getDefault(), "%,d lines in %d layers%s", read.count, read.layerCount,
+                        read.truncated ? " (first part only: very large file)" : ""));
                     layerBar.setMax(Math.max(0, read.layerCount - 1)); syncBars(); buildLegend(); sent = false; sendData();
                 });
             } catch (IOException | OutOfMemoryError failure) {
@@ -228,8 +238,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private void updateLabels() {
         if (path == null) return;
-        layerLabel.setText(String.format(Locale.getDefault(), "Layer %d of %d · Z %.2f mm", layer + 1, path.layerCount, path.layerZ(layer)));
-        moveLabel.setText(String.format(Locale.getDefault(), "Move %,d of %,d in this layer", move, layerSize(layer)));
+        layerLabel.setText(String.format(Locale.getDefault(), "%sLayer %d of %d · %.2f mm high", following ? "● LIVE · " : "", layer + 1, path.layerCount, path.layerZ(layer)));
+        moveLabel.setText(String.format(Locale.getDefault(), "Drawn so far in this layer: %,d of %,d lines", move, layerSize(layer)));
     }
 
     /** Sends the current range, nozzle and filters to the page. `nozzle` is null outside follow mode. */
@@ -255,10 +265,35 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (playing) { if (layer >= path.layerCount - 1 && move >= layerSize(layer)) { layer = 0; move = 0; } main.post(player); }
     }
 
-    private void stopFollowing() { if (following) { following = false; if (follow != null) follow.setEnabled(true); } }
+    private void stopFollowing() {
+        if (following) {
+            following = false; if (follow != null) follow.setEnabled(true);
+            status.setText("Not live any more: you are looking at the file. Tap “Back to live” to jump to the printer's position.");
+        }
+    }
+
+    /** Layer 1 with everything printed, seen from above: the view for checking the first layer before a print. */
+    private void showFirstLayer() {
+        if (path == null) return;
+        stopFollowing(); setPlaying(false);
+        layer = 0; move = layerSize(0); syncBars(); pushView();
+        if (web != null && pageReady) web.evaluateJavascript("viewer.setView('top')", null);
+        status.setText("First layer, from above. It should be solid, even lines touching edge to edge, with no gaps. Drag the Layer bar to go up.");
+    }
+
+    private void helpDialog() {
+        StringBuilder text = new StringBuilder();
+        text.append("Each coloured line is a stretch of plastic the printer lays down; the colour says what it is (outer wall, infill, support…). The coloured chips list the types in this file.\n\n")
+            .append("Pale grey: layers below the one you are looking at, and, in the current layer, what is still to print.\n")
+            .append("Blue lines (Travel moves): the nozzle moving without printing.\n")
+            .append("Teal dot: the nozzle.\n\n")
+            .append("Use “Show / hide…” or tap a colour chip to hide a type. To find the supports or prime tower, hold their chip to see only that.");
+        if (followMode) text.append("\n\nLive: the phone shows this G-code file, not a camera. The printer reports its current layer and nozzle position, and the viewer shows the file printed up to there. Scrubbing the bars leaves live mode; “Back to live” returns.");
+        new AlertDialog.Builder(this).setTitle("What am I seeing?").setMessage(text).setPositiveButton("Got it", null).show();
+    }
 
     private void setControlsEnabled(boolean on) {
-        for (View view : new View[] {layerBar, moveBar, play, features, travel}) if (view != null) view.setEnabled(on);
+        for (View view : new View[] {layerBar, moveBar, play, firstLayer, features, travel}) if (view != null) view.setEnabled(on);
         if (follow != null) follow.setEnabled(on && !following);
     }
 
@@ -293,7 +328,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         pushView(hasPosition ? new double[] {x, y, z} : null);
         int progress = live.optJSONObject("machine_status").optInt("progress", -1);
         logFollow(print, position, hasPosition, currentLayer, located);
-        status.setText(String.format(Locale.getDefault(), "Printing layer %d of %d%s%s", currentLayer, path.layerCount,
+        status.setText(String.format(Locale.getDefault(), "Live · printing layer %d of %d%s%s", currentLayer, path.layerCount,
             progress >= 0 ? " · " + progress + "%" : "", hasPosition ? "" : " · nozzle position not reported, showing the layer start"));
     }
 
@@ -368,14 +403,26 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         double[] lengths = path.featureLengths();
         for (int i = 0; i < lengths.length; i++) {
             if (lengths[i] <= 0) continue;
-            LinearLayout chip = new LinearLayout(this); chip.setOrientation(LinearLayout.HORIZONTAL); chip.setPadding(0, dp(2), dp(12), dp(6));
+            final int feature = i;
+            LinearLayout chip = new LinearLayout(this); chip.setOrientation(LinearLayout.HORIZONTAL); chip.setPadding(0, dp(10), dp(14), dp(10));
+            chip.setMinimumHeight(dp(48)); chip.setContentDescription(GcodeToolpath.FEATURES[i] + ((hidden >> i & 1) == 1 ? ", hidden. Tap to show." : ". Tap to hide, hold to show only this."));
+            chip.setOnClickListener(v -> { hidden ^= 1 << feature; buildLegend(); pushView(); });
+            chip.setOnLongClickListener(v -> { hidden = soloMask(feature); buildLegend(); pushView(); return true; });
             chip.setGravity(android.view.Gravity.CENTER_VERTICAL);
             View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setColor(Color.parseColor(PALETTE[i])); dot.setCornerRadius(dp(3)); swatch.setBackground(dot);
             chip.addView(swatch, new LinearLayout.LayoutParams(dp(12), dp(12)));
-            TextView name = new TextView(this); name.setText(GcodeToolpath.FEATURES[i]); name.setTextSize(12); name.setTextColor((hidden >> i & 1) == 1 ? muted : ink); name.setPadding(dp(6), 0, 0, 0);
+            TextView name = new TextView(this); name.setText(GcodeToolpath.FEATURES[i]); name.setTextSize(13); name.setTextColor((hidden >> i & 1) == 1 ? muted : ink);
+            if ((hidden >> i & 1) == 1) name.setPaintFlags(name.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG); name.setPadding(dp(6), 0, 0, 0);
             chip.addView(name);
             legend.addView(chip);
         }
+    }
+
+    /** Hides every feature that is in the file except `keep`; a second long-press on the only visible one shows all. */
+    private int soloMask(int keep) {
+        double[] lengths = path.featureLengths(); int mask = 0;
+        for (int i = 0; i < lengths.length; i++) if (i != keep && lengths[i] > 0) mask |= 1 << i;
+        return mask == hidden ? 0 : mask;
     }
 
     private void featureDialog() {
@@ -392,7 +439,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             body.addView(box);
         }
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        new AlertDialog.Builder(this).setTitle("Show features").setView(scroll).setPositiveButton("Done", null).show();
+        new AlertDialog.Builder(this).setTitle("Show or hide line types").setView(scroll).setPositiveButton("Done", null)
+            .setNeutralButton("Show all", (d, w) -> { hidden = 0; buildLegend(); pushView(); }).show();
     }
 
     // ------------------------------------------------------------------ helpers
@@ -405,10 +453,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
     private SeekBar seekBar(LinearLayout parent) {
         SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
-        parent.addView(bar, new LinearLayout.LayoutParams(-1, dp(36))); return bar;
+        parent.addView(bar, new LinearLayout.LayoutParams(-1, dp(48))); return bar;
     }
     private Button rowButton(LinearLayout row, String text, Runnable action) {
-        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(44)); button.setMinimumHeight(dp(44));
+        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
         button.setPadding(dp(6), dp(4), dp(6), dp(4)); button.setTextSize(13);
         button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, teal}));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12));

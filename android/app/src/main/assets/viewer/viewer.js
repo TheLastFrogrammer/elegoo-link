@@ -3,7 +3,7 @@
 //   meta.json      layer starts, travel starts, layer Z, bed outline, feature names
 //   segments.bin   float32 x0 y0 z0 x1 y1 z1 width height type, per segment
 //   travels.bin    float32 x0 y0 z0 x1 y1 z1, per travel move
-// The app drives it through window.viewer: load(), update(state), setTheme(theme), resetCamera().
+// The app drives it through window.viewer: load(), update(state), setTheme(theme), resetCamera(), setView("top"|"iso").
 "use strict";
 (function () {
   const STRIDE = 9 * 4;
@@ -335,6 +335,8 @@
   }
   setPalette(PALETTE);
   try { setupStatic(); } catch (error) { fail("WebGL setup failed: " + error.message); return; }
-  window.viewer = { load, update, setTheme, resetCamera: fit, redraw, camera };
+  // setView("top") looks straight down, to check a layer's lines; anything else is the usual three-quarter view.
+  function setView(name) { fit(); if (name === "top") { camera.yaw = -90; camera.pitch = 88; redraw(); } }
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

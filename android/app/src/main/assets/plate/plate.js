@@ -4,7 +4,10 @@
 // "LKM1", uint32 triangle count, float32 xyz per corner, uint8 filament per triangle; centered on X/Y, base at Z 0).
 // A placement is {file, object, x, y, rotation, scale}: the copy's footprint center on the bed, degrees about Z and
 // a uniform scale, as the engine applies them. The app drives the page through window.plate and hears back through
-// Android.onReady(), onSelect(index), onChanged(json) and onError(text).
+// Android.onReady(), onSelect(index), onChanged(json) and onError(text). onChanged's json is
+// {placements, problems, advice, selected}: problems[i] lists the issue keys of copy i ("off the bed", ...) and
+// advice[i] the same issues as sentences saying what to do. The page also draws its own labels over the models
+// (name of the selected one, what is wrong with a problem one) and a short how-to hint on the first runs.
 "use strict";
 (function () {
   const canvas = document.getElementById("view");
@@ -199,10 +202,58 @@
       return issues;
     });
   }
+  // Each issue as a short title and what to do about it, for the labels over the models and the panel's status.
+  function advice(issue) {
+    switch (issue) {
+      case "off the bed": return ["Off the bed", "drag it back or tap Arrange"];
+      case "in the excluded area": return ["In a no-print zone (red)", "drag it clear"];
+      case "on the prime tower": return ["On the prime tower", "drag it clear or tap Arrange"];
+      case "taller than the printer": return ["Too tall (max " + Math.round(scene.height) + " mm)", "scale it down or lay it on a face"];
+      case "touching another copy": return ["Overlapping another model", "drag them apart or tap Arrange"];
+      default: return [issue, ""];
+    }
+  }
   function changed() {
     redraw();
-    if (android && android.onChanged) android.onChanged(JSON.stringify({ placements: scene.placements, problems: problems(), selected }));
+    const found = problems();
+    if (android && android.onChanged) android.onChanged(JSON.stringify({ placements: scene.placements, problems: found,
+      advice: found.map((list) => list.map((issue) => { const a = advice(issue); return a[1] ? a[0] + ": " + a[1] : a[0]; })), selected }));
   }
+
+  // ---------------------------------------------------------------- labels over the models
+  const tags = document.getElementById("tags"), modeBanner = document.getElementById("mode"), hint = document.getElementById("hint");
+  function readable(rgb) { return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 0.6 ? "#10181c" : "#ffffff"; }
+  function css(rgb) { return "rgb(" + rgb.slice(0, 3).map((c) => Math.round(c * 255)).join(",") + ")"; }
+  function updateTags(issues, viewProj) {
+    const width = canvas.clientWidth, height = canvas.clientHeight; let used = 0; const said = new Set();
+    scene.placements.forEach((p, i) => {
+      const bad = issues[i].length > 0; if (!bad && i !== selected) return;
+      const key = bad ? issues[i].join() : ""; if (bad && said.has(key)) return; said.add(key);
+      const object = objectOf(p); if (!object) return;
+      const r = rect(p), clip = transform(viewProj, [p.x, p.y, r[4]], 1); if (clip[3] <= 0) return;
+      let el = tags.children[used]; if (!el) { el = document.createElement("div"); el.className = "tag"; tags.appendChild(el); }
+      used++;
+      const parts = issues[i].map(advice);
+      el.textContent = bad ? "\u26A0 " + parts[0][0] + (parts[0][1] ? ": " + parts[0][1] : "") + (parts.length > 1 ? " (+" + (parts.length - 1) + " more)" : "") : (object.name || "Model");
+      const colour = bad ? theme.problem : theme.selected;
+      el.style.background = css(colour); el.style.color = readable(colour); el.style.display = "block";
+      const half = el.offsetWidth / 2;
+      el.style.left = Math.max(half + 6, Math.min(width - half - 6, (clip[0] / clip[3] * 0.5 + 0.5) * width)) + "px";
+      el.style.top = Math.max(el.offsetHeight + 6, (0.5 - clip[1] / clip[3] * 0.5) * height - 8) + "px";
+    });
+    while (tags.children.length > used) tags.removeChild(tags.lastChild);
+  }
+  function showMode(text) { modeBanner.textContent = text || ""; modeBanner.style.display = text ? "block" : "none"; }
+  // A short how-to over the plate for the first few visits, gone at the first touch.
+  function showHint() {
+    let n = 0; try { n = +localStorage.getItem("plateHints") || 0; } catch (e) { }
+    if (n >= 3) return;
+    try { localStorage.setItem("plateHints", String(n + 1)); } catch (e) { }
+    hint.style.whiteSpace = "pre-line";
+    hint.textContent = "Drag a model to move it\nDrag empty space to turn the view \u00B7 two fingers to zoom \u00B7 double-tap empty space to reset it";
+    hint.style.display = "block";
+  }
+  function hideHint() { hint.style.display = "none"; }
 
   // ---------------------------------------------------------------- static geometry
   let plateVao, gridVao, gridCount, excludedVao, towerVao;
@@ -222,6 +273,11 @@
     gridVao = vao(lines); gridCount = lines.length / 3;
     const excluded = boxOf(scene.excluded); excludedVao = excluded ? vao(quad(excluded, 0.02)) : null;
     towerVao = scene.tower ? vao(quad(scene.tower, 0.03)) : null;
+    resetView();
+  }
+  function resetView() {
+    const bed = boxOf(scene.bed) || [0, 0, 256, 256];
+    camera.yaw = -60; camera.pitch = 38;
     camera.target = [(bed[0] + bed[2]) / 2, (bed[1] + bed[3]) / 2, 0];
     camera.distance = Math.max(bed[2] - bed[0], bed[3] - bed[1]) * 1.25 / Math.tan(camera.fov * Math.PI / 360) / 2;
   }
@@ -290,6 +346,7 @@
       gl.bindVertexArray(object.vao); gl.drawArrays(gl.TRIANGLES, 0, object.count);
     });
     gl.bindVertexArray(null);
+    updateTags(issues, viewProj);
   }
   function redraw() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
 
@@ -356,10 +413,10 @@
   }
 
   const pointers = new Map();
-  let drag = null, tapStart = null, moved = false;
+  let drag = null, tapStart = null, moved = false, lastTap = 0;
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId); pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    moved = false;
+    moved = false; hideHint();
     if (pointers.size === 1) {
       tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       const hit = pick(e.clientX, e.clientY), point = onBed(e.clientX, e.clientY);
@@ -407,9 +464,12 @@
       const hit = pick(e.clientX, e.clientY);
       if (layMode && hit >= 0) {
         const normal = faceAt(e.clientX, e.clientY, hit);
-        if (normal) { scene.placements[hit].down = normal; scene.placements[hit].rotation = 0; layMode = false; select(hit); changed();
+        if (normal) { scene.placements[hit].down = normal; scene.placements[hit].rotation = 0; layMode = false; showMode(""); select(hit); changed();
           if (android && android.onLayDone) android.onLayDone(true); }
-      } else if (hit < 0) select(-1);
+      } else if (hit < 0) {
+        select(-1);
+        const now = Date.now(); if (now - lastTap < 350) resetView(); lastTap = now; redraw();
+      }
     }
     drag = null; tapStart = null;
   }
@@ -426,7 +486,7 @@
         colours: data.colours || [], placements: data.placements || [] });
       scene.objects = data.objects.map((o) => Object.assign({}, o, { footprints: {} }));
       await Promise.all(scene.objects.map((o, i) => fetch("/data/mesh/" + i).then((r) => r.arrayBuffer()).then((b) => setupMesh(o, b))));
-      setupBed(); select(-1); changed();
+      setupBed(); select(scene.placements.length === 1 ? 0 : -1); changed(); showHint();
       if (android && android.onLoaded) android.onLoaded(scene.objects.length);
     } catch (error) { fail("The plate could not be shown: " + error.message); }
   }
@@ -448,9 +508,9 @@
       scene.placements.push(copy); select(scene.placements.length - 1); changed();
     },
     remove() { if (!current()) return; scene.placements.splice(selected, 1); select(-1); changed(); },
-    setLayMode(on) { layMode = !!on; },
+    setLayMode(on) { layMode = !!on; showMode(layMode ? "Tap the face of the model that should lie flat on the bed" : ""); },
     upright() { const p = current(); if (!p) return; delete p.down; p.rotation = 0; changed(); },
-    resetCamera() { setupBed(); redraw(); },
+    resetCamera() { resetView(); redraw(); },
     redraw, camera, scene,
   };
   window.plate = api;

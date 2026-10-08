@@ -258,4 +258,59 @@ public class ScreenshotTest {
                 .put("layerStart", path.layerStart(19)).put("layerEnd", path.layerEnd(19)).put("move", move.getInt(activity)).toString().getBytes("UTF-8"));
         }
     }
+
+    private static void setField(Object target, String name, Object value) throws Exception {
+        Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
+    }
+
+    private static void snapshot(android.app.Activity activity, File file) throws Exception {
+        View root = activity.getWindow().getDecorView(); int width = 1080, height = 2340;
+        root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, width, height);
+        Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888); root.draw(new Canvas(bitmap));
+        file.getParentFile().mkdirs();
+        try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+    }
+
+    /** The plate screen's native panel (the page above it is blank here): one model selected, then two with a problem. */
+    @Test public void renderPlatePanel() throws Exception {
+        String out = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        JSONObject inspected = new JSONObject().put("files", new org.json.JSONArray().put(new JSONObject().put("objects", new org.json.JSONArray()
+            .put(new JSONObject().put("name", "3DBenchy")).put(new JSONObject().put("name", "elegoo_cube")))));
+        for (String theme : new String[] {"light", "dark"}) {
+            context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
+            android.content.Intent intent = new android.content.Intent(context, PlateActivity.class)
+                .putExtra(PlateActivity.EXTRA_MODELS, new String[] {"/none/model.3mf"}).putExtra(PlateActivity.EXTRA_SELECTION, "{}").putExtra(PlateActivity.EXTRA_INSPECTED, inspected.toString());
+            PlateActivity activity = Robolectric.buildActivity(PlateActivity.class, intent).setup().get();
+            org.json.JSONArray placements = new org.json.JSONArray()
+                .put(new JSONObject().put("file", 0).put("object", 0).put("x", 120.5).put("y", 98.0).put("rotation", 45).put("scale", 1))
+                .put(new JSONObject().put("file", 0).put("object", 1).put("x", 130.0).put("y", 100.0).put("rotation", 0).put("scale", 1));
+            setField(activity, "placements", placements); setField(activity, "selected", 0);
+            Method shown = PlateActivity.class.getDeclaredMethod("showSelected"); shown.setAccessible(true); shown.invoke(activity);
+            Method buttons = PlateActivity.class.getDeclaredMethod("setButtons"); buttons.setAccessible(true); buttons.invoke(activity);
+            Field status = PlateActivity.class.getDeclaredField("status"); status.setAccessible(true);
+            ((android.widget.TextView) status.get(activity)).setText("3DBenchy - Overlapping another model: drag them apart or tap Arrange\nelegoo_cube - Overlapping another model: drag them apart or tap Arrange");
+            snapshot(activity, new File(out, "plate-panel-" + theme + ".png"));
+        }
+    }
+
+    /** Writes the viewer page's data files (meta.json, segments.bin, travels.bin) for the Playwright harness. */
+    @Test public void dumpViewerData() throws Exception {
+        String out = System.getProperty("screenshots", "");
+        Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
+        File gcode = new File(org.robolectric.RuntimeEnvironment.getApplication().getCacheDir(), "dump.gcode");
+        try (java.io.InputStream in = getClass().getResourceAsStream("/gcode/tolerance-cc2.gcode")) { java.nio.file.Files.copy(in, gcode.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        // Some infill relabelled as support and prime tower, so the harness can show them.
+        String text = new String(java.nio.file.Files.readAllBytes(gcode.toPath()), "UTF-8");
+        int n = 0; StringBuilder sb = new StringBuilder();
+        for (String line : text.split("\n", -1)) { if (line.equals(";TYPE:Sparse infill")) line = n++ % 3 == 0 ? ";TYPE:Support" : n % 3 == 1 ? ";TYPE:Prime tower" : line; sb.append(line).append('\n'); }
+        java.nio.file.Files.write(gcode.toPath(), sb.toString().getBytes("UTF-8"));
+        GcodeToolpath path = GcodeToolpath.read(gcode);
+        File dir = new File(out, "viewer-data/data"); dir.mkdirs();
+        java.nio.file.Files.write(new File(dir, "meta.json").toPath(), path.layersJson().getBytes("UTF-8"));
+        java.nio.file.Files.write(new File(dir, "segments.bin").toPath(), path.segmentsBinary());
+        java.nio.file.Files.write(new File(dir, "travels.bin").toPath(), path.travelsBinary());
+    }
 }

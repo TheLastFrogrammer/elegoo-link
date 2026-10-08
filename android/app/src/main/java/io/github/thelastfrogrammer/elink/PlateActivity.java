@@ -35,8 +35,9 @@ public final class PlateActivity extends Activity {
     private WebView web;
     private TextView status, selectedLabel;
     private EditText scale;
-    private Button rotateLeft, rotateRight, rotate90, copy, remove, arrange, done, layFace, upright, modelSettings;
+    private Button rotateLeft, rotateRight, rotate45, rotate90, copy, remove, arrange, done, layFace, upright, modelSettings;
     private boolean laying;
+    private int problemCount;
     private final List<File> models = new ArrayList<>();
     private String selection;
     private JSONObject inspected;
@@ -63,31 +64,40 @@ public final class PlateActivity extends Activity {
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(12));
         panel.setBackgroundColor(ui.surface); panel.setElevation(ui.dp(8)); root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
         status = ui.label(panel, "Placing the models…", 13, ui.muted, false);
-        selectedLabel = ui.label(panel, "Tap a model to select it, then drag it to move it.", 14, ui.ink, true);
+        selectedLabel = ui.label(panel, "Tap a model to select it. The buttons below work on the selected model.", 14, ui.ink, true);
         LinearLayout turn = ui.row(panel);
-        rotateLeft = ui.rowButton(turn, "⟲ 15°", () -> js("plate.rotate(15)"), false);
-        rotateRight = ui.rowButton(turn, "⟳ 15°", () -> js("plate.rotate(-15)"), false);
-        rotate90 = ui.rowButton(turn, "90°", () -> js("plate.rotate(90)"), false);
+        rotateLeft = ui.rowButton(turn, "Left 15°", () -> js("plate.rotate(15)"), false);
+        rotateRight = ui.rowButton(turn, "Right 15°", () -> js("plate.rotate(-15)"), false);
+        rotate45 = ui.rowButton(turn, "Left 45°", () -> js("plate.rotate(45)"), false);
+        rotate90 = ui.rowButton(turn, "Left 90°", () -> js("plate.rotate(90)"), false);
+        for (Button b : new Button[] {rotateLeft, rotateRight, rotate45, rotate90}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(12); }
+        rotateLeft.setContentDescription("Turn 15 degrees left"); rotateRight.setContentDescription("Turn 15 degrees right");
+        rotate45.setContentDescription("Turn 45 degrees left"); rotate90.setContentDescription("Turn 90 degrees left");
         LinearLayout lay = ui.row(panel);
-        layFace = ui.rowButton(lay, "Lay on face", () -> {
+        layFace = ui.rowButton(lay, "Lay flat on a face", () -> {
             laying = !laying; js("plate.setLayMode(" + laying + ")");
-            layFace.setText(laying ? "Cancel" : "Lay on face");
-            if (laying) { status.setText("Tap the face of a model that should rest on the bed."); status.setTextColor(ui.teal); }
+            layFace.setText(laying ? "Cancel" : "Lay flat on a face");
+            if (laying) { status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); }
         }, false);
-        upright = ui.rowButton(lay, "Upright", () -> js("plate.upright()"), false);
+        upright = ui.rowButton(lay, "Upright again", () -> js("plate.upright()"), false);
         LinearLayout edit = ui.row(panel);
-        scale = new EditText(this); scale.setHint("Scale %"); scale.setHintTextColor(ui.muted); scale.setTextColor(ui.ink); scale.setSingleLine(true);
+        TextView scaleName = new TextView(this); scaleName.setText("Scale"); scaleName.setTextColor(ui.ink); scaleName.setTextSize(14);
+        scale = new EditText(this); scale.setHint("100"); scale.setHintTextColor(ui.muted); scale.setTextColor(ui.ink); scale.setSingleLine(true);
         scale.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL); scale.setImeOptions(EditorInfo.IME_ACTION_DONE);
         scale.setBackgroundTintList(android.content.res.ColorStateList.valueOf(ui.teal)); scale.setContentDescription("Scale in percent");
-        edit.addView(scale, new LinearLayout.LayoutParams(0, ui.dp(52), 1));
+        LinearLayout scaleBox = new LinearLayout(this); scaleBox.setOrientation(LinearLayout.HORIZONTAL); scaleBox.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView percent = new TextView(this); percent.setText("%"); percent.setTextColor(ui.ink); percent.setTextSize(14);
+        scaleBox.addView(scaleName); scaleBox.addView(scale, new LinearLayout.LayoutParams(0, ui.dp(52), 1)); scaleBox.addView(percent);
+        scaleName.setPadding(0, 0, ui.dp(8), 0); percent.setPadding(ui.dp(4), 0, ui.dp(8), 0);
+        LinearLayout.LayoutParams scaleLayout = new LinearLayout.LayoutParams(0, -2, 1); scaleLayout.topMargin = ui.dp(6); edit.addView(scaleBox, scaleLayout);
         scale.setOnEditorActionListener((v, action, event) -> { applyScale(); return false; });
         scale.setOnFocusChangeListener((v, focused) -> { if (!focused) applyScale(); });
         copy = ui.rowButton(edit, "Copy", () -> js("plate.duplicate()"), false);
         remove = ui.rowButton(edit, "Remove", () -> js("plate.remove()"), false);
         LinearLayout finish = ui.row(panel);
-        arrange = ui.rowButton(finish, "Arrange", this::arrangeAll, false);
+        arrange = ui.rowButton(finish, "Arrange all", this::arrangeAll, false);
         modelSettings = ui.rowButton(finish, "Model settings…", this::editSelectedSettings, false);
-        done = ui.rowButton(finish, "Done", this::finishWithResult, true);
+        done = ui.button(panel, "Done · back to Slice", this::finishWithResult, true);
         setContentView(root);
         setButtons();
 
@@ -112,6 +122,16 @@ public final class PlateActivity extends Activity {
     @Override protected void onDestroy() { if (web != null) web.destroy(); super.onDestroy(); }
 
     private void finishWithResult() {
+        if (problemCount > 0 && placements.length() > 0) {
+            new android.app.AlertDialog.Builder(this).setTitle("Some models have a problem")
+                .setMessage(problemCount + " model(s) are off the bed, overlapping or in a no-print zone, as marked in red. Slicing like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
+                .setNegativeButton("Fix it", null).setPositiveButton("Go back anyway", (d, w) -> leave()).show();
+            return;
+        }
+        leave();
+    }
+
+    private void leave() {
         if (placements.length() == 0) { status.setText("Put at least one model on the plate, or go back to the Slice screen with Arrange."); status.setTextColor(ui.error); return; }
         setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
         finish();
@@ -230,14 +250,19 @@ public final class PlateActivity extends Activity {
 
     private void setButtons() {
         boolean on = selected >= 0;
-        for (View view : new View[] {rotateLeft, rotateRight, rotate90, copy, remove, scale, upright, modelSettings}) view.setEnabled(on);
+        for (View view : new View[] {rotateLeft, rotateRight, rotate45, rotate90, copy, remove, scale, upright, modelSettings}) view.setEnabled(on);
         layFace.setEnabled(placements.length() > 0);
     }
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; load(); }); }
         @JavascriptInterface public void onLoaded(int count) { }
-        @JavascriptInterface public void onLayDone(boolean laid) { main.post(() -> { laying = false; layFace.setText("Lay on face"); }); }
+        @JavascriptInterface public void onLayDone(boolean laid) {
+            main.post(() -> {
+                laying = false; layFace.setText("Lay flat on a face");
+                if (laid && problemCount == 0) { status.setText("Laid flat on that face. “Upright again” undoes it."); status.setTextColor(ui.teal); }
+            });
+        }
         @JavascriptInterface public void onError(String message) { main.post(() -> { status.setText(message); status.setTextColor(ui.error); }); }
         @JavascriptInterface public void onSelect(int index) { main.post(() -> { selected = index; showSelected(); setButtons(); }); }
         @JavascriptInterface public void onChanged(String json) {
@@ -247,13 +272,15 @@ public final class PlateActivity extends Activity {
                     placements = state.getJSONArray("placements"); selected = state.optInt("selected", -1);
                     // Kept current, so leaving with Back (or a back gesture) keeps the layout too.
                     if (placements.length() > 0) setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
-                    JSONArray problems = state.getJSONArray("problems");
+                    JSONArray problems = state.getJSONArray("problems"), advice = state.optJSONArray("advice");
                     List<String> lines = new ArrayList<>();
                     for (int i = 0; i < problems.length(); i++) {
                         JSONArray issues = problems.getJSONArray(i);
-                        if (issues.length() > 0) lines.add(name(i) + ": " + String.join(", ", toList(issues)));
+                        if (issues.length() > 0) lines.add(name(i) + " - " + String.join("; ", toList(advice != null && advice.optJSONArray(i) != null ? advice.getJSONArray(i) : issues)));
                     }
-                    status.setText(lines.isEmpty() ? placements.length() + " model(s) on the plate." : String.join("\n", lines));
+                    problemCount = lines.size();
+                    int n = placements.length();
+                    status.setText(lines.isEmpty() ? (n == 1 ? "1 model on the plate, inside the bed." : n + " models on the plate, all inside the bed and apart.") : String.join("\n", lines));
                     status.setTextColor(lines.isEmpty() ? ui.muted : ui.error);
                     showSelected(); setButtons();
                 } catch (JSONException ignored) { }
@@ -262,9 +289,9 @@ public final class PlateActivity extends Activity {
     }
 
     private void showSelected() {
-        if (selected < 0 || selected >= placements.length()) { selectedLabel.setText("Tap a model to select it, then drag it to move it."); scale.setText(""); return; }
+        if (selected < 0 || selected >= placements.length()) { selectedLabel.setText("Tap a model to select it. The buttons below work on the selected model."); scale.setText(""); return; }
         JSONObject p = placements.optJSONObject(selected);
-        selectedLabel.setText(String.format(Locale.getDefault(), "%s · X %.1f Y %.1f · %.0f°", name(selected), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation")));
+        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s\nX %.1f · Y %.1f mm · turned %.0f°", name(selected), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation")));
         if (!scale.hasFocus()) scale.setText(String.format(Locale.ROOT, "%.0f", p.optDouble("scale", 1) * 100));
     }
 
