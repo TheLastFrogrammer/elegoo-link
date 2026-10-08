@@ -206,14 +206,15 @@
       return issues;
     });
   }
-  // Each issue as a short title and what to do about it, for the labels over the models and the panel's status.
-  function advice(issue) {
+  // Each issue as a short title and what to do about it, for `n` models sharing it (labels over the models).
+  function advice(issue, n) {
+    n = n || 1; const them = n > 1 ? "them" : "it", many = n + " models";
     switch (issue) {
-      case "off the bed": return ["Off the bed", "drag it back or tap Arrange all"];
-      case "in the excluded area": return ["In a no-print zone (red)", "drag it clear"];
-      case "on the prime tower": return ["On the prime tower", "drag it clear or tap Arrange all"];
-      case "taller than the printer": return ["Too tall (max " + Math.round(scene.height) + " mm)", "scale it down, or More… > Lay flat"];
-      case "touching another copy": return ["Overlapping another model", "drag them apart or tap Arrange all"];
+      case "off the bed": return [n > 1 ? many + " off the bed" : "Off the bed", "drag " + them + " back or tap Arrange all"];
+      case "in the excluded area": return [n > 1 ? many + " in a no-print zone (red)" : "In a no-print zone (red)", "drag " + them + " clear"];
+      case "on the prime tower": return [n > 1 ? many + " on the prime tower" : "On the prime tower", "drag " + them + " clear or tap Arrange all"];
+      case "taller than the printer": return [(n > 1 ? many + " too tall" : "Too tall") + " (max " + Math.round(scene.height) + " mm)", "scale " + them + " down, or More… > Lay flat"];
+      case "touching another copy": return [n > 1 ? many + " overlap" : "Overlapping another model", "drag them apart or tap Arrange all"];
       default: return [issue, ""];
     }
   }
@@ -221,31 +222,95 @@
     redraw();
     const found = problems();
     if (android && android.onChanged) android.onChanged(JSON.stringify({ placements: scene.placements, problems: found,
-      advice: found.map((list) => list.map((issue) => { const a = advice(issue); return a[1] ? a[0] + ": " + a[1] : a[0]; })), selected }));
+      advice: found.map((list) => list.map((issue) => { const a = advice(issue, 1); return a[1] ? a[0] + ": " + a[1] : a[0]; })), selected }));
   }
 
   // ---------------------------------------------------------------- labels over the models
   const tags = document.getElementById("tags"), modeBanner = document.getElementById("mode"), hint = document.getElementById("hint");
   function readable(rgb) { return 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 0.6 ? "#10181c" : "#ffffff"; }
   function css(rgb) { return "rgb(" + rgb.slice(0, 3).map((c) => Math.round(c * 255)).join(",") + ")"; }
+  // Where a model is on screen: the bounding box of its eight corners in CSS px, and whether the box has any front-facing part.
+  function screenBox(p, viewProj, width, height) {
+    const r = rect(p); let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, front = true;
+    for (let k = 0; k < 8; k++) {
+      const c = transform(viewProj, [k & 1 ? r[2] : r[0], k & 2 ? r[3] : r[1], k & 4 ? r[4] : 0], 1);
+      if (c[3] <= 0.001) { front = false; continue; }
+      const x = (c[0] / c[3] * 0.5 + 0.5) * width, y = (0.5 - c[1] / c[3] * 0.5) * height;
+      x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y);
+    }
+    return front && isFinite(x0) ? [x0, y0, x1, y1] : null;
+  }
+  function hit(a, b) { return a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3]; }
+  function plainName(object) { return (object.name || "Model").replace(/\.[A-Za-z0-9]{1,5}$/, ""); }
+  // One label per model with a problem, or per group of nearby models with the same problem ("2 models overlap"), and one for
+  // the selected model. A label sits above its own model, or below it when that would cover another model; for a model whose
+  // centre is out of view it is pinned to the nearest edge with an arrow towards it. Tapping a label selects the model and
+  // moves the view to it.
   function updateTags(issues, viewProj) {
-    const width = canvas.clientWidth, height = canvas.clientHeight; let used = 0; const said = new Set();
+    const width = canvas.clientWidth, height = canvas.clientHeight, margin = 8;
+    // Labels keep out of the banners at the top (lay-flat prompt) and bottom (how-to hint) while they are showing.
+    const top0 = modeBanner.style.display === "block" ? modeBanner.offsetHeight + 20 : margin / 2;
+    const bottom0 = hint.style.display === "block" ? height - hint.offsetHeight - 20 : height - margin / 2;
+    const boxes = scene.placements.map((p) => objectOf(p) ? screenBox(p, viewProj, width, height) : null);
+    const centre = (b) => b ? [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2] : null;
+    const items = [], grouped = new Set();
     scene.placements.forEach((p, i) => {
-      const bad = issues[i].length > 0; if (!bad && i !== selected) return;
-      const key = bad ? issues[i].join() : ""; if (bad && said.has(key)) return; said.add(key);
-      const object = objectOf(p); if (!object) return;
-      const r = rect(p), clip = transform(viewProj, [p.x, p.y, r[4]], 1); if (clip[3] <= 0) return;
+      if (issues[i].length === 0 || grouped.has(i) || !objectOf(p)) return;
+      const key = issues[i].join(), members = [i]; grouped.add(i);
+      scene.placements.forEach((q, j) => {
+        if (j === i || grouped.has(j) || issues[j].join() !== key || !boxes[i] || !boxes[j]) return;
+        const a = centre(boxes[i]), b = centre(boxes[j]);
+        if (Math.hypot(a[0] - b[0], a[1] - b[1]) < 160) { members.push(j); grouped.add(j); }
+      });
+      const parts = issues[i].map((issue) => advice(issue, members.length));
+      items.push({ members, bad: true, target: members.indexOf(selected) >= 0 ? selected : members[0],
+        text: "\u26A0 " + parts[0][0] + (parts[0][1] ? ": " + parts[0][1] : "") + (parts.length > 1 ? " (+" + (parts.length - 1) + " more)" : "") });
+    });
+    if (selected >= 0 && selected < scene.placements.length && issues[selected].length === 0 && objectOf(scene.placements[selected]))
+      items.push({ members: [selected], bad: false, target: selected, text: plainName(objectOf(scene.placements[selected])) });
+    const placed = []; let used = 0;
+    items.forEach((item) => {
       let el = tags.children[used]; if (!el) { el = document.createElement("div"); el.className = "tag"; tags.appendChild(el); }
       used++;
-      const parts = issues[i].map(advice);
-      el.textContent = bad ? "\u26A0 " + parts[0][0] + (parts[0][1] ? ": " + parts[0][1] : "") + (parts.length > 1 ? " (+" + (parts.length - 1) + " more)" : "") : (object.name || "Model");
-      const colour = bad ? theme.problem : theme.selected;
-      el.style.background = css(colour); el.style.color = readable(colour); el.style.display = "block";
-      const half = el.offsetWidth / 2;
-      el.style.left = Math.max(half + 6, Math.min(width - half - 6, (clip[0] / clip[3] * 0.5 + 0.5) * width)) + "px";
-      el.style.top = Math.max(el.offsetHeight + 6, (0.5 - clip[1] / clip[3] * 0.5) * height - 8) + "px";
+      const colour = item.bad ? theme.problem : theme.selected;
+      el.style.background = css(colour); el.style.color = readable(colour); el.style.display = "block"; el.style.transform = "none";
+      el.textContent = item.text;
+      el.onclick = () => { select(item.target); focusOn(item.members.find((m) => { const c = centre(boxes[m]); return !c || c[0] < 0 || c[0] > width || c[1] < 0 || c[1] > height; }) ?? item.target); };
+      // The union of the members' boxes, those in front of the camera.
+      const mine = item.members.map((m) => boxes[m]).filter(Boolean);
+      const box = mine.length ? [Math.min(...mine.map((b) => b[0])), Math.min(...mine.map((b) => b[1])), Math.max(...mine.map((b) => b[2])), Math.max(...mine.map((b) => b[3]))] : null;
+      const c = box ? centre(box) : null, inView = c && c[0] >= 0 && c[0] <= width && c[1] >= 0 && c[1] <= height;
+      let w = el.offsetWidth, h = el.offsetHeight, options = [];
+      const others = scene.placements.map((q, k) => item.members.indexOf(k) < 0 ? boxes[k] : null).filter(Boolean);
+      if (inView) {
+        const x = Math.max(margin, Math.min(width - w - margin, c[0] - w / 2));
+        options = [[x, box[1] - h - 6], [x, box[3] + 6], [x, box[1] - 2 * h - 12], [x, box[3] + h + 12]];
+      } else {
+        // Pinned to the edge the model lies towards, with an arrow that way.
+        const dx = c ? c[0] - width / 2 : 0, dy = c ? c[1] - height / 2 : height, horizontal = Math.abs(dx) / width >= Math.abs(dy) / height;
+        const arrow = horizontal ? (dx > 0 ? "\u2192 " : "\u2190 ") : (dy > 0 ? "\u2193 " : "\u2191 ");
+        el.textContent = horizontal && dx < 0 ? arrow.trim() + "\u00A0" + item.text : item.text + "\u00A0" + arrow.trim();
+        w = el.offsetWidth; h = el.offsetHeight;
+        const along = horizontal ? Math.max(top0, Math.min(bottom0 - h, (c ? c[1] : height / 2) - h / 2)) : Math.max(margin, Math.min(width - w - margin, (c ? c[0] : width / 2) - w / 2));
+        for (const shift of [0, h + 6, -(h + 6), 2 * (h + 6), -2 * (h + 6), 3 * (h + 6), -3 * (h + 6)])
+          options.push(horizontal ? [dx > 0 ? width - w - margin : margin, along + shift] : [along + shift, dy > 0 ? bottom0 - h : top0]);
+      }
+      // Clear of every model (a pinned label also keeps off its own model's visible part) and of other labels, if there is room.
+      const blockers = inView ? others : others.concat(mine);
+      let choice = options.find((o) => { const r = [o[0], o[1], o[0] + w, o[1] + h];
+        return r[1] >= top0 && r[3] <= bottom0 && r[0] >= 0 && r[2] <= width && !blockers.some((b) => hit(r, b)) && !placed.some((b) => hit(r, b)); });
+      if (!choice) choice = options.find((o) => { const r = [o[0], o[1], o[0] + w, o[1] + h];
+        return r[1] >= top0 && r[3] <= bottom0 && r[0] >= 0 && r[2] <= width && !others.some((b) => hit(r, b)); });
+      if (!choice) choice = options.find((o) => o[1] >= top0 && o[1] + h <= bottom0) || options[0];
+      el.style.left = choice[0] + "px"; el.style.top = choice[1] + "px";
+      placed.push([choice[0], choice[1], choice[0] + w, choice[1] + h]);
     });
     while (tags.children.length > used) tags.removeChild(tags.lastChild);
+  }
+  // Moves the view so the copy is in the middle of it, keeping the zoom and angle.
+  function focusOn(index) {
+    const p = scene.placements[index]; if (!p || !objectOf(p)) return;
+    camera.target = [p.x, p.y, 0]; redraw();
   }
   function showMode(text) { modeBanner.textContent = text || ""; modeBanner.style.display = text ? "block" : "none"; }
   // A short how-to over the plate for the first few visits, gone at the first touch.

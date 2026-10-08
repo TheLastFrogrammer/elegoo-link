@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.12.3 (development):** usability pass on the settings editor (everyday-word search, plain names, collapsible groups, changed settings named with Show changed only and per-row Reset), the plate view (problems written on the model, a compact panel with the 3D view taking most of the screen, More… for rarer actions) and the toolpath viewer (First layer, tap-to-hide legend, Live explained, model fitted to the frame).
+**v0.12.4 (development):** plate view problems no longer rely on colour (striped models with a ring on the bed; labels anchored to their model, pinned with an arrow when it is out of view, tap to go to it); a compact viewer legend with plain names; clearer sign-in, cloud details, cloud camera and print recordings (weekday, time, duration and result; clock-time charts).
+
+**v0.12.3:** usability pass on the settings editor (everyday-word search, plain names, collapsible groups, changed settings named with Show changed only and per-row Reset), the plate view (problems written on the model, a compact panel with the 3D view taking most of the screen, More… for rarer actions) and the toolpath viewer (First layer, tap-to-hide legend, Live explained, model fitted to the frame).
 
 **v0.12.2:** clarity pass from a task-by-task usability audit: hints that say what is missing with a way to fix it (Open Settings keeps the sliced file in Files), connection fields that say where to find the IP and code on the printer, home Wi-Fi before the cloud sign-in, plainer cloud-control and error texts, "Filament 1 · T0" naming throughout, a red Stop, a confirm before trays replace filaments, and a heater control that says it does not change sliced files.
 
