@@ -48,7 +48,7 @@ public final class MainActivity extends Activity {
     private Button materialDetails;
     private Button saveCopy, shareInspection, clearCopy, cancelDownload;
     private int INK = 0xff17252c, MUTED = 0xff5a6d76, TEAL = 0xff00796b, BACKGROUND = 0xfff2f5f6, SURFACE = Color.WHITE, BUTTON = 0xffe2efed,
-        TILE = 0xfff4f8f8, TRACK = 0xffdbe6e6, ERROR = 0xffb3261e, AMBER = 0xff9a6700, NAV = Color.WHITE;
+        TILE = 0xfff4f8f8, TRACK = 0xffdbe6e6, ERROR = 0xffb3261e, AMBER = 0xff855700, NAV = Color.WHITE;
     private boolean dark;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService checks = Executors.newSingleThreadExecutor();
@@ -136,13 +136,13 @@ public final class MainActivity extends Activity {
         // Header: printer name, connection chip, model/firmware line.
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); content.addView(header);
         title = new TextView(this); title.setText("Link Workshop"); title.setTextSize(24); title.setTextColor(INK); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.END); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); A11y.heading(title); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4)); header.addView(summary);
         identity = label(content, "Centauri Carbon 2", 13, MUTED, false);
         // Results of actions show here, on every tab, until tapped away or replaced.
         feedback = new TextView(this); feedback.setTextSize(14); feedback.setTextColor(INK); feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
         GradientDrawable banner = new GradientDrawable(); banner.setColor(TILE); banner.setCornerRadius(dp(14)); banner.setStroke(dp(1), (TEAL & 0x00ffffff) | 0x55000000); feedback.setBackground(banner);
-        feedback.setContentDescription("Latest message. Tap to dismiss."); feedback.setVisibility(View.GONE);
+        A11y.polite(feedback); A11y.clickLabel(feedback, "Dismiss message"); feedback.setVisibility(View.GONE);
         feedback.setOnClickListener(v -> { dismissedFeedback = feedback.getText().toString(); feedback.setVisibility(View.GONE); });
         LinearLayout.LayoutParams bannerLayout = new LinearLayout.LayoutParams(-1, -2); bannerLayout.topMargin = dp(8); content.addView(feedback, bannerLayout);
         // Bottom navigation.
@@ -152,7 +152,7 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < 4; i++) {
             final int target = i; LinearLayout item = new LinearLayout(this); item.setOrientation(LinearLayout.VERTICAL); item.setGravity(Gravity.CENTER); item.setPadding(0, dp(8), 0, dp(8));
             ImageView icon = new ImageView(this); icon.setImageResource(icons[i]); item.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
-            TextView name = new TextView(this); name.setText(titles[i]); name.setTextSize(12); name.setGravity(Gravity.CENTER); item.addView(name);
+            TextView name = new TextView(this); name.setText(titles[i]); name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 12 * getResources().getDisplayMetrics().density * Math.min(1.3f, getResources().getConfiguration().fontScale)); name.setGravity(Gravity.CENTER); name.setMaxLines(2); item.addView(name);
             item.setContentDescription(titles[i]); item.setOnClickListener(v -> selectPage(target));
             item.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x3363d5c7 : 0x22006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
             tabs[i] = item; navigation.addView(item, new LinearLayout.LayoutParams(0, -2, 1));
@@ -176,7 +176,7 @@ public final class MainActivity extends Activity {
         pinProbeHelp = label(connectionCard, "Experimental and read-only: use the pairing PIN the printer currently shows, not the access code. The PIN is never saved.", 13, MUTED, false);
         serial = input(connectionCard, "Serial number (optional)", false);
         serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
-        remember = new CheckBox(this); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
+        remember = new CheckBox(this); remember.setMinHeight(dp(48)); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
         remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
         LinearLayout connectRow = row(connectionCard);
         connect = rowButton(connectRow, "Connect", this::toggleConnection, true);
@@ -218,10 +218,10 @@ public final class MainActivity extends Activity {
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
         ring = new ProgressRing(this, TRACK, TEAL, INK, MUTED); heroRow.addView(ring, new LinearLayout.LayoutParams(dp(116), dp(116)));
         LinearLayout heroText = new LinearLayout(this); heroText.setOrientation(LinearLayout.VERTICAL); heroText.setPadding(dp(16), 0, 0, 0); heroRow.addView(heroText, new LinearLayout.LayoutParams(0, -2, 1));
-        state = label(heroText, "Waiting for printer", 20, INK, true);
+        state = A11y.polite(label(heroText, "Waiting for printer", 20, INK, true));
         job = label(heroText, "", 14, INK, false); job.setMaxLines(2); job.setEllipsize(android.text.TextUtils.TruncateAt.END);
         detail = label(heroText, "", 13, MUTED, false);
-        faults = label(hero, "", 14, ERROR, true);
+        faults = A11y.assertive(label(hero, "", 14, ERROR, true));
         LinearLayout heroButtons = row(hero);
         liveToolpath = rowButton(heroButtons, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), false);
         graphs = rowButton(heroButtons, "Print recordings", () -> {
@@ -230,7 +230,7 @@ public final class MainActivity extends Activity {
             if (current != null) intent.putExtra(RecordingsActivity.EXTRA_META, current.meta.getAbsolutePath());
             startActivity(intent);
         }, false);
-        LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL); tilesRow = tiles;
+        LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(getResources().getConfiguration().fontScale >= 1.5f ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL); tilesRow = tiles;
         LinearLayout.LayoutParams tilesLayout = new LinearLayout.LayoutParams(-1, -2); tilesLayout.topMargin = dp(12); currentSection.addView(tiles, tilesLayout);
         tileNozzle = tile(tiles, "Nozzle", 0); tileBed = tile(tiles, "Bed", dp(8)); tileChamber = tile(tiles, "Chamber", dp(8));
         LinearLayout controls = card("Controls"); controlsCard = controls;
@@ -299,7 +299,7 @@ public final class MainActivity extends Activity {
             SlicedMaterials materials = printer.selectedReport.materials; LinearLayout body = dialogBody();
             for (SlicedMaterials.Entry entry : materials.entries) {
                 LinearLayout row = new LinearLayout(this); body.addView(row);
-                if (entry.color != null) { View swatch = new View(this); swatch.setContentDescription("Configured filament color " + entry.color); swatch.setBackgroundColor(Color.parseColor(entry.color)); LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(28),dp(28)); size.setMargins(0,dp(8),dp(12),0); row.addView(swatch,size); }
+                if (entry.color != null) { View swatch = new View(this); swatch.setContentDescription("Configured filament colour: " + colourWords(entry.color)); swatch.setBackgroundColor(Color.parseColor(entry.color)); LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(28),dp(28)); size.setMargins(0,dp(8),dp(12),0); row.addView(swatch,size); }
                 label(row, entry.text(), 14, INK, false);
             }
             for (String warning : materials.warnings) label(body, warning, 13, MUTED, false);
@@ -488,8 +488,8 @@ public final class MainActivity extends Activity {
         label(body, "Homed: " + (head == null ? "unknown" : head.optString("homed_axes", "none").toUpperCase(Locale.ROOT))
             + (position == null ? "" : String.format(Locale.ROOT, "\nPosition X %.1f · Y %.1f · Z %.1f", position.optDouble("x", 0), position.optDouble("y", 0), position.optDouble("z", 0)))
             + "\nAn axis must be homed before it can move. Each tap sends one move.", 14, INK, false);
-        Spinner axis = spinner(body, new String[] {"X axis", "Y axis", "Z axis"});
-        Spinner step = spinner(body, new String[] {"0.1 mm", "1 mm", "10 mm"});
+        Spinner axis = spinner(body, new String[] {"X axis", "Y axis", "Z axis"}); A11y.name(axis, "Axis to move");
+        Spinner step = spinner(body, new String[] {"0.1 mm", "1 mm", "10 mm"}); A11y.name(step, "Step size");
         double[] steps = {0.1, 1, 10}; String[] axes = {"x", "y", "z"};
         LinearLayout moves = row(body);
         rowButton(moves, "− Move", () -> jog(axes[axis.getSelectedItemPosition()], -steps[step.getSelectedItemPosition()]), false);
@@ -533,7 +533,7 @@ public final class MainActivity extends Activity {
             int color = i == page ? TEAL : MUTED;
             ((ImageView) tabs[i].getChildAt(0)).setImageTintList(ColorStateList.valueOf(color));
             TextView name = (TextView) tabs[i].getChildAt(1); name.setTextColor(color); name.setTypeface(Typeface.DEFAULT, i == page ? Typeface.BOLD : Typeface.NORMAL);
-            tabs[i].setSelected(i == page);
+            A11y.tab(tabs[i], i == page);
         }
         settings.edit().putInt("page", page).apply();
     }
@@ -557,6 +557,7 @@ public final class MainActivity extends Activity {
     private void setMore(boolean open) {
         moreOpen = open; moreOptions.setVisibility(open ? View.VISIBLE : View.GONE);
         moreToggle.setText(open ? "Fewer options ▴" : "More options: saved printers, route, authentication ▾");
+        moreToggle.setContentDescription(open ? "Fewer options" : "More options: saved printers, route, authentication"); A11y.expandable(moreToggle, open);
     }
     private boolean pinProbe() { return authPicker != null && authPicker.getSelectedItemPosition() == 1; }
     private boolean remoteMode() { return routePicker != null && routePicker.getSelectedItemPosition() == 1; }
@@ -659,7 +660,7 @@ public final class MainActivity extends Activity {
     private void buildFileBrowser() {
         LinearLayout browser = card("Printer files");
         LinearLayout storageRow = row(browser); storageRow.setGravity(Gravity.CENTER_VERTICAL);
-        storagePicker = spinner(storageRow, new String[] {"Internal storage", "USB drive"}); storagePicker.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
+        storagePicker = spinner(storageRow, new String[] {"Internal storage", "USB drive"}); A11y.name(storagePicker, "Printer storage to list"); storagePicker.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
         storagePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { if (printer != null && printer.canQuery() && !printer.busy(Cc2Codec.FILES)) printer.browse(position == 0 ? "local" : "u-disk", 0); }
@@ -726,14 +727,18 @@ public final class MainActivity extends Activity {
         }
     }
     private Spinner spinner(LinearLayout parent, String[] items) {
-        Spinner view = new Spinner(this); ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_spinner_item, items); adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); view.setAdapter(adapter); view.setBackgroundTintList(tint(TEAL)); parent.addView(view, new LinearLayout.LayoutParams(-1, dp(52))); return view;
+        Spinner view = new Spinner(this);
+        ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
+            @Override public View getView(int position, View convert, android.view.ViewGroup group) { TextView text = (TextView) super.getView(position, convert, group); text.setSingleLine(false); text.setMaxLines(Integer.MAX_VALUE); return text; }
+            @Override public View getDropDownView(int position, View convert, android.view.ViewGroup group) { TextView text = (TextView) super.getDropDownView(position, convert, group); text.setSingleLine(false); text.setMaxLines(Integer.MAX_VALUE); return text; }
+        }; adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); view.setAdapter(adapter); view.setBackgroundTintList(tint(TEAL)); view.setMinimumHeight(dp(52)); parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); A11y.nameFromCaption(view, parent); return view;
     }
     private LinearLayout dialogBody() { LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8)); return body; }
     private void fileActions(JSONObject file, String storage) {
         String name = file.optString("filename");
         try { Cc2Codec.filename(name); } catch (Exception error) { message("Only .gcode files can be started or deleted here."); return; }
         LinearLayout body = dialogBody();
-        fileThumbnail = new ImageView(this); fileThumbnail.setAdjustViewBounds(true); fileThumbnail.setVisibility(View.GONE); body.addView(fileThumbnail, new LinearLayout.LayoutParams(-1, dp(180)));
+        fileThumbnail = new ImageView(this); fileThumbnail.setAdjustViewBounds(true); fileThumbnail.setContentDescription("Preview image of this print file from the printer"); fileThumbnail.setVisibility(View.GONE); body.addView(fileThumbnail, new LinearLayout.LayoutParams(-1, dp(180)));
         fileThumbnailKey = storage + "/" + name; if (printer != null) printer.thumbnail(storage, name); showThumbnail();
         label(body, FeatureData.file(file), 14, INK, false);
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
@@ -849,8 +854,8 @@ public final class MainActivity extends Activity {
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { int nt = Integer.parseInt(nozzle.getText().toString()), bt = Integer.parseInt(bed.getText().toString()); Cc2Codec.temperatureRequest(0, nt, bt); if (printer != null) printer.temperatures(nt, bt); dialog.dismiss(); } catch (Exception error) { nozzle.setError("Nozzle 0–300°C; bed 0–100°C"); } })); dialog.show();
     }
     private void fanDialog() {
-        LinearLayout body = dialogBody(); Spinner kind = spinner(body, new String[] {"Part cooling", "Auxiliary", "Chamber"});
-        TextView value = label(body, "Fan: 0%", 15, INK, false); SeekBar amount = new SeekBar(this); amount.setMax(100); body.addView(amount);
+        LinearLayout body = dialogBody(); Spinner kind = spinner(body, new String[] {"Part cooling", "Auxiliary", "Chamber"}); A11y.name(kind, "Fan");
+        TextView value = label(body, "Fan: 0%", 15, INK, false); SeekBar amount = new SeekBar(this); amount.setMax(100); body.addView(amount); A11y.labelFor(value, amount);
         amount.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { public void onProgressChanged(SeekBar bar, int progress, boolean user) { value.setText("Fan: " + progress + "%"); } public void onStartTrackingTouch(SeekBar bar) { } public void onStopTrackingTouch(SeekBar bar) { } });
         new AlertDialog.Builder(this).setTitle("Fan setting").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set fan", (dialog, which) -> { if (printer != null) printer.fan(new String[] {"fan", "aux_fan", "box_fan"}[kind.getSelectedItemPosition()], amount.getProgress()); }).show();
     }
@@ -1043,7 +1048,7 @@ public final class MainActivity extends Activity {
         int percent = machine == null ? 0 : Math.max(0, Math.min(100, machine.optInt("progress", 0)));
         String stateText = snapshot.length() == 0 ? (printer == null ? "Starting…" : connecting ? "Connecting…" : cloud ? "Waiting for printer" : "Not connected") : StatusPresentation.state(snapshot);
         if (snapshot.length() > 0 && !live) stateText += " · stale";
-        state.setText(stateText);
+        if (!stateText.contentEquals(state.getText())) state.setText(stateText);
         // The title beside the ring already names the state, so the ring holds only progress (and stays empty while idle).
         boolean inJobNow = machine != null && machine.optInt("status", -1) == 2;
         ring.set(inJobNow ? percent : -1, inJobNow ? percent + "%" : "", inJobNow && print != null && print.optInt("total_layer", 0) > 0 ? "layer " + print.optInt("current_layer", 0) + "/" + print.optInt("total_layer", 0) : "");
@@ -1065,7 +1070,7 @@ public final class MainActivity extends Activity {
         ((LinearLayout.LayoutParams) graphs.getLayoutParams()).leftMargin = liveToolpath.getVisibility() == View.VISIBLE ? dp(8) : 0;
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
-        faults.setText(codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen.");
+        String faultText = codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen."; if (!faultText.contentEquals(faults.getText())) faults.setText(faultText);
         faults.setVisibility(codes.isEmpty() ? View.GONE : View.VISIBLE);
         setTile(tileNozzle, temperature("extruder")); setTile(tileBed, temperature("heater_bed")); setTile(tileChamber, temperature("ztemperature_sensor"));
         // Where controls go.
@@ -1120,11 +1125,12 @@ public final class MainActivity extends Activity {
                 LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
                 TextView first = new TextView(this); first.setTextColor(INK); first.setTextSize(15); first.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL);
                 first.setText("Tray " + trayId + " · " + (type.isEmpty() ? "Empty" : name.isEmpty() || name.equalsIgnoreCase(type) ? type : name)); text.addView(first);
-                String second = type; // the dot shows the colour; the hex stays in the content description
+                String second = type; // the dot shows the colour; its plain name is written beside the material and spoken instead of the hex
+                if (colour != null) second += (second.isEmpty() ? "" : " · ") + colourWords(colour);
                 if (tray.has("min_nozzle_temp") && tray.has("max_nozzle_temp")) second += (second.isEmpty() ? "" : " · ") + tray.optInt("min_nozzle_temp") + "–" + tray.optInt("max_nozzle_temp") + "°C";
                 if (!second.isEmpty()) { TextView detailLine = new TextView(this); detailLine.setText(second); detailLine.setTextColor(MUTED); detailLine.setTextSize(12); text.addView(detailLine); }
                 if (active) { TextView chip = new TextView(this); chip.setTextSize(12); chip.setTypeface(Typeface.DEFAULT, Typeface.BOLD); chip.setPadding(dp(10), dp(4), dp(10), dp(4)); chip(chip, "Active", TEAL); row.addView(chip); }
-                row.setContentDescription("Tray " + trayId + ", " + (type.isEmpty() ? "empty" : type + " " + name) + (colour == null ? "" : ", colour " + colour) + (active ? ", active" : ""));
+                row.setContentDescription("Tray " + trayId + ", " + (type.isEmpty() ? "empty" : type + " " + name) + (colour == null ? "" : ", " + colourWords(colour)) + (active ? ", active" : ""));
                 trayList.addView(row);
             }
         }
@@ -1238,7 +1244,7 @@ public final class MainActivity extends Activity {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(14), dp(16), dp(14));
         GradientDrawable background = new GradientDrawable(); background.setColor(SURFACE); background.setCornerRadius(dp(20)); card.setBackground(background);
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); (currentSection == null ? content : currentSection).addView(card, layout);
-        if (title != null) label(card, title, 17, INK, true);
+        if (title != null) A11y.heading(label(card, title, 17, INK, true));
         return card;
     }
     private LinearLayout row(LinearLayout parent) {
@@ -1246,7 +1252,7 @@ public final class MainActivity extends Activity {
     }
     /** Equal-width button in a row; primary buttons are filled with the accent color. */
     private Button rowButton(LinearLayout row, String text, Runnable action, boolean primary) {
-        Button button = new Button(this); button.setText(text); styleButton(button);
+        Button button = new A11y.DimButton(this); button.setText(text); styleButton(button);
         if (primary) {
             // Disabled primary buttons fall back to the tonal colors so they do not look tappable.
             GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
@@ -1265,16 +1271,22 @@ public final class MainActivity extends Activity {
         GradientDrawable background = new GradientDrawable(); background.setColor(SURFACE); background.setCornerRadius(dp(16)); tile.setBackground(background);
         TextView name = new TextView(this); name.setText(caption); name.setTextSize(12); name.setTextColor(MUTED); tile.addView(name);
         TextView value = new TextView(this); value.setText("—"); value.setTextSize(20); value.setTextColor(INK); value.setTypeface(Typeface.DEFAULT, Typeface.BOLD); tile.addView(value);
-        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.leftMargin = gap; row.addView(tile, layout);
+        boolean stacked = row.getOrientation() == LinearLayout.VERTICAL; // at large font sizes the tiles stack instead of breaking words
+        LinearLayout.LayoutParams layout = stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
+        if (stacked) layout.topMargin = gap == 0 ? 0 : dp(8); else layout.leftMargin = gap;
+        row.addView(tile, layout);
         return value;
     }
+    private static int darker(int color) { return 0xff000000 | (int) (((color >> 16) & 255) * 0.8f) << 16 | (int) (((color >> 8) & 255) * 0.8f) << 8 | (int) ((color & 255) * 0.8f); }
     private void chip(TextView view, String text, int color) {
-        view.setText(text); view.setTextColor(color);
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12)); shape.setColor((color & 0x00ffffff) | 0x26000000); view.setBackground(shape);
+        // Light theme: the text is a darker shade of the colour on a fainter tint, so it stays above 4.5:1 on the page and card backgrounds.
+        int text_ = dark ? color : darker(color);
+        view.setText(text); view.setTextColor(text_);
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12)); shape.setColor((color & 0x00ffffff) | (dark ? 0x26000000 : 0x14000000)); view.setBackground(shape);
     }
     /** A group heading inside a card, set apart from the controls above it. */
     private void subheading(LinearLayout parent, String text) {
-        TextView view = label(parent, text, 14, INK, true);
+        TextView view = A11y.heading(label(parent, text, 14, INK, true));
         ((LinearLayout.LayoutParams) view.getLayoutParams()).topMargin = dp(14);
     }
     private TextView label(LinearLayout parent, String text, int size, int color, boolean bold) {
@@ -1283,10 +1295,10 @@ public final class MainActivity extends Activity {
     }
     private EditText input(LinearLayout parent, String hint, boolean password) {
         EditText input = new EditText(this); input.setHint(hint); input.setHintTextColor(MUTED); input.setBackgroundTintList(tint(TEAL)); input.setSingleLine(true); input.setTextColor(tint(INK)); if (password) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        parent.addView(input, new LinearLayout.LayoutParams(-1, dp(56))); return input;
+        input.setMinHeight(dp(56)); parent.addView(input, new LinearLayout.LayoutParams(-1, -2)); return input;
     }
     private Button button(LinearLayout parent, String text, Runnable action) {
-        Button button = new Button(this); button.setText(text); styleButton(button);
+        Button button = new A11y.DimButton(this); button.setText(text); styleButton(button);
         button.setOnClickListener(view -> action.run()); LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6); parent.addView(button, layout); return button;
     }
     private ColorStateList tint(int color) { return new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, color}); }
@@ -1296,6 +1308,7 @@ public final class MainActivity extends Activity {
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6); button.setLayoutParams(layout); button.setPadding(dp(10), dp(8), dp(10), dp(8));
     }
-    private CheckBox checkbox(LinearLayout parent, String text, boolean checked) { CheckBox view = new CheckBox(this); view.setText(text); view.setTextColor(INK); view.setButtonTintList(tint(TEAL)); view.setChecked(checked); parent.addView(view); return view; }
+    private CheckBox checkbox(LinearLayout parent, String text, boolean checked) { CheckBox view = new CheckBox(this); view.setMinHeight(dp(48)); view.setText(text); view.setTextColor(INK); view.setButtonTintList(tint(TEAL)); view.setChecked(checked); parent.addView(view); return view; }
+    private static String colourWords(String hex) { String name = WorkshopUi.colourName(hex); return name == null ? "colour not reported" : name; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

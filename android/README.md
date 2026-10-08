@@ -1,6 +1,8 @@
 # Link Workshop for Android
 
-**v0.12.5 (development):** cloud uploads and controls no longer wait forever when Elegoo's online endpoint refuses the account (live updates and recent reports count as online), with a clearer upload hint and step-by-step upload diagnostics; one vocabulary across the app (Local / Cloud / Waiting for printer / Printer offline / Not connected, build plate vs project plate, Layout, Print profile, Printer controls, CANVAS 0 · tray 1).
+**v0.12.6 (development):** accessibility: TalkBack names for switches, fields and dropdowns, headings, announced status changes, expand/collapse and tab states, colour names instead of hex; layouts that hold at large text; better contrast; 48dp targets; select and move models in the layout without gestures (More… → Select a model…, Move…, Reset view). A refused cloud-mode download no longer claims the printer's file server is off: Elegoo's own cloud page downloads the same way.
+
+**v0.12.5:** cloud uploads and controls no longer wait forever when Elegoo's online endpoint refuses the account (live updates and recent reports count as online), with a clearer upload hint and step-by-step upload diagnostics; one vocabulary across the app (Local / Cloud / Waiting for printer / Printer offline / Not connected, build plate vs project plate, Layout, Print profile, Printer controls, CANVAS 0 · tray 1).
 
 **v0.12.4:** plate view problems no longer rely on colour (striped models with a ring on the bed; labels anchored to their model, pinned with an arrow when it is out of view, tap to go to it); a compact viewer legend with plain names; clearer sign-in, cloud details, cloud camera and print recordings (weekday, time, duration and result; clock-time charts).
 
@@ -10,7 +12,7 @@
 
 **v0.12.1:** layout pass on the Slice and main screens: numbered steps, compact filament slots with colour dots, a plate chooser for multi-plate results, controls that say why they are off with one fix button, compact file and history rows, and Print setup in three sections (checks, build plate, filament) with tray colours.
 
-**v0.12.0:** **Upload and print…** and Files uploads also work through the Elegoo cloud: the file goes to Elegoo's storage and the printer fetches it, as ElegooSlicer does; **Settings for one model…** (on the Slice screen, or **Model settings…** in the plate view) gives one model and its copies its own walls, infill, speeds, supports and other object settings, like the desktop's per-object settings; four more **calibration prints**: pressure advance lines and pattern, input shaping frequency and damping; a cloud-mode download that the printer refuses now says why (its file server is off outside LAN Only).
+**v0.12.0:** **Upload and print…** and Files uploads also work through the Elegoo cloud: the file goes to Elegoo's storage and the printer fetches it, as ElegooSlicer does; **Settings for one model…** (on the Slice screen, or **Model settings…** in the plate view) gives one model and its copies its own walls, infill, speeds, supports and other object settings, like the desktop's per-object settings; four more **calibration prints**: pressure advance lines and pattern, input shaping frequency and damping; a cloud-mode download that the printer refuses says so.
 
 **v0.11.1:** downloads also work while the printer is watched through the Elegoo cloud: the app finds the printer on the same Wi-Fi by its serial and downloads from its HTTP port, as Elegoo's printer page does (Live toolpath's **Download from printer** and the Files tab).
 

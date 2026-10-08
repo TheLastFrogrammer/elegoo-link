@@ -81,8 +81,8 @@ public class PlateDialogsTest {
         more().performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Close"), names);
-        for (String name : names.subList(0, 6)) assertTrue(name, button(d, name).isEnabled());
+        assertEquals(Arrays.asList("Select a model…", "Move…", "Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view", "Close"), names);
+        for (String name : names.subList(0, 9)) assertTrue(name, button(d, name).isEnabled());
         assertTrue(button(d, "Copy").getMinHeight() >= 0);
     }
 
@@ -90,7 +90,9 @@ public class PlateDialogsTest {
         select(-1);
         more().performClick(); idle();
         AlertDialog d = dialog();
-        for (String name : new String[] {"Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
+        for (String name : new String[] {"Move…", "Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
+        assertTrue("choosing a model works without a selection", button(d, "Select a model…").isEnabled());
+        assertTrue(button(d, "Reset view").isEnabled());
     }
 
     @Test public void copyRemoveAndUprightCallThePage() throws Exception {
@@ -99,6 +101,37 @@ public class PlateDialogsTest {
             button(dialog(), pair[0]).performClick(); idle();
             assertEquals(pair[0], pair[1], lastScript());
         }
+    }
+
+    @Test public void selectListsTheModelsAndSelectsThroughThePage() throws Exception {
+        select(-1);
+        more().performClick(); idle();
+        button(dialog(), "Select a model…").performClick(); idle();
+        AlertDialog d = dialog();
+        android.widget.ListView list = d.getListView();
+        assertEquals(2, list.getCount());
+        assertEquals("1. 3DBenchy", list.getItemAtPosition(0).toString()); assertEquals("2. elegoo_cube", list.getItemAtPosition(1).toString());
+        list.performItemClick(null, 1, 1); idle();
+        assertEquals("plate.select(1)", lastScript());
+    }
+
+    @Test public void moveButtonsMoveBySetStepsAndKeepTheDialogOpen() throws Exception {
+        more().performClick(); idle();
+        button(dialog(), "Move…").performClick(); idle();
+        AlertDialog d = dialog();
+        for (Button b : buttons(d)) if (b.getContentDescription() != null && b.getContentDescription().toString().equals("Move 5 millimetres left")) { b.performClick(); break; }
+        idle(); assertEquals("plate.move(-5,0)", lastScript());
+        for (Button b : buttons(d)) if (b.getContentDescription() != null && b.getContentDescription().toString().equals("Move 1 millimetre back")) { b.performClick(); break; }
+        idle(); assertEquals("plate.move(0,1)", lastScript());
+        for (Button b : buttons(d)) if (b.getContentDescription() != null && b.getContentDescription().toString().equals("Move 10 millimetres right")) { b.performClick(); break; }
+        assertEquals("plate.move(10,0)", lastScript());
+        assertTrue("dialog stays open for repeated nudges", d.isShowing());
+    }
+
+    @Test public void resetViewCallsThePage() throws Exception {
+        more().performClick(); idle();
+        button(dialog(), "Reset view").performClick(); idle();
+        assertEquals("plate.resetCamera()", lastScript());
     }
 
     @Test public void layFlatStartsAndCancels() throws Exception {

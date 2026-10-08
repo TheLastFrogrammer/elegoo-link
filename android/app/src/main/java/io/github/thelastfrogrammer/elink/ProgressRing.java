@@ -27,7 +27,7 @@ final class ProgressRing extends View {
     /** percent < 0 hides the arc; center replaces the percentage text when not printing. */
     void set(int percent, String center, String below) {
         this.percent = percent; this.center = center; this.below = below;
-        setContentDescription(percent >= 0 ? "Print progress " + percent + " percent" : center);
+        setContentDescription(percent >= 0 ? "Printing, " + percent + " percent" + (below.isEmpty() ? "" : ", " + below.replace("/", " of ")) : center);
         invalidate();
     }
 

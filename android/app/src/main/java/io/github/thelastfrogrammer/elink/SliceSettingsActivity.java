@@ -161,7 +161,7 @@ public final class SliceSettingsActivity extends Activity {
         });
         searchHint = ui.label(top, "", 12, ui.muted, false);
         changedOnly = new Switch(this); changedOnly.setText("Show changed only"); changedOnly.setTextColor(ui.ink); changedOnly.setTextSize(14);
-        changedOnly.setPadding(0, ui.dp(6), 0, ui.dp(6));
+        changedOnly.setPadding(0, ui.dp(6), 0, ui.dp(6)); changedOnly.setMinHeight(ui.dp(48));
         top.addView(changedOnly, new LinearLayout.LayoutParams(-1, -2));
         changedOnly.setOnCheckedChangeListener((v, checked) -> filter());
         LinearLayout buttons = ui.row(top);
@@ -249,7 +249,7 @@ public final class SliceSettingsActivity extends Activity {
     /** A settings group: a header that opens or closes it, and the body holding its rows. */
     private Section section(String name) {
         LinearLayout card = ui.card(list, null);
-        TextView header = ui.label(card, "", 17, ui.ink, true);
+        TextView header = A11y.heading(ui.label(card, "", 17, ui.ink, true)); header.setMinHeight(ui.dp(48)); header.setGravity(Gravity.CENTER_VERTICAL);
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); card.addView(body);
         Section section = new Section(name, card, body, header);
         header.setOnClickListener(v -> { if (!expanded.remove(name)) expanded.add(name); filter(); });
@@ -309,20 +309,21 @@ public final class SliceSettingsActivity extends Activity {
         row.addView(header, new LinearLayout.LayoutParams(-1, -2));
         TextView title = new TextView(this); title.setText(heading); title.setTextSize(14); title.setTextColor(ui.ink);
         title.setPadding(0, ui.dp(2), 0, ui.dp(2));
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        title.setGravity(Gravity.CENTER_VERTICAL); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
         String tooltip = definition.optString("tooltip");
         Runnable showHelp = () -> new AlertDialog.Builder(this).setTitle(label).setMessage(tooltip).setPositiveButton("Close", null).show();
         if (!tooltip.isEmpty()) {
-            title.setOnClickListener(v -> showHelp.run());
-            TextView help = new TextView(this); help.setText("?"); help.setGravity(Gravity.CENTER); help.setTextSize(14);
+            title.setOnClickListener(v -> showHelp.run()); title.setMinHeight(ui.dp(48)); // a tap on the name opens help too, so it is a full-size target
+            TextView help = new TextView(this); help.setText("?"); help.setGravity(Gravity.CENTER); help.setTextSize(14); help.setMinWidth(ui.dp(48)); help.setMinHeight(ui.dp(48));
             help.setTypeface(Typeface.DEFAULT, Typeface.BOLD); help.setTextColor(ui.teal); help.setContentDescription("What is " + label + "?");
-            GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(ui.dp(2), ui.teal); help.setBackground(ring);
+            GradientDrawable ring = new GradientDrawable(); ring.setShape(GradientDrawable.OVAL); ring.setStroke(ui.dp(2), ui.teal); help.setBackground(new android.graphics.drawable.InsetDrawable(ring, ui.dp(9))); // a 30dp ring inside the 48dp target
+            A11y.button(help);
             help.setOnClickListener(v -> showHelp.run());
-            LinearLayout.LayoutParams helpLayout = new LinearLayout.LayoutParams(ui.dp(30), ui.dp(30)); helpLayout.leftMargin = ui.dp(8);
+            LinearLayout.LayoutParams helpLayout = new LinearLayout.LayoutParams(-2, -2); helpLayout.leftMargin = ui.dp(0);
             header.addView(help, helpLayout);
         }
         TextView reset = new TextView(this); reset.setText("Reset"); reset.setTextSize(13); reset.setTextColor(ui.teal);
-        reset.setTypeface(Typeface.DEFAULT, Typeface.BOLD); reset.setMinHeight(ui.dp(40)); reset.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
+        reset.setTypeface(Typeface.DEFAULT, Typeface.BOLD); reset.setMinHeight(ui.dp(48)); reset.setMinWidth(ui.dp(48)); A11y.button(reset); reset.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         reset.setPadding(ui.dp(10), 0, 0, 0); reset.setVisibility(View.GONE);
         reset.setContentDescription("Reset " + label + " to the " + (object != null ? "print settings'" : slot >= 0 ? "filament profile's" : "print profile's") + " value");
         reset.setOnClickListener(v -> { overrides.remove(key); build(); });
@@ -338,7 +339,7 @@ public final class SliceSettingsActivity extends Activity {
         };
         switch (type) {
             case "bool": {
-                Switch toggle = new Switch(this); toggle.setChecked("1".equals(value)); toggle.setText("");
+                Switch toggle = new Switch(this); toggle.setChecked("1".equals(value)); toggle.setText(""); toggle.setMinHeight(ui.dp(48)); toggle.setMinWidth(ui.dp(48)); toggle.setContentDescription(heading);
                 LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-2, -2); toggleLayout.leftMargin = ui.dp(8);
                 header.addView(toggle, 1, toggleLayout); // on the title line, before the ? badge
                 toggle.setOnCheckedChangeListener((v, checked) -> { set(key, checked ? "1" : "0", preset); showNote.run(); });
@@ -349,7 +350,7 @@ public final class SliceSettingsActivity extends Activity {
                 List<String> values = new ArrayList<>(), labels = new ArrayList<>();
                 for (int i = 0; options != null && i < options.length(); i++) { values.add(options.optJSONArray(i).optString(0)); labels.add(options.optJSONArray(i).optString(1)); }
                 Spinner spinner = ui.spinner(row, labels, values.indexOf(value));
-                row.removeView(spinner); row.addView(spinner, 1);
+                row.removeView(spinner); row.addView(spinner, 1); A11y.name(spinner, heading);
                 spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                     @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { set(key, values.get(position), preset); showNote.run(); }
                     @Override public void onNothingSelected(AdapterView<?> p) { }
@@ -358,7 +359,7 @@ public final class SliceSettingsActivity extends Activity {
             }
             default: {
                 EditText input = ui.input(row, "nil".equals(preset) ? "Printer's value" : preset); input.setText("nil".equals(value) ? "" : value);
-                row.removeView(input); row.addView(input, 1);
+                row.removeView(input); row.addView(input, 1); A11y.labelFor(title, input);
                 if (type.equals("int")) input.setInputType(InputType.TYPE_CLASS_NUMBER);
                 else if (type.equals("float")) input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
                 input.setImeOptions(EditorInfo.IME_ACTION_DONE);
@@ -487,6 +488,7 @@ public final class SliceSettingsActivity extends Activity {
             section.body.setVisibility(open ? View.VISIBLE : View.GONE);
             int changed = changedIn(section);
             section.header.setText((open ? "▾ " : "▸ ") + section.name + (changed > 0 ? "   " + changed + " changed" : ""));
+            section.header.setContentDescription(section.name + (changed > 0 ? ", " + changed + " changed" : "")); A11y.expandable(section.header, open);
         }
         if (searchHint == null) return;
         String defaultHint = slot >= 0 ? "Try “stringing”, “first layer” or “adhesion”. Tap ? on a setting for what it does."

@@ -350,8 +350,8 @@ public final class SliceActivity extends Activity {
 
         LinearLayout settingsCard = card("3 · Print settings");
         label(settingsCard, "Leave a setting on “Preset” to use the print profile's value.", 13, muted, false);
-        label(settingsCard, "Infill density (%)", 12, muted, false);
-        infill = new EditText(this); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
+        TextView infillLabel = label(settingsCard, "Infill density (%)", 12, muted, false);
+        infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
         infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); settingsCard.addView(infill, new LinearLayout.LayoutParams(-1, dp(52)));
         label(settingsCard, "Supports", 12, muted, false);
         supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList("Preset", "Off", "Normal (auto)", "Tree (auto)"), "Preset");
@@ -362,7 +362,7 @@ public final class SliceActivity extends Activity {
         showSettingsSummary();
 
         LinearLayout sliceCard = actionBar; actionBar.setVisibility(View.VISIBLE);
-        status = label(sliceCard, "Loading Elegoo presets…", 14, ink, false); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(3);
+        status = A11y.polite(label(sliceCard, "Loading Elegoo presets…", 14, ink, false)); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(3);
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgressTintList(ColorStateList.valueOf(teal));
         progress.setVisibility(View.GONE); sliceCard.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
         sliceHint = label(sliceCard, "", 12, muted, false); sliceHint.setVisibility(View.GONE);
@@ -1105,17 +1105,17 @@ public final class SliceActivity extends Activity {
         slot.title = new TextView(this); slot.title.setText("Filament " + number + " · T" + (number - 1)); slot.title.setTextColor(ink); slot.title.setTextSize(14); slot.title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         header.addView(slot.title, new LinearLayout.LayoutParams(0, -2, 1));
         slot.swatch = new TextView(this);
-        slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament " + number + " colour");
-        header.addView(slot.swatch, new LinearLayout.LayoutParams(dp(40), dp(40)));
+        slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament " + number + " colour"); A11y.button(slot.swatch);
+        header.addView(slot.swatch, new LinearLayout.LayoutParams(dp(48), dp(48)));
         slot.settings = styled("Settings…", () -> openFilamentSettings(slots.indexOf(slot)), false);
         LinearLayout.LayoutParams settingsLayout = new LinearLayout.LayoutParams(-2, -2); settingsLayout.leftMargin = dp(8); header.addView(slot.settings, settingsLayout);
         slot.row.addView(header);
-        slot.preset = spinner(slot.row);
+        slot.preset = spinner(slot.row); A11y.name(slot.preset, () -> slot.title.getText() + " filament profile");
         slot.preset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { if (slots.size() > 1 && !models.isEmpty()) showModels(); updateButtons(); }
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
-        slot.tray = spinner(slot.row); ((LinearLayout.LayoutParams) slot.tray.getLayoutParams()).topMargin = dp(4);
+        slot.tray = spinner(slot.row); A11y.name(slot.tray, () -> slot.title.getText() + " tray"); ((LinearLayout.LayoutParams) slot.tray.getLayoutParams()).topMargin = dp(4);
         slot.tray.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
                 TrayPlan.Tray chosen = position > 0 && position <= slot.trayChoices.size() ? slot.trayChoices.get(position - 1) : null;
@@ -1157,9 +1157,9 @@ public final class SliceActivity extends Activity {
     private void showSwatch(Slot slot) {
         GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(10)); shape.setStroke(dp(1), slot.colour != null ? muted : teal);
         int number = slots.indexOf(slot) + 1;
-        if (slot.colour != null) { shape.setColor(Color.parseColor(slot.colour)); slot.swatch.setContentDescription("Filament colour " + slot.colour + " for filament " + number); }
+        if (slot.colour != null) { shape.setColor(Color.parseColor(slot.colour)); slot.swatch.setContentDescription("Filament " + number + " colour: " + colourWords(slot.colour)); }
         else { shape.setColor(buttonColor); slot.swatch.setContentDescription("Filament colour from the filament profile for filament " + number); }
-        slot.swatch.setBackground(shape);
+        slot.swatch.setBackground(new android.graphics.drawable.InsetDrawable(shape, dp(4))); // a 40dp chip in the 48dp target
     }
 
     private void chooseColour(Slot slot) {
@@ -1302,8 +1302,8 @@ public final class SliceActivity extends Activity {
     private void fill(Spinner spinner, List<String> values, String preferred) {
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, values) {
             @Override public View getView(int position, View convert, android.view.ViewGroup parent) { TextView view = (TextView) super.getView(position, convert, parent); view.setTextColor(ink);
-                view.setSingleLine(false); view.setMaxLines(2); return view; } // preset names are long: wrap instead of cutting them off
-            @Override public View getDropDownView(int position, View convert, android.view.ViewGroup parent) { TextView view = (TextView) super.getDropDownView(position, convert, parent); view.setSingleLine(false); view.setMaxLines(3); return view; }
+                view.setSingleLine(false); view.setMaxLines(Integer.MAX_VALUE); return view; } // preset names are long: wrap instead of cutting them off
+            @Override public View getDropDownView(int position, View convert, android.view.ViewGroup parent) { TextView view = (TextView) super.getDropDownView(position, convert, parent); view.setSingleLine(false); view.setMaxLines(Integer.MAX_VALUE); return view; }
         };
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
         spinner.setAdapter(adapter);
@@ -1315,13 +1315,13 @@ public final class SliceActivity extends Activity {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { updateButtons(); }
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
-        spinner.setMinimumHeight(dp(48)); parent.addView(spinner, new LinearLayout.LayoutParams(-1, -2)); return spinner;
+        spinner.setMinimumHeight(dp(48)); parent.addView(spinner, new LinearLayout.LayoutParams(-1, -2)); A11y.nameFromCaption(spinner, parent); return spinner;
     }
     private LinearLayout card(String title) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(14), dp(16), dp(14));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20)); card.setBackground(shape);
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); content.addView(card, layout);
-        if (title != null) label(card, title, 17, ink, true);
+        if (title != null) A11y.heading(label(card, title, 17, ink, true));
         return card;
     }
     private TextView label(LinearLayout parent, String text, int size, int color, boolean bold) {
@@ -1336,7 +1336,7 @@ public final class SliceActivity extends Activity {
         if (row.getChildCount() > 0) layout.leftMargin = dp(8); row.addView(button, layout); return button;
     }
     private Button styled(String text, Runnable action, boolean primary) {
-        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setPadding(dp(10), dp(8), dp(10), dp(8));
+        Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setPadding(dp(10), dp(8), dp(10), dp(8));
         restyle(button, primary); button.setOnClickListener(view -> action.run()); return button;
     }
     /** Filled teal (primary) or the soft secondary look, in place: the button keeps its text, listener and place. */
@@ -1353,5 +1353,6 @@ public final class SliceActivity extends Activity {
         spinner.setAdapter(new WorkshopUi.DottedAdapter(this, ink, muted, values, colours));
         int index = values.indexOf(preferred); if (index >= 0) spinner.setSelection(index);
     }
+    private static String colourWords(String hex) { String name = WorkshopUi.colourName(hex); return name == null ? "custom" : name; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

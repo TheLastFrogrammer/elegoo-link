@@ -590,6 +590,8 @@
     setPlacements(list) { scene.placements = list; if (selected >= list.length) selected = -1; select(selected); changed(); },
     setColours(list) { scene.colours = list; redraw(); },
     select(index) { select(index); },
+    /** Moves the selected model by a distance in mm, as dragging does: rounded to 0.1 mm, problems checked by changed(). */
+    move(dx, dy) { const p = current(); if (!p || !isFinite(dx) || !isFinite(dy)) return; p.x = Math.round((p.x + dx) * 10) / 10; p.y = Math.round((p.y + dy) * 10) / 10; changed(); },
     rotate(degrees) { const p = current(); if (!p) return; p.rotation = ((p.rotation + degrees) % 360 + 540) % 360 - 180; changed(); },
     setScale(scale) { const p = current(); if (!p || !(scale > 0.001)) return; p.scale = scale; changed(); },
     duplicate() {

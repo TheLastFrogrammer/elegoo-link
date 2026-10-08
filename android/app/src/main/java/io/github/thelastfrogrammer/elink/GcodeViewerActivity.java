@@ -124,11 +124,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         back.setContentDescription("Back"); back.setOnClickListener(v -> finish());
         header.addView(back);
         title = new TextView(this); title.setText(followMode ? "Live toolpath" : "Toolpath"); title.setTextSize(16); title.setTextColor(ink); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); A11y.heading(title);
         LinearLayout titles = new LinearLayout(this); titles.setOrientation(LinearLayout.VERTICAL); titles.addView(title);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
-        status = label(titles, "Reading G-code…", 12, muted, false); status.setPadding(0, 0, 0, 0);
+        status = A11y.polite(label(titles, "Reading G-code…", 12, muted, false)); status.setPadding(0, 0, 0, 0);
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
         int shown = hintsShown();
         if (shown < 3 || followMode) {
@@ -137,9 +137,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         }
         missingCard = new LinearLayout(this); missingCard.setOrientation(LinearLayout.VERTICAL); missingCard.setVisibility(View.GONE); panel.addView(missingCard);
         layerLabel = label(panel, "Layer", 13, ink, false);
-        layerBar = seekBar(panel);
+        layerBar = seekBar(panel); A11y.labelFor(layerLabel, layerBar);
         moveLabel = label(panel, "Moves", 13, ink, false);
-        moveBar = seekBar(panel);
+        moveBar = seekBar(panel); A11y.labelFor(moveLabel, moveBar);
         moveLabel.setVisibility(View.GONE); moveBar.setVisibility(View.GONE);
         SeekBar.OnSeekBarChangeListener scrub = new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar bar, int value, boolean fromUser) {
@@ -245,6 +245,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (legendLayer != layer && legend != null) buildLegend();
         layerLabel.setText(String.format(Locale.getDefault(), "%sLayer %d of %d · %.2f mm high", following ? "● LIVE · " : "", layer + 1, path.layerCount, path.layerZ(layer)));
         moveLabel.setText(String.format(Locale.getDefault(), "Drawn so far in this layer: %,d of %,d lines", move, layerSize(layer)));
+        A11y.state(layerBar, String.format(Locale.getDefault(), "Layer %d of %d", layer + 1, path.layerCount));
+        A11y.state(moveBar, String.format(Locale.getDefault(), "%,d of %,d lines", move, layerSize(layer)));
     }
 
     /** Sends the current range, nozzle and filters to the page. `nozzle` is null outside follow mode. */
@@ -495,13 +497,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         GradientDrawable back = new GradientDrawable(); back.setColor(buttonColor); back.setCornerRadius(dp(16)); pill.setBackground(back);
         pill.setPadding(dp(10), 0, dp(12), 0);
         if (color != 0) {
-            View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setColor(color); dot.setCornerRadius(dp(3)); swatch.setBackground(dot);
-            pill.addView(swatch, new LinearLayout.LayoutParams(dp(10), dp(10)));
+            View swatch = new View(this); GradientDrawable dot = new GradientDrawable(); dot.setColor(color); dot.setCornerRadius(dp(3)); dot.setStroke(Math.max(1, Math.round(1.5f * getResources().getDisplayMetrics().density)), muted); swatch.setBackground(dot); // outlined: pale colours stay visible on the chip
+            pill.addView(swatch, new LinearLayout.LayoutParams(dp(12), dp(12)));
         }
         TextView name = new TextView(this); name.setText(text); name.setTextSize(12); name.setTextColor(struck ? muted : ink); name.setPadding(color != 0 ? dp(6) : 0, 0, 0, 0);
         if (struck) name.setPaintFlags(name.getPaintFlags() | android.graphics.Paint.STRIKE_THRU_TEXT_FLAG);
         pill.addView(name);
-        area.addView(pill, new LinearLayout.LayoutParams(-2, dp(32)));
+        pill.setMinimumHeight(dp(32)); area.addView(pill, new LinearLayout.LayoutParams(-2, -2)); // grows with the text size
         return area;
     }
 
@@ -559,7 +561,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         parent.addView(bar, new LinearLayout.LayoutParams(-1, dp(48))); return bar;
     }
     private Button rowButton(LinearLayout row, String text, Runnable action) {
-        Button button = new Button(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
+        Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
         button.setPadding(dp(6), dp(4), dp(6), dp(4)); button.setTextSize(13);
         button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, teal}));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12));

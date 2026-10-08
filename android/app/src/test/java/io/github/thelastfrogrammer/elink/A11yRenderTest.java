@@ -89,12 +89,18 @@ public class A11yRenderTest {
             float w = v.getWidth() / density, h = v.getHeight() / density;
             if (control && (h < 48 || w < 48) && !(v instanceof ScrollView)) log.append(String.format(Locale.ROOT, "SMALL-TARGET %.0fx%.0fdp %s\n", w, h, describe(v)));
             if (control) {
-                boolean named = v.getContentDescription() != null && v.getContentDescription().length() > 0 || v instanceof TextView && ((TextView) v).getText().length() > 0
-                    || v instanceof TextView && ((TextView) v).getHint() != null || v instanceof ViewGroup && hasText((ViewGroup) v);
+                // What a screen reader gets: the real node, with the name from description, text or a label pointing at it.
+                android.view.accessibility.AccessibilityNodeInfo info = v.createAccessibilityNodeInfo();
+                boolean labelled = false; for (View other : all) if (v.getId() != View.NO_ID && other.getLabelFor() == v.getId()) labelled = true; // a view pointing at this one as its label
+                boolean named = info.getContentDescription() != null && info.getContentDescription().length() > 0 || info.getText() != null && info.getText().length() > 0
+                    || labelled || v instanceof ViewGroup && hasText((ViewGroup) v);
+                if (v instanceof CompoundButton && ((CompoundButton) v).getText().length() == 0 && !(info.getContentDescription() != null && info.getContentDescription().length() > 0) && !labelled) named = false;
+                if (v instanceof EditText && !labelled && (info.getContentDescription() == null)) { CharSequence hint = ((EditText) v).getHint(); if (hint == null || hint.length() == 0) named = false; }
                 if (!named) log.append(String.format(Locale.ROOT, "UNNAMED %.0fx%.0fdp %s\n", w, h, describe(v)));
-                if (v instanceof CompoundButton && ((CompoundButton) v).getText().length() == 0 && v.getContentDescription() == null) log.append("UNLABELLED-TOGGLE " + describe(v) + "\n");
-                if (v instanceof Spinner && v.getContentDescription() == null && v.getLabelFor() == View.NO_ID) log.append("SPINNER-NO-OWN-LABEL " + describe(v) + " selected=" + ((Spinner) v).getSelectedItem() + "\n");
-                if (v instanceof SeekBar && v.getContentDescription() == null && v.getStateDescription() == null) log.append(String.format(Locale.ROOT, "SEEKBAR-NO-STATE-DESC progress=%d/%d\n", ((SeekBar) v).getProgress(), ((SeekBar) v).getMax()));
+                if (v instanceof Spinner && (info.getContentDescription() == null || info.getContentDescription().toString().indexOf(',') < 0) && !labelled) log.append("SPINNER-NO-OWN-LABEL " + describe(v) + " selected=" + ((Spinner) v).getSelectedItem() + "\n");
+                if (v instanceof EditText && !labelled && info.getContentDescription() == null) log.append("INPUT-NAMED-ONLY-BY-HINT hint=\"" + ((EditText) v).getHint() + "\"\n");
+                if (v instanceof SeekBar && (info.getStateDescription() == null)) log.append(String.format(Locale.ROOT, "SEEKBAR-NO-STATE-DESC progress=%d/%d\n", ((SeekBar) v).getProgress(), ((SeekBar) v).getMax()));
+                info.recycle();
             }
             if (v instanceof TextView && !(v instanceof EditText)) {
                 TextView t = (TextView) v; Layout layout = t.getLayout();
@@ -117,6 +123,10 @@ public class A11yRenderTest {
                 }
             }
         }
+        String[] kinds = {"UNNAMED", "SPINNER-NO-OWN-LABEL", "CLIPPED-HEIGHT", "SMALL-TARGET", "SEEKBAR-NO-STATE-DESC", "INPUT-NAMED-ONLY-BY-HINT", "ELLIPSIZED"};
+        StringBuilder counts = new StringBuilder("COUNTS");
+        for (String kind : kinds) { int n = 0; for (String l : log.toString().split("\n")) if (l.startsWith(kind)) n++; counts.append(" ").append(kind).append("=").append(n); }
+        log.append(counts).append("\n");
         File file = new File(out(), "a11y-" + name + "-" + tag(scale) + ".txt");
         try (FileOutputStream stream = new FileOutputStream(file)) { stream.write(log.toString().getBytes("UTF-8")); }
     }

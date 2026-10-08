@@ -18,6 +18,8 @@ final class ChartView extends View {
     }
 
     private final float density;
+    /** Text and its spacing follow the system font size (up to 1.6x, so the plot keeps room). */
+    private final float f;
     private final int ink, muted, grid, surface;
     private final Paint line = new Paint(Paint.ANTI_ALIAS_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG), small = new Paint(Paint.ANTI_ALIAS_FLAG),
         rule = new Paint(Paint.ANTI_ALIAS_FLAG), fill = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -33,12 +35,13 @@ final class ChartView extends View {
     ChartView(Context context, int ink, int muted, int grid, int surface) {
         super(context);
         density = context.getResources().getDisplayMetrics().density;
+        f = Math.min(1.6f, Math.max(1f, context.getResources().getConfiguration().fontScale));
         this.ink = ink; this.muted = muted; this.grid = grid; this.surface = surface;
         line.setStyle(Paint.Style.STROKE); line.setStrokeWidth(2 * density); line.setStrokeJoin(Paint.Join.ROUND); line.setStrokeCap(Paint.Cap.ROUND);
-        text.setColor(ink); text.setTextSize(14 * density); text.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
-        small.setColor(muted); small.setTextSize(11 * density);
+        text.setColor(ink); text.setTextSize(14 * density * f); text.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        small.setColor(muted); small.setTextSize(11 * density * f);
         rule.setStrokeWidth(Math.max(1, density * 0.75f));
-        setMinimumHeight(Math.round(220 * density));
+        setMinimumHeight(Math.round(220 * density * f));
     }
 
     /** x values in seconds since the print started; NaN values leave gaps. A fixed range (e.g. 0-100 %) may be given. */
@@ -46,7 +49,12 @@ final class ChartView extends View {
         this.title = title; this.unit = unit; this.seconds = seconds; this.series.clear(); this.series.addAll(series);
         fixedMin = min; fixedMax = max; touched = -1;
         StringBuilder description = new StringBuilder(title).append(" chart");
-        for (Series s : series) description.append(", ").append(s.name).append(" latest ").append(format(last(s.values))).append(unit);
+        for (Series s : series) {
+            double lo = Double.POSITIVE_INFINITY, hi = Double.NEGATIVE_INFINITY;
+            for (double v : s.values) if (!Double.isNaN(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+            description.append(", ").append(s.name).append(" latest ").append(format(last(s.values))).append(unit);
+            if (!Double.isInfinite(lo)) description.append(", lowest ").append(format(lo)).append(unit).append(", highest ").append(format(hi)).append(unit);
+        }
         setContentDescription(description.toString());
         invalidate();
     }
@@ -55,7 +63,7 @@ final class ChartView extends View {
     void clock(long startMillis) { clockStart = startMillis; invalidate(); }
 
     @Override protected void onMeasure(int widthSpec, int heightSpec) {
-        setMeasuredDimension(MeasureSpec.getSize(widthSpec), resolveSize(Math.round(240 * density), heightSpec));
+        setMeasuredDimension(MeasureSpec.getSize(widthSpec), resolveSize(Math.round(240 * density * f), heightSpec));
     }
 
     @Override public boolean onTouchEvent(MotionEvent event) {
@@ -68,16 +76,16 @@ final class ChartView extends View {
         touched = best; invalidate(); return true;
     }
 
-    private float plotLeft() { return 44 * density; }
+    private float plotLeft() { return 44 * density * f; }
     /** Room on the right for direct end labels when there are several series. */
     private float plotRight() { return (series.size() > 1 ? 64 : 12) * density; }
-    private float plotTop() { return series.size() > 1 ? (30 + 20 * legendRows(getWidth())) * density : 30 * density; }
-    private float plotBottom() { return 24 * density; }
+    private float plotTop() { return series.size() > 1 ? (30 + 20 * legendRows(getWidth())) * density * f : 30 * density * f; }
+    private float plotBottom() { return 24 * density * f; }
 
     @Override protected void onDraw(Canvas canvas) {
-        canvas.drawText(title + (unit.isEmpty() ? "" : " (" + unit.trim() + ")"), 0, 16 * density, text);
+        canvas.drawText(title + (unit.isEmpty() ? "" : " (" + unit.trim() + ")"), 0, 16 * density * f, text);
         float left = plotLeft(), top = plotTop(), right = getWidth() - plotRight(), bottom = getHeight() - plotBottom();
-        if (series.size() > 1) legend(canvas, 40 * density, getWidth());
+        if (series.size() > 1) legend(canvas, 40 * density * f, getWidth());
         if (seconds.length < 2) { small.setTextAlign(Paint.Align.LEFT); canvas.drawText("Not enough samples yet.", left, (top + bottom) / 2, small); return; }
         double lo = fixedMin, hi = fixedMax;
         if (Double.isNaN(lo) || Double.isNaN(hi)) {
@@ -103,11 +111,11 @@ final class ChartView extends View {
             double local0 = localSeconds(clockStart);
             for (double local = Math.ceil((local0 + x0) / xStep) * xStep; local <= local0 + x1; local += xStep) {
                 float x = (float) (left + (local - local0 - x0) / (x1 - x0) * (right - left));
-                canvas.drawText(clockOfDay((long) local), x, bottom + 16 * density, small);
+                canvas.drawText(clockOfDay((long) local), x, bottom + 16 * density * f, small);
             }
         } else for (double t = Math.ceil(x0 / xStep) * xStep; t <= x1; t += xStep) {
             float x = (float) (left + (t - x0) / (x1 - x0) * (right - left));
-            canvas.drawText(elapsed(t), x, bottom + 16 * density, small);
+            canvas.drawText(elapsed(t), x, bottom + 16 * density * f, small);
         }
         // Lines; targets dashed.
         for (Series s : series) {
@@ -132,7 +140,7 @@ final class ChartView extends View {
             }
             Integer[] order = new Integer[ends.size()]; for (int i = 0; i < order.length; i++) order[i] = i;
             Arrays.sort(order, (a, b) -> Float.compare(ends.get(a)[0], ends.get(b)[0]));
-            float previous = Float.NEGATIVE_INFINITY, gap = 13 * density;
+            float previous = Float.NEGATIVE_INFINITY, gap = 13 * density * f;
             small.setTextAlign(Paint.Align.LEFT); small.setColor(ink);
             for (int i : order) { float y = Math.max(ends.get(i)[0] + 4 * density, previous + gap); previous = y; canvas.drawText(names.get(i), right + 6 * density, y, small); }
             small.setColor(muted);
@@ -151,13 +159,13 @@ final class ChartView extends View {
             }
             float width = 0; small.setTextAlign(Paint.Align.LEFT);
             for (String row : rows) width = Math.max(width, small.measureText(row));
-            float boxW = width + 30 * density, boxH = rows.size() * 16 * density + 10 * density;
+            float boxW = width + 30 * density, boxH = rows.size() * 16 * density * f + 10 * density;
             float boxX = x + 10 * density + boxW > right ? x - 10 * density - boxW : x + 10 * density, boxY = top;
             boxX = Math.max(0, Math.min(boxX, getWidth() - boxW));
             fill.setColor(surface); canvas.drawRoundRect(boxX, boxY, boxX + boxW, boxY + boxH, 8 * density, 8 * density, fill);
             rule.setColor(grid); rule.setStyle(Paint.Style.STROKE); canvas.drawRoundRect(boxX, boxY, boxX + boxW, boxY + boxH, 8 * density, 8 * density, rule); rule.setStyle(Paint.Style.FILL);
             for (int i = 0; i < rows.size(); i++) {
-                float rowY = boxY + 18 * density + i * 16 * density;
+                float rowY = boxY + 18 * density * f + i * 16 * density * f;
                 if (colors.get(i) != 0) { fill.setColor(colors.get(i)); canvas.drawRoundRect(boxX + 8 * density, rowY - 8 * density, boxX + 18 * density, rowY - 1 * density, 2 * density, 2 * density, fill); }
                 small.setColor(i == 0 ? muted : ink); canvas.drawText(rows.get(i), boxX + (colors.get(i) == 0 ? 8 : 22) * density, rowY, small);
             }
@@ -183,7 +191,7 @@ final class ChartView extends View {
         float x = 0; small.setTextAlign(Paint.Align.LEFT); small.setColor(ink);
         for (String name : legendNames()) {
             float w = entryWidth(name);
-            if (x > 0 && x + w > width) { x = 0; y += 20 * density; }
+            if (x > 0 && x + w > width) { x = 0; y += 20 * density * f; }
             Series match = null; for (Series s : series) if (!s.dashed && s.name.equals(name)) match = s;
             if (match == null) { // shared dashed "Target" key, drawn in muted ink so it never claims a series color
                 line.setColor(muted); line.setStrokeWidth(1.5f * density); line.setPathEffect(new DashPathEffect(new float[] {4 * density, 3 * density}, 0));

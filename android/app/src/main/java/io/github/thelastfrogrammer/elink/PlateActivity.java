@@ -63,22 +63,25 @@ public final class PlateActivity extends Activity {
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(12));
         panel.setBackgroundColor(ui.surface); panel.setElevation(ui.dp(8)); root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
-        status = ui.label(panel, "Placing the models…", 13, ui.muted, false);
-        selectedLabel = ui.label(panel, "Tap a model to select it.", 14, ui.ink, true);
-        selectedLabel.setSingleLine(true); selectedLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        status = A11y.polite(ui.label(panel, "Placing the models…", 13, ui.muted, false));
+        selectedLabel = A11y.polite(ui.label(panel, "Tap a model to select it, or use More… > Select a model.", 14, ui.ink, true));
+        selectedLabel.setMaxLines(2); selectedLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setPadding(0, ui.dp(2), 0, ui.dp(2)); selectedLabel.setPadding(0, ui.dp(2), 0, ui.dp(2));
         LinearLayout turn = ui.row(panel);
         rotateLeft = ui.rowButton(turn, "Left 15°", () -> js("plate.rotate(15)"), false);
         rotateRight = ui.rowButton(turn, "Right 15°", () -> js("plate.rotate(-15)"), false);
         rotate45 = ui.rowButton(turn, "Left 45°", () -> js("plate.rotate(45)"), false);
         more = ui.rowButton(turn, "More…", this::moreDialog, false);
-        for (Button b : new Button[] {rotateLeft, rotateRight, rotate45, more}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(12); }
+        // The compact panel keeps its buttons' text to at most 1.3x so the 3D view stays large; longer labels wrap onto a second line.
+        float panelText = 12 * getResources().getDisplayMetrics().density * Math.min(1.3f, getResources().getConfiguration().fontScale);
+        for (Button b : new Button[] {rotateLeft, rotateRight, rotate45, more}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, panelText); }
         rotateLeft.setContentDescription("Turn 15 degrees left"); rotateRight.setContentDescription("Turn 15 degrees right");
-        rotate45.setContentDescription("Turn 45 degrees left"); more.setContentDescription("More: copy, lay flat, scale, remove, model settings");
+        rotate45.setContentDescription("Turn 45 degrees left"); more.setContentDescription("More: select a model, move, copy, lay flat, scale, remove, model settings, reset view");
         LinearLayout finish = ui.row(panel);
         arrange = ui.rowButton(finish, "Arrange all", this::arrangeAll, false);
         done = ui.rowButton(finish, "Done · back to Slice", this::finishWithResult, true);
         ((LinearLayout.LayoutParams) done.getLayoutParams()).weight = 1.6f;
+        for (Button b : new Button[] {arrange, done}) b.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, panelText * 14 / 12);
         setContentView(root);
         setButtons();
 
@@ -231,19 +234,61 @@ public final class PlateActivity extends Activity {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), ui.dp(8));
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
-        String[] names = {"Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"};
-        Runnable[] actions = {() -> js("plate.duplicate()"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
+        String[] names = {"Select a model…", "Move…", "Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
+        Runnable[] actions = {this::selectDialog, this::moveDialog, () -> js("plate.duplicate()"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
                 status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
-            () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings};
+            () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings, () -> js("plate.resetCamera()")};
         for (int i = 0; i < names.length; i++) {
             Runnable action = actions[i];
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
-            b.setEnabled(on && (i != 1 || placements.length() > 0));
+            b.setEnabled(i == 0 ? placements.length() > 0 : i == 8 || on && (i != 3 || placements.length() > 0));
         }
-        if (!on) ui.label(body, "Select a model first: tap it in the layout.", 13, ui.muted, false);
+        if (!on) ui.label(body, "Select a model first: tap it in the layout, or use Select a model.", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
     }
+
+    /** The models on the plate by name, to pick one without touching the 3D view. */
+    private void selectDialog() {
+        String[] items = new String[placements.length()];
+        for (int i = 0; i < items.length; i++) items[i] = (i + 1) + ". " + name(i);
+        new android.app.AlertDialog.Builder(this).setTitle("Select a model")
+            .setSingleChoiceItems(items, selected, (d, which) -> { js(selectScript(which)); d.dismiss(); })
+            .setNegativeButton("Close", null).show();
+    }
+
+    /** Moves the selected model by buttons instead of dragging: the dialog stays open so a model can be nudged several times. */
+    private void moveDialog() {
+        if (selected < 0 || selected >= placements.length()) return;
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), ui.dp(8));
+        TextView readout = A11y.polite(ui.label(body, positionText(), 14, ui.ink, true));
+        Runnable refresh = () -> readout.setText(positionText());
+        String[] directions = {"Left", "Right", "Front", "Back"};
+        double[][] unit = {{-1, 0}, {1, 0}, {0, -1}, {0, 1}};
+        for (int step : MOVE_STEPS) {
+            LinearLayout row = ui.row(body);
+            for (int d = 0; d < 4; d++) {
+                final double dx = unit[d][0] * step, dy = unit[d][1] * step; final String direction = directions[d];
+                Button b = ui.rowButton(row, direction + " " + step, () -> { js(moveScript(dx, dy)); main.postDelayed(refresh, 150); }, false);
+                b.setContentDescription("Move " + step + " millimetre" + (step == 1 ? "" : "s") + " " + direction.toLowerCase(Locale.ROOT));
+                b.setTextSize(13); b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8));
+            }
+        }
+        ui.label(body, "Millimetres on the bed. Problems (off the bed, overlap) are reported in the panel as when dragging.", 12, ui.muted, false);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        new android.app.AlertDialog.Builder(this).setTitle("Move " + name(selected)).setView(scroll).setNegativeButton("Done", null).show();
+    }
+
+    private String positionText() {
+        JSONObject p = selected >= 0 ? placements.optJSONObject(selected) : null;
+        return p == null ? "" : String.format(Locale.ROOT, "Position: X %.1f mm, Y %.1f mm", p.optDouble("x"), p.optDouble("y"));
+    }
+
+    static final int[] MOVE_STEPS = {1, 5, 10};
+    /** The page call that moves the selected model; plain numbers whatever the phone's language. */
+    static String moveScript(double dx, double dy) { return String.format(Locale.ROOT, "plate.move(%s,%s)", number(dx), number(dy)); }
+    static String selectScript(int index) { return "plate.select(" + index + ")"; }
+    private static String number(double value) { return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value); }
 
     /** Lets the engine arrange the current copies (with their turns, scales and duplicates). */
     private void arrangeAll() {

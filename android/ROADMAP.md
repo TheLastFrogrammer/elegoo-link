@@ -21,7 +21,7 @@ checklist is [FIELD_TEST.md](FIELD_TEST.md); Settings → Share diagnostics reco
 
 1. Hardware round: work through FIELD_TEST.md on the phone and CC2 and fix what the diagnostics show.
 2. Slicer: supports and seam painting on models; modifier volumes (a box or cylinder with its own settings inside a model).
-3. Downloads from a printer in cloud mode stay impossible (its file server is off); nothing to do unless Elegoo adds a path.
+3. Find out why the printer refused a cloud-mode download on port 80 (Elegoo's own cloud page uses the same request); check with the phone's browser and diagnostics.
 4. Other printer models (the Centauri Carbon 1 uses a different protocol).
 
 ## Rules that stay

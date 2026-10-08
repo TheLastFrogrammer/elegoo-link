@@ -338,10 +338,11 @@ public final class PrinterService extends Service {
             } catch (PrinterErrors.Rejected rejected) {
                 failure = "The printer refused the download: its access code is needed. Connect once locally in Settings with \u201cRemember access code\u201d on, then try again.";
             } catch (java.net.ConnectException refused) {
-                // Seen on a CC2 in cloud mode: found on Wi-Fi, but nothing listens on its HTTP port.
-                Diagnostics.note(Diagnostics.FILES, "direct download refused: printer HTTP port closed");
-                failure = "The printer was found on this Wi-Fi but does not serve files right now (HTTP port 80 is closed). In cloud mode the CC2 keeps its file server off; "
-                    + "turn on LAN Only on the printer and connect locally to download. Elegoo's cloud has no way to fetch files from the printer.";
+                // Seen once on a CC2 in cloud mode while printing. Elegoo's own cloud printer page downloads from the same port,
+                // so the cause is not known: the printer's state, the phone's network path, or the firmware.
+                Diagnostics.note(Diagnostics.FILES, "direct download: connection to the printer's HTTP port refused while " + (usingCloud() ? "watching through the cloud" : "not connected") + ", printer state " + StatusPresentation.state(cloudStatus));
+                failure = "The printer was found on this Wi-Fi, but it refused the connection to its file server (port 80). Try again in a minute; if it keeps failing, "
+                    + "open http://<printer IP>/ in the phone's browser: if that also fails, the printer is not serving files right now. Downloading also works over the local connection (LAN Only).";
             } catch (Exception error) {
                 failure = error instanceof IOException && error.getMessage() != null ? error.getMessage() : PrinterErrors.describe(error, "Download");
             } finally { directHttp = null; }

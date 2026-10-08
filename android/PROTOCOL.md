@@ -160,5 +160,9 @@ The printer never receives the file from the phone: it fetches it from Elegoo's 
 
 Progress shown: 0–50 % while storing, 50–100 % while the printer fetches, as in the SDK. Not yet tried against a real printer.
 
-Downloads have no cloud path: the SDK's cloud service has no file download, and a CC2 in cloud mode was seen refusing
-connections on its HTTP port 80, so downloading needs LAN Only and the local connection.
+Downloads have no cloud path in the SDK: its cloud service keeps file details (`local-file/page`, `local-file/filename`:
+name, size, layers, print time, per-tool colours, a thumbnail object served through `oss/generate-pre-access-url`) but
+not the G-code. Elegoo's own cloud printer page (ElegooSlicer `cloud_service_web`) downloads files from the printer's
+HTTP port on the local network, `http://<ip>:80/download?X-Token=<access code, default 123456>&file_name=…`, the same
+request this app makes, so the printer is expected to serve files in cloud mode too. One attempt on the owner's CC2 in
+cloud mode, during a print, had its connection to port 80 refused; the cause is not known.
