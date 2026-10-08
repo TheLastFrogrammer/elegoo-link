@@ -318,16 +318,16 @@ public final class SliceActivity extends Activity {
         chooseModels = button(modelCard, "Choose model files", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
-        }, false);
-        calibrate = button(modelCard, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
-        calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
+        }, true);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
         editPlate = rowButton(layoutRow, "Edit plate…", this::openPlate, false);
-        autoLayout = rowButton(layoutRow, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
+        objectButton = rowButton(layoutRow, "Model settings…", this::chooseObjectSettings, false);
+        autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
-        objectButton = button(modelCard, "Settings for one model…", this::chooseObjectSettings, false);
+        calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
+        calibrate = button(modelCard, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
 
         LinearLayout filamentCard = card("2 · Printer and filaments");
         label(filamentCard, "Printer", 12, muted, false); printerSpinner = spinner(filamentCard);
@@ -337,7 +337,7 @@ public final class SliceActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         TextView filamentsHeading = label(filamentCard, "Filaments", 14, ink, true); ((LinearLayout.LayoutParams) filamentsHeading.getLayoutParams()).topMargin = dp(14);
-        label(filamentCard, "Slot 1 prints as tool T0, slot 2 as T1, and so on. A CANVAS tray gives a slot its material and colour, and Print setup offers the same trays later.", 13, muted, false);
+        label(filamentCard, "Slot 1 is tool T0, slot 2 is T1, and so on.", 13, muted, false);
         fillTrays = button(filamentCard, "Fill from CANVAS trays", this::fillFromTrays, false);
         traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
         slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
@@ -969,7 +969,7 @@ public final class SliceActivity extends Activity {
     private void showObjectSettings() {
         if (objectButton == null) return;
         int changed = 0; for (Map<String, String> values : objectSettings.values()) if (!values.isEmpty()) changed++;
-        objectButton.setText(changed == 0 ? "Settings for one model…" : "Settings for one model… (" + changed + " model" + (changed == 1 ? "" : "s") + " changed)");
+        objectButton.setText(changed == 0 ? "Model settings…" : "Model settings… (" + changed + ")");
         objectButton.setTextColor(changed == 0 ? ColorStateList.valueOf(teal) : ColorStateList.valueOf(dark ? 0xffffd27a : 0xff8a5300));
     }
 
@@ -1080,7 +1080,7 @@ public final class SliceActivity extends Activity {
     private static boolean is3mf(File file) { return file.getName().toLowerCase(Locale.ROOT).endsWith(".3mf"); }
     private String slotSummary(int k) {
         Slot slot = slots.get(k - 1); String preset = selected(slot.preset);
-        return (preset == null ? "" : " · " + preset.replaceFirst(" @.*$", "")) + (slot.colour == null ? "" : " " + slot.colour);
+        return preset == null ? "" : " · " + preset.replaceFirst(" @.*$", "");
     }
 
     private void addSlot(TrayPlan.Tray tray) {
@@ -1090,9 +1090,9 @@ public final class SliceActivity extends Activity {
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
         slot.title = new TextView(this); slot.title.setText("Slot " + number + " · T" + (number - 1)); slot.title.setTextColor(ink); slot.title.setTextSize(14); slot.title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         header.addView(slot.title, new LinearLayout.LayoutParams(0, -2, 1));
-        slot.swatch = new TextView(this); slot.swatch.setTextSize(12); slot.swatch.setGravity(android.view.Gravity.CENTER); slot.swatch.setMinHeight(dp(36)); slot.swatch.setPadding(dp(10), 0, dp(10), 0);
+        slot.swatch = new TextView(this);
         slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament colour for slot " + number);
-        header.addView(slot.swatch, new LinearLayout.LayoutParams(-2, dp(36)));
+        header.addView(slot.swatch, new LinearLayout.LayoutParams(dp(40), dp(40)));
         slot.settings = styled("Settings…", () -> openFilamentSettings(slots.indexOf(slot)), false);
         LinearLayout.LayoutParams settingsLayout = new LinearLayout.LayoutParams(-2, -2); settingsLayout.leftMargin = dp(8); header.addView(slot.settings, settingsLayout);
         slot.row.addView(header);
@@ -1139,16 +1139,12 @@ public final class SliceActivity extends Activity {
         showSwatch(slot);
     }
 
+    /** A plain colour chip; its hex is only in the description. Without a colour, the preset's own colour applies. */
     private void showSwatch(Slot slot) {
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(10));
-        if (slot.colour != null) {
-            int rgb = Color.parseColor(slot.colour); shape.setColor(rgb);
-            boolean light = (Color.red(rgb) * 299 + Color.green(rgb) * 587 + Color.blue(rgb) * 114) / 1000 > 140;
-            slot.swatch.setTextColor(light ? 0xff17252c : Color.WHITE); slot.swatch.setText(slot.colour);
-            shape.setStroke(dp(1), muted);
-        } else {
-            shape.setColor(buttonColor); slot.swatch.setTextColor(teal); slot.swatch.setText("Preset colour");
-        }
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(10)); shape.setStroke(dp(1), slot.colour != null ? muted : teal);
+        int number = slots.indexOf(slot) + 1;
+        if (slot.colour != null) { shape.setColor(Color.parseColor(slot.colour)); slot.swatch.setContentDescription("Filament colour " + slot.colour + " for slot " + number); }
+        else { shape.setColor(buttonColor); slot.swatch.setContentDescription("Filament colour from the preset for slot " + number); }
         slot.swatch.setBackground(shape);
     }
 
@@ -1170,6 +1166,9 @@ public final class SliceActivity extends Activity {
     /** The trays the printer reported last (possibly stale), or an empty list. */
     private List<TrayPlan.Tray> reportedTrays() { return printer == null ? new ArrayList<>() : TrayPlan.trays(printer.canvas); }
 
+    /** A tray's dropdown text without its hex colour, which the swatch shows. */
+    private static String trayChoice(TrayPlan.Tray tray) { return tray.label().replaceFirst(" #[0-9A-Fa-f]{6}$", ""); }
+
     private void fillTrayChoices(Slot slot) {
         slot.trayChoices = reportedTrays();
         List<String> choices = new ArrayList<>(); choices.add(slot.trayChoices.isEmpty() && slot.source == null ? "No trays reported (choose at print start)" : "No tray (choose at print start)");
@@ -1179,8 +1178,8 @@ public final class SliceActivity extends Activity {
             for (TrayPlan.Tray tray : slot.trayChoices) if (tray.same(slot.source.canvasId, slot.source.trayId)) match = tray;
             if (match == null) slot.trayChoices.add(slot.source); else slot.source = match;
         }
-        for (TrayPlan.Tray tray : slot.trayChoices) choices.add(tray.label());
-        fill(slot.tray, choices, slot.source == null ? choices.get(0) : slot.source.label());
+        for (TrayPlan.Tray tray : slot.trayChoices) choices.add(trayChoice(tray));
+        fill(slot.tray, choices, slot.source == null ? choices.get(0) : trayChoice(slot.source));
     }
 
     private void refreshTrays() {

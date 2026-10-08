@@ -467,11 +467,11 @@ public class SlicerIntegrationTest {
             context().getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
             SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
             waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
-            @SuppressWarnings("unchecked") List<File> models = (List<File>) field(activity, "models"); models.clear();
-            for (String name : new String[] {"calibration_box.stl", "small_box.stl"}) {
-                File imported = new File(context().getCacheDir(), "slice-input/" + name); imported.getParentFile().mkdirs();
-                Files.copy(model.toPath(), imported.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); models.add(imported);
-            }
+            // Two models picked as the user picks them: the real import copies and inspects them, which enables the plate and settings buttons.
+            File picks = new File(context().getCacheDir(), "slice-picks"); picks.mkdirs();
+            File[] picked = new File[2];
+            for (int i = 0; i < picked.length; i++) { picked[i] = new File(picks, new String[] {"calibration_box.stl", "small_box.stl"}[i]); Files.copy(model.toPath(), picked[i].toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+            importFiles(activity, picked);
             // Two slots from CANVAS trays, as "Fill from CANVAS trays" makes them (no printer in this test).
             java.lang.reflect.Method addSlot = SliceActivity.class.getDeclaredMethod("addSlot", TrayPlan.Tray.class); addSlot.setAccessible(true);
             java.lang.reflect.Method removeLast = SliceActivity.class.getDeclaredMethod("removeLastSlot"); removeLast.setAccessible(true);
@@ -505,6 +505,65 @@ public class SlicerIntegrationTest {
             File file = new File(out, "slice-" + theme + ".png"); file.getParentFile().mkdirs();
             try (FileOutputStream stream = new FileOutputStream(file)) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream); }
         }
+    }
+
+    /** An all-plates result offers a plate chooser: Preview, Save and Send act on the chosen plate, also after recreation. */
+    @Test public void plateChooserPicksThePlateThatSendsAndSurvivesRecreation() throws Exception {
+        org.robolectric.android.controller.ActivityController<SliceActivity> controller = Robolectric.buildActivity(SliceActivity.class).setup();
+        SliceActivity activity = controller.get();
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        importFiles(activity, fixture("twoplate_project.3mf"));
+        setField(activity, "plate", SliceActivity.ALL_PLATES);
+        invoke(activity, "showProject"); invoke(activity, "updateButtons");
+        invoke(activity, "startSlice");
+        waitFor(() -> ((View) field(activity, "resultCard")).getVisibility() == View.VISIBLE);
+        android.widget.Spinner chooser = (android.widget.Spinner) field(activity, "resultPlate");
+        assertEquals(View.VISIBLE, ((View) field(activity, "resultPlateBox")).getVisibility());
+        assertEquals(2, chooser.getAdapter().getCount());
+        assertEquals("Send plate 1 to the Files tab", buttonText(activity, "useInFiles"));
+        chooser.setSelection(1); layOut(chooser); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        @SuppressWarnings("unchecked") List<File> files = (List<File>) field(activity, "slicedFiles");
+        assertEquals(files.get(1), field(activity, "sliced"));
+        assertEquals("twoplate_project_plate2.gcode", field(activity, "slicedName"));
+        assertEquals("Send plate 2 to the Files tab", buttonText(activity, "useInFiles"));
+
+        controller.recreate();
+        SliceActivity again = controller.get();
+        waitFor(() -> spinnerFilled(again, "processSpinner") && firstSlotFilled(again));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(1, ((android.widget.Spinner) field(again, "resultPlate")).getSelectedItemPosition());
+        assertEquals("twoplate_project_plate2.gcode", field(again, "slicedName"));
+        assertEquals("Send plate 2 to the Files tab", buttonText(again, "useInFiles"));
+    }
+
+    /** The Slice bar's hint names what is missing; it stays hidden while presets load and once the slice can start. */
+    @Test public void sliceHintNamesWhatIsMissing() throws Exception {
+        SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).create().get();
+        android.widget.TextView hint = (android.widget.TextView) field(activity, "sliceHint");
+        assertEquals("presets are still loading", View.GONE, hint.getVisibility());
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        assertEquals(View.VISIBLE, hint.getVisibility());
+        assertTrue(hint.getText().toString(), hint.getText().toString().startsWith("Choose model files"));
+        importFiles(activity, box(20, 20, 10));
+        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(View.GONE, hint.getVisibility());
+    }
+
+    /** Imports files as the Slice screen's picker does: the real import copies them and inspects them on the worker. */
+    private static void importFiles(Object activity, File... files) throws Exception {
+        List<android.net.Uri> uris = new ArrayList<>(); for (File file : files) uris.add(android.net.Uri.fromFile(file));
+        java.lang.reflect.Method importModels = SliceActivity.class.getDeclaredMethod("importModels", List.class); importModels.setAccessible(true);
+        importModels.invoke(activity, uris);
+        waitFor(() -> !((List<?>) field(activity, "models")).isEmpty() && field(activity, "inspected") != null);
+    }
+    /** Lays a view out at phone-ish width, which is when a spinner reports its selection. */
+    private static void layOut(View view) {
+        view.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
+        view.layout(0, 0, 1080, view.getMeasuredHeight());
+    }
+    private static String buttonText(Object target, String name) throws Exception { return ((android.widget.Button) field(target, name)).getText().toString(); }
+    private static void setField(Object target, String name, Object value) throws Exception {
+        java.lang.reflect.Field field = target.getClass().getDeclaredField(name); field.setAccessible(true); field.set(target, value);
     }
 
     private interface Condition { boolean met() throws Exception; }
