@@ -689,7 +689,8 @@ public final class SliceActivity extends Activity {
         sliced = slicedFiles.get(0); slicedName = slicedNames.get(0);
         // The print setup dialog offers this plan for a printer file of the same name.
         SharedPreferences.Editor plans = getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit();
-        for (String name : names) plans.putString(GcodeLibrary.safeName(name), plan.toJson());
+        TrayPlan withNeeds = plan.withNeeds(filaments, colours);
+        for (String name : names) plans.putString(GcodeLibrary.safeName(name), withNeeds.toJson());
         plans.apply();
         status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " project plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();

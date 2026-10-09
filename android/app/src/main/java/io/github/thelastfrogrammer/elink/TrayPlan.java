@@ -32,10 +32,28 @@ final class TrayPlan {
         Tool(int t, int canvasId, int trayId) { this.t = t; this.canvasId = canvasId; this.trayId = trayId; }
     }
 
+    /** What a tool was sliced as: the filament preset and its colour (either may be empty). */
+    static final class Need {
+        final int t; final String preset, colour;
+        Need(int t, String preset, String colour) { this.t = t; this.preset = preset == null ? "" : preset; this.colour = TrayPlan.colour(colour); }
+    }
+
     final int count;
     final List<Tool> tools;
+    final List<Need> needs;
 
-    TrayPlan(int count, List<Tool> tools) { this.count = count; this.tools = Collections.unmodifiableList(new ArrayList<>(tools)); }
+    TrayPlan(int count, List<Tool> tools) { this(count, tools, new ArrayList<>()); }
+    TrayPlan(int count, List<Tool> tools, List<Need> needs) {
+        this.count = count; this.tools = Collections.unmodifiableList(new ArrayList<>(tools)); this.needs = Collections.unmodifiableList(new ArrayList<>(needs));
+    }
+    /** This plan with each tool's sliced filament preset and colour recorded, so print setup can match trays to them. */
+    TrayPlan withNeeds(List<String> presets, List<String> colours) {
+        List<Need> list = new ArrayList<>();
+        for (int t = 0; t < count && t < presets.size(); t++) list.add(new Need(t, presets.get(t), colours == null || t >= colours.size() ? null : colours.get(t)));
+        return new TrayPlan(count, tools, list);
+    }
+    /** What tool t was sliced as, or null. */
+    Need need(int t) { for (Need need : needs) if (need.t == t) return need; return null; }
 
     /** Tool count to preselect: a stored plan's count, else the highest T0–T7 seen in the file plus one, else 1. A starting point the user must still verify. */
     static int defaultToolCount(TrayPlan plan, Collection<Integer> seen) {
@@ -52,7 +70,13 @@ final class TrayPlan {
         try {
             JSONArray list = new JSONArray();
             for (Tool tool : tools) list.put(new JSONObject().put("t", tool.t).put("canvas_id", tool.canvasId).put("tray_id", tool.trayId));
-            return new JSONObject().put("count", count).put("tools", list).toString();
+            JSONObject root = new JSONObject().put("count", count).put("tools", list);
+            if (!needs.isEmpty()) {
+                JSONArray sliced = new JSONArray();
+                for (Need need : needs) sliced.put(new JSONObject().put("t", need.t).put("preset", need.preset).put("colour", need.colour == null ? "" : need.colour));
+                root.put("needs", sliced);
+            }
+            return root.toString();
         } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
     }
 
@@ -71,12 +95,21 @@ final class TrayPlan {
                 if (t < 0 || t >= count) return null;
                 tools.add(new Tool(t, item.getInt("canvas_id"), item.getInt("tray_id")));
             }
-            return new TrayPlan(count, tools);
+            List<Need> needs = new ArrayList<>();
+            JSONArray sliced = root.optJSONArray("needs");     // older plans have none
+            if (sliced != null) for (int i = 0; i < sliced.length(); i++) {
+                JSONObject item = sliced.optJSONObject(i); if (item == null) continue;
+                int t = item.optInt("t", -1);
+                if (t >= 0 && t < count) needs.add(new Need(t, StatusPresentation.clean(item.optString("preset")), item.optString("colour")));
+            }
+            return new TrayPlan(count, tools, needs);
         } catch (JSONException malformed) { return null; }
     }
 
-    /** Loaded trays of connected CANVAS units, in reported order. */
-    static List<Tray> trays(JSONObject canvas) {
+    /** Loaded trays of connected CANVAS units, in reported order (a unit that does not report "connected" counts). */
+    static List<Tray> trays(JSONObject canvas) { return trays(canvas, false); }
+    /** As above; with `strict`, only units that report themselves connected (what print start accepts). */
+    static List<Tray> trays(JSONObject canvas, boolean strict) {
         List<Tray> result = new ArrayList<>();
         JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
         if (units == null) return result;
@@ -84,7 +117,7 @@ final class TrayPlan {
             JSONObject unit = units.optJSONObject(u);
             if (unit == null || unit.optInt("canvas_id", -1) < 0) continue;
             Object connected = unit.opt("connected");
-            if (connected != null && !(Boolean.TRUE.equals(connected) || unit.optInt("connected", 0) == 1)) continue;
+            if ((strict || connected != null) && !(Boolean.TRUE.equals(connected) || unit.optInt("connected", 0) == 1)) continue;
             JSONArray list = unit.optJSONArray("tray_list"); if (list == null) continue;
             for (int t = 0; t < list.length(); t++) {
                 JSONObject tray = list.optJSONObject(t);

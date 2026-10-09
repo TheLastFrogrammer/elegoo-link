@@ -1099,70 +1099,136 @@ public final class MainActivity extends Activity {
         subheading(body, "3 · Filament");
         label(body, "Filaments used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 filament", "2 filaments", "3 filaments", "4 filaments", "5 filaments", "6 filaments", "7 filaments", "8 filaments"});
-        List<JSONObject> trays = new ArrayList<>(); List<String> choices = new ArrayList<>(), dots = new ArrayList<>(); choices.add("Printer / G-code default"); dots.add(null);
-        if (printer.canvasFresh()) {
-            JSONArray units = printer.canvas.optJSONArray("canvas_list");
-            if (units != null) for (int u = 0; u < units.length(); u++) {
-                JSONObject unit = units.optJSONObject(u); if (unit == null || !(Boolean.TRUE.equals(unit.opt("connected")) || unit.optInt("connected", 0) == 1)) continue;
-                JSONArray slots = unit.optJSONArray("tray_list"); if (slots == null) continue;
-                for (int t = 0; t < slots.length(); t++) {
-                    JSONObject slot = slots.optJSONObject(t); if (slot == null || slot.optString("filament_type").isEmpty() || unit.optInt("canvas_id", -1) < 0 || slot.optInt("tray_id", -1) < 0) continue;
-                    try { trays.add(new JSONObject().put("canvas_id", unit.getInt("canvas_id")).put("tray_id", slot.getInt("tray_id"))); }
-                    catch (Exception error) { continue; }
-                    choices.add("CANVAS " + unit.optInt("canvas_id") + " · tray " + slot.optInt("tray_id") + " · " + StatusPresentation.clean(slot.optString("filament_type"))); dots.add(TrayPlan.colour(slot.optString("filament_color")));
-                }
-            }
+        // Loaded trays of connected CANVAS units (what print start accepts), each with its material and colour in words.
+        List<TrayPlan.Tray> trays = printer.canvasFresh() ? TrayPlan.trays(printer.canvas, true) : new ArrayList<>();
+        List<String> choices = new ArrayList<>(), dots = new ArrayList<>(); choices.add("Printer / G-code default"); dots.add(null);
+        for (TrayPlan.Tray tray : trays) {
+            String material = tray.name.isEmpty() || tray.name.equalsIgnoreCase(tray.type) ? tray.type : tray.name.toUpperCase(Locale.ROOT).contains(tray.type.toUpperCase(Locale.ROOT)) ? tray.name : tray.type + " " + tray.name;
+            String colourWord = WorkshopUi.colourName(tray.colour);
+            choices.add(material + (colourWord == null ? "" : " · " + colourWord) + "\nCANVAS " + tray.canvasId + " · tray " + tray.trayId); dots.add(tray.colour);
         }
-        Spinner[] maps = new Spinner[8]; TextView[] labels = new TextView[8];
-        for (int t = 0; t < 8; t++) {
-            labels[t] = label(body, "Filament " + (t + 1) + " (T" + t + ") prints from", 13, MUTED, false); maps[t] = spinner(body, new String[] {""});
-            maps[t].setAdapter(new WorkshopUi.DottedAdapter(this, INK, MUTED, choices, dots));
-        }
-        toolCount.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onNothingSelected(AdapterView<?> parent) { }
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { for (int t = 0; t < 8; t++) { maps[t].setVisibility(t <= position && choices.size() > 1 ? View.VISIBLE : View.GONE); labels[t].setVisibility(t <= position && choices.size() > 1 ? View.VISIBLE : View.GONE); } }
-        });
-        // A file sliced on this phone carries its slot-to-tray plan: G-code tool t prints from the tray chosen for slot t + 1.
+        // What the file was sliced for, per tool: a plan saved when slicing on this phone, the printer's file details, or the
+        // slicer notes of the same file inspected on this phone.
         TrayPlan plan = TrayPlan.parse(getSharedPreferences(SliceActivity.TRAY_PLANS, MODE_PRIVATE).getString(GcodeLibrary.safeName(name), null));
+        boolean sameFile = printer.selectedReport != null && GcodeLibrary.safeName(printer.selectedName) != null && GcodeLibrary.safeName(printer.selectedName).equals(GcodeLibrary.safeName(name));
+        FilamentMatch.Need[] needs = FilamentMatch.merge(TrayPlan.MAX_TOOLS, FilamentMatch.fromPlan(plan), FilamentMatch.fromColorMap(file.opt("color_map")),
+            sameFile ? FilamentMatch.fromComments(printer.selectedReport.materials, TrayPlan.MAX_TOOLS) : new ArrayList<>());
+        if (file.has("color_map")) Diagnostics.note(Diagnostics.TRAYS, "file details carry color_map (" + (file.opt("color_map") instanceof JSONArray ? "list" : file.opt("color_map") == null ? "null" : file.opt("color_map").getClass().getSimpleName()) + ")");
+        Spinner[] maps = new Spinner[8]; LinearLayout[] rows = new LinearLayout[8]; TextView[] verdicts = new TextView[8];
+        for (int t = 0; t < 8; t++) {
+            rows[t] = new LinearLayout(this); rows[t].setOrientation(LinearLayout.VERTICAL); rows[t].setPadding(0, dp(10), 0, 0); body.addView(rows[t]);
+            FilamentMatch.Need need = needs[t];
+            TextView heading = label(rows[t], "Filament " + (t + 1) + " (T" + t + ")", 14, INK, true);
+            String wants = need == null ? "" : need.describe();
+            TextView wanted = label(rows[t], wants.isEmpty() ? "The file does not say which material." : "Sliced for " + wants + " (from " + need.source + ")", 13, MUTED, false);
+            if (need != null && need.colour != null) { wanted.setCompoundDrawablesRelativeWithIntrinsicBounds(swatch(need.colour), null, null, null); wanted.setCompoundDrawablePadding(dp(8)); }
+            maps[t] = spinner(rows[t], new String[] {""});
+            maps[t].setAdapter(new WorkshopUi.DottedAdapter(this, INK, MUTED, choices, dots));
+            A11y.name(maps[t], "Tray for filament " + (t + 1));
+            verdicts[t] = A11y.polite(label(rows[t], "", 13, MUTED, false));
+            heading.setContentDescription("Filament " + (t + 1) + ", tool T" + t);
+        }
+        Runnable judge = () -> {
+            int count = toolCount.getSelectedItemPosition() + 1;
+            for (int t = 0; t < 8; t++) {
+                boolean shown = t < count && choices.size() > 1;
+                rows[t].setVisibility(shown ? View.VISIBLE : View.GONE);
+                if (!shown) continue;
+                int selected = maps[t].getSelectedItemPosition();
+                TrayPlan.Tray tray = selected > 0 ? trays.get(selected - 1) : null;
+                List<Integer> shared = new ArrayList<>();
+                for (int o = 0; o < count; o++) if (o != t && selected > 0 && maps[o].getSelectedItemPosition() == selected) shared.add(o + 1);
+                FilamentMatch.Verdict verdict = tray == null ? FilamentMatch.unset(needs[t], trays) : FilamentMatch.check(needs[t], tray, shared);
+                verdicts[t].setText((verdict.level == FilamentMatch.Level.OK ? "✓ " : verdict.level == FilamentMatch.Level.WRONG ? "✕ " : "! ") + verdict.text);
+                verdicts[t].setTextColor(verdict.level == FilamentMatch.Level.OK ? TEAL : verdict.level == FilamentMatch.Level.WRONG ? ERROR : AMBER);
+            }
+        };
+        AdapterView.OnItemSelectedListener rejudge = new AdapterView.OnItemSelectedListener() {
+            public void onNothingSelected(AdapterView<?> parent) { }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { judge.run(); }
+        };
+        toolCount.setOnItemSelectedListener(rejudge);
+        for (Spinner map : maps) map.setOnItemSelectedListener(rejudge);
+        TextView source = label(body, "", 13, TEAL, false);
+        Runnable suggestTrays = () -> {
+            int[] picks = FilamentMatch.suggest(java.util.Arrays.copyOf(needs, toolCount.getSelectedItemPosition() + 1), trays);
+            int filled = 0;
+            for (int t = 0; t < picks.length; t++) if (picks[t] >= 0) { maps[t].setSelection(picks[t] + 1); filled++; }
+            source.setText(filled == 0 ? "No loaded tray matches the materials the file was sliced for. Choose the trays yourself."
+                : "Suggested " + filled + " tray(s) by material, then colour. Check each before starting.");
+            judge.run();
+        };
         if (plan != null) {
             toolCount.setSelection(plan.count - 1);
             int matched = 0;
             for (TrayPlan.Tool tool : plan.tools)
-                for (int i = 0; i < trays.size(); i++)
-                    if (trays.get(i).optInt("canvas_id") == tool.canvasId && trays.get(i).optInt("tray_id") == tool.trayId) { maps[tool.t].setSelection(i + 1); matched++; }
+                for (int i = 0; i < trays.size(); i++) if (trays.get(i).same(tool.canvasId, tool.trayId)) { maps[tool.t].setSelection(i + 1); matched++; }
             StringBuilder reported = new StringBuilder();
-            for (JSONObject tray : trays) reported.append(reported.length() > 0 ? ", " : "").append(tray.optInt("canvas_id")).append("/").append(tray.optInt("tray_id"));
+            for (TrayPlan.Tray tray : trays) reported.append(reported.length() > 0 ? ", " : "").append(tray.canvasId).append("/").append(tray.trayId);
             Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": plan " + plan.toJson() + " · loaded trays (canvas/tray) [" + reported + "]"
                 + (printer.canvasFresh() ? "" : " · tray status not fresh") + " · prefilled " + matched + " of " + plan.tools.size());
-            label(body, plan.tools.isEmpty() ? "Filament count from slicing this file on the phone (" + plan.count + ")."
-                : matched == plan.tools.size() ? "Filament count and trays prefilled from slicing this file on the phone."
-                : "Filament count prefilled from slicing this file on the phone; " + (plan.tools.size() - matched) + " planned tray(s) are not reported as loaded now. Refresh trays or choose them.", 13, TEAL, false);
-        }
-        else {
+            source.setText(plan.tools.isEmpty() ? "Filament count from slicing this file on the phone (" + plan.count + ")."
+                : matched == plan.tools.size() ? "Filament count and trays from slicing this file on the phone."
+                : "Filament count from slicing this file on the phone; " + (plan.tools.size() - matched) + " planned tray(s) are not loaded now. Choose them, or use Suggest trays.");
+            if (plan.tools.isEmpty() && trays.size() > 0) main.post(suggestTrays);
+        } else {
             // No stored plan: the file's own T selections (when this is the file inspected on the phone) are a starting point, not proof.
-            boolean sameFile = printer.selectedReport != null && GcodeLibrary.safeName(printer.selectedName) != null && GcodeLibrary.safeName(printer.selectedName).equals(GcodeLibrary.safeName(name));
             int guess = TrayPlan.defaultToolCount(null, sameFile ? printer.selectedReport.tools : null);
-            if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); label(body, "Filament count taken from the file's own T commands (" + guess + "). Check it against your slice.", 13, TEAL, false); }
+            int known = 0; for (FilamentMatch.Need need : needs) if (need != null) known = Math.max(known, need.t + 1);
+            if (known > 0) { toolCount.setSelection(Math.max(known, guess) - 1); }
+            else if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); source.setText("Filament count taken from the file's own T commands (" + guess + "). Check it against your slice."); }
+            if (known > 0 && trays.size() > 0) main.post(suggestTrays);
         }
-        label(body, choices.size() > 1 ? "Leave every filament at Printer / G-code default, or map every filament to a loaded tray." : "No loaded CANVAS trays reported: the printer's own G-code mapping is used.", 13, MUTED, false);
+        if (choices.size() > 1) {
+            LinearLayout tools = row(body);
+            rowButton(tools, "Suggest trays", suggestTrays, false);
+            rowButton(tools, "Clear trays", () -> { for (Spinner map : maps) map.setSelection(0); source.setText(""); judge.run(); }, false);
+        }
+        label(body, choices.size() > 1 ? "Leave every filament at Printer / G-code default, or choose a loaded tray for every filament." : printer.canvasFresh()
+            ? "No loaded CANVAS trays reported: the printer's own G-code mapping is used." : "Tray status is not fresh: refresh the printer to choose trays. Until then the printer's own mapping is used.", 13, MUTED, false);
         label(body, "A timelapse is recorded on the printer; download it later from the Files tab (local connection).", 12, MUTED, false);
+        main.post(judge);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog setup = new AlertDialog.Builder(this).setTitle("Print setup").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Next: review…", null).create();
         setup.setOnShowListener(d -> setup.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            JSONArray mapping = new JSONArray(); int count = toolCount.getSelectedItemPosition() + 1, explicit = 0;
+            JSONArray mapping = new JSONArray(); int count = toolCount.getSelectedItemPosition() + 1, explicit = 0, wrong = 0, check = 0;
+            StringBuilder lines = new StringBuilder();
             try {
-                for (int t = 0; t < count; t++) { int selected = maps[t].getSelectedItemPosition(); if (selected > 0) { JSONObject tray = new JSONObject(trays.get(selected - 1).toString()); tray.put("t", t); mapping.put(tray); explicit++; } }
-                if (explicit != 0 && explicit != count) { message("Map every used filament, or leave all filaments at Printer / G-code default."); new AlertDialog.Builder(this).setMessage("Map every used filament, or leave all filaments at default.").setPositiveButton("OK", null).show(); return; }
+                for (int t = 0; t < count; t++) {
+                    int selected = maps[t].getSelectedItemPosition();
+                    if (selected > 0) { TrayPlan.Tray tray = trays.get(selected - 1); mapping.put(new JSONObject().put("t", t).put("canvas_id", tray.canvasId).put("tray_id", tray.trayId)); explicit++; }
+                }
+                if (explicit != 0 && explicit != count) { new AlertDialog.Builder(this).setTitle("Choose every filament").setMessage("Choose a tray for every filament, or set them all to Printer / G-code default.").setPositiveButton("OK", null).show(); return; }
+                for (int t = 0; t < count && explicit > 0; t++) {
+                    int selected = maps[t].getSelectedItemPosition(); TrayPlan.Tray tray = trays.get(selected - 1);
+                    List<Integer> shared = new ArrayList<>();
+                    for (int o = 0; o < count; o++) if (o != t && maps[o].getSelectedItemPosition() == selected) shared.add(o + 1);
+                    FilamentMatch.Verdict verdict = FilamentMatch.check(needs[t], tray, shared);
+                    if (verdict.level == FilamentMatch.Level.WRONG) wrong++; else if (verdict.level == FilamentMatch.Level.CHECK) check++;
+                    String wants = needs[t] == null ? "" : needs[t].describe();
+                    lines.append("\nFilament ").append(t + 1).append(wants.isEmpty() ? "" : " (" + wants + ")").append(" → ").append(choices.get(selected).replace("\n", ", "))
+                        .append(verdict.level == FilamentMatch.Level.OK ? "" : (verdict.level == FilamentMatch.Level.WRONG ? "\n   ✕ " : "\n   ! ") + verdict.text);
+                }
             } catch (Exception error) { message("Could not prepare tool mappings. Refresh trays."); return; }
             setup.dismiss();
             String text = StatusPresentation.clean(name) + "\nStorage: " + (storage.equals("local") ? "Internal" : "USB") + "\nBuild plate " + (plate.getSelectedItemPosition() == 0 ? "A" : "B")
                 + " · Run printer / bed check " + (leveling.isChecked() ? "on" : "off") + " · Force bed leveling " + (force.isChecked() ? "on" : "off") + "\nTimelapse " + (timelapse.isChecked() ? "on" : "off")
-                + "\n" + count + " filament(s): " + (mapping.length() == 0 ? "printer / G-code default mapping" : "explicit reported tray mappings") + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
-            new AlertDialog.Builder(this).setTitle("Start this print?").setMessage(text).setNegativeButton("Cancel", null).setPositiveButton("Start print", (confirm, which) -> {
-                if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping);
-                if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
-            }).show();
+                + "\n\n" + count + " filament(s): " + (mapping.length() == 0 ? "the printer's own mapping" : "from these trays:" + lines)
+                + (wrong > 0 ? "\n\n" + wrong + " filament(s) are a different material from what the file was sliced for. Printing with the wrong material can fail or clog the nozzle." : "")
+                + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
+            int wrongCount = wrong, checkCount = check;
+            new AlertDialog.Builder(this).setTitle(wrong > 0 ? "Materials don't match" : "Start this print?").setMessage(text).setNegativeButton(wrong > 0 ? "Go back" : "Cancel", (b2, w2) -> { if (wrongCount > 0) setup.show(); })
+                .setPositiveButton(wrong > 0 ? "Start anyway" : "Start print", (confirm, which) -> {
+                    if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
+                        + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
+                    if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
+                }).show();
         })); setup.show();
+    }
+    /** A small round colour swatch for a "sliced for" line. */
+    private android.graphics.drawable.Drawable swatch(String colour) {
+        GradientDrawable dot = new GradientDrawable(); dot.setShape(GradientDrawable.OVAL); dot.setColor(Color.parseColor(colour)); dot.setStroke(Math.max(1, dp(1)), MUTED); dot.setSize(dp(14), dp(14));
+        return dot;
     }
     /** Shows the open file dialog's thumbnail once the printer has sent it (base64 PNG, with or without a data: prefix). */
     private void showThumbnail() {

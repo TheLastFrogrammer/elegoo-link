@@ -180,3 +180,13 @@ If the download fails, the error and the history entry help: share the diagnosti
 3. Downloads as in section 16; MakerWorld's download button should now work too (tell us if it does not).
 4. Rotate the phone and leave/return to the app: the page should stay where it was.
 5. The APK is much larger (about 70 MB) because Firefox's engine is inside it.
+
+## 18. Choosing trays for a print (v0.21.0)
+
+1. Slice a model on the phone with two filaments (e.g. PLA and PETG), then Upload and print. In Print setup each filament
+   shows what it was sliced for (material and colour), and trays holding that material are suggested, closest colour first.
+2. Each filament shows a verdict: ✓ matches, ! check (colour differs, a shared tray, fibre-filled), ✕ a different material.
+   Choose a PETG file's filament from a PLA tray: the review says "Materials don't match" and offers Go back.
+3. **Suggest trays** fills the trays again; **Clear trays** leaves every filament to the printer's own choice.
+4. For a file on the printer that was not sliced on this phone: Share diagnostics after opening Print setup. If the printer
+   sends filament details for the file ("color_map"), the Live tray plan section says so; tell us, so we can read them.
