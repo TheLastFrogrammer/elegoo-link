@@ -94,7 +94,7 @@ Screen-off battery management can suspend activity; no wake lock is held. Proces
 
 ## Build
 
-JDK 17, Android SDK platform 37.0 (compileSdk; targetSdk is 36)/build tools 36.0.0, Gradle 9.7.1 and AGP 9.4.1 (platform 37 and AGP 9.1+ are what GeckoView, the model-site browser, requires):
+JDK 17, Android SDK platform 36/build tools 35.0.0, Gradle 8.13 and AGP 8.11.1:
 
 ```sh
 ./gradlew --no-build-cache clean testDebugUnitTest lintDebug assembleDebug

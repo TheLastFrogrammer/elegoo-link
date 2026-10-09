@@ -38,4 +38,12 @@ public class SliceIntentTest {
         assertEquals("", SliceActivity.modelExtension("photo.jpg", "image/jpeg"));
         assertEquals("", SliceActivity.modelExtension(null, null));
     }
+
+    @Test public void zipsFromModelSitesAreRecognised() {
+        org.junit.Assert.assertTrue(SliceActivity.isZip("Benchy - 763622.zip", null));
+        org.junit.Assert.assertTrue(SliceActivity.isZip("download", "application/zip"));
+        org.junit.Assert.assertTrue(SliceActivity.isZip(null, "application/x-zip-compressed"));
+        org.junit.Assert.assertFalse(SliceActivity.isZip("benchy.stl", "model/stl"));
+        org.junit.Assert.assertFalse(SliceActivity.isZip("photo.jpg", "image/jpeg"));
+    }
 }

@@ -622,7 +622,11 @@ public class SlicerIntegrationTest {
             waitFor(() -> ((View) field(activity, "preview")).getVisibility() == View.VISIBLE); // the embedded preview, so both themes match
             View root = activity.getWindow().getDecorView();
             String plan = context().getSharedPreferences(SliceActivity.TRAY_PLANS, 0).getString("calibration_box_plate.gcode", null);
-            assertEquals("{\"count\":2,\"tools\":[{\"t\":0,\"canvas_id\":0,\"tray_id\":0},{\"t\":1,\"canvas_id\":0,\"tray_id\":1}]}", plan);
+            TrayPlan saved = TrayPlan.parse(plan);
+            assertEquals(2, saved.count);
+            assertEquals(0, saved.tool(0).trayId); assertEquals(1, saved.tool(1).trayId);
+            // What each filament was sliced as, for matching trays at print setup.
+            assertEquals("Elegoo PLA Matte @ECC2", saved.need(0).preset); assertEquals("#D02828", saved.need(0).colour);
             // The whole form from its top (the result scroll leaves the form scrolled), with the sticky Slice bar below it.
             org.robolectric.shadows.ShadowLooper.idleMainLooper();
             ((android.widget.ScrollView) field(activity, "scroll")).scrollTo(0, 0);

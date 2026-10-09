@@ -1,14 +1,13 @@
 plugins { id 'com.android.application' }
 android {
     namespace 'io.github.thelastfrogrammer.elink'
-    // 37.1: GeckoView (the model-site browser) is built against it; targetSdk stays 36.
-    compileSdk { version = release(37) { minorApiLevel = 1 } }
+    compileSdk 36
     defaultConfig {
         applicationId 'io.github.thelastfrogrammer.elink'
         minSdk 26
         targetSdk 36
-        versionCode 54
-        versionName '0.21.0'
+        versionCode 55
+        versionName '0.22.0'
         // Agora ships native code for four CPU types; keep only 64-bit ARM (modern phones) to limit APK size.
         ndk { abiFilters 'arm64-v8a' }
     }
@@ -36,7 +35,7 @@ android {
     // once at install.
     packaging { jniLibs { useLegacyPackaging = true } }
     testOptions { unitTests { includeAndroidResources = true; all {
-        maxHeapSize = '2g'   // the render tests and the slicer engine need more than Gradle 9's default
+        maxHeapSize = '2g'   // the render tests and the slicer engine
         systemProperty 'screenshots', System.getProperty('screenshots', '')
         // Opt-in: -DslicerLib=<dir with a host liblinkslicer.so> runs SlicerIntegrationTest against the real engine.
         def slicerLib = System.getProperty('slicerLib', '')
@@ -49,9 +48,6 @@ dependencies {
     implementation 'androidx.webkit:webkit:1.12.1'
     // Agora RTM: Elegoo's cloud command channel (same major version as the SDK's bundled 2.2.8 native library).
     implementation 'io.agora:agora-rtm:2.2.6'
-    // GeckoView: Firefox's engine for the model-site browser, so a Firefox add-on (uBlock Origin) can block ads there.
-    // 64-bit ARM only, like the rest of the app. Update with each Firefox release for its security fixes.
-    implementation 'org.mozilla.geckoview:geckoview-arm64-v8a:157.0.20260924084938'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
     // Only for opt-in UI screenshots (-Dscreenshots=<dir>); see ScreenshotTest.

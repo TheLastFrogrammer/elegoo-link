@@ -190,3 +190,14 @@ If the download fails, the error and the history entry help: share the diagnosti
 3. **Suggest trays** fills the trays again; **Clear trays** leaves every filament to the printer's own choice.
 4. For a file on the printer that was not sliced on this phone: Share diagnostics after opening Print setup. If the printer
    sends filament details for the file ("color_map"), the Live tray plan section says so; tell us, so we can read them.
+
+## 19. Model sites in Firefox (v0.22.0; replaces section 17)
+
+The app no longer carries Firefox's engine (it is about 17 MB again). Instead:
+1. Files → Find models online…: choose **In Firefox** (default when Firefox is installed) or **In this app**. Without
+   Firefox, **Get Firefox…** opens its Play Store page.
+2. In Firefox, the site opens with your search, your sign-ins and your add-ons (uBlock Origin). Download a model; when
+   Firefox shows the download, tap **Open** and choose **Link Workshop** (Slice a model). The model opens in the slicer.
+3. Download a ZIP (Thingiverse "Download all files", Printables): opening it in Link Workshop unpacks the model files
+   inside and loads them all. Tell us if a site's download does not offer Link Workshop under Open.
+4. **In this app** works as in section 16 (no ad blocker; downloads go straight to the slicer).

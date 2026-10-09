@@ -237,6 +237,21 @@ public final class SliceActivity extends Activity {
         return uris;
     }
 
+    /** A ZIP by its name or MIME type (a 3MF is a ZIP too, but is recognised as a model before this is asked). */
+    static boolean isZip(String name, String mime) {
+        String type = mime == null ? "" : mime.toLowerCase(Locale.ROOT);
+        return name != null && name.toLowerCase(Locale.ROOT).endsWith(".zip") || type.equals("application/zip") || type.equals("application/x-zip-compressed");
+    }
+    /** A file unpacked from a ZIP, renamed to the characters a slice (and later the printer) accepts. */
+    private static File sliceSafe(File model) {
+        String name = model.getName(), extension = ModelSites.extension(name);
+        String safe = name.substring(0, name.length() - extension.length() - 1).replaceAll("[^A-Za-z0-9 _.-]", "_");
+        if (safe.isEmpty()) safe = "model"; if (safe.length() > 80) safe = safe.substring(0, 80);
+        File target = new File(model.getParentFile(), safe + "." + extension);
+        for (int n = 2; !target.equals(model) && target.exists(); n++) target = new File(model.getParentFile(), safe + "_" + n + "." + extension);
+        return target.equals(model) || model.renameTo(target) ? target : model;
+    }
+
     /** The model file extension from its name, or else from its MIME type (apps often share without one); "" if neither. */
     static String modelExtension(String name, String mime) {
         String extension = name != null && name.contains(".") ? name.substring(name.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT) : "";
@@ -884,6 +899,19 @@ public final class SliceActivity extends Activity {
                 String name = displayName(uri), type = null;
                 try { type = getContentResolver().getType(uri); } catch (RuntimeException ignored) { }
                 String extension = modelExtension(name, type);
+                if (extension.isEmpty() && isZip(name, type)) {
+                    // Model sites download a model's files as one ZIP: its model files are what is read (other files are skipped).
+                    File zip = new File(inputDir, "download-" + System.nanoTime() + ".zip");
+                    try (InputStream in = getContentResolver().openInputStream(uri)) {
+                        if (in == null) throw new IOException("Cannot open " + name);
+                        ModelSites.save(in, zip, 512L * 1024 * 1024, -1, (done, total) -> true);
+                        List<File> found = ModelSites.unzipModels(zip, inputDir);
+                        if (found.isEmpty()) problem = name + " has no STL, 3MF, OBJ, STEP or AMF file in it.";
+                        for (File model : found) imported.add(sliceSafe(model));
+                    } catch (IOException failure) { problem = name + ": " + failure.getMessage(); }
+                    finally { zip.delete(); }
+                    continue;
+                }
                 if (extension.isEmpty()) { problem = name + " is not an STL, 3MF, OBJ, Draco or STEP file."; continue; }
                 // libslic3r picks the reader by extension; keep it, and a filename the printer accepts later.
                 String stem = name.toLowerCase(Locale.ROOT).endsWith("." + extension) ? name.substring(0, name.length() - extension.length() - 1) : name;

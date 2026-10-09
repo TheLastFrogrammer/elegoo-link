@@ -5,6 +5,16 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- To see whether Firefox is installed, so the model sites can open there (Find models). -->
+    <queries>
+        <package android:name="org.mozilla.firefox" />
+        <package android:name="org.mozilla.firefox_beta" />
+        <package android:name="org.mozilla.fenix" />
+        <package android:name="org.mozilla.fennec_fdroid" />
+        <package android:name="org.ironfoxoss.ironfox" />
+        <package android:name="io.github.forkmaintainers.iceraven" />
+        <package android:name="us.spotco.fennec_dos" />
+    </queries>
     <application android:label="Link Workshop" android:theme="@style/WorkshopLaunch"
         android:icon="@drawable/ic_launcher" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="true" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
@@ -20,7 +30,7 @@
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
-        <!-- "Open with" and "Share" for model files from other apps. -->
+        <!-- "Open with" and "Share" for model files (and ZIPs of them, as model sites download) from other apps. -->
         <activity android:name=".SliceActivity" android:exported="true" android:label="Slice a model"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
             <intent-filter>
@@ -38,6 +48,8 @@
                 <data android:mimeType="model/step" />
                 <data android:mimeType="application/step" />
                 <data android:mimeType="application/x-step" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -65,6 +77,8 @@
                 <data android:pathPattern=".*\\..*\\.STEP" />
                 <data android:pathPattern=".*\\..*\\.stp" />
                 <data android:pathPattern=".*\\..*\\.STP" />
+                <data android:pathPattern=".*\\.zip" />
+                <data android:pathPattern=".*\\.ZIP" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
@@ -81,6 +95,8 @@
                 <data android:mimeType="model/step" />
                 <data android:mimeType="application/step" />
                 <data android:mimeType="application/x-step" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE" />
@@ -97,6 +113,8 @@
                 <data android:mimeType="model/step" />
                 <data android:mimeType="application/step" />
                 <data android:mimeType="application/x-step" />
+                <data android:mimeType="application/zip" />
+                <data android:mimeType="application/x-zip-compressed" />
             </intent-filter>
         </activity>
         <activity android:name=".ModelSearchActivity" android:exported="false" android:label="Find models"

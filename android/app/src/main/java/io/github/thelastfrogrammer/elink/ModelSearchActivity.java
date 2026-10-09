@@ -35,6 +35,11 @@ import org.json.JSONObject;
 public final class ModelSearchActivity extends Activity {
     static final String RESULT_PATHS = "paths";
     private static final int BROWSE = 1;
+    /** Firefox and its well-known builds (Play Store, beta, nightly, F-Droid builds), in order of preference. */
+    static final String[] FIREFOXES = {"org.mozilla.firefox", "org.mozilla.firefox_beta", "org.mozilla.fenix", "org.mozilla.fennec_fdroid",
+        "org.ironfoxoss.ironfox", "io.github.forkmaintainers.iceraven", "us.spotco.fennec_dos"};
+    private Button inFirefox, inApp, getFirefox;
+    private TextView browseNote;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newFixedThreadPool(3);
     private boolean dark;
@@ -78,16 +83,21 @@ public final class ModelSearchActivity extends Activity {
         status = A11y.polite(label(content, "", 13, muted, false));
 
         label(content, "Browse the sites", 13, ink, true);
-        label(content, "Each site opens here with your search. Sign in on the site as usual; files you download come straight to the slicer.", 12, muted, false);
+        // Where the sites open: Firefox (with the user's own add-ons, such as an ad blocker) or this app's own browser.
+        LinearLayout where = row(content);
+        inFirefox = rowButton(where, "In Firefox", () -> setBrowseIn(true), false);
+        inApp = rowButton(where, "In this app", () -> setBrowseIn(false), false);
+        browseNote = label(content, "", 12, muted, false);
+        getFirefox = button(content, "Get Firefox…", this::getFirefox);
         // Three and two to a row; one to a row with large text, so no site name breaks mid-word.
         boolean large = getResources().getConfiguration().fontScale >= 1.3f;
         LinearLayout sites = row(content);
         for (int i = 0; i < ModelSites.BROWSER_SITES.length; i++) {
             String site = ModelSites.BROWSER_SITES[i];
             if (i > 0 && (large || i == 3)) sites = row(content);
-            rowButton(sites, site, () -> startActivityForResult(new Intent(this, ModelBrowserActivity.class)
-                .putExtra(ModelBrowserActivity.EXTRA_SITE, site).putExtra(ModelBrowserActivity.EXTRA_TERM, query.getText().toString().trim()), BROWSE), false);
+            rowButton(sites, site, () -> browse(site, null), false);
         }
+        showBrowseIn();
         results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); content.addView(results);
         more = button(content, "More results", () -> search(page + 1)); more.setVisibility(View.GONE);
         label(content, "Models belong to their designers: check each model's licence on its page before printing or sharing it.", 12, muted, false);
@@ -262,11 +272,62 @@ public final class ModelSearchActivity extends Activity {
 
     // ------------------------------------------------------------------ helpers
     private HttpURLConnection open(URL url) throws IOException { return (HttpURLConnection) url.openConnection(); }
-    /** Opens a model's page in the in-app browser, where its downloads come straight to the slicer. */
-    private void openBrowser(String address) {
-        if (!address.startsWith("https://")) return;
-        startActivityForResult(new Intent(this, ModelBrowserActivity.class).putExtra(ModelBrowserActivity.EXTRA_URL, address), BROWSE);
+    /** Opens a model's page where the user browses the sites: Firefox, or the in-app browser. */
+    private void openBrowser(String address) { if (address.startsWith("https://")) browse(null, address); }
+
+    // ------------------------------------------------------------------ where the sites open
+    /** The installed Firefox to use, or null. */
+    private String firefox() {
+        for (String name : FIREFOXES) {
+            try { getPackageManager().getPackageInfo(name, 0); return name; } catch (android.content.pm.PackageManager.NameNotFoundException absent) { }
+        }
+        return null;
     }
+    /** Firefox when it is installed and chosen (the default), else this app's browser. */
+    private boolean browseInFirefox() { return firefox() != null && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("sitesInFirefox", true); }
+    private void setBrowseIn(boolean firefox) {
+        if (firefox && firefox() == null) { getFirefox(); return; }
+        getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putBoolean("sitesInFirefox", firefox).apply(); showBrowseIn();
+    }
+    private void showBrowseIn() {
+        boolean installed = firefox() != null, useFirefox = browseInFirefox();
+        style(inFirefox, useFirefox); style(inApp, !useFirefox);
+        getFirefox.setVisibility(installed ? View.GONE : View.VISIBLE);
+        browseNote.setText(useFirefox
+            ? "Sites open in Firefox with your search, your sign-ins and add-ons such as uBlock Origin. When a download finishes, tap Open and choose Link Workshop: the model goes straight to the slicer (a ZIP is unpacked)."
+            : installed ? "Sites open in this app's browser (no ad blocker). Files you download come straight to the slicer."
+            : "Sites open in this app's browser (no ad blocker); files you download come straight to the slicer. With Firefox installed they can open there instead, with an ad blocker such as uBlock Origin.");
+    }
+    private void style(Button button, boolean selected) {
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(selected ? teal : buttonColor); shape.setCornerRadius(dp(12)); button.setBackground(shape);
+        button.setTextColor(selected ? (dark ? 0xff0e1417 : Color.WHITE) : teal); button.setSelected(selected);
+        button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
+        button.setContentDescription("Open the sites " + button.getText().toString().toLowerCase(Locale.ROOT) + (selected ? ", selected" : ""));
+    }
+    /** Opens a site's search (or `address`) where the user chose; Firefox is only ever asked to show the page. */
+    private void browse(String site, String address) {
+        String url = address != null ? address : ModelSites.webSearch(site, query.getText().toString());
+        String firefox = browseInFirefox() ? firefox() : null;
+        if (firefox != null) {
+            try {
+                startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).setPackage(firefox).addCategory(Intent.CATEGORY_BROWSABLE));
+                Diagnostics.note(Diagnostics.SITES, "opened " + (site == null ? "a model page" : site) + " in Firefox (" + firefox + ")");
+                return;
+            } catch (android.content.ActivityNotFoundException gone) { status.setText("Firefox could not open the page, so it opens here instead."); }
+        }
+        Intent intent = new Intent(this, ModelBrowserActivity.class);
+        if (address != null) intent.putExtra(ModelBrowserActivity.EXTRA_URL, address);
+        else intent.putExtra(ModelBrowserActivity.EXTRA_SITE, site).putExtra(ModelBrowserActivity.EXTRA_TERM, query.getText().toString().trim());
+        startActivityForResult(intent, BROWSE);
+    }
+    private void getFirefox() {
+        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=org.mozilla.firefox"))); }
+        catch (android.content.ActivityNotFoundException noStore) {
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=org.mozilla.firefox"))); }
+            catch (android.content.ActivityNotFoundException none) { status.setText("No app store or browser is installed to get Firefox."); }
+        }
+    }
+    @Override protected void onResume() { super.onResume(); if (browseNote != null) showBrowseIn(); }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == BROWSE && result == RESULT_OK && data != null && data.getStringArrayListExtra(RESULT_PATHS) != null) {
