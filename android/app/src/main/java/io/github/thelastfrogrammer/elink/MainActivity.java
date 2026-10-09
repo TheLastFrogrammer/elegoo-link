@@ -153,7 +153,7 @@ public final class MainActivity extends Activity {
         credentials = new CredentialStore(this);
         profiles = new ProfileStore(this);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND);
-        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BACKGROUND);
+        ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BACKGROUND); mainScroll = scroll;
         content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         root.setOnApplyWindowInsetsListener((view, insets) -> {
@@ -174,6 +174,14 @@ public final class MainActivity extends Activity {
         summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4));
         LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(-2, -2); if (largeText) chipLayout.topMargin = dp(4); header.addView(summary, chipLayout);
         identity = label(content, "Centauri Carbon 2", 13, MUTED, false);
+        // "Find a feature": on every tab, a search-style bar that jumps to any feature by name or everyday words.
+        Button find = new Button(this); find.setText("Find a feature…"); find.setAllCaps(false); find.setTextSize(14); find.setTextColor(MUTED);
+        find.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); find.setMinHeight(dp(48)); find.setMinimumHeight(dp(48)); find.setPadding(dp(14), 0, dp(14), 0);
+        android.graphics.drawable.Drawable lens = getDrawable(android.R.drawable.ic_menu_search);
+        if (lens != null) { lens = lens.mutate(); lens.setTint(MUTED); lens.setBounds(0, 0, dp(22), dp(22)); find.setCompoundDrawables(lens, null, null, null); find.setCompoundDrawablePadding(dp(8)); }
+        GradientDrawable findShape = new GradientDrawable(); findShape.setColor(SURFACE); findShape.setCornerRadius(dp(24)); findShape.setStroke(dp(1), (MUTED & 0x00ffffff) | 0x40000000); find.setBackground(findShape);
+        find.setContentDescription("Find a feature"); find.setOnClickListener(v -> featureDialog());
+        LinearLayout.LayoutParams findLayout = new LinearLayout.LayoutParams(-1, -2); findLayout.topMargin = dp(8); content.addView(find, findLayout);
         // Results of actions show here, on every tab, until tapped away or replaced.
         feedback = new TextView(this); feedback.setTextSize(14); feedback.setTextColor(INK); feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
         GradientDrawable banner = new GradientDrawable(); banner.setColor(TILE); banner.setCornerRadius(dp(14)); banner.setStroke(dp(1), (TEAL & 0x00ffffff) | 0x55000000); feedback.setBackground(banner);
@@ -701,6 +709,101 @@ public final class MainActivity extends Activity {
     /** Opens the tab another screen asked for (EXTRA_PAGE), once. */
     private void openRequestedPage(Intent intent) {
         if (intent != null && intent.hasExtra(EXTRA_PAGE)) { selectPage(intent.getIntExtra(EXTRA_PAGE, 0)); intent.removeExtra(EXTRA_PAGE); }
+        // Launcher shortcuts name a feature; go there as "Find a feature" does, once the screen is laid out.
+        String feature = intent == null ? null : intent.getStringExtra(EXTRA_FEATURE);
+        if (feature != null) { intent.removeExtra(EXTRA_FEATURE); FeatureIndex.Feature f = FeatureIndex.byId(feature); if (f != null) main.post(() -> goToFeature(f)); }
+    }
+
+    // ------------------------------------------------------------------ Find a feature
+    static final String EXTRA_FEATURE = "feature";
+    private ScrollView mainScroll;
+    private List<String> recentFeatures() {
+        List<String> ids = new ArrayList<>();
+        for (String id : settings.getString("recentFeatures", "").split(",")) if (!id.isEmpty()) ids.add(id);
+        return ids;
+    }
+    private void featureDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
+        EditText query = new EditText(this); query.setHint("What are you looking for? e.g. level, timelapse"); query.setSingleLine(true);
+        query.setInputType(InputType.TYPE_CLASS_TEXT); query.setTextColor(INK); query.setHintTextColor(MUTED);
+        body.addView(query, new LinearLayout.LayoutParams(-1, dp(56)));
+        TextView hint = label(body, "", 12, MUTED, false);
+        ListView list = new ListView(this); body.addView(list, new LinearLayout.LayoutParams(-1, dp(360)));
+        List<FeatureIndex.Feature> shown = new ArrayList<>();
+        ArrayAdapter<String> adapter = new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, new ArrayList<>());
+        list.setAdapter(adapter);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Find a feature").setView(body).setNegativeButton("Close", null).create();
+        Runnable refresh = () -> {
+            shown.clear(); shown.addAll(FeatureIndex.search(query.getText().toString(), recentFeatures()));
+            adapter.clear(); for (FeatureIndex.Feature f : shown) adapter.add(f.title + "  ·  " + f.where());
+            boolean typed = query.length() > 0;
+            hint.setText(shown.isEmpty() ? "Nothing matches. Try another word, such as camera, filament or history."
+                : typed ? "" : recentFeatures().isEmpty() ? "Everything the app can do, by where it lives." : "Recently used first.");
+        };
+        query.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            public void onTextChanged(CharSequence s, int a, int b, int c) { refresh.run(); }
+            public void afterTextChanged(android.text.Editable s) { }
+        });
+        list.setOnItemClickListener((parent, view, position, id) -> { dialog.dismiss(); goToFeature(shown.get(position)); });
+        refresh.run();
+        dialog.show();
+    }
+    /**
+     * Goes to a feature: its tab, any collapsed section or Settings mode it lives in, then brings its button into view and
+     * marks it. Only features that open a screen or a dialog are pressed; printer-changing buttons are only shown.
+     */
+    private void goToFeature(FeatureIndex.Feature f) {
+        settings.edit().putString("recentFeatures", String.join(",", FeatureIndex.used(recentFeatures(), f.id))).apply();
+        switch (f.id) {   // tools that live on the Slice screen
+            case "slice": startActivityForResult(new Intent(this, SliceActivity.class), SLICE); return;
+            case "find-models": startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "find"), SLICE); return;
+            case "calibration": startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "calibration"), SLICE); return;
+            default: break;
+        }
+        switch (f.prepare) {
+            case HISTORY_OPEN: setHistoryOpen(true); break;
+            case SETTINGS_LOCAL: setSettingsMode(false); break;
+            case SETTINGS_CLOUD: setSettingsMode(true); break;
+            case ADVANCED_CONNECTION: setSettingsMode(false); setMore(true); break;
+            default: break;
+        }
+        selectPage(f.tab);
+        render();
+        main.post(() -> {
+            View target = findByText(pages[f.tab], f.target);
+            if (target == null || !target.isShown()) {
+                // Hidden in this state (printer controls while it prints, or not connected): show the card that explains when.
+                View card = f.fallback.isEmpty() ? null : findByText(pages[f.tab], f.fallback);
+                if (card != null && card.isShown()) {
+                    scrollTo(card); highlight(card);
+                    message(f.title + " appears here when the printer is connected and idle.");
+                } else message("toolpath".equals(f.id) ? "Live toolpath appears on Monitor while a print is running."
+                    : f.title + " needs a connected printer" + (f.tab == FeatureIndex.MONITOR ? " that is idle" : "") + ". Connect in Settings first.");
+                return;
+            }
+            scrollTo(target); highlight(target);
+            if (f.press && target.isEnabled() && target instanceof Button) target.performClick();
+            else if (!f.press && target instanceof Button && !target.isEnabled()) message(f.title + " is here, but not available right now (it needs a connected, idle printer).");
+        });
+    }
+    /** The first visible button, check box or heading in `root` whose text starts with `text`. */
+    static View findByText(View root, String text) {
+        if (root instanceof TextView && ((TextView) root).getText().toString().startsWith(text) && root.getVisibility() == View.VISIBLE) return root;
+        if (root instanceof ViewGroup && root.getVisibility() == View.VISIBLE)
+            for (int i = 0; i < ((ViewGroup) root).getChildCount(); i++) { View found = findByText(((ViewGroup) root).getChildAt(i), text); if (found != null) return found; }
+        return null;
+    }
+    private void scrollTo(View target) {
+        int[] at = new int[2], top = new int[2]; target.getLocationInWindow(at); mainScroll.getLocationInWindow(top);
+        mainScroll.smoothScrollTo(0, Math.max(0, mainScroll.getScrollY() + at[1] - top[1] - dp(96)));
+    }
+    /** A brief outline around what was found, and focus for TalkBack. */
+    private void highlight(View target) {
+        GradientDrawable ring = new GradientDrawable(); ring.setCornerRadius(dp(12)); ring.setStroke(dp(3), TEAL); ring.setColor(Color.TRANSPARENT);
+        target.setForeground(ring);
+        target.postDelayed(() -> target.setForeground(null), 2500);
+        target.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED);
     }
     private void selectPage(int selected) {
         page = Math.max(0, Math.min(3, selected));
@@ -1051,37 +1154,49 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the current print's speed mode. Filament changes may reset the mode on some firmware.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
     }).setNegativeButton("Cancel", null).show(); }
     private void buildCamera() {
+        // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
         cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
         cameraFix = button(cloudCard, "Open Settings to sign in", () -> { setSettingsMode(true); selectPage(3); }); cameraFix.setVisibility(View.GONE);
         // Opening it asks for the one-time cloud-control agreement first, like every other cloud action.
-        cloudCamera = rowButton(row(cloudCard), "Watch through the Elegoo cloud", () -> {
+        cloudCamera = button(cloudCard, "Watch through the Elegoo cloud", () -> {
             if (printer == null || printer.cloudSerial.isEmpty()) return;
             String serialNumber = printer.cloudSerial, printerName = printer.cloudName;
             cloudGate(true, () -> { stopCamera(); startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName)); });
-        }, true);
-        LinearLayout lineUp = card("Camera in the 3D view");
-        label(lineUp, "Live toolpath can show the camera's picture in its 3D view. Line it up once against the real bed, with or without a print running; it follows the bed as it moves.", 13, MUTED, false);
-        button(lineUp, "Line up the camera in 3D…", () -> {
-            if (printer == null) return;
-            Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true)); };
-            cloudGate(!printer.ready() && printer.usingCloud(), open);
         });
         cameraLocalCard = card("Local camera");
         localToggle = button(cameraLocalCard, "", () -> { localCameraOpen = !localCameraOpen; render(); });
         localCameraBody = new LinearLayout(this); localCameraBody.setOrientation(LinearLayout.VERTICAL); cameraLocalCard.addView(localCameraBody);
         LinearLayout card = localCameraBody;
-        cameraAddress = input(card, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
-        cameraQuery = button(card, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
-        cameraInfo = label(card, "The printer's own video stream on your network (port 8080), or through your home VPN.", 14, MUTED, false);
-        cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
+        cameraInfo = label(card, "The printer's stream on port 8080, or through your home VPN.", 14, MUTED, false);
         cameraStart = button(card, "Start camera", this::toggleCamera);
+        cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
         cameraSnapshot = button(card, "Save snapshot to phone…", () -> {
             if (lastFrame == null) return; pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
         });
         button(card, "Larger camera view", () -> { cameraImage.getLayoutParams().height = cameraImage.getLayoutParams().height == dp(240) ? dp(400) : dp(240); cameraImage.requestLayout(); });
-        label(card, "Camera stops when you leave this tab or put the app in the background. Printer monitoring continues in its foreground service. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
+        // Setup details sit behind one collapsed header; the header speaks its state.
+        Button settingsToggle = button(card, "", () -> { });
+        LinearLayout settings = new LinearLayout(this); settings.setOrientation(LinearLayout.VERTICAL); settings.setVisibility(View.GONE);
+        settingsToggle.setContentDescription("Camera settings");
+        settingsToggle.setOnClickListener(view -> {
+            boolean open = settings.getVisibility() != View.VISIBLE;
+            settings.setVisibility(open ? View.VISIBLE : View.GONE);
+            settingsToggle.setText(open ? "Hide camera settings ▴" : "Camera settings ▾"); A11y.expandable(settingsToggle, open);
+        });
+        settingsToggle.setText("Camera settings ▾"); A11y.expandable(settingsToggle, false);
+        card.addView(settings);
+        cameraAddress = input(settings, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        cameraQuery = button(settings, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
+        label(settings, "Camera stops when you leave this tab or the app goes to the background. Monitoring continues. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
+        LinearLayout lineUp = card("Camera in the 3D view");
+        label(lineUp, "Shows the camera picture in the 3D toolpath. Line it up once against the real bed, print or no print.", 13, MUTED, false);
+        button(lineUp, "Line up the camera in 3D…", () -> {
+            if (printer == null) return;
+            Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true)); };
+            cloudGate(!printer.ready() && printer.usingCloud(), open);
+        });
     }
     private void toggleCamera() {
         if (cameraPlayer != null) { stopCamera(); return; }
@@ -1090,7 +1205,7 @@ public final class MainActivity extends Activity {
             NetworkRoute route = NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
-                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true); }
+                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true); }
                 public void error(String text) { stopCamera(); cameraInfo.setText(text); }
             }); cameraStart.setText("Stop camera");
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
@@ -1150,18 +1265,29 @@ public final class MainActivity extends Activity {
         if (ready && !printer.cameraUrl.isEmpty() && cameraPlayer == null && !printer.cameraUrl.equals(cameraReported)) { cameraAddress.setText(printer.cameraUrl); cameraReported = printer.cameraUrl; }
         cameraSnapshot.setEnabled(lastFrame != null);
     }
-    /** Camera tab: the cloud camera says what it needs; the local camera collapses unless it is the likely way in (connected locally) or the user opens it. */
+    /** Fills a watch button with the accent colour, or returns it to the tonal style. */
+    private void emphasise(Button button, boolean on) {
+        if (!on) { styleButton(button); return; }
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
+        shape.setColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {BUTTON, TEAL}));
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33ffffff), shape, null));
+        button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, dark ? 0xff00201c : Color.WHITE}));
+    }
+    /** Camera tab: the one way that works now is filled and first; the local card leads when the printer is on this network. */
     private void renderCamera(boolean ready, boolean cloud) {
+        // The picture area shows only once there is something to show: no empty black box before the camera starts.
+        cameraImage.setVisibility(cameraPlayer != null || lastFrame != null ? View.VISIBLE : View.GONE);
         boolean cloudOk = settings.getBoolean("cloudControlUnderstood", false), signedIn = printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty();
-        boolean online = signedIn && printer.cloudOnline == 1;
+        boolean online = signedIn && printer.cloudOnline == 1, local = ready || cameraPlayer != null;
+        emphasise(cameraStart, local);
+        emphasise(cloudCamera, !local);
         cloudCamera.setEnabled(online);
-        cloudCameraHint.setText(!signedIn ? "Sign in with Elegoo in Settings to watch from anywhere, without LAN Only."
-            : !online ? "The Elegoo cloud does not show the printer online right now."
-            : "Works from anywhere, the way Elegoo's apps show the camera." + (cloudOk ? "" : " The first use asks you to turn on cloud control."));
-        boolean showLocal = ready || cameraPlayer != null || localCameraOpen;
-        localCameraBody.setVisibility(showLocal ? View.VISIBLE : View.GONE);
-        localToggle.setVisibility(ready || cameraPlayer != null ? View.GONE : View.VISIBLE);
-        localToggle.setText(localCameraOpen ? "Hide local camera options" : "Use the printer's own camera on this network…");
+        cloudCameraHint.setText(!signedIn ? "Sign in with Elegoo in Settings. Works when LAN Only is off on the printer."
+            : !online ? "The Elegoo cloud shows the printer offline right now."
+            : "Works from anywhere." + (cloudOk ? "" : " The first use asks you to turn on cloud control."));
+        localCameraBody.setVisibility(local || localCameraOpen ? View.VISIBLE : View.GONE);
+        localToggle.setVisibility(local ? View.GONE : View.VISIBLE);
+        localToggle.setText(localCameraOpen ? "Hide local camera" : "Use the printer's own camera on this network…");
         cameraFix.setVisibility(!ready && !signedIn ? View.VISIBLE : View.GONE);
         if (ready != cameraLocalFirst) { cameraLocalFirst = ready; pages[2].removeView(cameraLocalCard); pages[2].addView(cameraLocalCard, ready ? 0 : 1); }
     }

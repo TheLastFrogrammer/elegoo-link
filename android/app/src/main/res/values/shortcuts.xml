@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Launcher shortcuts (long-press the app icon). -->
+    <string name="shortcut_slice">Slice a model</string>
+    <string name="shortcut_toolpath">Live toolpath</string>
+    <string name="shortcut_camera">Camera</string>
+    <string name="shortcut_find_models">Find models</string>
+    <string name="shortcut_history">Print history</string>
+</resources>

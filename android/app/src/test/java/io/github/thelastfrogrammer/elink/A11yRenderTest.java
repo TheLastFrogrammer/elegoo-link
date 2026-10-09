@@ -9,6 +9,7 @@ import android.view.ViewGroup;
 import android.widget.*;
 import org.json.JSONObject;
 import org.junit.Assume;
+import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -197,7 +198,7 @@ public class A11yRenderTest {
             Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
             Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
             String[] names = {"monitor", "files", "camera", "settings"};
-            for (int i : new int[] {0, 1, 3}) {
+            for (int i : new int[] {0, 1, 2, 3}) {
                 page.invoke(activity, i); render.invoke(activity);
                 shot(activity.getWindow().getDecorView(), i == 3 ? 6500 : 4200, "main-" + names[i], scale);
             }
@@ -282,6 +283,35 @@ public class A11yRenderTest {
             dialogShot("viewer-more", scale, 3000);
             activity.finish();
         }
+    }
+
+    /** Every "Find a feature" entry leads to something that exists and shows on its tab (labels drift; this catches it). */
+    @Test public void everyFeatureCanBeFound() throws Exception {
+        RuntimeEnvironment.setFontScale(1f); theme(false);
+        MainActivity activity = local(false);   // idle: printer controls are shown
+        Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
+        Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
+        Method history = MainActivity.class.getDeclaredMethod("setHistoryOpen", boolean.class); history.setAccessible(true);
+        Method mode = MainActivity.class.getDeclaredMethod("setSettingsMode", boolean.class); mode.setAccessible(true);
+        Method more = MainActivity.class.getDeclaredMethod("setMore", boolean.class); more.setAccessible(true);
+        android.widget.LinearLayout[] pages = (android.widget.LinearLayout[]) field(activity, "pages");
+        List<String> missing = new java.util.ArrayList<>();
+        for (FeatureIndex.Feature f : FeatureIndex.ALL) {
+            if (f.id.equals("toolpath")) continue;   // shown only while printing
+            switch (f.prepare) {
+                case HISTORY_OPEN: history.invoke(activity, true); break;
+                case SETTINGS_LOCAL: mode.invoke(activity, false); break;
+                case SETTINGS_CLOUD: mode.invoke(activity, true); break;
+                case ADVANCED_CONNECTION: mode.invoke(activity, false); more.invoke(activity, true); break;
+                default: break;
+            }
+            page.invoke(activity, f.tab); render.invoke(activity);
+            android.view.View found = MainActivity.findByText(pages[f.tab], f.target);
+            if (found == null && !f.fallback.isEmpty()) found = MainActivity.findByText(pages[f.tab], f.fallback);   // e.g. speed mode only while printing
+            if (found == null) missing.add(f.id + " (\"" + f.target + "\" on " + f.where() + ")");
+        }
+        assertTrue("Features whose button or heading was not found: " + missing, missing.isEmpty());
+        activity.finish();
     }
 
     /** Find models (Slice > Find models online), before any search. */

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Launcher shortcuts: each opens the main screen with a feature from FeatureIndex, which goes there as "Find a feature" does. -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="slice" android:enabled="true" android:icon="@drawable/ic_nav_files" android:shortcutShortLabel="@string/shortcut_slice">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="io.github.thelastfrogrammer.elink" android:targetClass="io.github.thelastfrogrammer.elink.MainActivity">
+            <extra android:name="feature" android:value="slice" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="toolpath" android:enabled="true" android:icon="@drawable/ic_nav_monitor" android:shortcutShortLabel="@string/shortcut_toolpath">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="io.github.thelastfrogrammer.elink" android:targetClass="io.github.thelastfrogrammer.elink.MainActivity">
+            <extra android:name="feature" android:value="toolpath" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="camera" android:enabled="true" android:icon="@drawable/ic_nav_camera" android:shortcutShortLabel="@string/shortcut_camera">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="io.github.thelastfrogrammer.elink" android:targetClass="io.github.thelastfrogrammer.elink.MainActivity">
+            <extra android:name="feature" android:value="camera" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="find-models" android:enabled="true" android:icon="@drawable/ic_nav_files" android:shortcutShortLabel="@string/shortcut_find_models">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="io.github.thelastfrogrammer.elink" android:targetClass="io.github.thelastfrogrammer.elink.MainActivity">
+            <extra android:name="feature" android:value="find-models" />
+        </intent>
+    </shortcut>
+    <shortcut android:shortcutId="history" android:enabled="true" android:icon="@drawable/ic_nav_files" android:shortcutShortLabel="@string/shortcut_history">
+        <intent android:action="android.intent.action.VIEW" android:targetPackage="io.github.thelastfrogrammer.elink" android:targetClass="io.github.thelastfrogrammer.elink.MainActivity">
+            <extra android:name="feature" android:value="history" />
+        </intent>
+    </shortcut>
+</shortcuts>
