@@ -163,6 +163,8 @@
     camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
   const camera = { yaw: -55, pitch: 32, distance: 300, target: [128, 128, 10], fov: 35 };
   let dirty = false;
+  let gridLineCount = 0;
+  const alignStyle = { grid: "all", alpha: 0.9, dot: 12 };
   let beadVao, beadVertices, instanceBuffer, travelVao, travelBuffer, bedVao, bedLineCount = 0, plateVao, markerVao, markerBuffer;
   const colors = new Float32Array(PALETTE.length * 3);
 
@@ -350,6 +352,7 @@
     };
     for (let x = Math.ceil(minX / 10) * 10; x <= maxX; x += 10) line(x, minY, x, maxY);
     for (let y = Math.ceil(minY / 10) * 10; y <= maxY; y += 10) line(minX, y, maxX, y);
+    gridLineCount = v.length / 3;   // the grid comes first, then the bed's outline
     for (let i = 0; i < outline.length; i += 2) { const j = (i + 2) % outline.length; line(outline[i], outline[i + 1], outline[j], outline[j + 1]); }
     bedLineCount = v.length / 3;
     bedVao = gl.createVertexArray(); gl.bindVertexArray(bedVao);
@@ -438,7 +441,15 @@
     // Plate and grid (over the camera picture, the grid only).
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
     if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
-    gl.uniform4fv(lines.u.uColor, overlay ? theme.align : theme.grid); gl.bindVertexArray(bedVao); gl.drawArrays(gl.LINES, 0, bedLineCount);
+    gl.bindVertexArray(bedVao);
+    if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.grid); gl.drawArrays(gl.LINES, 0, bedLineCount); }
+    else {
+      // Over the camera picture: the grid can be hidden or kept to the bed's edges, at the chosen strength.
+      const colour = [theme.align[0], theme.align[1], theme.align[2], alignStyle.alpha];
+      gl.uniform4fv(lines.u.uColor, colour);
+      if (alignStyle.grid === "all") gl.drawArrays(gl.LINES, 0, bedLineCount);
+      else if (alignStyle.grid === "edges") gl.drawArrays(gl.LINES, gridLineCount, bedLineCount - gridLineCount);
+    }
     // Printed / visible beads, then travels, then the rest of the current layer as a translucent ghost.
     drawBeads(view.start, view.end, false, viewProj, viewMatrix);
     if (view.showTravel && view.travelEnd > view.travelStart) {
@@ -594,12 +605,21 @@
     for (const m of marks) {
       const nx = (m.u * 2 - 1) * f.w, ny = (1 - m.v * 2) * f.k;
       const dot = document.createElement("div");
-      dot.style.cssText = "position:absolute;width:12px;height:12px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 2px #000;background:" + EDGE_COLOURS[m.edge % 4];
+      const size = alignStyle.dot, edge = Math.max(1, Math.round(size / 6));
+      dot.style.cssText = "position:absolute;border-radius:50%;box-shadow:0 0 2px #000;border:" + edge + "px solid #fff;background:" + EDGE_COLOURS[m.edge % 4]
+        + ";width:" + size + "px;height:" + size + "px;margin:" + (-size / 2 - edge) + "px 0 0 " + (-size / 2 - edge) + "px";
       dot.style.left = ((nx + 1) / 2 * f.width) + "px"; dot.style.top = ((1 - ny) / 2 * f.height) + "px";
       layer.appendChild(dot);
     }
   }
   function setMarking(on, list) { marking = !!on; marks = list || []; drawMarks(); }
+  // How the line-up looks: grid "all" | "edges" | "none", its strength (0..1) and the tap dots' size in CSS pixels.
+  function setAlignStyle(style) {
+    if (style.grid === "all" || style.grid === "edges" || style.grid === "none") alignStyle.grid = style.grid;
+    if (style.alpha >= 0 && style.alpha <= 1) alignStyle.alpha = style.alpha;
+    if (style.dot >= 4 && style.dot <= 40) alignStyle.dot = style.dot;
+    drawMarks(); redraw();
+  }
   window.addEventListener("resize", drawMarks);
 
   // "printer" looks from where the printer's camera is, at what it looks at.
@@ -626,6 +646,6 @@
     if (!printerCam.looking) fit();
     lookFromCamera();
   }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

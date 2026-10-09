@@ -413,6 +413,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         startCamera();
         alignStart = currentParams(); aligning = alignStart.clone(); alignZ = bedZ;
         if (alignPanel == null) buildAlignPanel();
+        sendAlignStyle();
         for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
         mainPanel.setVisibility(View.GONE); alignScroll.setVisibility(View.VISIBLE); arrange();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack == null) {
@@ -528,7 +529,43 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         rowButton(actions, "Clear taps", () -> { marks.clear(); sendMarks(); });
         rowButton(actions, "Fit", this::fitToMarks);
         markNote = A11y.polite(label(markBox, "", 12, ink, false));
+        // How the outline and the taps look over the picture (kept between line-ups).
+        LinearLayout look = new LinearLayout(this); look.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(look);
+        gridButton = rowButton(look, "", () -> {
+            String now = viewerPrefs().getString("alignGrid", "all");
+            viewerPrefs().edit().putString("alignGrid", "all".equals(now) ? "edges" : "edges".equals(now) ? "none" : "all").apply();
+            sendAlignStyle();
+        });
+        styleSlider(markBox, "Outline strength", "alignAlpha", 15, 100, 90, "%");
+        styleSlider(markBox, "Dot size", "alignDot", 4, 32, 12, " px");
         syncEdgeButtons();
+    }
+    private Button gridButton;
+    private void styleSlider(LinearLayout parent, String name, String key, int min, int max, int fallback, String unit) {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink);
+        row.addView(label, new LinearLayout.LayoutParams(dp(112), -2));
+        SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+        bar.setMax(max - min); bar.setProgress(viewerPrefs().getInt(key, fallback) - min);
+        row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1));
+        A11y.labelFor(label, bar);
+        Runnable show = () -> { String value = (bar.getProgress() + min) + unit; label.setText(name + "\n" + value); A11y.state(bar, value); };
+        show.run();
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (!fromUser) return; viewerPrefs().edit().putInt(key, value + min).apply(); show.run(); sendAlignStyle(); }
+            @Override public void onStartTrackingTouch(SeekBar b) { }
+            @Override public void onStopTrackingTouch(SeekBar b) { }
+        });
+        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+    private void sendAlignStyle() {
+        String grid = viewerPrefs().getString("alignGrid", "all");
+        if (gridButton != null) gridButton.setText("all".equals(grid) ? "Grid: all lines" : "edges".equals(grid) ? "Grid: bed edges only" : "Grid: hidden");
+        if (web == null) return;
+        try {
+            web.evaluateJavascript("viewer.setAlignStyle(" + new JSONObject().put("grid", grid).put("alpha", viewerPrefs().getInt("alignAlpha", 90) / 100.0)
+                .put("dot", viewerPrefs().getInt("alignDot", 12)) + ")", null);
+        } catch (org.json.JSONException ignored) { }
     }
     private void syncEdgeButtons() {
         for (int i = 0; i < edgeButtons.size(); i++) {
