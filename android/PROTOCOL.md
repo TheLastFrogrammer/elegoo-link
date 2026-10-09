@@ -227,3 +227,8 @@ v0.16.0: taps are kept per bed height (up to six heights; new taps within 2 mm o
 one camera for the bed at Z 0 against the taps from every height at once, the camera's height above the bed growing by
 exactly the bed's Z (it stays on the frame while the bed moves); Save then keeps that single camera. The camera picture can
 be zoomed and panned from the camera (the drawing and tap dots zoom with it), and rotation lock turns drags into panning.
+v0.16.3: the bed's height for the camera comes only from Z positions reported while Z is homed (tool_head.homed_axes holds
+"z"); the printer reports a Z when unhomed too, and it can be stale. After a bed move or Z homing from the line-up, the
+height counts as moving until two status reports past a 3 s lag agree (and, for a move, the bed is within 0.5 mm of where
+it was sent), with status asked for at 3, 6, 10, 20 and 40 s; after 90 s it is "not confirmed". Taps and Fit wait for a
+known height; a slider-only line-up can be saved at an unconfirmed height after a warning, without its taps.

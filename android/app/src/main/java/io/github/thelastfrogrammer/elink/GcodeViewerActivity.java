@@ -230,12 +230,14 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
      * frame, so camera heights are kept with the bed at 0 and drawn this much higher above the bed.
      */
     private double bedZ, shownBedZ = Double.NaN;
+    /** Whether the bed's height can be trusted (Z homed, not moving); see BedHeight. */
+    private final BedHeight bed = new BedHeight();
     private void readBedZ() {
         if (printer == null) return;
-        JSONObject position = Cc2Codec.position(printer.liveStatus());
-        double z = position == null ? Double.NaN : position.optDouble("z", Double.NaN);
-        if (!Double.isNaN(z) && z >= 0 && z < 400) bedZ = z;
+        bed.report(printer.liveStatus(), System.currentTimeMillis());
+        if (!Double.isNaN(bed.z())) bedZ = Math.max(0, bed.z());   // only heights reported while Z is homed
     }
+    private boolean heightReady() { return bed.state(System.currentTimeMillis()) == BedHeight.State.KNOWN; }
     /** A pose for the page from camera parameters that already hold for the bed's current height. */
     private JSONObject livePose(double[] c) throws org.json.JSONException { shownBedZ = bedZ; return poseJson(c); }
     /** Where the CC2's camera sits is not measured yet: five spots around the 256 mm bed, looking at its centre. */
@@ -536,7 +538,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         rowButton(buttons, "Cancel", () -> finishAligning(false));
         Button reset = rowButton(buttons, "Reset", () -> { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
         reset.setContentDescription("Reset to the default camera");
-        rowButton(buttons, "Save", () -> finishAligning(true));
+        rowButton(buttons, "Save", this::saveLineUp);
         alignSheet.addView(buttons);
         root.addView(alignSheet, new LinearLayout.LayoutParams(-1, -2));
     }
@@ -644,6 +646,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (blocked != null) { if (moveNote != null) moveNote.setText(blocked); return; }
         try {
             printer.maintenance(distance == 0 ? Cc2Codec.homeRequest(0, "z") : Cc2Codec.moveRequest(0, "z", distance));
+            bed.moveSent(distance, System.currentTimeMillis());
+            // Ask for status a few times (reads only), so the new height is confirmed without waiting for the cloud's slow polling.
+            for (long delay : new long[] {3_000, 6_000, 10_000, 20_000, 40_000})
+                main.postDelayed(() -> { if (printer != null && aligning != null && bed.state(System.currentTimeMillis()) == BedHeight.State.MOVING) printer.refresh(); }, delay);
+            if (bedNote != null) bedNote.setText(bedText());
             if (moveNote != null) moveNote.setText(distance == 0 ? "Home Z sent once. The bed's height updates when the printer reports it." : "Move sent once. The bed's height updates when the printer reports it.");
         } catch (Exception invalid) { if (moveNote != null) moveNote.setText("That move could not be prepared."); }
     }
@@ -768,6 +775,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private CameraFit.TapSet currentTaps() { return new CameraFit.TapSet(bedZ, markAspect, marks); }
     private void fitToMarks() {
         if (aligning == null) return;
+        if (!marks.isEmpty() && !heightReady()) { if (markNote != null) markNote.setText("Not fitted. " + bed.describe(System.currentTimeMillis())); return; }
         java.util.List<CameraFit.TapSet> sets = withTaps(savedTaps(), currentTaps());
         if (CameraFit.freeSets(sets).length == 0) { sendMarks(); return; }
         double[] start = CameraFit.atBed(aligning, -bedZ);   // the camera with the bed at 0
@@ -802,7 +810,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (bedNote != null) bedNote.setText(bedText());
     }
     private String bedText() {
-        String now = String.format(Locale.getDefault(), "The bed is at Z %.1f mm now. ", bedZ);
+        String now = bed.describe(System.currentTimeMillis()) + " ";
         java.util.List<CameraFit.TapSet> taps = viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedTaps() : java.util.Collections.emptyList();
         if (!taps.isEmpty()) {
             StringBuilder heights = new StringBuilder();
@@ -819,14 +827,30 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         viewerPrefs().edit().remove("cameraPoints").remove("cameraTaps").remove("cameraCustomBed0").putInt("cameraSpot", 0).apply();
         if (aligning != null) { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); }
     }
+    /**
+     * Save, if the bed's height is known. Taps made now are only kept at a confirmed height; a line-up made with the sliders
+     * alone can be saved at an unconfirmed height after a warning (it may then sit off at other bed heights).
+     */
+    private void saveLineUp() {
+        if (aligning == null) return;
+        long now = System.currentTimeMillis();
+        if (heightReady()) { finishAligning(true); return; }
+        if (!marks.isEmpty()) { if (markNote != null) markNote.setText("Not saved. " + bed.describe(now)); return; }
+        new AlertDialog.Builder(this).setTitle("Save at an unconfirmed bed height?").setMessage(bed.describe(now)
+                + "\n\nThe camera will be right at this bed position, but may sit off when the bed moves. Homing Z first and saving again fixes that.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Save anyway", (d, w) -> finishAligning(true)).show();
+    }
     private void finishAligning(boolean save) {
         if (save && aligning != null) {
-            java.util.List<CameraFit.TapSet> sets = withTaps(savedTaps(), currentTaps());
+            boolean confirmed = heightReady();
+            java.util.List<CameraFit.TapSet> sets = confirmed ? withTaps(savedTaps(), currentTaps()) : savedTaps();
             // With taps (from any height), the camera is one camera on the frame: saved once, it follows the bed exactly.
             // Without, as before: a line-up per bed height, fitted with a line.
             java.util.List<double[]> points = !sets.isEmpty() ? addPoint(new java.util.ArrayList<>(), alignZ, aligning)
                 : addPoint(viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedPoints() : new java.util.ArrayList<>(), alignZ, aligning);
             viewerPrefs().edit().putString("cameraPoints", pointsJson(points)).putString("cameraTaps", tapsJson(sets)).remove("cameraCustomBed0").putInt("cameraSpot", LINED_UP).apply();
+            Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "bed height for this line-up: %s, Z %s, status %d s old",
+                bed.state(System.currentTimeMillis()), bed.homed() ? "homed" : "not homed", Math.max(-1, bed.age(System.currentTimeMillis()) / 1000)));
             Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera lined up by hand at bed Z %.2f; all line-ups {bed Z, x, y, height, turn, tilt, view, lens}: %s", alignZ, pointsJson(points)));
             status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
         }
@@ -846,6 +870,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
+            // Taps are tied to the bed's height: none while it is unknown or moving.
+            if (!heightReady()) { if (markNote != null) markNote.setText("Tap not added. " + bed.describe(System.currentTimeMillis())); return; }
             markAspect = aspect > 0.2 && aspect < 5 ? aspect : markAspect;
             marks.add(new CameraFit.Mark(markEdge, u, v)); sendMarks();
         }); }
@@ -1030,6 +1056,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (!followMode || printer == null || isDestroyed()) return;
         // The bed moved: the camera, fixed to the frame, sits that much higher above it.
         readBedZ();
+        if (aligning != null && bedNote != null) bedNote.setText(bedText());
         if (aligning != null && moveNote != null && printer.feedback != null && !printer.feedback.isEmpty() && !printer.feedback.equals(lastMoveFeedback)) {
             lastMoveFeedback = printer.feedback; moveNote.setText(StatusPresentation.clean(printer.feedback));
         }
