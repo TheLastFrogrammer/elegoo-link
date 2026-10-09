@@ -9,7 +9,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import static org.junit.Assert.*;
@@ -102,7 +101,7 @@ public class FailureModelInputTest {
     private interface Condition { boolean met() throws Exception; }
     private static void waitFor(Condition condition) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000;
-        while (true) { Shadows.shadowOf(Looper.getMainLooper()).idle(); if (condition.met()) return; if (System.currentTimeMillis() > deadline) fail("timed out"); Thread.sleep(50); }
+        while (true) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); if (condition.met()) return; if (System.currentTimeMillis() > deadline) fail("timed out"); Thread.sleep(50); }
     }
     private static boolean filled(Object activity, String name) throws Exception {
         android.widget.Spinner spinner = (android.widget.Spinner) field(activity, name); return spinner.getAdapter() != null && spinner.getAdapter().getCount() > 0;

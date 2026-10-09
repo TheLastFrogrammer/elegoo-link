@@ -227,6 +227,34 @@ final class ModelSites {
         return "";
     }
 
+    /**
+     * Where the model-site browser may go: secure pages, files a page made itself (blob:, data:), and the ad blocker's own
+     * pages. Other apps' links (intent:, market:, mailto: …) and unencrypted pages are not opened.
+     */
+    static boolean browserMayOpen(String uri) {
+        if (uri == null) return false;
+        String u = uri.trim().toLowerCase(Locale.ROOT);
+        return u.startsWith("https://") || u.startsWith("blob:") || u.startsWith("data:") || u.startsWith("moz-extension://") || u.equals("about:blank");
+    }
+    /** Whether a download from this address is taken (secure, or made by a secure page). */
+    static boolean browserDownloadFrom(String uri) {
+        if (uri == null) return false;
+        String u = uri.trim().toLowerCase(Locale.ROOT);
+        return u.startsWith("https://") || u.startsWith("blob:https://") || u.startsWith("data:");
+    }
+    /** Copies a download into `target`, stopping past `max` bytes or when `progress` says so; deletes the file if it fails. */
+    static void save(InputStream in, File target, long max, long total, Progress progress) throws IOException {
+        try (InputStream body = in; OutputStream out = new FileOutputStream(target)) {
+            byte[] buffer = new byte[64 * 1024]; long done = 0; int n;
+            while ((n = body.read(buffer)) >= 0) {
+                done += n;
+                if (done > max) throw new IOException("The file is larger than " + max / (1024 * 1024) + " MB.");
+                out.write(buffer, 0, n);
+                if (!progress.update(done, total)) throw new InterruptedIOException("Download cancelled.");
+            }
+        } catch (IOException failed) { target.delete(); throw failed; }
+    }
+
     static final int MAX_ZIP_ENTRIES = 500;
     static final long MAX_UNZIPPED = 1024L * 1024 * 1024;
     /**

@@ -11,7 +11,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import java.io.File;
@@ -48,11 +47,11 @@ public class FirstRunRenderTest {
     private static MainActivity freshMain() throws Exception {
         android.content.Context context = RuntimeEnvironment.getApplication();
         PrinterService service = Robolectric.setupService(PrinterService.class);
-        Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(
+        ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context)).setComponentNameAndServiceForBindService(
             new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
         MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
         Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
-        Thread.sleep(500); Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        Thread.sleep(500); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         return activity;
     }
 
@@ -115,8 +114,8 @@ public class FirstRunRenderTest {
         Assume.assumeFalse("Needs -DslicerLib", System.getProperty("slicerLib", "").isEmpty());
         freshPreferences(theme);
         SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
-        for (int i = 0; i < 400; i++) { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(50); }
-        Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        for (int i = 0; i < 400; i++) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(50); }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         View root = activity.getWindow().getDecorView();
         View form = (View) field(activity, "content"), bar = (View) field(activity, "actionBar");
         form.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);

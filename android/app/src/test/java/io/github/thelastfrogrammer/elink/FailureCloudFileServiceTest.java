@@ -7,7 +7,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import static org.junit.Assert.*;
@@ -26,7 +25,7 @@ public class FailureCloudFileServiceTest {
     private static void set(Object target, String name, Object value) throws Exception { java.lang.reflect.Field f = target.getClass().getDeclaredField(name); f.setAccessible(true); f.set(target, value); }
     private static void waitFor(java.util.concurrent.Callable<Boolean> condition) throws Exception {
         long end = System.currentTimeMillis() + 20_000;
-        while (true) { Shadows.shadowOf(Looper.getMainLooper()).idle(); if (condition.call()) return; if (System.currentTimeMillis() > end) fail("timed out"); Thread.sleep(25); }
+        while (true) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); if (condition.call()) return; if (System.currentTimeMillis() > end) fail("timed out"); Thread.sleep(25); }
     }
     private static HttpURLConnection answer(URL url, int status, byte[] body) {
         return new HttpURLConnection(url) {

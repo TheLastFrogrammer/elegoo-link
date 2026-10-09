@@ -25,7 +25,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowAlertDialog;
 
@@ -57,7 +56,7 @@ public class PlateDialogsTest {
         set("selected", index);
         for (String method : new String[] {"showSelected", "setButtons"}) { java.lang.reflect.Method m = PlateActivity.class.getDeclaredMethod(method); m.setAccessible(true); m.invoke(activity); }
     }
-    private String lastScript() throws Exception { return Shadows.shadowOf((WebView) get("web")).getLastEvaluatedJavascript(); }
+    private String lastScript() throws Exception { return ((org.robolectric.shadows.ShadowWebView) org.robolectric.shadow.api.Shadow.extract(get("web"))).getLastEvaluatedJavascript(); }
     private Button more() throws Exception { return (Button) get("more"); }
     private AlertDialog dialog() { AlertDialog d = ShadowAlertDialog.getLatestAlertDialog(); assertNotNull(d); assertTrue(d.isShowing()); return d; }
 
@@ -75,7 +74,7 @@ public class PlateDialogsTest {
         for (Button b : buttons(dialog)) if (b.getText().toString().equals(text)) return b;
         throw new AssertionError("no button " + text + " in " + buttons(dialog).size() + " buttons");
     }
-    private void idle() { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); }
+    private void idle() { org.robolectric.shadows.ShadowLooper.idleMainLooper(); }
 
     @Test public void moreListsTheSelectedModelsActions() throws Exception {
         more().performClick(); idle();
@@ -172,7 +171,7 @@ public class PlateDialogsTest {
         more().performClick(); idle();
         button(dialog(), "Model settings…").performClick(); idle();
         assertTrue(activity.isFinishing());
-        Intent result = Shadows.shadowOf(activity).getResultIntent();
+        Intent result = ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(activity)).getResultIntent();
         assertNotNull(result);
         assertArrayEquals(new int[] {0, 0}, result.getIntArrayExtra(PlateActivity.EXTRA_EDIT_OBJECT));
         assertEquals("3DBenchy", result.getStringExtra(PlateActivity.EXTRA_EDIT_NAME));
@@ -185,8 +184,8 @@ public class PlateDialogsTest {
         set("problemCount", 2);
         ((Button) get("done")).performClick(); idle();
         AlertDialog d = dialog();
-        assertTrue(Shadows.shadowOf(d).getTitle().toString().contains("problem"));
-        assertTrue(Shadows.shadowOf(d).getMessage().toString().contains("Arrange all"));
+        assertTrue(((org.robolectric.shadows.ShadowAlertDialog) org.robolectric.shadow.api.Shadow.extract(d)).getTitle().toString().contains("problem"));
+        assertTrue(((org.robolectric.shadows.ShadowAlertDialog) org.robolectric.shadow.api.Shadow.extract(d)).getMessage().toString().contains("Arrange all"));
         button(d, "Fix it").performClick(); idle();
         assertFalse(activity.isFinishing());
     }
@@ -196,13 +195,13 @@ public class PlateDialogsTest {
         ((Button) get("done")).performClick(); idle();
         button(dialog(), "Go back anyway").performClick(); idle();
         assertTrue(activity.isFinishing());
-        assertEquals(Activity.RESULT_OK, Shadows.shadowOf(activity).getResultCode());
-        assertEquals(2, new JSONArray(Shadows.shadowOf(activity).getResultIntent().getStringExtra(PlateActivity.EXTRA_PLACEMENTS)).length());
+        assertEquals(Activity.RESULT_OK, ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(activity)).getResultCode());
+        assertEquals(2, new JSONArray(((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(activity)).getResultIntent().getStringExtra(PlateActivity.EXTRA_PLACEMENTS)).length());
     }
 
     @Test public void doneWithoutAProblemFinishesAtOnce() throws Exception {
         ((Button) get("done")).performClick(); idle();
         assertTrue(activity.isFinishing());
-        assertEquals(Activity.RESULT_OK, Shadows.shadowOf(activity).getResultCode());
+        assertEquals(Activity.RESULT_OK, ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(activity)).getResultCode());
     }
 }

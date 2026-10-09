@@ -170,3 +170,13 @@ If the download fails, the error and the history entry help: share the diagnosti
 4. Tell us any download that does nothing or says "Not added" (and which site): Share diagnostics lists, under Model
    sites, how each download went (link or page data, file type), never the addresses.
 5. More… → **Sign out of all sites** clears every site's sign-in in the app's browser.
+
+## 17. Firefox engine and the ad blocker (v0.20.0)
+
+1. The model-site browser now runs on Firefox's engine (GeckoView). Open a site as in section 16: pages, search, sign-in and
+   the site's drop-down menus (sort order etc.) should all work.
+2. More… → **Install the ad blocker (uBlock Origin)…** → Install. It downloads from Mozilla's add-on site; reload a site
+   and ads should be gone. More… then shows "Ad blocker: on (tap to turn off)".
+3. Downloads as in section 16; MakerWorld's download button should now work too (tell us if it does not).
+4. Rotate the phone and leave/return to the app: the page should stay where it was.
+5. The APK is much larger (about 70 MB) because Firefox's engine is inside it.

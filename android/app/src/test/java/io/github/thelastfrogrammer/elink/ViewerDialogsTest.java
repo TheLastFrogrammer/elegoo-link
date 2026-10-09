@@ -22,7 +22,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowAlertDialog;
 
@@ -40,15 +39,15 @@ public class ViewerDialogsTest {
         activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
         Field path = GcodeViewerActivity.class.getDeclaredField("path"); path.setAccessible(true);
         long deadline = System.currentTimeMillis() + 30_000;
-        while (path.get(activity) == null && System.currentTimeMillis() < deadline) { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+        while (path.get(activity) == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
         Field ready = GcodeViewerActivity.class.getDeclaredField("pageReady"); ready.setAccessible(true); ready.set(activity, true);
         java.lang.reflect.Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(activity, true);
     }
 
     private Object get(String name) throws Exception { Field f = GcodeViewerActivity.class.getDeclaredField(name); f.setAccessible(true); return f.get(activity); }
-    private void idle() { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); }
+    private void idle() { org.robolectric.shadows.ShadowLooper.idleMainLooper(); }
     private AlertDialog dialog() { AlertDialog d = ShadowAlertDialog.getLatestAlertDialog(); assertTrue(d.isShowing()); return d; }
-    private String lastScript() throws Exception { return Shadows.shadowOf((WebView) get("web")).getLastEvaluatedJavascript(); }
+    private String lastScript() throws Exception { return ((org.robolectric.shadows.ShadowWebView) org.robolectric.shadow.api.Shadow.extract(get("web"))).getLastEvaluatedJavascript(); }
 
     @Test public void engineNamesGetPlainOnes() {
         assertEquals("Start / end G-code", GcodeViewerActivity.displayName(16));
@@ -109,7 +108,7 @@ public class ViewerDialogsTest {
     @Test public void helpExplainsTheColoursAndTheStepSliderAppears() throws Exception {
         ((Button) get("more")).performClick(); idle();
         PlateDialogsTest.button(dialog(), "What am I seeing?").performClick(); idle();
-        String text = Shadows.shadowOf(dialog()).getMessage().toString();
+        String text = ((org.robolectric.shadows.ShadowAlertDialog) org.robolectric.shadow.api.Shadow.extract(dialog())).getMessage().toString();
         assertTrue(text.contains("Travel moves") && text.contains("Gestures"));
         dialog().getButton(AlertDialog.BUTTON_POSITIVE).performClick(); idle();
         ((Button) get("more")).performClick(); idle();

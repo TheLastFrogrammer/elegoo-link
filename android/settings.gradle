@@ -1,4 +1,8 @@
 pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }
-dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
+dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories {
+    google(); mavenCentral()
+    // Mozilla's own repository, only for GeckoView (Firefox's engine, used by the model-site browser).
+    maven { url 'https://maven.mozilla.org/maven2/'; content { includeGroup 'org.mozilla.geckoview' } }
+} }
 rootProject.name = 'ElegooLinkAndroid'
 include ':app'

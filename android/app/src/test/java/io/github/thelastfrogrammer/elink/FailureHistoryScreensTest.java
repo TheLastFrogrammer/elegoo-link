@@ -18,7 +18,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadows.ShadowAlertDialog;
@@ -60,10 +59,10 @@ public class FailureHistoryScreensTest {
         android.content.Context context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).putInt("page", 1).putBoolean("cloudControlUnderstood", true).commit();
         PrinterService service = Robolectric.setupService(PrinterService.class);
-        Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(new ComponentName(context, PrinterService.class), service.onBind(null));
+        ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context)).setComponentNameAndServiceForBindService(new ComponentName(context, PrinterService.class), service.onBind(null));
         MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
         Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
-        Thread.sleep(300); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        Thread.sleep(300); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         long now = System.currentTimeMillis();
         service.cloudSignedIn = true; service.cloudSerial = SERIAL; service.cloudName = "Bedroom"; service.cloudModel = "Centauri Carbon 2";
         service.cloudOnline = 1; service.cloudCheckedAt = now; service.cloudReportedAt = now; service.cloudOnlineSignal = true; service.cloudStatus = status(state);
@@ -71,12 +70,12 @@ public class FailureHistoryScreensTest {
         Rig rig = new Rig(); rig.activity = activity; rig.service = service; return rig;
     }
     private static void call(Object target, String name, Class<?>[] types, Object... args) throws Exception { Method m = target.getClass().getDeclaredMethod(name, types); m.setAccessible(true); m.invoke(target, args); }
-    private static void render(MainActivity activity) throws Exception { call(activity, "render", new Class<?>[0]); Shadows.shadowOf(Looper.getMainLooper()).idle(); }
+    private static void render(MainActivity activity) throws Exception { call(activity, "render", new Class<?>[0]); org.robolectric.shadows.ShadowLooper.idleMainLooper(); }
     private static void collect(View view, List<View> out) { out.add(view); if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) collect(((ViewGroup) view).getChildAt(i), out); }
     private static List<Button> buttons(View root, String text) { List<View> all = new ArrayList<>(); collect(root, all); List<Button> found = new ArrayList<>(); for (View v : all) if (v instanceof Button && text.contentEquals(((Button) v).getText())) found.add((Button) v); return found; }
     private static boolean hasText(View root, String text) { List<View> all = new ArrayList<>(); collect(root, all); for (View v : all) if (v instanceof TextView && ((TextView) v).getText().toString().contains(text)) return true; return false; }
     private JSONObject row(Rig rig, String id) throws Exception { JSONArray rows = rig.service.history.getJSONArray("history_task_list"); for (int i = 0; i < rows.length(); i++) if (rows.getJSONObject(i).getString("task_id").equals(id)) return rows.getJSONObject(i); throw new AssertionError(id); }
-    private static void printAgain(MainActivity activity, JSONObject row) throws Exception { call(activity, "printAgain", new Class<?>[] {JSONObject.class}, row); Shadows.shadowOf(Looper.getMainLooper()).idle(); }
+    private static void printAgain(MainActivity activity, JSONObject row) throws Exception { call(activity, "printAgain", new Class<?>[] {JSONObject.class}, row); org.robolectric.shadows.ShadowLooper.idleMainLooper(); }
 
     @Test public void printAgainIsOnlyEnabledForAFileTheListingHolds() throws Exception {
         Rig rig = rig("light", 1); render(rig.activity);
@@ -154,7 +153,7 @@ public class FailureHistoryScreensTest {
             java.io.ByteArrayOutputStream png = new java.io.ByteArrayOutputStream(); picture.compress(Bitmap.CompressFormat.PNG, 100, png);
             rig.service.thumbnails.put("local/Benchy.gcode", android.util.Base64.encodeToString(png.toByteArray(), android.util.Base64.NO_WRAP));
             call(rig.activity, "historyDetail", new Class<?>[] {JSONObject.class}, row(rig, "t1"));
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             AlertDialog dialog = ShadowAlertDialog.getLatestAlertDialog();
             assertTrue(hasText(dialog.getWindow().getDecorView(), "Smooth Build Plate (Side B)"));
             assertTrue(hasText(dialog.getWindow().getDecorView(), "Tray A1 · Type PLA · Weight g 23.97"));
@@ -168,14 +167,14 @@ public class FailureHistoryScreensTest {
         android.content.Context context = RuntimeEnvironment.getApplication();
         context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
         PrinterService service = Robolectric.setupService(PrinterService.class);
-        Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(new ComponentName(context, PrinterService.class), service.onBind(null));
+        ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context)).setComponentNameAndServiceForBindService(new ComponentName(context, PrinterService.class), service.onBind(null));
         Intent intent = new Intent(context, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true);
         GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
-        Thread.sleep(300); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        Thread.sleep(300); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         long now = System.currentTimeMillis();
         service.cloudSignedIn = true; service.cloudSerial = SERIAL; service.cloudOnline = 1; service.cloudCheckedAt = now; service.cloudReportedAt = now; service.cloudOnlineSignal = true;
         service.cloudStatus = status(2);
-        activity.changed(); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        activity.changed(); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         return activity;
     }
     @Test public void withoutAGcodeCopyTheViewerShowsProgressThePlainLineAndBothButtons() throws Exception {

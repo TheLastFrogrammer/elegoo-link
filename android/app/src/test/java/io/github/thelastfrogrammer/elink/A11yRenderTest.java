@@ -15,7 +15,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import java.io.File;
@@ -165,11 +164,11 @@ public class A11yRenderTest {
     /** MainActivity connected locally with sample files, trays and a feedback message. */
     private static MainActivity local(boolean busy) throws Exception {
         PrinterService service = Robolectric.setupService(PrinterService.class);
-        Shadows.shadowOf((android.app.Application) context()).setComponentNameAndServiceForBindService(
+        ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context())).setComponentNameAndServiceForBindService(
             new android.content.ComponentName(context(), PrinterService.class), service.onBind(null));
         MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
         Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
-        Thread.sleep(500); Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        Thread.sleep(500); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         Field wanted = PrinterService.class.getDeclaredField("wanted"); wanted.setAccessible(true); wanted.setBoolean(service, true);
         Cc2Session session = new Cc2Session("192.168.1.50", "123456", null);
         Field ready = Cc2Session.class.getDeclaredField("ready"); ready.setAccessible(true); ready.setBoolean(session, true);
@@ -275,7 +274,7 @@ public class A11yRenderTest {
                 .putExtra(GcodeViewerActivity.EXTRA_FILE, gcode.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, "ElegooToleranceTest_with_a_long_file_name.gcode");
             GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
             long deadline = System.currentTimeMillis() + 30_000;
-            while (field(activity, "path") == null && System.currentTimeMillis() < deadline) { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            while (field(activity, "path") == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
             Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(activity, true);
             setField(activity, "layer", 19); invoke(activity, "syncBars");
             shot(activity.getWindow().getDecorView(), 2340, "viewer", scale);
@@ -358,15 +357,15 @@ public class A11yRenderTest {
                 .putExtra(GcodeViewerActivity.EXTRA_FILE, gcode.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, "Line-up.gcode");
             GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
             long deadline = System.currentTimeMillis() + 30_000;
-            while (field(activity, "path") == null && System.currentTimeMillis() < deadline) { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            while (field(activity, "path") == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
             setField(activity, "pageReady", true);
             invoke(activity, "startAligning");
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             shot(activity.getWindow().getDecorView(), 2340, "lineup", scale);
             // Open every collapsed section (their headers end in an arrow) and capture the whole sheet.
             java.util.List<View> all = new java.util.ArrayList<>(); collect(activity.getWindow().getDecorView(), all);
             for (View view : all) if (view instanceof android.widget.Button && ((android.widget.Button) view).getText().toString().startsWith("►")) view.performClick();
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             View sheet = (View) field(activity, "alignPanel");
             shot(sheet, 4200, "lineup-open", scale);
             activity.finish();
@@ -383,7 +382,7 @@ public class A11yRenderTest {
     private static void waitFor(Condition condition) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000;
         while (true) {
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             if (condition.met()) return;
             if (System.currentTimeMillis() > deadline) throw new AssertionError("timed out");
             Thread.sleep(50);
@@ -417,7 +416,7 @@ public class A11yRenderTest {
             Method addSlot = SliceActivity.class.getDeclaredMethod("addSlot", TrayPlan.Tray.class); addSlot.setAccessible(true);
             addSlot.invoke(activity, new TrayPlan.Tray(0, 1, "PLA", "", "ELEGOO", "#F0F0F0"));
             invoke(activity, "showModels"); invoke(activity, "updateButtons");
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             View root = activity.getWindow().getDecorView();
             View form = (View) field(activity, "content"), bar = (View) field(activity, "actionBar");
             form.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.UNSPECIFIED);
@@ -439,7 +438,7 @@ public class A11yRenderTest {
             android.content.Intent intent = new android.content.Intent(context(), SliceSettingsActivity.class).putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson());
             SliceSettingsActivity screen = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
             waitFor(() -> field(screen, "definitions") != null);
-            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             @SuppressWarnings("unchecked") java.util.Set<String> expanded = (java.util.Set<String>) field(screen, "expanded");
             @SuppressWarnings("unchecked") List<Object> sections = (List<Object>) field(screen, "sections");
             for (Object section : sections) expanded.add((String) field(section, "name"));

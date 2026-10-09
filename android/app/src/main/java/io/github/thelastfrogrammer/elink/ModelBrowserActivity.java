@@ -6,7 +6,6 @@ import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
-import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -16,40 +15,41 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
-import android.webkit.CookieManager;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebSettings;
-import android.webkit.WebStorage;
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.webkit.WebChromeClient;
+import org.mozilla.geckoview.AllowOrDeny;
+import org.mozilla.geckoview.GeckoResult;
+import org.mozilla.geckoview.GeckoRuntime;
+import org.mozilla.geckoview.GeckoSession;
+import org.mozilla.geckoview.GeckoSessionSettings;
+import org.mozilla.geckoview.GeckoView;
+import org.mozilla.geckoview.WebExtension;
+import org.mozilla.geckoview.WebResponse;
 import android.widget.*;
 import java.io.*;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The model sites, browsed inside the app: each site's own pages, where the user searches and signs in as on any browser
- * (the app never sees a password). When the site starts a download, the file comes here instead of the phone's Downloads:
- * model files and ZIPs of them only, https only, at most 200 MB, with the browser's own cookies for that address and no
- * other. The downloaded models go back to the Slice screen. Nothing on these pages can reach the app or the printer: no
- * JavaScript bridge, no file access, and other apps' links (intent:, market:) are not followed.
+ * The model sites, browsed inside the app with Firefox's engine (GeckoView), so the uBlock Origin add-on can block ads. The
+ * user searches and signs in on each site's own pages (the app never sees a password). When a site starts a download, the
+ * engine hands the file here instead of the phone's Downloads: model files and ZIPs of them only, from secure pages, at
+ * most 200 MB. The downloaded models go back to the Slice screen. Nothing on these pages can reach the app or the printer:
+ * no bridge to the app, no file uploads, no device permissions, and other apps' links (intent:, market:) are not followed.
  */
 public final class ModelBrowserActivity extends Activity {
     static final String EXTRA_SITE = "site", EXTRA_TERM = "term", EXTRA_URL = "url";
     static final String RESULT_PATHS = ModelSearchActivity.RESULT_PATHS;
-    /** The largest file taken from a page's own (blob:) download, which has to pass through the page's memory. */
-    static final long MAX_BLOB = 50L * 1024 * 1024;
-    private static final int BLOB_CHUNK = 512 * 1024;   // a multiple of 4, so each piece decodes on its own
 
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private boolean dark;
     private int ink, muted, teal, background, surface, buttonColor;
-    private WebView web;
+    private View page;                 // the GeckoView, or a placeholder where the engine cannot run (unit tests)
+    private GeckoRuntime runtime;
+    private GeckoSession session;
+    private String currentUrl = "";
+    private boolean canGoBack;
+    private WebExtension adBlocker;
     private ProgressBar loading;
     private TextView where, readyText, downloadText;
     private LinearLayout readyBar, downloadBar, tabs;
@@ -63,7 +63,6 @@ public final class ModelBrowserActivity extends Activity {
     private File folder;
     private Object backCallback;
 
-    @SuppressLint("SetJavaScriptEnabled")
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         int appearance = getSharedPreferences("workshop-settings", MODE_PRIVATE).getInt("theme", 0);
@@ -94,36 +93,19 @@ public final class ModelBrowserActivity extends Activity {
         loading = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); loading.setMax(100);
         root.addView(loading, new LinearLayout.LayoutParams(-1, dp(4)));
 
-        web = new WebView(this);
-        root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
-        WebSettings settings = web.getSettings();
-        settings.setJavaScriptEnabled(true);           // the sites need it; no bridge to the app is added
-        settings.setDomStorageEnabled(true);
-        settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
-        settings.setGeolocationEnabled(false);
-        settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-        settings.setSupportMultipleWindows(false);     // a new window opens in place
-        settings.setSafeBrowsingEnabled(true);
-        CookieManager.getInstance().setAcceptCookie(true);
-        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true);   // sign-in pages on a sister domain (e.g. Prusa account)
-        web.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String scheme = request.getUrl().getScheme();
-                if ("https".equalsIgnoreCase(scheme)) return false;
-                if ("http".equalsIgnoreCase(scheme)) {   // upgrade, never load an unencrypted page
-                    view.loadUrl(request.getUrl().buildUpon().scheme("https").build().toString()); return true;
-                }
-                return true;                              // intent:, market:, mailto: … are not followed
-            }
-            @Override public void onPageStarted(WebView view, String url, Bitmap favicon) { showWhere(url); }
-            @Override public void doUpdateVisitedHistory(WebView view, String url, boolean reload) { showWhere(url); }
-        });
-        web.setWebChromeClient(new WebChromeClient() {
-            @Override public void onProgressChanged(WebView view, int progress) {
-                loading.setProgress(progress); loading.setVisibility(progress >= 100 ? View.INVISIBLE : View.VISIBLE);
-            }
-        });
-        web.setDownloadListener((url, userAgent, disposition, mimeType, length) -> startDownload(url, userAgent, disposition, mimeType, length));
+        if (GeckoEngine.available()) {
+            runtime = GeckoEngine.runtime(this, dark);
+            session = new GeckoSession(new GeckoSessionSettings.Builder().usePrivateMode(false).useTrackingProtection(true)
+                .userAgentMode(GeckoSessionSettings.USER_AGENT_MODE_MOBILE).build());
+            session.setNavigationDelegate(navigation());
+            session.setProgressDelegate(progressDelegate());
+            session.setContentDelegate(contentDelegate());
+            session.setPromptDelegate(new BrowserPrompts(this));
+            session.open(runtime);
+            GeckoView view = new GeckoView(this); view.setSession(session); page = view;
+            refreshAdBlocker(true);
+        } else { page = new View(this); page.setBackgroundColor(background); }
+        root.addView(page, new LinearLayout.LayoutParams(-1, 0, 1));
 
         // Downloading, then the files ready for the slicer.
         downloadBar = bar(root);
@@ -138,30 +120,81 @@ public final class ModelBrowserActivity extends Activity {
         sliceButton = rowButton(readyRow, "Slice", this::finishWithModels, true);
 
         if (android.os.Build.VERSION.SDK_INT >= 33) {
-            android.window.OnBackInvokedCallback callback = () -> { if (web.canGoBack()) web.goBack(); else finishWithModels(); };
+            android.window.OnBackInvokedCallback callback = this::goBack;
             backCallback = callback;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
         }
         showReady();
         String url = getIntent().getStringExtra(EXTRA_URL);
-        if (url != null && url.startsWith("https://")) { site = ""; highlightTab(); web.loadUrl(url); }
+        if (url != null && url.startsWith("https://")) { site = ""; highlightTab(); load(url); }
         else openSite(site);
     }
 
     @SuppressLint("GestureBackNavigation")
-    @Override public void onBackPressed() { if (web != null && web.canGoBack()) web.goBack(); else finishWithModels(); }
+    @Override public void onBackPressed() { goBack(); }
+    private void goBack() { if (session != null && canGoBack) session.goBack(); else finishWithModels(); }
 
     @Override protected void onDestroy() {
         cancelDownload = true; worker.shutdownNow();
         if (android.os.Build.VERSION.SDK_INT >= 33 && backCallback != null) getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) backCallback);
-        if (web != null) { web.stopLoading(); web.destroy(); }
-        CookieManager.getInstance().flush();
+        if (page instanceof GeckoView) ((GeckoView) page).releaseSession();
+        if (session != null) session.close();
         super.onDestroy();
+    }
+
+    private void load(String url) { currentUrl = url; showWhere(url); if (session != null) session.loadUri(url); }
+
+    // ------------------------------------------------------------------ the engine's callbacks
+    private GeckoSession.NavigationDelegate navigation() {
+        return new GeckoSession.NavigationDelegate() {
+            @Override public void onLocationChange(GeckoSession s, String url, List<GeckoSession.PermissionDelegate.ContentPermission> perms, Boolean gesture) {
+                if (url != null) { currentUrl = url; showWhere(url); }
+            }
+            @Override public void onCanGoBack(GeckoSession s, boolean can) { canGoBack = can; }
+            @Override public GeckoResult<AllowOrDeny> onLoadRequest(GeckoSession s, LoadRequest request) {
+                if (!ModelSites.browserMayOpen(request.uri)) {
+                    if (request.uri != null && request.uri.startsWith("http://")) main.post(() -> load("https://" + request.uri.substring(7)));   // upgrade
+                    return GeckoResult.deny();
+                }
+                if (request.target == TARGET_WINDOW_NEW) { main.post(() -> load(request.uri)); return GeckoResult.deny(); }   // one tab: open it here
+                return GeckoResult.allow();
+            }
+            @Override public GeckoResult<AllowOrDeny> onSubframeLoadRequest(GeckoSession s, LoadRequest request) {
+                return ModelSites.browserMayOpen(request.uri) ? GeckoResult.allow() : GeckoResult.deny();
+            }
+            @Override public GeckoResult<GeckoSession> onNewSession(GeckoSession s, String uri) { return null; }
+        };
+    }
+    private GeckoSession.ProgressDelegate progressDelegate() {
+        return new GeckoSession.ProgressDelegate() {
+            @Override public void onProgressChange(GeckoSession s, int progress) {
+                loading.setProgress(progress); loading.setVisibility(progress >= 100 ? View.INVISIBLE : View.VISIBLE);
+            }
+            @Override public void onPageStop(GeckoSession s, boolean success) { loading.setVisibility(View.INVISIBLE); }
+        };
+    }
+    private GeckoSession.ContentDelegate contentDelegate() {
+        return new GeckoSession.ContentDelegate() {
+            @Override public void onExternalResponse(GeckoSession s, WebResponse response) { takeDownload(response); }
+            @Override public void onCrash(GeckoSession s) { restart("The page crashed."); }
+            @Override public void onKill(GeckoSession s) { restart("The page was closed to free memory."); }
+        };
+    }
+    /** After a page crash: a fresh session at the same address. */
+    private void restart(String why) {
+        if (isDestroyed() || runtime == null) return;
+        toast(why + " Reloading.");
+        if (session != null) session.close();
+        session = new GeckoSession(new GeckoSessionSettings.Builder().usePrivateMode(false).useTrackingProtection(true).build());
+        session.setNavigationDelegate(navigation()); session.setProgressDelegate(progressDelegate());
+        session.setContentDelegate(contentDelegate()); session.setPromptDelegate(new BrowserPrompts(this));
+        session.open(runtime); ((GeckoView) page).setSession(session);
+        load(currentUrl.startsWith("https://") ? currentUrl : ModelSites.webSearch(site.isEmpty() ? ModelSites.BROWSER_SITES[0] : site, term));
     }
 
     private void openSite(String name) {
         site = name; highlightTab();
-        String url = ModelSites.webSearch(name, term); showWhere(url); web.loadUrl(url);
+        load(ModelSites.webSearch(name, term));
     }
     private void highlightTab() {
         for (Button tab : tabButtons) {
@@ -184,119 +217,99 @@ public final class ModelBrowserActivity extends Activity {
     }
 
     private void moreMenu() {
-        String[] items = {"Reload", "Open this page in the phone's browser", "Sign out of all sites (clears their cookies)"};
-        new AlertDialog.Builder(this).setTitle("Browser").setItems(items, (d, which) -> {
-            if (which == 0) web.reload();
-            else if (which == 1) {
-                String url = web.getUrl();
-                if (url == null || !url.startsWith("https://")) return;
-                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url))); }
-                catch (android.content.ActivityNotFoundException none) { toast("No other browser is installed."); }
-            } else new AlertDialog.Builder(this).setTitle("Sign out of all sites?")
-                .setMessage("Clears every model site's cookies and saved data in this app's browser. You will need to sign in again.")
-                .setNegativeButton("Cancel", null).setPositiveButton("Sign out", (d2, w2) -> {
-                    CookieManager.getInstance().removeAllCookies(null); CookieManager.getInstance().flush();
-                    WebStorage.getInstance().deleteAllData(); web.clearCache(true); web.reload();
-                }).show();
-        }).show();
+        List<String> items = new ArrayList<>(); List<Runnable> actions = new ArrayList<>();
+        items.add("Reload"); actions.add(() -> { if (session != null) session.reload(); });
+        items.add(adBlocker == null ? "Install the ad blocker (" + GeckoEngine.AD_BLOCKER_NAME + ")…"
+            : adBlocker.metaData.enabled ? "Ad blocker: on (tap to turn off)" : "Ad blocker: off (tap to turn on)");
+        actions.add(this::adBlockerAction);
+        items.add("Open this page in the phone's browser"); actions.add(() -> {
+            if (!currentUrl.startsWith("https://")) return;
+            try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(currentUrl))); }
+            catch (android.content.ActivityNotFoundException none) { toast("No other browser is installed."); }
+        });
+        items.add("Sign out of all sites"); actions.add(() -> new AlertDialog.Builder(this).setTitle("Sign out of all sites?")
+            .setMessage("Clears every model site's cookies and saved data in this app's browser. You will need to sign in again. The ad blocker stays.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Sign out", (d2, w2) -> {
+                if (runtime != null) GeckoEngine.signOutEverywhere(runtime).accept(done -> { if (session != null) session.reload(); });
+            }).show());
+        new AlertDialog.Builder(this).setTitle("Browser").setItems(items.toArray(new String[0]), (d, which) -> actions.get(which).run()).show();
+    }
+
+    // ------------------------------------------------------------------ ad blocker
+    private void refreshAdBlocker(boolean checkUpdate) {
+        if (runtime == null) return;
+        GeckoEngine.adBlocker(runtime).accept(extension -> {
+            adBlocker = extension;
+            if (extension != null && checkUpdate) GeckoEngine.updateIfDue(this, runtime, extension);
+        }, failed -> adBlocker = null);
+    }
+    private void adBlockerAction() {
+        if (runtime == null) { toast("The browser engine is not running."); return; }
+        if (adBlocker != null) {
+            boolean on = !adBlocker.metaData.enabled;
+            GeckoEngine.setAdBlocker(runtime, adBlocker, on).accept(extension -> {
+                adBlocker = extension; toast("Ad blocker " + (on ? "on." : "off.")); if (session != null) session.reload();
+            }, failed -> toast("Could not change the ad blocker."));
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Install the ad blocker?")
+            .setMessage(GeckoEngine.AD_BLOCKER_NAME + " is a free, open-source ad blocker for Firefox by Raymond Hill. It is downloaded from "
+                + "Mozilla's add-on site (addons.mozilla.org) and Firefox's engine checks Mozilla's signature before installing it. It works "
+                + "only in this browser, can read and change the model sites' pages to remove ads (that is how it works), and is "
+                + "updated from Mozilla about once a week. You can turn it off here at any time.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Install", (d, w) -> {
+                toast("Installing the ad blocker…");
+                GeckoEngine.installAdBlocker(runtime).accept(extension -> {
+                    adBlocker = extension;
+                    Diagnostics.note(Diagnostics.SITES, "ad blocker installed (version " + extension.metaData.version + ")");
+                    toast("Ad blocker installed."); if (session != null) session.reload();
+                }, failed -> {
+                    Diagnostics.note(Diagnostics.SITES, "ad blocker install failed: " + failed.getClass().getSimpleName());
+                    explain("Ad blocker not installed", "It could not be installed from Mozilla's add-on site. Check the connection and try again.");
+                });
+            }).show();
     }
 
     // ------------------------------------------------------------------ downloads
-    private void startDownload(String url, String userAgent, String disposition, String mimeType, long length) {
-        if (downloading) { toast("One download at a time: wait for this one to finish."); return; }
-        String scheme = url == null ? "" : Uri.parse(url).getScheme();
-        boolean blob = "blob".equalsIgnoreCase(scheme), data = "data".equalsIgnoreCase(scheme);
-        if (!blob && !data && !"https".equalsIgnoreCase(scheme)) { explain("Download not taken", "The site offered this file over an address that is not secure, so it was not downloaded."); return; }
-        String name = ModelSites.fileNameFor(blob || data ? null : url, disposition, mimeType);
-        if (!ModelSites.browserTakes(name)) {
-            explain("Not a model file", "\"" + name + "\" is not a model. The app takes STL, 3MF, OBJ, STEP and AMF files, and ZIPs of them.");
+    /** A file the page started downloading, handed over by the engine (it has already fetched it, with the site's sign-in). */
+    private void takeDownload(WebResponse response) {
+        String disposition = header(response, "Content-Disposition"), type = header(response, "Content-Type");
+        long length = -1; try { length = Long.parseLong(header(response, "Content-Length").trim()); } catch (NumberFormatException unknown) { }
+        String name = ModelSites.fileNameFor(response.uri != null && response.uri.startsWith("https://") ? response.uri : null, disposition, type);
+        String refusal = downloading ? "One download at a time: wait for this one to finish."
+            : !ModelSites.browserDownloadFrom(response.uri) ? "The site offered this file over an address that is not secure, so it was not downloaded."
+            : !ModelSites.browserTakes(name) ? "\"" + name + "\" is not a model. The app takes STL, 3MF, OBJ, STEP and AMF files, and ZIPs of them."
+            : length > ModelSites.MAX_DOWNLOAD ? "The file is larger than 200 MB." : null;
+        if (refusal == null && !folder.isDirectory() && !folder.mkdirs()) refusal = "Could not make room for the download.";
+        if (refusal != null) {
+            closeQuietly(response.body);
+            if (downloading) toast(refusal); else explain("Download not taken", refusal);
             return;
         }
-        if (length > ModelSites.MAX_DOWNLOAD || blob && length > MAX_BLOB) { explain("File too large", "The file is larger than " + (blob ? "50" : "200") + " MB."); return; }
-        if (!folder.isDirectory() && !folder.mkdirs()) { explain("Download stopped", "Could not make room for the download."); return; }
         File target = unique(new File(folder, name));
+        long total = length;
         downloading = true; cancelDownload = false;
         downloadText.setText("Downloading " + name + "…"); downloadProgress.setProgress(0); downloadBar.setVisibility(View.VISIBLE);
-        Diagnostics.note(Diagnostics.SITES, "browser download started (" + (blob ? "page data" : data ? "inline data" : "link") + ", type " + valueOr(ModelSites.extension(name), "?") + ")");
-        if (blob) { readBlob(url, target); return; }
-        String page = web.getUrl();
+        Diagnostics.note(Diagnostics.SITES, "browser download started (" + (response.uri != null && response.uri.startsWith("blob:") ? "page data" : "link") + ", type " + valueOr(ModelSites.extension(name), "?") + ")");
+        response.setReadTimeoutMillis(30_000);
         worker.execute(() -> {
             try {
-                if (data) writeDataUrl(url, target);
-                else ModelSites.download(u -> (HttpURLConnection) u.openConnection(), url, (hop, connection) -> {
-                    // The browser's own cookies for this address (as the browser itself would send), its user agent, and the
-                    // page's origin as referrer; nothing else, and nothing kept by the app.
-                    String cookies = CookieManager.getInstance().getCookie(hop.toString());
-                    if (cookies != null && !cookies.isEmpty()) connection.setRequestProperty("Cookie", cookies);
-                    if (userAgent != null) connection.setRequestProperty("User-Agent", userAgent);
-                    String origin = origin(page); if (!origin.isEmpty()) connection.setRequestProperty("Referer", origin);
-                }, target, (done, total) -> { progress(done, total > 0 ? total : length); return !cancelDownload; });
+                if (response.body == null) throw new IOException("The site sent no file.");
+                ModelSites.save(response.body, target, ModelSites.MAX_DOWNLOAD, total, (done, all) -> { progress(done, all); return !cancelDownload; });
                 main.post(() -> finished(target, null));
             } catch (Exception failed) {
-                target.delete();
                 String why = failed instanceof InterruptedIOException ? "Download cancelled." : failed.getMessage() == null ? "The download failed." : failed.getMessage();
                 main.post(() -> finished(null, why));
             }
         });
     }
-
-    /**
-     * A page-made (blob:) file exists only inside the page, so the page is asked to read it, and the app copies it out in
-     * pieces through evaluateJavascript: no bridge object is ever exposed to the page.
-     */
-    private void readBlob(String url, File target) {
-        String js = "(function(u){window.__lwBlob=null;window.__lwErr=null;fetch(u).then(function(r){return r.blob();}).then(function(b){"
-            + "if(b.size>" + MAX_BLOB + "){window.__lwErr='large';return;}var f=new FileReader();f.onload=function(){var s=f.result;window.__lwBlob=s.substring(s.indexOf(',')+1);};"
-            + "f.onerror=function(){window.__lwErr='read';};f.readAsDataURL(b);}).catch(function(){window.__lwErr='fetch';});})(" + org.json.JSONObject.quote(url) + ")";
-        web.evaluateJavascript(js, null);
-        pollBlob(target, System.currentTimeMillis() + 60_000);
+    private static String header(WebResponse response, String name) {
+        if (response.headers == null) return "";
+        for (Map.Entry<String, String> e : response.headers.entrySet()) if (e.getKey() != null && e.getKey().equalsIgnoreCase(name)) return e.getValue() == null ? "" : e.getValue();
+        return "";
     }
-    private void pollBlob(File target, long deadline) {
-        if (cancelDownload) { cleanBlob(); finished(null, "Download cancelled."); return; }
-        web.evaluateJavascript("window.__lwErr?('E'+window.__lwErr):(window.__lwBlob===null?'':String(window.__lwBlob.length))", value -> {
-            String state = unquote(value);
-            if (state.startsWith("E")) { cleanBlob(); finished(null, state.equals("Elarge") ? "The file is larger than 50 MB." : "The page's file could not be read."); return; }
-            if (state.isEmpty()) {
-                if (System.currentTimeMillis() > deadline) { cleanBlob(); finished(null, "The page did not hand over the file."); return; }
-                main.postDelayed(() -> pollBlob(target, deadline), 200); return;
-            }
-            long total;
-            try { total = Long.parseLong(state); } catch (NumberFormatException odd) { cleanBlob(); finished(null, "The page's file could not be read."); return; }
-            try { copyBlob(target, new FileOutputStream(target), 0, total); }
-            catch (IOException failed) { cleanBlob(); finished(null, "Could not save the file."); }
-        });
-    }
-    private void copyBlob(File target, OutputStream out, long at, long total) {
-        if (cancelDownload || at >= total) {
-            try { out.close(); } catch (IOException ignored) { }
-            cleanBlob();
-            if (cancelDownload) { target.delete(); finished(null, "Download cancelled."); } else finished(target, null);
-            return;
-        }
-        web.evaluateJavascript("window.__lwBlob?window.__lwBlob.substr(" + at + "," + BLOB_CHUNK + "):''", value -> {
-            String piece = unquote(value);
-            try {
-                if (piece.isEmpty()) throw new IOException("The page dropped the file.");
-                out.write(Base64Holder.decode(piece));
-                progress(at * 3 / 4, total * 3 / 4);
-                copyBlob(target, out, at + piece.length(), total);
-            } catch (Exception failed) {
-                try { out.close(); } catch (IOException ignored) { }
-                target.delete(); cleanBlob(); finished(null, "Could not save the file.");
-            }
-        });
-    }
-    private void cleanBlob() { if (web != null) web.evaluateJavascript("window.__lwBlob=null;window.__lwErr=null;", null); }
-    private static final class Base64Holder { static byte[] decode(String text) { return java.util.Base64.getDecoder().decode(text); } }
-
-    private static void writeDataUrl(String url, File target) throws IOException {
-        int comma = url.indexOf(',');
-        if (comma < 0) throw new IOException("The page's file could not be read.");
-        String meta = url.substring(0, comma), body = url.substring(comma + 1);
-        if (body.length() > MAX_BLOB * 4 / 3 + 4) throw new IOException("The file is larger than 50 MB.");
-        byte[] bytes = meta.endsWith(";base64") ? java.util.Base64.getDecoder().decode(body) : java.net.URLDecoder.decode(body.replace("+", "%2B"), "UTF-8").getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
-        try (OutputStream out = new FileOutputStream(target)) { out.write(bytes); }
-    }
+    private static void closeQuietly(InputStream in) { try { if (in != null) in.close(); } catch (IOException ignored) { } }
 
     private void progress(long done, long total) {
         int value = total > 0 ? (int) Math.min(1000, done * 1000 / total) : 0;
@@ -360,13 +373,6 @@ public final class ModelBrowserActivity extends Activity {
         String name = file.getName(); int dot = name.lastIndexOf('.');
         String base = dot > 0 ? name.substring(0, dot) : name, ext = dot > 0 ? name.substring(dot) : "";
         for (int i = 2; ; i++) { File next = new File(file.getParentFile(), base + " (" + i + ")" + ext); if (!next.exists()) return next; }
-    }
-    private static String origin(String url) {
-        try { Uri uri = Uri.parse(url); return "https".equals(uri.getScheme()) && uri.getHost() != null ? "https://" + uri.getHost() + "/" : ""; } catch (Exception none) { return ""; }
-    }
-    private static String unquote(String value) {
-        if (value == null || value.equals("null")) return "";
-        try { return new org.json.JSONArray("[" + value + "]").optString(0, ""); } catch (Exception odd) { return ""; }
     }
     private static String valueOr(String value, String fallback) { return value == null || value.isEmpty() ? fallback : value; }
     private void explain(String title, String message) { if (!isDestroyed()) new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show(); }

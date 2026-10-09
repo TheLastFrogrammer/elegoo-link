@@ -8,7 +8,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import android.graphics.Bitmap;
@@ -334,7 +333,7 @@ public class SlicerIntegrationTest {
         waitFor(() -> field(screen, "definitions") != null);
         org.json.JSONObject definitions = (org.json.JSONObject) field(screen, "definitions");
         assertTrue(definitions.has("wall_loops")); assertFalse(definitions.has("enable_prime_tower"));
-        org.robolectric.shadows.ShadowActivity shadow = Shadows.shadowOf(screen);
+        org.robolectric.shadows.ShadowActivity shadow = ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(screen));
         assertEquals("{\"wall_loops\":\"5\"}", shadow.getResultIntent().getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
         assertArrayEquals(new int[] {1, 0}, shadow.getResultIntent().getIntArrayExtra(SliceSettingsActivity.EXTRA_OBJECT));
     }
@@ -418,7 +417,7 @@ public class SlicerIntegrationTest {
         SliceActivity again = controller.get();
         assertNotSame(activity, again);
         waitFor(() -> spinnerFilled(again, "processSpinner") && firstSlotFilled(again));
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         @SuppressWarnings("unchecked") List<File> kept = (List<File>) field(again, "models");
         assertEquals(Collections.singletonList(imported), kept);
         @SuppressWarnings("unchecked") List<Object> keptSlots = (List<Object>) field(again, "slots");
@@ -447,11 +446,11 @@ public class SlicerIntegrationTest {
         if (slot >= 0) intent.putExtra(SliceSettingsActivity.EXTRA_FILAMENT_SLOT, slot);
         SliceSettingsActivity screen = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
         waitFor(() -> field(screen, "definitions") != null);
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         return screen;
     }
     private static void typeInSearch(SliceSettingsActivity screen, String text) throws Exception {
-        ((android.widget.EditText) field(screen, "search")).setText(text); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        ((android.widget.EditText) field(screen, "search")).setText(text); org.robolectric.shadows.ShadowLooper.idleMainLooper();
     }
     @SuppressWarnings("unchecked") private static Map<String, View> rowsOf(SliceSettingsActivity screen) throws Exception { return (Map<String, View>) field(screen, "rows"); }
     private static String summaryOf(SliceSettingsActivity screen) throws Exception { return ((android.widget.TextView) field(screen, "summary")).getText().toString(); }
@@ -501,7 +500,7 @@ public class SlicerIntegrationTest {
         android.widget.EditText input = descendant(rowsOf(screen).get("wall_loops"), android.widget.EditText.class);
         input.setText("5");
         input.getOnFocusChangeListener().onFocusChange(input, false);
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the print profile:"));
         assertTrue(summaryOf(screen), summaryOf(screen).contains("Walls (wall loops)"));
         assertEquals(View.VISIBLE, textViewNamed(rowsOf(screen).get("wall_loops"), "Reset").getVisibility());
@@ -512,7 +511,7 @@ public class SlicerIntegrationTest {
         SliceSettingsActivity screen = openSettings(processSelection("wall_loops", "4", "sparse_infill_pattern", "gyroid"), -1);
         @SuppressWarnings("unchecked") Map<String, String> overrides = (Map<String, String>) field(screen, "overrides");
         ((android.widget.Switch) field(screen, "changedOnly")).setChecked(true);
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         int visible = 0;
         for (Map.Entry<String, View> row : rowsOf(screen).entrySet()) {
             boolean changed = overrides.containsKey(row.getKey());
@@ -530,8 +529,8 @@ public class SlicerIntegrationTest {
         android.widget.TextView reset = textViewNamed(rowsOf(screen).get("wall_loops"), "Reset");
         assertEquals(View.VISIBLE, reset.getVisibility());
         reset.performClick();
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
-        org.json.JSONObject result = new org.json.JSONObject(Shadows.shadowOf(screen).getResultIntent().getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        org.json.JSONObject result = new org.json.JSONObject(((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(screen)).getResultIntent().getStringExtra(SliceSettingsActivity.EXTRA_OVERRIDES));
         assertFalse(result.has("wall_loops"));
         assertEquals("gyroid", result.getString("sparse_infill_pattern"));
         assertTrue(summaryOf(screen), summaryOf(screen).startsWith("1 setting changed from the print profile:") && summaryOf(screen).contains("Infill pattern (sparse infill)"));
@@ -577,7 +576,7 @@ public class SlicerIntegrationTest {
                 intent.putExtra(SliceSettingsActivity.EXTRA_SELECTION, selection.toJson());
                 SliceSettingsActivity activity = Robolectric.buildActivity(SliceSettingsActivity.class, intent).setup().get();
                 waitFor(() -> field(activity, "definitions") != null);
-                Shadows.shadowOf(Looper.getMainLooper()).idle();
+                org.robolectric.shadows.ShadowLooper.idleMainLooper();
                 View root = activity.getWindow().getDecorView();
                 int width = 1080;
                 root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
@@ -615,7 +614,7 @@ public class SlicerIntegrationTest {
             applyTray.invoke(activity, slots.get(0), new TrayPlan.Tray(0, 0, "PLA", "PLA Matte", "ELEGOO", "#D02828"));
             addSlot.invoke(activity, new TrayPlan.Tray(0, 1, "PLA", "", "ELEGOO", "#F0F0F0"));
             invoke(activity, "showModels"); invoke(activity, "updateButtons");
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             assertEquals("Elegoo PLA Matte @ECC2", ((Spinner) field(slots.get(0), "preset")).getSelectedItem());
             ((android.widget.EditText) field(activity, "infill")).setText("20");
             invoke(activity, "startSlice");
@@ -625,7 +624,7 @@ public class SlicerIntegrationTest {
             String plan = context().getSharedPreferences(SliceActivity.TRAY_PLANS, 0).getString("calibration_box_plate.gcode", null);
             assertEquals("{\"count\":2,\"tools\":[{\"t\":0,\"canvas_id\":0,\"tray_id\":0},{\"t\":1,\"canvas_id\":0,\"tray_id\":1}]}", plan);
             // The whole form from its top (the result scroll leaves the form scrolled), with the sticky Slice bar below it.
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             ((android.widget.ScrollView) field(activity, "scroll")).scrollTo(0, 0);
             View form = (View) field(activity, "content"), bar = (View) field(activity, "actionBar");
             int width = 1080;
@@ -655,7 +654,7 @@ public class SlicerIntegrationTest {
         assertEquals(View.VISIBLE, ((View) field(activity, "resultPlateBox")).getVisibility());
         assertEquals(2, chooser.getAdapter().getCount());
         assertEquals("Send project plate 1 to the Files tab", buttonText(activity, "useInFiles"));
-        chooser.setSelection(1); layOut(chooser); Shadows.shadowOf(Looper.getMainLooper()).idle();
+        chooser.setSelection(1); layOut(chooser); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         @SuppressWarnings("unchecked") List<File> files = (List<File>) field(activity, "slicedFiles");
         assertEquals(files.get(1), field(activity, "sliced"));
         assertEquals("twoplate_project_plate2.gcode", field(activity, "slicedName"));
@@ -664,13 +663,13 @@ public class SlicerIntegrationTest {
         controller.recreate();
         SliceActivity again = controller.get();
         waitFor(() -> spinnerFilled(again, "processSpinner") && firstSlotFilled(again));
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         assertEquals(1, ((android.widget.Spinner) field(again, "resultPlate")).getSelectedItemPosition());
         assertEquals("twoplate_project_plate2.gcode", field(again, "slicedName"));
         assertEquals("Send project plate 2 to the Files tab", buttonText(again, "useInFiles"));
         // Open Settings from the result keeps the chosen plate: it goes to the Files tab, and the main screen opens on Settings.
         invoke(again, "openSettingsTab");
-        android.content.Intent next = Shadows.shadowOf(again).getNextStartedActivity();
+        android.content.Intent next = ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(again)).getNextStartedActivity();
         assertNotNull(next);
         assertEquals(3, next.getIntExtra(MainActivity.EXTRA_PAGE, -1));
         assertEquals("twoplate_project_plate2.gcode", next.getStringExtra(SliceActivity.RESULT_NAME));
@@ -687,7 +686,7 @@ public class SlicerIntegrationTest {
         assertEquals(View.VISIBLE, hint.getVisibility());
         assertTrue(hint.getText().toString(), hint.getText().toString().startsWith("Choose model files"));
         importFiles(activity, box(20, 20, 10));
-        Shadows.shadowOf(Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         assertEquals(View.GONE, hint.getVisibility());
     }
 
@@ -726,7 +725,7 @@ public class SlicerIntegrationTest {
     private static void waitFor(Condition condition) throws Exception {
         long deadline = System.currentTimeMillis() + 60_000;
         while (true) {
-            Shadows.shadowOf(Looper.getMainLooper()).idle();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
             if (condition.met()) return;
             if (System.currentTimeMillis() > deadline) fail("timed out");
             Thread.sleep(50);

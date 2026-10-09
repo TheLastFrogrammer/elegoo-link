@@ -8,7 +8,6 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.RuntimeEnvironment;
-import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 import org.robolectric.shadows.ShadowAlertDialog;
@@ -27,7 +26,7 @@ public class FailureServiceRecoveryTest {
     private static void call(Object target, String name, Class<?>[] types, Object... args) throws Exception { java.lang.reflect.Method m = target.getClass().getDeclaredMethod(name, types); m.setAccessible(true); m.invoke(target, args); }
     private static void waitFor(java.util.concurrent.Callable<Boolean> condition) throws Exception {
         long end = System.currentTimeMillis() + 20_000;
-        while (true) { Shadows.shadowOf(Looper.getMainLooper()).idle(); if (condition.call()) return; if (System.currentTimeMillis() > end) fail("timed out"); Thread.sleep(25); }
+        while (true) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); if (condition.call()) return; if (System.currentTimeMillis() > end) fail("timed out"); Thread.sleep(25); }
     }
 
     /** Connection lost while a queued (Upload and print) file is on its way: the queue clears and the sliced file is kept in the Files tab. */
@@ -48,7 +47,7 @@ public class FailureServiceRecoveryTest {
     /** A print was running when the local connection failed: the user is told, not just shown a changed notification. */
     @Test public void losingContactMidPrintRaisesAnAlert() throws Exception {
         android.app.Application app = RuntimeEnvironment.getApplication();
-        Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS);
+        ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(app)).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS);
         PrinterService service = Robolectric.buildService(PrinterService.class).create().get();
         set(service, "wanted", true);
         service.status = new JSONObject().put("machine_status", new JSONObject().put("status", 2));

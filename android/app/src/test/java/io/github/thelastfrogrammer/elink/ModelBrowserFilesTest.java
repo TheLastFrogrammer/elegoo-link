@@ -72,6 +72,30 @@ public class ModelBrowserFilesTest {
         assertEquals("attachment; filename=\"clip.zip\"", disposition);
     }
 
+    @Test public void theBrowserOpensOnlySecurePagesAndKeepsOtherAppsOut() {
+        for (String ok : new String[] {"https://www.printables.com/model/1", "blob:https://makerworld.com/9f2c", "data:application/octet-stream;base64,AA==",
+            "moz-extension://abc/document-blocked.html", "about:blank"}) assertTrue(ok, ModelSites.browserMayOpen(ok));
+        for (String no : new String[] {"http://www.printables.com/", "intent://scan/#Intent;scheme=zxing;end", "market://details?id=x", "mailto:a@b.c",
+            "file:///sdcard/secret", "content://contacts/1", "javascript:alert(1)", "about:config", null}) assertFalse(String.valueOf(no), ModelSites.browserMayOpen(no));
+        assertTrue(ModelSites.browserDownloadFrom("https://files.printables.com/a.zip"));
+        assertTrue(ModelSites.browserDownloadFrom("blob:https://makerworld.com/1"));
+        assertFalse(ModelSites.browserDownloadFrom("http://files.example/a.stl"));
+        assertFalse(ModelSites.browserDownloadFrom("blob:http://files.example/1"));
+        assertFalse(ModelSites.browserDownloadFrom("file:///sdcard/a.stl"));
+    }
+
+    @Test public void savingStopsAtTheCapOrWhenCancelledAndLeavesNothingBehind() throws Exception {
+        File ok = new File(folder.getRoot(), "ok.stl");
+        ModelSites.save(new ByteArrayInputStream(new byte[1000]), ok, 1000, 1000, (d, t) -> true);
+        assertEquals(1000, ok.length());
+        File big = new File(folder.getRoot(), "big.stl");
+        try { ModelSites.save(new ByteArrayInputStream(new byte[1001]), big, 1000, -1, (d, t) -> true); fail(); } catch (IOException expected) { }
+        assertFalse(big.exists());
+        File cancelled = new File(folder.getRoot(), "cancelled.stl");
+        try { ModelSites.save(new ByteArrayInputStream(new byte[10]), cancelled, 1000, 10, (d, t) -> false); fail(); } catch (InterruptedIOException expected) { }
+        assertFalse(cancelled.exists());
+    }
+
     private File write(String name, byte[] bytes) throws IOException {
         File file = folder.newFile(name);
         try (OutputStream out = new FileOutputStream(file)) { out.write(bytes); }

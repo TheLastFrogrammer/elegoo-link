@@ -54,7 +54,7 @@ public class MoreScreensRenderTest {
 
     private static void waitForWorker() throws Exception {
         Thread.sleep(800);
-        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
     }
 
     // ---- Sign-in ----

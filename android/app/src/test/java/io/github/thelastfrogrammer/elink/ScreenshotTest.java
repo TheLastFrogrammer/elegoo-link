@@ -84,12 +84,12 @@ public class ScreenshotTest {
             android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
             context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).putInt("page", 0).commit();
             PrinterService service = Robolectric.setupService(PrinterService.class);
-            org.robolectric.Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(
+            ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context)).setComponentNameAndServiceForBindService(
                 new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
             MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
             Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
             // Let the service's own first cloud check (no account in this sandbox) finish, then show sample cloud data.
-            Thread.sleep(500); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            Thread.sleep(500); org.robolectric.shadows.ShadowLooper.idleMainLooper();
             service.cloudSignedIn = true; service.cloudSerial = "F01ABC0000R818"; service.cloudName = "Bedroom"; service.cloudModel = "Centauri Carbon 2";
             service.cloudOnline = 1; service.cloudCheckedAt = System.currentTimeMillis() - 4000; service.cloudStatus = printing();
             service.feedback = "Printer acknowledged through the cloud. Waiting for its status to update.";
@@ -157,11 +157,11 @@ public class ScreenshotTest {
         context.getSharedPreferences("workshop-settings", 0).edit().clear().putInt("theme", theme.equals("dark") ? 2 : 1).putInt("page", 0)
             .putBoolean("cloudControlUnderstood", !state.equals("cloud-agree") && !state.equals("offline")).commit();
         PrinterService service = Robolectric.setupService(PrinterService.class);
-        org.robolectric.Shadows.shadowOf((android.app.Application) context).setComponentNameAndServiceForBindService(
+        ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context)).setComponentNameAndServiceForBindService(
             new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
         MainActivity activity = Robolectric.buildActivity(MainActivity.class).setup().get();
         Field printer = MainActivity.class.getDeclaredField("printer"); printer.setAccessible(true); printer.set(activity, service);
-        Thread.sleep(500); org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+        Thread.sleep(500); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         boolean cloud = state.startsWith("cloud"), local = state.startsWith("local"), busy = state.endsWith("printing");
         JSONObject status = busy ? printing() : idle();
         if (cloud) {
@@ -237,7 +237,7 @@ public class ScreenshotTest {
             GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
             long deadline = System.currentTimeMillis() + 30_000;
             java.lang.reflect.Field pathField = GcodeViewerActivity.class.getDeclaredField("path"); pathField.setAccessible(true);
-            while (pathField.get(activity) == null && System.currentTimeMillis() < deadline) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            while (pathField.get(activity) == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
             java.lang.reflect.Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(activity, true);
             // Scrub to the middle of layer 20, as a user would.
             java.lang.reflect.Field layer = GcodeViewerActivity.class.getDeclaredField("layer"), move = GcodeViewerActivity.class.getDeclaredField("move");
@@ -276,7 +276,7 @@ public class ScreenshotTest {
         try {
             Field pathField = GcodeViewerActivity.class.getDeclaredField("path"); pathField.setAccessible(true);
             long deadline = System.currentTimeMillis() + 30_000;
-            while (pathField.get(other) == null && System.currentTimeMillis() < deadline) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            while (pathField.get(other) == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
         } catch (Exception e) { throw new IllegalStateException(e); }
         View root = other.getWindow().getDecorView();
         root.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(2340, View.MeasureSpec.EXACTLY));
@@ -379,7 +379,7 @@ public class ScreenshotTest {
             GcodeViewerActivity viewer = Robolectric.buildActivity(GcodeViewerActivity.class, viewIntent).setup().get();
             Field pathField = GcodeViewerActivity.class.getDeclaredField("path"); pathField.setAccessible(true);
             long deadline = System.currentTimeMillis() + 30_000;
-            while (pathField.get(viewer) == null && System.currentTimeMillis() < deadline) { org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            while (pathField.get(viewer) == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
             Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(viewer, true);
             Field viewerMore = GcodeViewerActivity.class.getDeclaredField("more"); viewerMore.setAccessible(true); ((android.widget.Button) viewerMore.get(viewer)).performClick();
             dialogShot(out, "viewer-more-" + theme + ".png");
