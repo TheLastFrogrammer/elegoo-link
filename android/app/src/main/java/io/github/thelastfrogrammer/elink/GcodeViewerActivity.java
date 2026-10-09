@@ -460,6 +460,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         rowButton(forget, "Forget saved line-ups", this::forgetLineUps);
         LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(lockRow);
         alignLockButton = rowButton(lockRow, "", () -> { viewerPrefs().edit().putBoolean("alignLock", !viewerPrefs().getBoolean("alignLock", true)).apply(); sendLock(); });
+        buildBedMoves();
         buildMarking();
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
@@ -547,6 +548,59 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         syncEdgeButtons();
     }
     private Button gridButton, alignLockButton;
+    // Moving the bed from the line-up, to tap at other bed heights: real printer moves, one per tap, each confirmed.
+    private TextView moveNote;
+    private boolean moveWarned;
+    private String lastMoveFeedback = "";   // the warning was accepted with "don't ask again" for this line-up
+    private void buildBedMoves() {
+        label(alignPanel, "Move the bed (moves the real printer)", 13, ink, true);
+        LinearLayout first = new LinearLayout(this); first.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(first);
+        rowButton(first, "Home Z", () -> confirmBedMove(0));
+        rowButton(first, "Raise 10 mm", () -> confirmBedMove(-10));
+        rowButton(first, "Lower 10 mm", () -> confirmBedMove(10));
+        LinearLayout second = new LinearLayout(this); second.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(second);
+        rowButton(second, "Raise 50 mm", () -> confirmBedMove(-50));
+        rowButton(second, "Lower 50 mm", () -> confirmBedMove(50));
+        moveNote = A11y.polite(label(alignPanel, "", 12, muted, false));
+    }
+    /** Why a bed move cannot be sent now, or null. The printer service checks the same again before sending. */
+    private String bedMoveBlocked(double distance) {
+        if (printer == null) return "Not connected to the printer.";
+        if (!printer.ready() && !getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false))
+            return "Moving the printer through Elegoo's cloud needs cloud control turned on first (Monitor > Controls asks once).";
+        if (!printer.liveFresh()) return "Waiting for fresh printer status before moving.";
+        JSONObject live = printer.liveStatus();
+        if (!Cc2Codec.idle(live) || !StatusPresentation.faultCodes(live).isEmpty()) return "The printer must be idle, without faults, to move the bed.";
+        if (distance == 0) return null;
+        if (!Cc2Codec.homed(live, "z")) return "Home Z first: the printer only moves an axis it has homed.";
+        double target = bedZ + distance;
+        if (target < 0 || target > 250) return String.format(Locale.getDefault(), "That would take the bed to Z %.0f mm, outside 0–250 mm.", target);
+        return null;
+    }
+    private void confirmBedMove(double distance) {
+        String blocked = bedMoveBlocked(distance);
+        if (blocked != null) { if (moveNote != null) moveNote.setText(blocked); return; }
+        if (moveWarned) { sendBedMove(distance); return; }
+        String what = distance == 0 ? "The bed rises until it finds its home position at the top, near the nozzle."
+            : distance < 0 ? String.format(Locale.getDefault(), "The bed rises %.0f mm, toward the nozzle, to about Z %.0f mm.", -distance, bedZ + distance)
+            : String.format(Locale.getDefault(), "The bed lowers %.0f mm, to about Z %.0f mm.", distance, bedZ + distance);
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
+        label(body, what + "\n\nThis moves the real printer straight away. Before you continue:\n• nothing is printing;\n• nothing loose is on the bed, and nothing is under it or in the way;\n"
+            + "• hands are out of the printer.\n\nA raised bed comes close to the nozzle; a part or tool left on it can be crushed. Each tap sends one move, and the app never repeats it.", 14, ink, false);
+        android.widget.CheckBox again = new android.widget.CheckBox(this); again.setText("Don't ask again until I leave the line-up"); again.setTextColor(ink);
+        body.addView(again);
+        new AlertDialog.Builder(this).setTitle(distance == 0 ? "Home the bed (Z)?" : "Move the printer's bed?").setView(body)
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton(distance == 0 ? "Home Z" : "Move bed", (d, which) -> { if (again.isChecked()) moveWarned = true; sendBedMove(distance); }).show();
+    }
+    private void sendBedMove(double distance) {
+        String blocked = bedMoveBlocked(distance);   // the status may have changed while the warning was open
+        if (blocked != null) { if (moveNote != null) moveNote.setText(blocked); return; }
+        try {
+            printer.maintenance(distance == 0 ? Cc2Codec.homeRequest(0, "z") : Cc2Codec.moveRequest(0, "z", distance));
+            if (moveNote != null) moveNote.setText(distance == 0 ? "Home Z sent once. The bed's height updates when the printer reports it." : "Move sent once. The bed's height updates when the printer reports it.");
+        } catch (Exception invalid) { if (moveNote != null) moveNote.setText("That move could not be prepared."); }
+    }
     private void js(String script) { if (web != null) web.evaluateJavascript(script, null); }
     /**
      * Rotation lock: dragging pans instead of turning the view, and from the camera it zooms and pans the picture instead of
@@ -716,7 +770,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera lined up by hand at bed Z %.2f; all line-ups {bed Z, x, y, height, turn, tilt, view, lens}: %s", alignZ, pointsJson(points)));
             status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
         }
-        aligning = null;
+        aligning = null; moveWarned = false;
         marks.clear(); if (marking) setMarking(false); else sendMarks();
         sendLock();
         double[] shown = currentParams();
@@ -916,6 +970,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (!followMode || printer == null || isDestroyed()) return;
         // The bed moved: the camera, fixed to the frame, sits that much higher above it.
         readBedZ();
+        if (aligning != null && moveNote != null && printer.feedback != null && !printer.feedback.isEmpty() && !printer.feedback.equals(lastMoveFeedback)) {
+            lastMoveFeedback = printer.feedback; moveNote.setText(StatusPresentation.clean(printer.feedback));
+        }
         if (Math.abs(bedZ - shownBedZ) > 0.05 && web != null) {
             if (aligning != null) {   // keep what is on the sliders lined up while the bed moves; saved at the new height
                 aligning[2] += bedZ - alignZ; alignZ = bedZ; syncAlignRow(2); pushAlign();

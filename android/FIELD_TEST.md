@@ -146,3 +146,6 @@ If the download fails, the error and the history entry help: share the diagnosti
    panel; More… in the toolpath view) makes a drag pan instead of turning the view.
 10. (v0.16.0) Joint fit: tap the edges and Save at bed Z ≈ 5, then again at Z ≈ 100 and Z ≈ 200 (Controls → Z). Each Fit
     uses all saved heights; the note lists the miss at each. Share diagnostics afterwards.
+11. (v0.16.1) Line-up → "Move the bed": Home Z, then Lower 50 mm twice to reach about Z 100. The first tap warns (with
+    "Don't ask again until I leave the line-up"); each tap sends exactly one move; the bed's Z above the sliders updates
+    when the printer reports it. A move is refused while printing, unhomed, without fresh status or outside Z 0–250.
