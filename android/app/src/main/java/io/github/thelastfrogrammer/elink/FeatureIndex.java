@@ -44,7 +44,7 @@ final class FeatureIndex {
         new Feature("recordings", "Print recordings and charts", "recordings charts graphs log temperature progress csv", FILES, "Print recordings", Prepare.HISTORY_OPEN, true),
         new Feature("storage", "Printer storage space", "storage space disk capacity free full", FILES, "Refresh storage", Prepare.HISTORY_OPEN, false),
         new Feature("slice", "Slice a model", "slice slicer stl 3mf obj step model prepare", FILES, "Slice a model", Prepare.NONE, true),
-        new Feature("find-models", "Find models online", "find download thingiverse printables makerworld cults myminifactory search models online", FILES, "Slice a model", Prepare.NONE, true),
+        new Feature("find-models", "Find models online", "find download thingiverse printables makerworld cults myminifactory search models online", FILES, "Find models online", Prepare.NONE, true),
         new Feature("calibration", "Calibration prints", "calibration pressure advance pa flow temperature tower retraction input shaping test print", FILES, "Slice a model", Prepare.NONE, true),
         new Feature("recent", "Recent slices", "recent sliced previous last gcode", FILES, "Recent slices", Prepare.NONE, true),
         new Feature("upload", "Send a G-code file from the phone", "upload send gcode phone choose file", FILES, "Choose G-code", Prepare.NONE, true),

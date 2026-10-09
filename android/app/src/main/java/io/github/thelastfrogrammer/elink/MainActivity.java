@@ -338,6 +338,7 @@ public final class MainActivity extends Activity {
         pick = rowButton(startRow, "Choose G-code…", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
         }, false);
+        button(files, "Find models online…", () -> startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "find"), SLICE));
         recentSlices = button(files, "Recent slices…", this::chooseRecentSlice);
         // The chosen file: preview, actions and the offline report, shown once there is one.
         fileDetails = new LinearLayout(this); fileDetails.setOrientation(LinearLayout.VERTICAL); files.addView(fileDetails);
