@@ -705,7 +705,7 @@ public class SlicerIntegrationTest {
         WorkshopUi.DottedAdapter adapter = (WorkshopUi.DottedAdapter) ((Spinner) field(slot, "tray")).getAdapter();
         assertNull(adapter.colourAt(0)); // "No tray" has no dot
         assertEquals("#D02828", adapter.colourAt(1)); assertEquals("#F0F0F0", adapter.colourAt(2));
-        assertEquals("CANVAS 0 · tray 0 · PLA · PLA Matte", adapter.getItem(1)); assertEquals("CANVAS 0 · tray 1 · PLA", adapter.getItem(2));
+        assertEquals("PLA Matte · red · CANVAS 0 tray 0", adapter.getItem(1)); assertEquals("PLA · white · CANVAS 0 tray 1", adapter.getItem(2));
     }
 
     /** Imports files as the Slice screen's picker does: the real import copies them and inspects them on the worker. */

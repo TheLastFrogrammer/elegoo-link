@@ -1103,9 +1103,7 @@ public final class MainActivity extends Activity {
         List<TrayPlan.Tray> trays = printer.canvasFresh() ? TrayPlan.trays(printer.canvas, true) : new ArrayList<>();
         List<String> choices = new ArrayList<>(), dots = new ArrayList<>(); choices.add("Printer / G-code default"); dots.add(null);
         for (TrayPlan.Tray tray : trays) {
-            String material = tray.name.isEmpty() || tray.name.equalsIgnoreCase(tray.type) ? tray.type : tray.name.toUpperCase(Locale.ROOT).contains(tray.type.toUpperCase(Locale.ROOT)) ? tray.name : tray.type + " " + tray.name;
-            String colourWord = WorkshopUi.colourName(tray.colour);
-            choices.add(material + (colourWord == null ? "" : " · " + colourWord) + "\nCANVAS " + tray.canvasId + " · tray " + tray.trayId); dots.add(tray.colour);
+            choices.add(tray.material() + "\n" + tray.where()); dots.add(tray.colour);
         }
         // What the file was sliced for, per tool: a plan saved when slicing on this phone, the printer's file details, or the
         // slicer notes of the same file inspected on this phone.

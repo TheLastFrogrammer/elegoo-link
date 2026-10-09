@@ -24,6 +24,14 @@ final class TrayPlan {
             return "CANVAS " + canvasId + " · tray " + trayId + " · " + material + (colour == null ? "" : " " + colour);
         }
         boolean same(int canvas, int tray) { return canvasId == canvas && trayId == tray; }
+        /** "PLA Matte · red": the material once (a name that repeats the type is used as is) and the colour in words. */
+        String material() {
+            String material = name.isEmpty() || name.equalsIgnoreCase(type) ? type : name.toUpperCase(Locale.ROOT).contains(type.toUpperCase(Locale.ROOT)) ? name : type + " " + name;
+            String word = WorkshopUi.colourName(colour);
+            return word == null ? material : material + " · " + word;
+        }
+        /** "CANVAS 0 tray 1". */
+        String where() { return "CANVAS " + canvasId + " tray " + trayId; }
     }
 
     /** One G-code tool's tray. */

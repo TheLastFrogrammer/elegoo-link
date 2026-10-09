@@ -89,6 +89,8 @@ public final class SliceActivity extends Activity {
     private LinearLayout projectBox;
     private TextView layoutLabel, settingsSummary;
     private Button editPlate, autoLayout, allSettings;
+    private Button modelExtras, printExtras;                 // collapsible headers: model settings and calibration; more print settings
+    private LinearLayout modelExtrasBody, printExtrasBody;
     private String restoredPrinter, restoredProcess;
     private SharedPreferences settings;
     private boolean dark, busy;
@@ -146,7 +148,7 @@ public final class SliceActivity extends Activity {
         actionBar.setVisibility(View.GONE);
         setContentView(root);
         label(content, "Slice a model", 22, ink, true);
-        label(content, "ElegooSlicer's own slicing engine and Elegoo presets, running on this phone.", 13, muted, false);
+        label(content, "Slices on this phone with ElegooSlicer and Elegoo presets.", 13, muted, false);
         Diagnostics.init(getFilesDir());
         current = this;
         if (!NativeSlicer.available(this)) {
@@ -382,7 +384,7 @@ public final class SliceActivity extends Activity {
 
     private void build() {
         LinearLayout modelCard = card("1 · Models");
-        modelsLabel = label(modelCard, "Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged in one layout.", 14, muted, false);
+        modelsLabel = label(modelCard, "STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. Several files share one layout.", 14, muted, false);
         chooseModels = button(modelCard, "Choose model files", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
@@ -391,13 +393,15 @@ public final class SliceActivity extends Activity {
         restoreLast = button(modelCard, "Restore your last models and settings", this::restoreLastSelection, false); restoreLast.setVisibility(View.GONE);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
-        LinearLayout layoutRow = new LinearLayout(this); layoutRow.setOrientation(LinearLayout.HORIZONTAL); modelCard.addView(layoutRow);
-        editPlate = rowButton(layoutRow, "Edit layout…", this::openPlate, false);
-        objectButton = rowButton(layoutRow, "Model settings…", this::chooseObjectSettings, false);
+        editPlate = button(modelCard, "Edit layout…", this::openPlate, false);
         autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
-        calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
-        calibrate = button(modelCard, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
+        // Rarely needed: per-model settings and calibration prints. Opens by itself while either is in use.
+        LinearLayout modelExtrasBox = new LinearLayout(this);
+        objectButton = button(modelExtrasBox, "Model settings…", this::chooseObjectSettings, false);
+        calibrationLabel = label(modelExtrasBox, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
+        calibrate = button(modelExtrasBox, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
+        modelExtrasBody = modelExtrasBox; modelExtras = section(modelCard, "Model settings and calibration", modelExtrasBox);
 
         LinearLayout filamentCard = card("2 · Printer and filaments");
         label(filamentCard, "Printer", 12, muted, false); printerSpinner = spinner(filamentCard);
@@ -407,11 +411,11 @@ public final class SliceActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         TextView filamentsHeading = label(filamentCard, "Filaments", 14, ink, true); ((LinearLayout.LayoutParams) filamentsHeading.getLayoutParams()).topMargin = dp(14);
-        label(filamentCard, "Each filament is one printer tool: Filament 1 is T0, Filament 2 is T1, and so on. T0 is the printer's tool number.", 13, muted, false);
+        label(filamentCard, "Filament 1 is T0, Filament 2 is T1, and so on.", 13, muted, false);
         fillTrays = button(filamentCard, "Fill from CANVAS trays", this::fillFromTrays, false);
         traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
         slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
-        LinearLayout slotButtons = new LinearLayout(this); slotButtons.setOrientation(LinearLayout.HORIZONTAL); filamentCard.addView(slotButtons);
+        LinearLayout slotButtons = buttonRow(); filamentCard.addView(slotButtons);
         addSlot = rowButton(slotButtons, "Add filament", () -> { addSlot(null); showModels(); updateButtons(); }, false);
         removeSlot = rowButton(slotButtons, "Remove last", () -> { removeLastSlot(); showModels(); updateButtons(); }, false);
         modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(modelAssign);
@@ -427,7 +431,10 @@ public final class SliceActivity extends Activity {
         label(settingsCard, "Brim", 12, muted, false);
         brimSpinner = spinner(settingsCard); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
         settingsSummary = label(settingsCard, "", 13, muted, false);
-        allSettings = button(settingsCard, "All settings…", this::openSettings, false);
+        // Overrides from All settings: opens by itself when there are any, so the changes are never hidden.
+        LinearLayout settingsBox = new LinearLayout(this);
+        allSettings = button(settingsBox, "All settings…", this::openSettings, false);
+        printExtrasBody = settingsBox; printExtras = section(settingsCard, "More print settings", settingsBox);
         showSettingsSummary();
 
         LinearLayout sliceCard = actionBar; actionBar.setVisibility(View.VISIBLE);
@@ -435,13 +442,13 @@ public final class SliceActivity extends Activity {
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgressTintList(ColorStateList.valueOf(teal));
         progress.setVisibility(View.GONE); sliceCard.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
         sliceHint = label(sliceCard, "", 12, muted, false); sliceHint.setVisibility(View.GONE);
-        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); sliceCard.addView(row);
+        LinearLayout row = buttonRow(); sliceCard.addView(row);
         slice = rowButton(row, "Slice", this::startSlice, true);
         cancel = rowButton(row, "Cancel", () -> { cancelRequested.set(true); status.setText("Cancelling…"); }, false);
 
         resultCard = card("Result"); resultCard.setVisibility(View.GONE);
         preview = new ImageView(this); preview.setContentDescription("Preview image embedded in the G-code"); preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        preview.setVisibility(View.GONE); resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
+        preview.setVisibility(View.GONE); // added below the actions, so Upload and print stays near the summary
         resultText = label(resultCard, "", 14, ink, false); resultText.setTextIsSelectable(true);
         resultPlateBox = new LinearLayout(this); resultPlateBox.setOrientation(LinearLayout.VERTICAL); resultPlateBox.setVisibility(View.GONE); resultCard.addView(resultPlateBox);
         label(resultPlateBox, "Project plate to preview, save or send", 12, muted, false);
@@ -453,7 +460,8 @@ public final class SliceActivity extends Activity {
         uploadPrint = button(resultCard, "Upload and print…", this::uploadAndPrint, true);
         printerHint = label(resultCard, "", 12, muted, false); printerHint.setMaxLines(2); printerHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
         printerFix = button(resultCard, "Open Settings (the file waits in Files)", this::openSettingsTab, false);
-        LinearLayout pair = new LinearLayout(this); pair.setOrientation(LinearLayout.HORIZONTAL); resultCard.addView(pair, new LinearLayout.LayoutParams(-1, -2));
+        resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
+        LinearLayout pair = buttonRow(); resultCard.addView(pair);
         rowButton(pair, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
             .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
         saveCopy = rowButton(pair, "Save to phone…", () -> {
@@ -563,6 +571,7 @@ public final class SliceActivity extends Activity {
     private void showSettingsSummary() {
         settingsSummary.setText(customOverrides.isEmpty() ? "Everything else follows the print profile." : customOverrides.size() + " more setting(s) changed in All settings.");
         settingsSummary.setTextColor(customOverrides.isEmpty() ? muted : teal);
+        if (!customOverrides.isEmpty() && printExtras != null) setSection(printExtras, printExtrasBody, true);
     }
 
     /** What to slice: presets, filament slots, settings, 3MF plate and the layout. Null when something is missing or invalid. */
@@ -722,7 +731,7 @@ public final class SliceActivity extends Activity {
         for (int i = 0; i < filaments.size(); i++) {
             TrayPlan.Tool tool = plan.tool(i);
             text.append("\n").append(filaments.size() > 1 ? "T" + i + ": " : "").append(filaments.get(i));
-            if (colours.get(i) != null) text.append(" · ").append(colours.get(i));
+            if (colours.get(i) != null) text.append(" · ").append(WorkshopUi.colourName(colours.get(i)) == null ? colours.get(i) : WorkshopUi.colourName(colours.get(i)));
             if (tool != null) text.append(" · CANVAS ").append(tool.canvasId).append(" tray ").append(tool.trayId);
         }
         if (calibration != null && calibrationSpec != null) text.insert(0, "How to read it: " + calibrationSpec[5] + "\n\n");
@@ -973,7 +982,7 @@ public final class SliceActivity extends Activity {
         while (modelSlots.size() > models.size()) modelSlots.remove(modelSlots.size() - 1);
         // New models: 3MF files keep their own assignment; others take the next slot in turn.
         while (modelSlots.size() < models.size()) { int i = modelSlots.size(); modelSlots.add(is3mf(models.get(i)) ? 0 : i % Math.max(1, slots.size()) + 1); }
-        if (models.isEmpty()) { modelsLabel.setText("Choose one or more STL, 3MF, OBJ, Draco or STEP files. Several files are arranged in one layout."); modelsLabel.setTextColor(muted); return; }
+        if (models.isEmpty()) { modelsLabel.setText("STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. Several files share one layout."); modelsLabel.setTextColor(muted); return; }
         StringBuilder names = new StringBuilder();
         for (File file : models) names.append(names.length() > 0 ? "\n" : "").append(file.getName()).append(" (").append(size(file.length())).append(")");
         modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
@@ -1134,6 +1143,7 @@ public final class SliceActivity extends Activity {
         int changed = 0; for (Map<String, String> values : objectSettings.values()) if (!values.isEmpty()) changed++;
         objectButton.setText(changed == 0 ? "Model settings…" : "Model settings… (" + changed + ")");
         objectButton.setTextColor(changed == 0 ? ColorStateList.valueOf(teal) : ColorStateList.valueOf(dark ? 0xffffd27a : 0xff8a5300));
+        if (changed > 0 && modelExtras != null) setSection(modelExtras, modelExtrasBody, true);
     }
 
     private void openFilamentSettings(int index) {
@@ -1228,6 +1238,7 @@ public final class SliceActivity extends Activity {
             calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nHow to read it: " + calibrationSpec[5] + "\nYour models are kept. Tap Back to my models to return to them.");
         }
         calibrate.setText(on ? "Back to my models" : "Calibration print…");
+        if (on && modelExtras != null) setSection(modelExtras, modelExtrasBody, true);
     }
 
     private static String trimNumber(double value) { return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value); }
@@ -1330,7 +1341,7 @@ public final class SliceActivity extends Activity {
     private List<TrayPlan.Tray> reportedTrays() { return printer == null ? new ArrayList<>() : TrayPlan.trays(printer.canvas); }
 
     /** A tray's dropdown text without its hex colour, which the swatch shows. */
-    private static String trayChoice(TrayPlan.Tray tray) { return tray.label().replaceFirst(" #[0-9A-Fa-f]{6}$", ""); }
+    private static String trayChoice(TrayPlan.Tray tray) { return tray.material() + " · " + tray.where(); }
 
     private void fillTrayChoices(Slot slot) {
         slot.trayChoices = reportedTrays();
@@ -1484,9 +1495,31 @@ public final class SliceActivity extends Activity {
     private Button button(LinearLayout parent, String text, Runnable action, boolean primary) {
         Button button = styled(text, action, primary); LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6); parent.addView(button, layout); return button;
     }
+    /** Buttons side by side; stacked at large font sizes, so a label wraps by word instead of being squeezed into half a row. */
+    private LinearLayout buttonRow() {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(getResources().getConfiguration().fontScale >= 1.5f ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        return row;
+    }
     private Button rowButton(LinearLayout row, String text, Runnable action, boolean primary) {
-        Button button = styled(text, action, primary); LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(6);
-        if (row.getChildCount() > 0) layout.leftMargin = dp(8); row.addView(button, layout); return button;
+        Button button = styled(text, action, primary); boolean stacked = row.getOrientation() == LinearLayout.VERTICAL;
+        LinearLayout.LayoutParams layout = stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(6);
+        if (row.getChildCount() > 0 && !stacked) layout.leftMargin = dp(8); row.addView(button, layout); return button;
+    }
+    /** A collapsible group under parent: its header button shows or hides body. */
+    private Button section(LinearLayout parent, String title, LinearLayout body) {
+        body.setOrientation(LinearLayout.VERTICAL);
+        Button toggle = button(parent, title, () -> { }, false); toggle.setTag(title);
+        toggle.setOnClickListener(view -> setSection(toggle, body, body.getVisibility() != View.VISIBLE));
+        parent.addView(body, new LinearLayout.LayoutParams(-1, -2));
+        setSection(toggle, body, false);
+        return toggle;
+    }
+    /** Opens or closes a section; the header says what a tap does, and A11y.expandable speaks the state. */
+    private void setSection(Button toggle, LinearLayout body, boolean open) {
+        String title = (String) toggle.getTag();
+        body.setVisibility(open ? View.VISIBLE : View.GONE);
+        toggle.setText(open ? "Hide " + title.toLowerCase(Locale.ROOT) + " ▴" : title + " ▾");
+        toggle.setContentDescription(title); A11y.expandable(toggle, open);
     }
     private Button styled(String text, Runnable action, boolean primary) {
         Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setPadding(dp(10), dp(8), dp(10), dp(8));
