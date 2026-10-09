@@ -1010,6 +1010,13 @@ public final class MainActivity extends Activity {
             String serialNumber = printer.cloudSerial, printerName = printer.cloudName;
             cloudGate(true, () -> { stopCamera(); startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName)); });
         }, true);
+        LinearLayout lineUp = card("Camera in the 3D view");
+        label(lineUp, "Live toolpath can show the camera's picture in its 3D view. Line it up once against the real bed, with or without a print running; it follows the bed as it moves.", 13, MUTED, false);
+        button(lineUp, "Line up the camera in 3D…", () -> {
+            if (printer == null) return;
+            Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true)); };
+            cloudGate(!printer.ready() && printer.usingCloud(), open);
+        });
         cameraLocalCard = card("Local camera");
         localToggle = button(cameraLocalCard, "", () -> { localCameraOpen = !localCameraOpen; render(); });
         localCameraBody = new LinearLayout(this); localCameraBody.setOrientation(LinearLayout.VERTICAL); cameraLocalCard.addView(localCameraBody);

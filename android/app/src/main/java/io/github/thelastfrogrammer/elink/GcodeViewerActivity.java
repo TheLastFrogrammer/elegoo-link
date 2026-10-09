@@ -40,7 +40,7 @@ import org.json.JSONObject;
  * printed part, and the rest of the current layer shows as a ghost ahead of the nozzle.
  */
 public final class GcodeViewerActivity extends Activity implements PrinterService.Observer {
-    static final String EXTRA_FILE = "file", EXTRA_NAME = "name", EXTRA_FOLLOW = "follow";
+    static final String EXTRA_FILE = "file", EXTRA_NAME = "name", EXTRA_FOLLOW = "follow", EXTRA_ALIGN = "align";
     private static final int CHOOSE = 1;
     private static final String ORIGIN = "https://appassets.androidplatform.net";
     /** Feature colors in GcodeToolpath.FEATURES order; also sent to the viewer page. */
@@ -76,7 +76,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private int frameNumber;
 
     private final ServiceConnection connection = new ServiceConnection() {
-        @Override public void onServiceConnected(ComponentName name, IBinder binder) { printer = ((PrinterService.LocalBinder) binder).service(); if (followMode) printer.watch(GcodeViewerActivity.this); }
+        @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            printer = ((PrinterService.LocalBinder) binder).service(); if (followMode) printer.watch(GcodeViewerActivity.this);
+            readBedZ(); startCamera();
+            if (alignOnly && aligning == null) startAligning(); else if (aligning != null) pushAlign();
+        }
         @Override public void onServiceDisconnected(ComponentName name) { printer = null; }
     };
     private final Runnable player = new Runnable() {
@@ -101,6 +105,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         library = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
         Diagnostics.init(getFilesDir());
         followMode = getIntent().getBooleanExtra(EXTRA_FOLLOW, false);
+        alignOnly = followMode && getIntent().getBooleanExtra(EXTRA_ALIGN, false);
         following = followMode;
         build();
         String file = getIntent().getStringExtra(EXTRA_FILE), name = getIntent().getStringExtra(EXTRA_NAME);
@@ -210,12 +215,29 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     // ------------------------------------------------------------------ the printer's camera in the scene
     private android.content.SharedPreferences viewerPrefs() { return getSharedPreferences("viewer-hints", MODE_PRIVATE); }
-    private boolean cameraWanted() { return followMode && viewerPrefs().getBoolean("camera", false); }
+    private boolean cameraWanted() { return followMode && (alignOnly || viewerPrefs().getBoolean("camera", false)); }
+    /** Opened only to line the camera up (Camera tab): the bed and camera show without a print or toolpath. */
+    private boolean alignOnly;
+    /**
+     * Where the bed is now (the printer's reported Z). The CC2's bed goes down as a print grows while the camera stays on the
+     * frame, so camera heights are kept with the bed at 0 and drawn this much higher above the bed.
+     */
+    private double bedZ, shownBedZ = Double.NaN;
+    private void readBedZ() {
+        if (printer == null) return;
+        JSONObject position = Cc2Codec.position(printer.liveStatus());
+        double z = position == null ? Double.NaN : position.optDouble("z", Double.NaN);
+        if (!Double.isNaN(z) && z >= 0 && z < 400) bedZ = z;
+    }
+    /** The camera as it sits above the bed right now. */
+    private JSONObject livePose(double[] c) throws org.json.JSONException {
+        double[] raised = c.clone(); raised[2] += bedZ; shownBedZ = bedZ; return poseJson(raised);
+    }
     /** Where the CC2's camera sits is not measured yet: five spots around the 256 mm bed, looking at its centre. */
     static JSONObject cameraPose(int spot) throws org.json.JSONException { return poseJson(spotParams(spot)); }
     /** A preset spot as camera parameters: x, y, z (mm), turn and tilt-down (degrees), vertical field of view, lens curve. */
     /** The CC2's camera, lined up by hand against its live picture (v0.14.2): just right of the bed, low, looking back-left. */
-    static final double[] CC2_CAMERA = {308, -9, 32, 134, 8, 37, 0.23};
+    static final double[] CC2_CAMERA = {308, -9, 28, 134, 8, 37, 0.23};   // height with the bed at 0 (lined up with it at Z ≈ 3.8)
     static double[] spotParams(int spot) {
         if (spot <= 0) return CC2_CAMERA.clone();
         double[][] spots = {{-10, -20, 240}, {266, -20, 240}, {-10, 276, 240}, {266, 276, 240}, {128, -40, 240}};
@@ -240,12 +262,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
     private double[] currentParams() {
         int spot = viewerPrefs().getInt("cameraSpot", 0);
-        double[] custom = spot == LINED_UP ? parseParams(viewerPrefs().getString("cameraCustom", null)) : null;
+        double[] custom = spot == LINED_UP ? parseParams(viewerPrefs().getString("cameraCustomBed0", null)) : null;
         return custom != null ? custom : spotParams(spot == LINED_UP ? 0 : spot);
     }
     private void startCamera() {
-        if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null) return;
-        try { web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(currentParams()) + ")", null); } catch (Exception ignored) { }
+        if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null && !alignOnly) return;
+        if (aligning == null) try { web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
         if (printer.ready()) {
             String host = printer.host(), url;
             try { url = FeatureData.cameraUrl(host, printer.cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : printer.cameraUrl); }
@@ -293,7 +315,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (cameraStarted && cameraCloud && web != null) web.evaluateJavascript("viewer.cameraStop()", null);
         cameraStarted = false;
     }
-    private void cameraMessage(String text) { if (status != null && text != null && !text.isEmpty()) status.setText(text); }
+    private void cameraMessage(String text) {
+        if (text == null || text.isEmpty()) return;
+        if (status != null) status.setText(text);
+        if (bedNote != null && aligning != null) bedNote.setText(text);
+    }
     private void toggleCamera() {
         boolean on = !cameraWanted();
         viewerPrefs().edit().putBoolean("camera", on).apply();
@@ -305,19 +331,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 d.dismiss();
                 if (which == LINED_UP) { startAligning(); return; }
                 viewerPrefs().edit().putInt("cameraSpot", which).apply();
-                try { if (web != null && cameraWanted()) web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(currentParams()) + ")", null); } catch (Exception ignored) { }
+                try { if (web != null && cameraWanted()) web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
             }).setNegativeButton("Cancel", null).show();
     }
 
     // Lining the camera up by hand: the view looks from the camera with its picture behind the bed outline (yellow); the
     // sliders move and aim the camera until the outline sits on the real bed. Saved as the "Lined up by hand" spot.
-    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
+    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height (bed at 0)", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
     // Wide enough for a camera outside the bed's footprint (the CC2's sits off its front-right corner); − and + nudge one step.
     private static final double[][] ALIGN_RANGE = {{-250, 510}, {-250, 510}, {-20, 400}, {-180, 180}, {-10, 90}, {15, 130}, {0, 1}};
     private static final double[] ALIGN_STEP = {1, 1, 1, 0.5, 0.5, 0.5, 0.01};
     private void startAligning() {
-        if (web == null || path == null) return;
-        if (!cameraWanted()) { viewerPrefs().edit().putBoolean("camera", true).apply(); startCamera(); }
+        if (web == null || !pageReady || path == null && !alignOnly || aligning != null) return;
+        if (!cameraWanted()) viewerPrefs().edit().putBoolean("camera", true).apply();
+        startCamera();
         alignStart = currentParams(); aligning = alignStart.clone();
         if (alignPanel == null) buildAlignPanel();
         for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
@@ -352,6 +379,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** Phones before Android 13 have no back-gesture callback API; the system calls this instead (later ones use alignBack). */
     @SuppressWarnings("deprecation") @android.annotation.SuppressLint("GestureBackNavigation")
     @Override public void onBackPressed() { if (aligning != null && android.os.Build.VERSION.SDK_INT < 33) finishAligning(false); else super.onBackPressed(); }
+    private TextView bedNote;
     private final java.util.List<SeekBar> alignBars = new java.util.ArrayList<>();
     private final java.util.List<TextView> alignLabels = new java.util.ArrayList<>();
     private void buildAlignPanel() {
@@ -360,6 +388,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         alignScroll.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
         TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture; − and + nudge one step. Match the middle of the bed first, then raise Lens curve until the outline bends like the bed's edges. Turn the phone sideways to see the whole picture, edges included.", 12, muted, false);
         intro.setPadding(0, 0, 0, dp(4));
+        bedNote = A11y.polite(label(alignPanel, "", 12, muted, false));
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -408,12 +437,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         A11y.state(alignBars.get(i), value);
     }
     private void pushAlign() {
-        try { if (web != null) web.evaluateJavascript("viewer.alignPrinterCamera(" + poseJson(aligning) + ")", null); } catch (Exception ignored) { }
+        try { if (web != null) web.evaluateJavascript("viewer.alignPrinterCamera(" + livePose(aligning) + ")", null); } catch (Exception ignored) { }
+        if (bedNote != null) bedNote.setText(String.format(Locale.getDefault(), "The bed is at Z %.1f mm now; the height is measured with the bed at 0, so the camera stays lined up as the bed moves.", bedZ));
     }
     private void finishAligning(boolean save) {
         if (save && aligning != null) {
             StringBuilder text = new StringBuilder(); for (double v : aligning) { if (text.length() > 0) text.append(','); text.append(v); }
-            viewerPrefs().edit().putString("cameraCustom", text.toString()).putInt("cameraSpot", LINED_UP).apply();
+            viewerPrefs().edit().putString("cameraCustomBed0", text.toString()).putInt("cameraSpot", LINED_UP).apply();
             Diagnostics.note(Diagnostics.FOLLOW, "camera lined up by hand: " + text);
             status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
         }
@@ -422,11 +452,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
         if (alignScroll != null) alignScroll.setVisibility(View.GONE);
         mainPanel.setVisibility(View.VISIBLE); arrange();
-        try { if (web != null && shown != null) web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(shown) + ")", null); } catch (Exception ignored) { }
+        try { if (web != null && shown != null) web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(shown) + ")", null); } catch (Exception ignored) { }
+        if (alignOnly) finish();
     }
 
     private final class Bridge {
-        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); }); }
+        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); if (alignOnly) startAligning(); }); }
         @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); }); }
         @JavascriptInterface public void onCamera(String message) { main.post(() -> {
             if ("playing".equals(message)) cameraMessage("Camera: live video through Elegoo's cloud.");
@@ -604,6 +635,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     // ------------------------------------------------------------------ following a print
     @Override public void changed() {
         if (!followMode || printer == null || isDestroyed()) return;
+        // The bed moved: the camera, fixed to the frame, sits that much higher above it.
+        readBedZ();
+        if (Math.abs(bedZ - shownBedZ) > 0.05 && web != null) {
+            if (aligning != null) pushAlign();
+            else if (cameraWanted() && pageReady && (path != null || alignOnly)) try { web.evaluateJavascript("viewer.movePrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
+        }
         JSONObject live = printer.liveStatus();
         JSONObject machine = live.optJSONObject("machine_status"), print = live.optJSONObject("print_status");
         boolean printing = machine != null && machine.optInt("status", -1) == 2 && print != null;

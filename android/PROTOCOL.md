@@ -210,3 +210,7 @@ v0.14.2: the lens curve bends the drawing instead of the picture (the v0.14.1 pi
 Seen from the camera, every projected point p (in units of the picture's half-diagonal) is drawn at p / (1 + k·|p|²), the
 division model of barrel distortion, so the bed outline curves like the wide-angle picture; bed lines are drawn in 8 mm
 pieces so they can bend. Slider ranges widened (x, y −250…510 mm, height −20…400 mm, view angle 15…130°, k 0…1).
+v0.14.5: the CC2's bed moves down as a print grows while the camera stays on the frame, so camera heights are stored with
+the bed at Z 0 and drawn raised by the Z the printer reports (gcode_move.z), live. The default CC2 height is 28 mm (lined up
+with the bed at about Z 3.8). Camera → "Line up the camera in 3D…" opens the line-up without a print; the view then shows
+the bed and camera with no toolpath.

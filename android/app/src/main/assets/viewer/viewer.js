@@ -410,7 +410,7 @@
     gl.viewport(0, 0, width, height);
     gl.clearColor(theme.background[0], theme.background[1], theme.background[2], 1);
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-    if (!data.meta) return;
+    if (!data.meta && !printerCam.pose) return;   // without a toolpath, the bed and the camera can still be shown
     const viewMatrix = lookAt(eye(), camera.target, [0, 0, 1]);
     const viewProj = multiply(perspective(camera.fov, width / Math.max(1, height), Math.max(0.5, camera.distance / 500), camera.distance * 20), viewMatrix);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
@@ -549,7 +549,7 @@
     redraw();
   }
   setPalette(PALETTE);
-  try { setupStatic(); } catch (error) { fail("WebGL setup failed: " + error.message); return; }
+  try { setupStatic(); setupBed([0, 0, 256, 0, 256, 256, 0, 256]); } catch (error) { fail("WebGL setup failed: " + error.message); return; }
   // setView("top") looks straight down, to check a layer's lines; anything else is the usual three-quarter view.
   // "printer" looks from where the printer's camera is, at what it looks at.
   function setView(name) {
@@ -563,12 +563,18 @@
     camera.target = t.slice(); camera.distance = Math.hypot(...d); camera.fov = printerCam.pose.fov || 50; printerCam.looking = true;
     camera.yaw = Math.atan2(d[1], d[0]) * 180 / Math.PI; camera.pitch = Math.asin(d[2] / Math.hypot(...d)) * 180 / Math.PI; redraw();
   }
+  // The bed moved (the CC2's bed goes down as a print grows; the camera stays on the frame): moves the camera without
+  // changing how the scene is viewed, except that a view from the camera follows it.
+  function movePrinterCamera(pose) {
+    printerCam.pose = pose; buildPrinterCamera();
+    if (printerCam.looking) lookFromCamera(); else redraw();
+  }
   // Lining the camera up by hand: moves it without resetting the view, and keeps looking from it.
   function alignPrinterCamera(pose) {
     printerCam.pose = pose; buildPrinterCamera();
     if (!printerCam.looking) fit();
     lookFromCamera();
   }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();
