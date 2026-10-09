@@ -39,8 +39,9 @@ public final class MainActivity extends Activity {
     private LinearLayout printRow, lightRow, tilesRow, controlsCard, canvasCard, tuningCard, upkeepCard, upkeepButtons, moreOptions, cameraCloudCard, cameraLocalCard, localCameraBody;
     private Button controlFix, filesFix, moreToggle, localToggle;
     private TextView tuningHint, upkeepHint, cloudCameraHint, timelapseHint, fileHelp;
-    private boolean moreOpen, localCameraOpen, cameraLocalFirst;
-    private LinearLayout historyButtons, historyList;
+    private boolean moreOpen, localCameraOpen, cameraLocalFirst, historyOpen;
+    private LinearLayout historyButtons, historyList, historyBody;
+    private Button historyToggle;
     private JSONObject renderedHistoryList;
     private ControlState.Block block = ControlState.Block.DISCONNECTED;
     private String dismissedFeedback = "", renderedCanvas;
@@ -290,8 +291,10 @@ public final class MainActivity extends Activity {
         urgentStop = button(upkeep, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
         urgentStop.setTextColor(ERROR);
         currentSection = pages[1];
-        LinearLayout files = card("G-code on this phone");
-        selected = label(files, "Slice a model, or choose a .gcode file sliced for this printer. No printer connection needed.", 14, MUTED, false);
+        // Order on the Files tab: what is on the printer, then sending a new file, then the rarely needed storage and history.
+        buildFileBrowser();
+        LinearLayout files = card("Send a new file to the printer");
+        selected = label(files, "Slice a model or choose a .gcode file on this phone. Slicing needs no printer connection; upload does.", 14, MUTED, false);
         LinearLayout startRow = row(files);
         sliceModel = rowButton(startRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
         pick = rowButton(startRow, "Choose G-code…", () -> {
@@ -340,7 +343,6 @@ public final class MainActivity extends Activity {
         cancelUpload = rowButton(transferRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
         cancelDownload = rowButton(transferRow, "Cancel download", () -> { if (printer != null) printer.cancelDownload(); }, false);
         label(fileDetails, "Uploads and downloads need the local connection (the printer's HTTP port 80). Downloads are kept in this app; Save to phone… exports a copy. The report reads slicer comments only; it does not simulate a print.", 12, MUTED, false);
-        buildFileBrowser();
         currentSection = pages[2]; buildCamera();
         currentSection = pages[3];
         cloudAccounts = new CloudAccountStore(this);
@@ -796,14 +798,13 @@ public final class MainActivity extends Activity {
     }
     private void buildFileBrowser() {
         LinearLayout browser = card("Printer files");
-        LinearLayout storageRow = row(browser); storageRow.setGravity(Gravity.CENTER_VERTICAL);
-        storagePicker = spinner(storageRow, new String[] {"Internal storage", "USB drive"}); A11y.name(storagePicker, "Printer storage to list"); storagePicker.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
+        // Storage picker and Refresh each take a full row, so long storage names and large font sizes never squeeze them.
+        storagePicker = spinner(browser, new String[] {"Internal storage", "USB drive"}); A11y.name(storagePicker, "Printer storage to list");
         storagePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { if (printer != null && printer.canQuery() && !printer.busy(Cc2Codec.FILES)) printer.browse(position == 0 ? "local" : "u-disk", 0); }
         });
-        listFiles = button(storageRow, "Refresh", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
-        LinearLayout.LayoutParams refreshSize = new LinearLayout.LayoutParams(-2, -2); refreshSize.leftMargin = dp(8); listFiles.setLayoutParams(refreshSize); listFiles.setMinWidth(dp(96));
+        listFiles = button(browser, "Refresh", () -> { if (printer != null) printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0); });
         fileInfo = label(browser, "Connect, then refresh to browse printer files.", 14, MUTED, false);
         filesFix = rowButton(row(browser), "", this::fixControl, true); ((View) filesFix.getParent()).setVisibility(View.GONE);
         fileRows = new LinearLayout(this); fileRows.setOrientation(LinearLayout.VERTICAL); browser.addView(fileRows);
@@ -811,24 +812,35 @@ public final class MainActivity extends Activity {
         previousFiles = rowButton(pageRow, "Previous 50", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); }, false);
         nextFiles = rowButton(pageRow, "Next 50", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); }, false);
         fileHelp = label(browser, "Tap a file to start a print, download it or delete it. Printing and deleting need an idle printer.", 13, MUTED, false);
-        LinearLayout recordings = card("Print recordings");
-        label(recordings, "Graphs of progress, layers, temperatures and fans for each print this app has watched.", 13, MUTED, false);
-        button(recordings, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
-        LinearLayout storage = card("Storage & print history");
-        diskInfo = label(storage, "Storage usage not loaded.", 14, MUTED, false);
-        LinearLayout refreshRow = row(storage); historyButtons = refreshRow;
+        // Storage, print history, timelapses and recordings are rarely needed, so they sit behind one toggle that starts collapsed.
+        LinearLayout storage = card("Print history & storage");
+        historyToggle = button(storage, "", () -> setHistoryOpen(!historyOpen));
+        historyBody = new LinearLayout(this); historyBody.setOrientation(LinearLayout.VERTICAL); storage.addView(historyBody);
+        setHistoryOpen(false);
+        diskInfo = label(historyBody, "Storage usage not loaded.", 14, MUTED, false);
+        LinearLayout refreshRow = row(historyBody); historyButtons = refreshRow;
         loadDisk = rowButton(refreshRow, "Refresh storage", () -> { if (printer != null) printer.loadDisk(); }, false);
         loadHistory = rowButton(refreshRow, "Refresh history", () -> { if (printer != null) printer.loadHistory(); }, false);
-        historyInfo = label(storage, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
-        historyList = new LinearLayout(this); historyList.setOrientation(LinearLayout.VERTICAL); storage.addView(historyList);
+        historyInfo = label(historyBody, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
+        historyList = new LinearLayout(this); historyList.setOrientation(LinearLayout.VERTICAL); historyBody.addView(historyList);
         // Timelapse videos the printer made for recent prints: download over LAN, then save.
-        timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); storage.addView(timelapseList);
-        timelapseHint = label(storage, "", 12, MUTED, false);
-        saveTimelapse = button(storage, "Save timelapse to phone…", () -> {
+        timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); historyBody.addView(timelapseList);
+        timelapseHint = label(historyBody, "", 12, MUTED, false);
+        saveTimelapse = button(historyBody, "Save timelapse to phone…", () -> {
             if (printer == null || printer.timelapseFile == null) return;
             startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.timelapseName), SAVE_TIMELAPSE);
         });
         saveTimelapse.setVisibility(View.GONE);
+        label(historyBody, "Graphs of progress, layers, temperatures and fans for each print this app has watched.", 13, MUTED, false);
+        button(historyBody, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
+    }
+    /** Expands or collapses the storage, history and recordings section; the header says what a tap does and speaks its state. */
+    private void setHistoryOpen(boolean open) {
+        historyOpen = open; historyBody.setVisibility(open ? View.VISIBLE : View.GONE);
+        // The card's title already names what is inside; the state is spoken by A11y.expandable.
+        historyToggle.setText(open ? "Hide ▴" : "Show history, storage and recordings ▾");
+        historyToggle.setContentDescription("Print history, storage and recordings");
+        A11y.expandable(historyToggle, open);
     }
 
     /** Saves the phone copy of the selected G-code where the user picks. */
@@ -1196,7 +1208,7 @@ public final class MainActivity extends Activity {
         materialDetails.setEnabled(hasReport && !report.materials.entries.isEmpty());
         previewToolpath.setEnabled(printer != null && printer.selectedFile != null && !printer.importing);
         boolean chosen = printer != null && printer.selectedFile != null;
-        selected.setText(chosen ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Slice a model, or choose a .gcode file sliced for this printer. No printer connection needed.");
+        selected.setText(chosen ? printer.selectedName + " · " + printer.selectedFile.length() / 1024 + " KiB" : "Slice a model or choose a .gcode file on this phone. Slicing needs no printer connection; upload does.");
         selected.setTextColor(chosen ? INK : MUTED); selected.setTypeface(Typeface.DEFAULT, chosen ? Typeface.BOLD : Typeface.NORMAL);
         // Header.
         String name = "Link Workshop", model = "Centauri Carbon 2";
