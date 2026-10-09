@@ -66,7 +66,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private PrinterService printer;
     private GcodeLibrary library;
     // The printer's camera in the scene (Live only): its position (an estimate the user can change) and the picture.
-    static final String[] CAMERA_SPOTS = {"Front left, top", "Front right, top", "Back left, top", "Back right, top", "Front centre, top"};
+    static final String[] CAMERA_SPOTS = {"Front left, top", "Front right, top", "Back left, top", "Back right, top", "Front centre, top", "Lined up by hand"};
+    static final int LINED_UP = 5;
+    private LinearLayout mainPanel, alignPanel;
+    private double[] aligning, alignStart;
     private CameraFrames cameraFrames;
     private boolean cameraStarted, cameraCloud;
     private int frameNumber;
@@ -121,7 +124,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(background); root.setFitsSystemWindows(true);
         web = new WebView(this);
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
-        LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12));
+        LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12)); mainPanel = panel;
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadii(new float[] {dp(20), dp(20), dp(20), dp(20), 0, 0, 0, 0}); panel.setBackground(shape);
         root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -208,14 +211,37 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private android.content.SharedPreferences viewerPrefs() { return getSharedPreferences("viewer-hints", MODE_PRIVATE); }
     private boolean cameraWanted() { return followMode && viewerPrefs().getBoolean("camera", false); }
     /** Where the CC2's camera sits is not measured yet: five spots around the 256 mm bed, looking at its centre. */
-    static JSONObject cameraPose(int spot) throws org.json.JSONException {
+    static JSONObject cameraPose(int spot) throws org.json.JSONException { return poseJson(spotParams(spot)); }
+    /** A preset spot as camera parameters: x, y, z (mm), turn and tilt-down (degrees), vertical field of view, lens curve. */
+    static double[] spotParams(int spot) {
         double[][] spots = {{-10, -20, 240}, {266, -20, 240}, {-10, 276, 240}, {266, 276, 240}, {128, -40, 240}};
         double[] p = spots[Math.max(0, Math.min(spots.length - 1, spot))];
-        return new JSONObject().put("position", new JSONArray(p)).put("target", new JSONArray(new double[] {128, 128, 0})).put("fov", 50).put("screen", 90);
+        double dx = 128 - p[0], dy = 128 - p[1];
+        return new double[] {p[0], p[1], p[2], Math.toDegrees(Math.atan2(dy, dx)), Math.toDegrees(Math.atan2(p[2], Math.hypot(dx, dy))), 50, 0};
+    }
+    static JSONObject poseJson(double[] c) throws org.json.JSONException {
+        double yaw = Math.toRadians(c[3]), pitch = Math.toRadians(c[4]), reach = 200;
+        double[] target = {c[0] + reach * Math.cos(pitch) * Math.cos(yaw), c[1] + reach * Math.cos(pitch) * Math.sin(yaw), c[2] - reach * Math.sin(pitch)};
+        return new JSONObject().put("position", new JSONArray(new double[] {c[0], c[1], c[2]})).put("target", new JSONArray(target))
+            .put("fov", c[5]).put("screen", 90).put("lens", c[6]);
+    }
+    /** The saved hand-lined-up camera, or null. */
+    static double[] parseParams(String text) {
+        if (text == null) return null;
+        String[] parts = text.split(",");
+        if (parts.length != 7) return null;
+        double[] c = new double[7];
+        try { for (int i = 0; i < 7; i++) c[i] = Double.parseDouble(parts[i]); } catch (NumberFormatException bad) { return null; }
+        return c;
+    }
+    private double[] currentParams() {
+        int spot = viewerPrefs().getInt("cameraSpot", 0);
+        double[] custom = spot == LINED_UP ? parseParams(viewerPrefs().getString("cameraCustom", null)) : null;
+        return custom != null ? custom : spotParams(spot == LINED_UP ? 0 : spot);
     }
     private void startCamera() {
         if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null) return;
-        try { web.evaluateJavascript("viewer.showPrinterCamera(" + cameraPose(viewerPrefs().getInt("cameraSpot", 0)) + ")", null); } catch (Exception ignored) { }
+        try { web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(currentParams()) + ")", null); } catch (Exception ignored) { }
         if (printer.ready()) {
             String host = printer.host(), url;
             try { url = FeatureData.cameraUrl(host, printer.cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : printer.cameraUrl); }
@@ -272,9 +298,94 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void cameraSpotDialog() {
         new AlertDialog.Builder(this).setTitle("Where is the camera?")
             .setSingleChoiceItems(CAMERA_SPOTS, viewerPrefs().getInt("cameraSpot", 0), (d, which) -> {
-                viewerPrefs().edit().putInt("cameraSpot", which).apply(); d.dismiss();
-                try { if (web != null && cameraWanted()) web.evaluateJavascript("viewer.showPrinterCamera(" + cameraPose(which) + ")", null); } catch (Exception ignored) { }
+                d.dismiss();
+                if (which == LINED_UP) { startAligning(); return; }
+                viewerPrefs().edit().putInt("cameraSpot", which).apply();
+                try { if (web != null && cameraWanted()) web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(currentParams()) + ")", null); } catch (Exception ignored) { }
             }).setNegativeButton("Cancel", null).show();
+    }
+
+    // Lining the camera up by hand: the view looks from the camera with its picture behind the bed outline (yellow); the
+    // sliders move and aim the camera until the outline sits on the real bed. Saved as the "Lined up by hand" spot.
+    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
+    private static final double[][] ALIGN_RANGE = {{-80, 340}, {-80, 340}, {0, 340}, {-180, 180}, {0, 90}, {30, 130}, {0, 0.6}};
+    private static final double[] ALIGN_STEP = {1, 1, 1, 0.5, 0.5, 0.5, 0.01};
+    private void startAligning() {
+        if (web == null || path == null) return;
+        if (!cameraWanted()) { viewerPrefs().edit().putBoolean("camera", true).apply(); startCamera(); }
+        alignStart = currentParams(); aligning = alignStart.clone();
+        if (alignPanel == null) buildAlignPanel();
+        for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
+        mainPanel.setVisibility(View.GONE); alignPanel.setVisibility(View.VISIBLE);
+        if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack == null) {
+            android.window.OnBackInvokedCallback callback = () -> finishAligning(false); alignBack = callback;
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, (android.window.OnBackInvokedCallback) alignBack);
+        }
+        pushAlign();
+    }
+    /** Back while lining up cancels the line-up instead of closing the screen. */
+    private Object alignBack;
+    /** Phones before Android 13 have no back-gesture callback API; the system calls this instead (later ones use alignBack). */
+    @SuppressWarnings("deprecation") @android.annotation.SuppressLint("GestureBackNavigation")
+    @Override public void onBackPressed() { if (aligning != null && android.os.Build.VERSION.SDK_INT < 33) finishAligning(false); else super.onBackPressed(); }
+    private final java.util.List<SeekBar> alignBars = new java.util.ArrayList<>();
+    private final java.util.List<TextView> alignLabels = new java.util.ArrayList<>();
+    private void buildAlignPanel() {
+        alignPanel = new LinearLayout(this); alignPanel.setOrientation(LinearLayout.VERTICAL); alignPanel.setPadding(dp(16), dp(8), dp(16), dp(12));
+        alignPanel.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
+        TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture. Fit the corners nearest the middle first; a wide lens bends the edges (Lens curve straightens them).", 12, muted, false);
+        intro.setPadding(0, 0, 0, dp(4));
+        for (int i = 0; i < ALIGN_NAMES.length; i++) {
+            int index = i;
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView name = new TextView(this); name.setTextSize(12); name.setTextColor(ink);
+            row.addView(name, new LinearLayout.LayoutParams(dp(132), -2));
+            SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+            bar.setMax((int) Math.round((ALIGN_RANGE[i][1] - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
+            row.addView(bar, new LinearLayout.LayoutParams(0, dp(44), 1));
+            A11y.labelFor(name, bar);
+            bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) {
+                    if (!fromUser || aligning == null) return;
+                    aligning[index] = ALIGN_RANGE[index][0] + value * ALIGN_STEP[index]; syncAlignLabel(index); pushAlign();
+                }
+                @Override public void onStartTrackingTouch(SeekBar b) { }
+                @Override public void onStopTrackingTouch(SeekBar b) { }
+            });
+            alignLabels.add(name); alignBars.add(bar);
+            alignPanel.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        }
+        LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(buttons);
+        rowButton(buttons, "Cancel", () -> finishAligning(false));
+        rowButton(buttons, "Start over", () -> { aligning = spotParams(0); for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
+        rowButton(buttons, "Save", () -> finishAligning(true));
+        ((LinearLayout) mainPanel.getParent()).addView(alignPanel, new LinearLayout.LayoutParams(-1, -2));
+    }
+    private void syncAlignRow(int i) {
+        alignBars.get(i).setProgress((int) Math.round((Math.max(ALIGN_RANGE[i][0], Math.min(ALIGN_RANGE[i][1], aligning[i])) - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
+        syncAlignLabel(i);
+    }
+    private void syncAlignLabel(int i) {
+        String value = i < 3 ? String.format(Locale.getDefault(), "%.0f mm", aligning[i]) : i < 6 ? String.format(Locale.getDefault(), "%.1f°", aligning[i]) : String.format(Locale.getDefault(), "%.2f", aligning[i]);
+        alignLabels.get(i).setText(ALIGN_NAMES[i] + "\n" + value);
+        A11y.state(alignBars.get(i), value);
+    }
+    private void pushAlign() {
+        try { if (web != null) web.evaluateJavascript("viewer.alignPrinterCamera(" + poseJson(aligning) + ")", null); } catch (Exception ignored) { }
+    }
+    private void finishAligning(boolean save) {
+        if (save && aligning != null) {
+            StringBuilder text = new StringBuilder(); for (double v : aligning) { if (text.length() > 0) text.append(','); text.append(v); }
+            viewerPrefs().edit().putString("cameraCustom", text.toString()).putInt("cameraSpot", LINED_UP).apply();
+            Diagnostics.note(Diagnostics.FOLLOW, "camera lined up by hand: " + text);
+            status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
+        }
+        double[] shown = save ? aligning : alignStart;
+        aligning = null;
+        if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
+        if (alignPanel != null) alignPanel.setVisibility(View.GONE);
+        mainPanel.setVisibility(View.VISIBLE);
+        try { if (web != null && shown != null) web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(shown) + ")", null); } catch (Exception ignored) { }
     }
 
     private final class Bridge {
@@ -400,6 +511,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if (on) {
                 names.add("Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt("cameraSpot", 0)))] + "…"); actions.add(this::cameraSpotDialog);
                 names.add("Look from the camera"); actions.add(() -> { if (web != null) web.evaluateJavascript("viewer.setView('printer')", null); });
+                names.add("Line up the camera by hand…"); actions.add(this::startAligning);
             }
         }
         names.add("What am I seeing?"); actions.add(this::helpDialog);

@@ -110,8 +110,14 @@
     uniform mat4 uViewProj; uniform float uMirror; out vec2 vUv;
     void main() { vUv = vec2(uMirror > 0.5 ? 1.0 - aUv.x : aUv.x, aUv.y); gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
     precision mediump float;
-    in vec2 vUv; uniform sampler2D uImage; uniform float uHas; uniform vec4 uEmpty; out vec4 fragment;
-    void main() { fragment = uHas > 0.5 ? vec4(texture(uImage, vUv).rgb, 0.96) : uEmpty; }`);
+    in vec2 vUv; uniform sampler2D uImage; uniform float uHas, uLens, uAspect; uniform vec4 uEmpty; out vec4 fragment;
+    // uLens straightens a wide-angle lens's curve (simple radial model): each point reads the picture a little further out.
+    void main() {
+      if (uHas < 0.5) { fragment = uEmpty; return; }
+      vec2 c = (vUv - 0.5) * vec2(uAspect, 1.0) * 2.0;
+      vec2 uv = 0.5 + c * (1.0 + uLens * dot(c, c)) / vec2(uAspect, 1.0) * 0.5;
+      fragment = (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) ? vec4(0.0, 0.0, 0.0, 0.96) : vec4(texture(uImage, uv).rgb, 0.96);
+    }`);
 
   // Bead geometry: top, bottom and two rounded sides (side normals lean up or down so the bead looks round).
   function beadGeometry() {
@@ -130,7 +136,7 @@
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0 };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
-    camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85] };
+    camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
   const camera = { yaw: -55, pitch: 32, distance: 300, target: [128, 128, 10], fov: 35 };
   let dirty = false;
   let beadVao, beadVertices, instanceBuffer, travelVao, travelBuffer, bedVao, bedLineCount = 0, plateVao, markerVao, markerBuffer;
@@ -215,6 +221,7 @@
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0); gl.uniform1f(picture.u.uHas, 1); gl.uniform1f(picture.u.uMirror, 0);
+    gl.uniform1f(picture.u.uLens, printerCam.pose.lens || 0); gl.uniform1f(picture.u.uAspect, printerCam.aspect);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
   }
@@ -224,6 +231,7 @@
     gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, viewProj);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0);
     gl.uniform1f(picture.u.uHas, printerCam.has ? 1 : 0); gl.uniform4fv(picture.u.uEmpty, theme.screen);
+    gl.uniform1f(picture.u.uLens, printerCam.pose.lens || 0); gl.uniform1f(picture.u.uAspect, printerCam.aspect);
     // Seen from the bed side the picture would read back to front: show it the way round it reads from where you look.
     const { f } = camBasis(printerCam.pose), e = eye(), p = printerCam.pose.position;
     gl.uniform1f(picture.u.uMirror, (e[0] - p[0]) * f[0] + (e[1] - p[1]) * f[1] + (e[2] - p[2]) * f[2] > (printerCam.pose.screen || 80) ? 1 : 0);
@@ -385,7 +393,7 @@
     // Plate and grid (over the camera picture, the grid only).
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
     if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
-    gl.uniform4fv(lines.u.uColor, theme.grid); gl.bindVertexArray(bedVao); gl.drawArrays(gl.LINES, 0, bedLineCount);
+    gl.uniform4fv(lines.u.uColor, overlay ? theme.align : theme.grid); gl.bindVertexArray(bedVao); gl.drawArrays(gl.LINES, 0, bedLineCount);
     // Printed / visible beads, then travels, then the rest of the current layer as a translucent ghost.
     drawBeads(view.start, view.end, false, viewProj, viewMatrix);
     if (view.showTravel && view.travelEnd > view.travelStart) {
@@ -515,12 +523,20 @@
   function setView(name) {
     fit();
     if (name === "top") { camera.yaw = -90; camera.pitch = 88; redraw(); }
-    if (name === "printer" && printerCam.pose) {
-      const p = printerCam.pose.position, t = printerCam.pose.target, d = [p[0] - t[0], p[1] - t[1], p[2] - t[2]];
-      camera.target = t.slice(); camera.distance = Math.hypot(...d); camera.fov = printerCam.pose.fov || 50; printerCam.looking = true;
-      camera.yaw = Math.atan2(d[1], d[0]) * 180 / Math.PI; camera.pitch = Math.asin(d[2] / Math.hypot(...d)) * 180 / Math.PI; redraw();
-    }
+    if (name === "printer") lookFromCamera();
   }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, cameraFrame, cameraCloud, cameraStop };
+  function lookFromCamera() {
+    if (!printerCam.pose) return;
+    const p = printerCam.pose.position, t = printerCam.pose.target, d = [p[0] - t[0], p[1] - t[1], p[2] - t[2]];
+    camera.target = t.slice(); camera.distance = Math.hypot(...d); camera.fov = printerCam.pose.fov || 50; printerCam.looking = true;
+    camera.yaw = Math.atan2(d[1], d[0]) * 180 / Math.PI; camera.pitch = Math.asin(d[2] / Math.hypot(...d)) * 180 / Math.PI; redraw();
+  }
+  // Lining the camera up by hand: moves it without resetting the view, and keeps looking from it.
+  function alignPrinterCamera(pose) {
+    printerCam.pose = pose; buildPrinterCamera();
+    if (!printerCam.looking) fit();
+    lookFromCamera();
+  }
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

@@ -203,3 +203,6 @@ the newest JPEG and serves it to the page at `/live/frame.jpg`; the page asks fo
 Through the cloud the page joins Elegoo's Agora video channel the same way the Camera screen does and draws the video element
 into the scene about ten times a second. "Look from the camera" puts the view at the camera's spot with its field of view and
 draws the picture behind the toolpath. The camera's real position and lens are not measured yet.
+
+v0.14.1 adds lining the camera up by hand: position (x, y, z), turn, tilt, vertical field of view and a radial lens-curve
+term (the picture is read at c·(1 + k·|c|²), straightening a wide-angle lens), saved as the "Lined up by hand" spot.
