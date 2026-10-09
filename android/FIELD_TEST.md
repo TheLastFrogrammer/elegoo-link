@@ -109,3 +109,12 @@ If the download fails, the error and the history entry help: share the diagnosti
 2. Print again on a file still on the printer: Print setup should open with its usual checks; nothing starts without
    confirming. On a file you deleted, the button should say the file is no longer on the printer.
 3. Open Live toolpath for a print started from the official app: it should show progress and the thumbnail, not an error.
+
+## 13. Read-only printer probe (v0.13.1)
+
+1. Settings → Link Workshop → **Probe printer (read-only)…** → Probe. Try it once connected locally if you can, and once
+   watching through the cloud on the same Wi-Fi.
+2. Check: it finishes within about a minute (local) or two (cloud); the printer does nothing visible; the list shows each
+   method as answered, refused with an error code, skipped or no reply.
+3. Share diagnostics… and send the **Printer probe** section. Especially wanted: the port line (is 80 refused while 9001 or
+   others are open?), the HTTP line for port 80, and whether 1037, 1046 and 1051 answer.

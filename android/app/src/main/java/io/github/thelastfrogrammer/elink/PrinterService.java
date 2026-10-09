@@ -839,6 +839,89 @@ public final class PrinterService extends Service {
             }
         });
     }
+    // Read-only printer probe (Settings → Diagnostics): network ports, then Elegoo's "Get…" questions, once each. See PrinterProbe.
+    static final int[] PROBE_PORTS = {80, 443, 554, 1883, 3030, 8080, 8554, 8883, 9001};
+    public boolean probing;
+    public String probeText = "";
+    private PrinterProbe probe;
+    private final ScheduledExecutorService probeWorker = Executors.newSingleThreadScheduledExecutor();
+    public void probePrinter() {
+        if (probing || destroyed) return;
+        probing = true; probeText = "Checking the printer's network ports…"; changed();
+        boolean local = ready();
+        String wantedSerial = local ? serial : cloudSerial, knownHost = host;
+        NetworkRoute current = local ? route : null;
+        files.execute(() -> {
+            String network;
+            try { network = probeNetwork(local, wantedSerial, knownHost, current); }
+            catch (Exception error) { network = "printer not found on this network (" + PrinterProbe.clean(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()) + "); ports not checked"; }
+            String found = network;
+            main.post(() -> startProbeQueries(found));
+        });
+    }
+    private String probeNetwork(boolean local, String wantedSerial, String knownHost, NetworkRoute current) throws Exception {
+        NetworkRoute via = local && current != null ? current : NetworkRoute.local(getApplicationContext());
+        String address = local ? knownHost : null;
+        if (address == null && !wantedSerial.isEmpty()) try (Cc2Discovery scanner = via.discovery()) {
+            for (Cc2Discovery.Found found : scanner.scan()) if (found.info.serial.equalsIgnoreCase(wantedSerial)) { address = found.host; break; }
+        }
+        if (address == null && wantedSerial.isEmpty() && !knownHost.isEmpty()) address = knownHost;
+        if (address == null || address.isEmpty()) return "printer did not answer discovery on this Wi-Fi; ports not checked";
+        main.post(() -> { probeText = "Checking ports " + java.util.Arrays.toString(PROBE_PORTS).replaceAll("[\\[\\]]", "") + "…"; changed(); });
+        String ports = PrinterHttp.probePorts(via.sockets(), address, PROBE_PORTS);
+        StringBuilder text = new StringBuilder(local ? "over the local connection's route" : "over this Wi-Fi").append(" · ports: ").append(ports);
+        for (int port : new int[] {80, 8080, 3030})
+            if ((", " + ports).contains(", " + port + " open")) text.append(" · HTTP ").append(port).append(": ").append(PrinterHttp.httpHead(via.sockets(), address, port));
+        text.append(" · discovery reply fields: ").append(Cc2Discovery.lastFields.isEmpty() ? "not seen" : Cc2Discovery.lastFields);
+        return text.toString();
+    }
+    private void startProbeQueries(String network) {
+        if (destroyed) return;
+        Diagnostics.note(Diagnostics.PROBE, "network " + network);
+        PrinterProbe.Transport transport = null; PrinterProbe.Tally tally = null; boolean local = false;
+        Cc2Session current = session;
+        if (ready() && current != null) {
+            local = true; tally = current.unasked;
+            transport = new PrinterProbe.Transport() {
+                public String name() { return "the local connection"; }
+                public void send(JSONObject request, PrinterProbe.Answer answer) { current.probe(request, answer); }
+            };
+        } else if (usingCloud() && cloudFresh() && cloudApi != null) {
+            ensureCloudControl(); CloudControl control = cloudControl; String serialNow = cloudSerial; tally = control.unasked;
+            transport = new PrinterProbe.Transport() {
+                public String name() { return "the Elegoo cloud"; }
+                public void send(JSONObject request, PrinterProbe.Answer answer) {
+                    control.send(serialNow, request, new CloudControl.Reply() {
+                        public void done(boolean acknowledged, String message) { answer.reply(null, message); }
+                        public void done(boolean acknowledged, String message, JSONObject result) { answer.reply(acknowledged ? result : null, acknowledged ? null : message); }
+                    });
+                }
+            };
+        }
+        if (transport == null) {
+            String text = "Questions not sent: connect locally, or watch the printer through the Elegoo cloud with fresh status (Settings).";
+            Diagnostics.note(Diagnostics.PROBE, text);
+            probing = false; probeText = "Network: " + network + "\n\n" + text; changed(); return;
+        }
+        PrinterProbe.Tally unasked = tally;
+        probe = new PrinterProbe(transport, probeWorker, new PrinterProbe.Listener() {
+            public void progress(String text) { main.post(() -> { probeText = text; changed(); }); }
+            public void finished(String report, java.util.List<PrinterProbe.Outcome> outcomes) {
+                String seen = unasked.summary();
+                main.post(() -> {
+                    for (String line : report.split("\n")) Diagnostics.note(Diagnostics.PROBE, line.trim());
+                    Diagnostics.note(Diagnostics.PROBE, "messages the printer sent unasked: " + seen);
+                    probing = false; probe = null;
+                    StringBuilder shown = new StringBuilder(report.split("\n")[0]).append(".\n");
+                    for (PrinterProbe.Outcome outcome : outcomes) shown.append("\n").append(outcome.method).append(' ').append(PrinterProbe.name(outcome.method)).append(": ").append(outcome.verdict);
+                    shown.append("\n\nNetwork: ").append(network).append("\n\nUnasked messages: ").append(seen).append("\n\nField names are in Share diagnostics…");
+                    probeText = shown.toString(); changed();
+                });
+            }
+        }, local ? 20_000 : 30_000, local ? 0 : 500);
+        probe.start();
+    }
+    public void cancelProbe() { PrinterProbe running = probe; if (running != null) running.cancel(); }
     private void ensureCloudControl() {
         if (cloudControl == null) cloudControl = new CloudControl(() -> {
             CloudApi current = cloudApi; if (current == null) throw new IOException("Sign in with Elegoo again.");
@@ -896,7 +979,7 @@ public final class PrinterService extends Service {
         destroyed = true; observer = null; watchers.clear(); clearRoute(); main.removeCallbacksAndMessages(null);
         if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();
         if (session != null) session.close(); session = null; code = "";
-        files.shutdownNow(); if (selectedFile != null) selectedFile.delete();
+        probeWorker.shutdownNow(); files.shutdownNow(); if (selectedFile != null) selectedFile.delete();
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy();
     }
 }

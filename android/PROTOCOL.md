@@ -175,3 +175,21 @@ record's field names and value kinds; it accepts a G-code reference only when a 
 `.gcode`/`.gcode.gz` or an https link on an Elegoo host ending the same way. Neither the SDK nor ElegooSlicer's cloud page
 reads such a field: ElegooSlicer downloads from the printer's port 80 on the local network even for cloud printers. How
 Elegoo's phone app fetches G-code in cloud mode is not known.
+
+## Read-only printer probe (v0.13.1)
+
+Settings → Link Workshop → Probe printer (read-only)… records what the printer exposes, for diagnostics only:
+
+- **Network** (this Wi-Fi, or the local connection's route): a TCP connect to ports 80, 443, 554, 1883, 3030, 8080, 8554, 8883
+  and 9001 (open / refused / unreachable / timeout). On an open 80, 8080 or 3030, one `GET /`; only the status line and the
+  `Server` and `Content-Type` headers are kept. It also records the field names of the UDP discovery reply (7000).
+- **Questions**: the read-only "Get…" methods from Elegoo's printer page (`PrinterProbe.READS`): 1001–1006, 1036, 1037, 1042,
+  1044, 1045, 1046, 1048, 1051, 1061, 1062 and 2005. Each is sent once, in order, over the local session (normal 2 s spacing)
+  or through the Elegoo cloud (1042 stays local). Follow-ups use earlier answers: 1045/1046 the first G-code in 1044's list
+  (`file_name` / `filename`, as on Elegoo's page), 1037 the first history `task_id`, 1051 the first `time_lapse_video_url`
+  (param `url`). Replies go only to the probe and never change what the app shows.
+- **Unasked messages**: a count by method of what the printer sent without being asked, locally (status topic, responses
+  that match no request) and on the cloud channel.
+
+Diagnostics keep each reply's field names and kinds, nested two levels, never values; error codes are kept. Unknown method
+numbers are never tried, since neighbouring numbers stop, start, move, delete and update the printer.

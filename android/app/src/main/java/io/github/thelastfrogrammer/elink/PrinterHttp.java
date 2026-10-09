@@ -240,4 +240,31 @@ public final class PrinterHttp {
         }
         return text.toString();
     }
+
+    /**
+     * One plain "GET /" on a port that accepted a connection, for the read-only probe: the status line and the Server and
+     * Content-Type headers only. Nothing else is read or kept; the connection closes after the headers.
+     */
+    static String httpHead(javax.net.SocketFactory sockets, String host, int port) {
+        try (java.net.Socket socket = sockets.createSocket()) {
+            socket.connect(new java.net.InetSocketAddress(host, port), 2000); socket.setSoTimeout(3000);
+            socket.getOutputStream().write(("GET / HTTP/1.0\r\nHost: " + host + "\r\nConnection: close\r\n\r\n").getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+            java.io.InputStream in = socket.getInputStream();
+            java.io.ByteArrayOutputStream head = new java.io.ByteArrayOutputStream();
+            int b; while (head.size() < 4096 && (b = in.read()) >= 0) { head.write(b); String sofar = head.toString("ISO-8859-1"); if (sofar.endsWith("\r\n\r\n") || sofar.endsWith("\n\n")) break; }
+            return describeHead(head.toString("ISO-8859-1"));
+        } catch (java.net.SocketTimeoutException timeout) { return "no HTTP answer in 3 s";
+        } catch (Exception error) { return "no HTTP answer (" + error.getClass().getSimpleName() + ")"; }
+    }
+    static String describeHead(String head) {
+        String[] lines = head.split("\r?\n");
+        if (lines.length == 0 || !lines[0].startsWith("HTTP/")) return head.isEmpty() ? "connection closed without an answer" : "answered, but not with HTTP";
+        StringBuilder text = new StringBuilder(lines[0].trim());
+        for (String line : lines) {
+            String lower = line.toLowerCase(java.util.Locale.ROOT);
+            if (lower.startsWith("server:") || lower.startsWith("content-type:")) text.append(" · ").append(line.trim().replaceAll("[^\\x20-\\x7e]", "?"));
+        }
+        String plain = text.toString().replaceAll("\\b\\d{1,3}(\\.\\d{1,3}){3}\\b", "<address>");
+        return plain.length() > 200 ? plain.substring(0, 200) + "…" : plain;
+    }
 }

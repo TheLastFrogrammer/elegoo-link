@@ -75,6 +75,7 @@ public final class Cc2Discovery implements AutoCloseable {
             JSONObject result = message.optJSONObject("result");
             if (result == null || (result.has("error_code") && result.optInt("error_code", -1) != 0) || !(result.opt("sn") instanceof String)) return null;
             String serial = result.getString("sn");
+            if (validSerial(serial)) lastFields = PrinterProbe.shape(result);
             return validSerial(serial) ? new Info(serial, result.optString("host_name"), result.optString("machine_model"), flag(result.opt("lan_status")), flag(result.opt("token_status"))) : null;
         } catch (Exception ignored) { return null; }
     }
@@ -112,6 +113,8 @@ public final class Cc2Discovery implements AutoCloseable {
         }
         return null;
     }
+    /** Field names (never values) of the last identity a printer announced, for the read-only probe. */
+    static volatile String lastFields = "";
     public static boolean validSerial(String serial) { return serial != null && serial.matches("[A-Za-z0-9_-]{1,64}"); }
     @Override public void close() { closed = true; DatagramSocket socket = current; if (socket != null) socket.close(); }
 }

@@ -67,9 +67,13 @@ public final class Cc2Session implements AutoCloseable {
     private long canvasAt;
     private String base;
     private static final class Pending {
-        final int method; final long deadline; final JSONObject params;
+        final int method; final long deadline; final JSONObject params; PrinterProbe.Answer probe;
         Pending(int method, JSONObject params) { this.method = method; this.params = params; deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(Cc2Codec.timeoutSeconds(method)); }
     }
+    /** Probe requests waiting in the queue, by request id; their replies go to the probe untouched (see probe()). */
+    private final Map<Integer, PrinterProbe.Answer> probes = new ConcurrentHashMap<>();
+    /** Methods the printer sent without being asked during this session (status reports and anything else). */
+    final PrinterProbe.Tally unasked = new PrinterProbe.Tally();
     public Cc2Session(String host, String accessCode, Listener listener) {
         this(host, accessCode, listener, url -> (java.net.HttpURLConnection) url.openConnection(), null);
     }
@@ -220,6 +224,20 @@ public final class Cc2Session implements AutoCloseable {
     }
     /** Sends a request built by Cc2Codec; its id is assigned here. State checks happen in allowed() before transmission. */
     public void request(JSONObject message) { execute(() -> prepare(() -> message.put("id", ids.getAndIncrement()))); }
+    /**
+     * Sends one read-only probe question (PrinterProbe.READS only) in the normal queue and spacing; the reply, error code or
+     * not, goes to answer and nowhere else, so a probe never changes what the app shows.
+     */
+    public void probe(JSONObject message, PrinterProbe.Answer answer) {
+        execute(() -> {
+            int method = message.optInt("method", -1);
+            if (!PrinterProbe.readOnly(method) || changing(method)) { answer.reply(null, "not a read-only method"); return; }
+            if (!ready()) { answer.reply(null, "not connected"); return; }
+            try { message.put("id", ids.getAndIncrement()); } catch (Exception error) { answer.reply(null, "could not prepare"); return; }
+            probes.put(message.optInt("id"), answer);
+            requestQueue.addLast(message); scheduleDispatch();
+        });
+    }
     public void light(boolean on) { execute(() -> prepare(() -> Cc2Codec.lightRequest(ids.getAndIncrement(), on))); }
     public void temperatures(int nozzle, int bed) { execute(() -> prepare(() -> Cc2Codec.temperatureRequest(ids.getAndIncrement(), nozzle, bed))); }
     public void fan(String name, int percent) { execute(() -> prepare(() -> Cc2Codec.fanRequest(ids.getAndIncrement(), name, percent))); }
@@ -254,7 +272,7 @@ public final class Cc2Session implements AutoCloseable {
             dispatch = null;
             if (!ready() || requestQueue.isEmpty()) return;
             JSONObject message = requestQueue.removeFirst(); int method = message.optInt("method");
-            queued.remove(method);
+            if (!probes.containsKey(message.optInt("id"))) queued.remove(method);
             if (!allowed(message)) emitResult("Control unavailable. Refresh status and check the printer state before trying again.");
             else { nextRequestAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2); transmit(message.optInt("id"), method, message); }
             scheduleDispatch();
@@ -290,11 +308,13 @@ public final class Cc2Session implements AutoCloseable {
     }
     private void transmit(int id, int method, JSONObject message) {
         try {
-            pending.put(id, new Pending(method, message.getJSONObject("params")));
+            Pending entry = new Pending(method, message.getJSONObject("params")); entry.probe = probes.remove(id);
+            pending.put(id, entry);
             publish(base + clientId + "/api_request", message);
             if (changing(method)) emitResult("Command sent; waiting for printer acknowledgement…");
         } catch (Exception exception) {
-            pending.remove(id);
+            Pending lost = pending.remove(id);
+            if (lost != null && lost.probe != null) { lost.probe.reply(null, "could not be sent"); return; }
             if (Cc2Codec.isQuery(method)) { Listener current = listener; if (current != null) current.queryError(method, "Request could not be sent. Refresh to retry."); }
             else emitResult("Request failed; outcome unknown. Refresh before trying again.");
         }
@@ -310,9 +330,10 @@ public final class Cc2Session implements AutoCloseable {
             int method = message.optInt("method", -1);
             if (response) {
                 Pending request = pending.get(message.optInt("id", -1));
-                if (request == null || method != request.method) return;
+                if (request == null || method != request.method) { unasked.saw("response", method); return; }
                 pending.remove(message.getInt("id"));
                 JSONObject result = message.optJSONObject("result");
+                if (request.probe != null) { request.probe.reply(result == null ? new JSONObject() : result, null); return; }
                 boolean query = Cc2Codec.isQuery(method);
                 if (result == null || result.has("error_code") && result.optInt("error_code", -1) != 0
                     || !result.has("error_code") && !(query && Cc2Codec.queryShape(method, result))) {
@@ -346,7 +367,8 @@ public final class Cc2Session implements AutoCloseable {
                     statusAt = 0; pending.values().removeIf(p -> p.method == Cc2Codec.STATUS);
                     send(Cc2Codec.STATUS); return;
                 }
-            } else if (!topic.equals(base + "api_status") || method != 6000) return;
+            } else if (topic.equals(base + "api_status")) { unasked.saw("status", method); if (method != 6000) return; }
+            else { unasked.saw("other topic", method); return; }
             if (method == Cc2Codec.STATUS || method == 6000) {
                 if (codec.accept(message)) {
                     if (message.getJSONObject("result").has("canvas_info")) canvasAt = System.nanoTime();
@@ -364,6 +386,7 @@ public final class Cc2Session implements AutoCloseable {
             Pending request = iterator.next();
             if (System.nanoTime() <= request.deadline) continue;
             iterator.remove();
+            if (request.probe != null) { request.probe.reply(null, "no reply"); continue; }
             if (changing(request.method))
                 emitResult("No command acknowledgement. Outcome unknown; refresh before trying again.");
             else if (request.method == Cc2Codec.STATUS) { statusAt = 0; emitResult("Status request timed out. Controls disabled until fresh status arrives."); }

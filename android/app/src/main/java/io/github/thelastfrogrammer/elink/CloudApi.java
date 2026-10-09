@@ -277,7 +277,7 @@ public final class CloudApi {
         }
         return text.toString();
     }
-    private static String kind(Object value) {
+    static String kind(Object value) {
         if (value == null || value == JSONObject.NULL) return "null";
         if (value instanceof Number) return "number";
         if (value instanceof Boolean) return "bool";

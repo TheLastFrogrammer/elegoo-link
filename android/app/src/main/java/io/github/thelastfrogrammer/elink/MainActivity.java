@@ -61,7 +61,8 @@ public final class MainActivity extends Activity {
     private ProfileStore profiles;
     private EditText profileName, cameraAddress, pairingPin;
     private TextView pinProbeHelp, cloudStatus, cloudLiveLabel, lanHint;
-    private Button cloudSignOut, cloudPrinters;
+    private Button cloudSignOut, cloudPrinters, probeButton;
+    private TextView probeResult;
     private CheckBox cloudBackground;
     private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck, urgentStop;
     private ImageView fileThumbnail;
@@ -367,6 +368,8 @@ public final class MainActivity extends Activity {
         label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
         LinearLayout about = card("Link Workshop " + appVersion());
         label(about, "Development build: printer behavior still needs hardware testing. Planned next: painting tools in the slicer, slicing all plates of a project at once, and other printer models.", 13, MUTED, false);
+        probeButton = button(about, "Probe printer (read-only)…", this::probeDialog);
+        probeResult = A11y.polite(label(about, "", 13, MUTED, false)); probeResult.setTextIsSelectable(true); probeResult.setVisibility(View.GONE);
         button(about, "Share diagnostics…", this::shareDiagnostics);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
@@ -627,6 +630,20 @@ public final class MainActivity extends Activity {
         if (viaCloud()) cloudGate(true, () -> printer.cloudLight(on)); else printer.light(on);
     }
     /** First cloud command: explain that it shares ElegooSlicer's cloud control identity. */
+    /** Explains the read-only probe before it runs; through the cloud it needs the cloud-control agreement like any request. */
+    private void probeDialog() {
+        if (printer == null) return;
+        if (printer.probing) { printer.cancelProbe(); return; }
+        boolean cloud = !printer.ready() && printer.usingCloud() && printer.cloudFresh();
+        new AlertDialog.Builder(this).setTitle("Probe the printer?")
+            .setMessage("Checks which network ports the printer accepts on this Wi-Fi (and what its web server says, if it has one), then asks it each read-only question "
+                + "Elegoo's own printer page knows: system info, status, fans, homing, files, history, storage, camera, filament, AI detection and CANVAS. "
+                + "Each is asked once, one at a time. Nothing that moves, heats, prints, deletes or updates the printer is ever sent, and unknown method numbers are never tried.\n\n"
+                + (printer.ready() ? "Questions go over the local connection." : cloud ? "Questions go through the Elegoo cloud; cloud controls wait while it runs (about a minute)." : "There is no local connection or fresh cloud status, so only the network ports are checked.")
+                + "\n\nThe result lists what answered. Share diagnostics… adds the field names of each answer, never their values, addresses or serial numbers.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Probe", (d, which) -> cloudGate(cloud, () -> { if (printer != null) printer.probePrinter(); })).show();
+    }
     private void cloudGate(boolean cloud, Runnable action) {
         if (!cloud || settings.getBoolean("cloudControlUnderstood", false)) { action.run(); return; }
         new AlertDialog.Builder(this).setTitle("Turn on cloud control?")
@@ -1093,6 +1110,13 @@ public final class MainActivity extends Activity {
     }
     private void render() {
         if (connect == null || isDestroyed()) return;
+        if (probeButton != null) {
+            boolean probing = printer != null && printer.probing;
+            probeButton.setText(probing ? "Stop probe" : "Probe printer (read-only)…");
+            String probeText = printer == null ? "" : printer.probeText;
+            if (!probeText.contentEquals(probeResult.getText())) probeResult.setText(probeText);
+            probeResult.setVisibility(probeText.isEmpty() ? View.GONE : View.VISIBLE);
+        }
         if (cameraPlayer != null && cameraRoute != null && !cameraRoute.available()) { stopCamera(); cameraInfo.setText("Home VPN is unavailable. Enable it and restart the camera."); }
         boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), writable = fresh && !printer.pinProbe(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
         // Local session first; otherwise what the Elegoo cloud last received.

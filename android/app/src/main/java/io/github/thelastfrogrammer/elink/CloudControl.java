@@ -57,6 +57,8 @@ public final class CloudControl implements AutoCloseable {
     private final List<Waiting> waiting = new ArrayList<>();
     private static final class Waiting { final String serial; final JSONObject request; final Reply reply; ScheduledFuture<?> expiry; Waiting(String serial, JSONObject request, Reply reply) { this.serial = serial; this.request = request; this.reply = reply; } }
     private ScheduledFuture<?> idle;
+    /** Methods arriving on the channel that answer nothing this app asked (for the read-only probe's report). */
+    final PrinterProbe.Tally unasked = new PrinterProbe.Tally();
     private int nextId = 1;
     private Transfers transfers;
     /** Serial whose transfer is being watched; keeps the session open until cleared. */
@@ -83,7 +85,7 @@ public final class CloudControl implements AutoCloseable {
             case Cc2Codec.HISTORY_DETAIL: case Cc2Codec.FILES: case Cc2Codec.DELETE: case Cc2Codec.DISK: case Cc2Codec.CANVAS: case Cc2Codec.AUTO_REFILL: case Cc2Codec.THUMBNAIL:
             case Cc2Codec.FETCH: case Cc2Codec.FETCH_CANCEL:
                 return true;
-            default: return Cc2Codec.maintenance(method);
+            default: return Cc2Codec.maintenance(method) || PrinterProbe.readOnly(method) && method != Cc2Codec.CAMERA;
         }
     }
 
@@ -201,8 +203,7 @@ public final class CloudControl implements AutoCloseable {
         }
         Pending wait;
         synchronized (this) { wait = pending; }
-        if (wait == null || !wait.publisher.equals(publisher)) return;
-        if (message.optInt("id", -1) != wait.id) return;
+        if (wait == null || !wait.publisher.equals(publisher) || message.optInt("id", -1) != wait.id) { unasked.saw("cloud", message.optInt("method", -1)); return; }
         JSONObject result = message.optJSONObject("result");
         int code = result == null ? -1 : result.optInt("error_code", 0);
         if (code == 0) finish(wait, true, "Printer acknowledged through the cloud. Waiting for its status to update.", result);

@@ -132,6 +132,25 @@ public class Cc2SessionTest {
             session.connect(); assertTrue(take(listener.failures).contains("Access code rejected")); assertFalse(listener.retryable); assertFalse(session.ready());
         } finally { session.close(); }
     }
+    @Test public void probeRepliesGoOnlyToTheProbeAndChangingMethodsAreRefused() throws Exception {
+        Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
+        Cc2Session session = new Cc2Session("192.168.1.50", "code", listener,
+            url -> info(url, "{\"system_info\":{\"sn\":\"TEST\"}}"), null,
+            (uri, id) -> { FakeMqtt fake = new FakeMqtt(uri, id); clients.add(fake); return fake; });
+        try {
+            session.connect(); take(listener.statuses); FakeMqtt client = clients.get(0);
+            BlockingQueue<String> answers = new LinkedBlockingQueue<>();
+            session.probe(new JSONObject().put("method", 1047).put("params", new JSONObject()), (result, error) -> answers.add("1047 " + error));
+            assertEquals("1047 not a read-only method", take(answers));
+            session.probe(new JSONObject().put("method", 1062).put("params", new JSONObject()), (result, error) -> answers.add("1062 " + result));
+            assertEquals("1062 {\"error_code\":0}", take(answers));
+            session.probe(new JSONObject().put("method", Cc2Codec.FILES).put("params", new JSONObject().put("storage_media", "local").put("offset", 0).put("limit", 20)), (result, error) -> answers.add("files " + result.has("file_list")));
+            assertEquals("files true", take(answers));
+            assertTrue("Probe answers never reach the app's file list", listener.queries.isEmpty());
+            assertEquals(0, client.requests.stream().filter(r -> r.optInt("method") == 1047).count());
+            assertTrue(client.writes.isEmpty());
+        } finally { session.close(); }
+    }
     @Test public void refillUsesExplicitPayloadAndMatchingAcknowledgement() throws Exception {
         Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
         Cc2Session session = new Cc2Session("192.168.1.50", "code", listener,
