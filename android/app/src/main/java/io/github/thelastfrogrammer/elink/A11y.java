@@ -78,6 +78,15 @@ final class A11y {
     private static final class RoleDelegate extends androidx.core.view.AccessibilityDelegateCompat {
         private final String role, state; private final Boolean expanded;
         RoleDelegate(String role, String state, Boolean expanded) { this.role = role; this.state = state; this.expanded = expanded; }
+        @Override public boolean performAccessibilityAction(View host, int action, android.os.Bundle args) {
+            // The expand / collapse actions advertised below press the view, but only when it is in the other state.
+            if (expanded != null) {
+                int expand = androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_EXPAND.getId();
+                int collapse = androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_COLLAPSE.getId();
+                if (action == expand && !expanded || action == collapse && expanded) return host.performClick();
+            }
+            return super.performAccessibilityAction(host, action, args);
+        }
         @Override public void onInitializeAccessibilityNodeInfo(View host, androidx.core.view.accessibility.AccessibilityNodeInfoCompat info) {
             super.onInitializeAccessibilityNodeInfo(host, info);
             info.setRoleDescription(role.toLowerCase(java.util.Locale.ROOT));

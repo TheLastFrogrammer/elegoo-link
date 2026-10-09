@@ -284,6 +284,37 @@ public class A11yRenderTest {
         }
     }
 
+    /** The camera line-up panel (Camera tab > Line up the camera in 3D), as it opens and with every section expanded. */
+    @Test public void viewerLineUp() throws Exception {
+        out();
+        File gcode = new File(context().getCacheDir(), "Benchy_PLA_0.2mm.gcode");
+        try (java.io.InputStream in = getClass().getResourceAsStream("/gcode/tolerance-cc2.gcode")) { java.nio.file.Files.copy(in, gcode.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        for (float scale : SCALES) {
+            RuntimeEnvironment.setFontScale(scale);
+            theme(false);
+            android.content.Intent intent = new android.content.Intent(context(), GcodeViewerActivity.class)
+                .putExtra(GcodeViewerActivity.EXTRA_FILE, gcode.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, "Line-up.gcode");
+            GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (field(activity, "path") == null && System.currentTimeMillis() < deadline) { Shadows.shadowOf(android.os.Looper.getMainLooper()).idle(); Thread.sleep(20); }
+            setField(activity, "pageReady", true);
+            invoke(activity, "startAligning");
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            shot(activity.getWindow().getDecorView(), 2340, "lineup", scale);
+            // Open every collapsed section (their headers end in an arrow) and capture the whole sheet.
+            java.util.List<View> all = new java.util.ArrayList<>(); collect(activity.getWindow().getDecorView(), all);
+            for (View view : all) if (view instanceof android.widget.Button && ((android.widget.Button) view).getText().toString().startsWith("►")) view.performClick();
+            Shadows.shadowOf(android.os.Looper.getMainLooper()).idle();
+            View sheet = (View) field(activity, "alignPanel");
+            shot(sheet, 4200, "lineup-open", scale);
+            activity.finish();
+        }
+    }
+    private static void collect(View view, java.util.List<View> into) {
+        into.add(view);
+        if (view instanceof android.view.ViewGroup) for (int i = 0; i < ((android.view.ViewGroup) view).getChildCount(); i++) collect(((android.view.ViewGroup) view).getChildAt(i), into);
+    }
+
     // ------------------------------------------------------------------ Slice screen and settings editor (need the real engine)
 
     private interface Condition { boolean met() throws Exception; }

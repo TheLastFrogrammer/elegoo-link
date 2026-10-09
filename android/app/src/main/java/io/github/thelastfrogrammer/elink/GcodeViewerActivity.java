@@ -70,6 +70,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     static final int LINED_UP = 5;
     private LinearLayout root, mainPanel, alignPanel;
     private android.widget.ScrollView alignScroll;
+    private LinearLayout alignSheet;   // the panel as shown: the scrolling sections, and the buttons fixed at its foot
     private double[] aligning, alignStart;
     private double alignZ;
     private CameraFrames cameraFrames;
@@ -415,11 +416,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (alignPanel == null) buildAlignPanel();
         sendAlignStyle(); sendLock();
         for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
-        mainPanel.setVisibility(View.GONE); alignScroll.setVisibility(View.VISIBLE); arrange();
+        mainPanel.setVisibility(View.GONE); alignSheet.setVisibility(View.VISIBLE); arrange();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack == null) {
             android.window.OnBackInvokedCallback callback = () -> finishAligning(false); alignBack = callback;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, (android.window.OnBackInvokedCallback) alignBack);
         }
+        setMarking(true);   // taps mark from the start; drag pans and pinch zooms the picture, as elsewhere in the camera view
         pushAlign();
     }
     /**
@@ -428,13 +430,14 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
      */
     private void arrange() {
         if (root == null || web == null) return;
-        boolean beside = aligning != null && alignScroll != null
+        boolean beside = aligning != null && alignSheet != null
             && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
         root.setOrientation(beside ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
         web.setLayoutParams(beside ? new LinearLayout.LayoutParams(0, -1, 1) : new LinearLayout.LayoutParams(-1, 0, 1));
-        if (alignScroll != null) {
-            alignScroll.setLayoutParams(beside ? new LinearLayout.LayoutParams(dp(340), -1) : new LinearLayout.LayoutParams(-1, -2));
-            android.graphics.drawable.Drawable panel = alignScroll.getBackground();
+        if (alignSheet != null) {
+            alignSheet.setLayoutParams(beside ? new LinearLayout.LayoutParams(dp(340), -1) : new LinearLayout.LayoutParams(-1, -2));
+            alignScroll.setLayoutParams(beside ? new LinearLayout.LayoutParams(-1, 0, 1) : new LinearLayout.LayoutParams(-1, -2));
+            android.graphics.drawable.Drawable panel = alignSheet.getBackground();
             if (panel instanceof GradientDrawable) ((GradientDrawable) panel).setCornerRadii(beside
                 ? new float[] {dp(20), dp(20), 0, 0, 0, 0, dp(20), dp(20)} : new float[] {dp(20), dp(20), dp(20), dp(20), 0, 0, 0, 0});
         }
@@ -450,18 +453,50 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private final java.util.List<SeekBar> alignBars = new java.util.ArrayList<>();
     private final java.util.List<TextView> alignLabels = new java.util.ArrayList<>();
     private void buildAlignPanel() {
-        alignPanel = new LinearLayout(this); alignPanel.setOrientation(LinearLayout.VERTICAL); alignPanel.setPadding(dp(16), dp(8), dp(16), dp(12));
-        alignScroll = new android.widget.ScrollView(this);
-        alignScroll.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
-        TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture; − and + nudge one step. Match the middle of the bed first, then raise Lens curve until the outline bends like the bed's edges. Turn the phone sideways to see the whole picture, edges included.", 12, muted, false);
-        intro.setPadding(0, 0, 0, dp(4));
-        bedNote = A11y.polite(label(alignPanel, "", 12, muted, false));
-        LinearLayout forget = new LinearLayout(this); forget.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(forget);
-        rowButton(forget, "Forget saved line-ups", this::forgetLineUps);
-        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(lockRow);
-        alignLockButton = rowButton(lockRow, "", () -> { viewerPrefs().edit().putBoolean("alignLock", !viewerPrefs().getBoolean("alignLock", true)).apply(); sendLock(); });
-        buildBedMoves();
+        // The panel is a sheet: its sections scroll above, and Cancel / Reset / Save stay in view at its foot.
+        alignSheet = new LinearLayout(this); alignSheet.setOrientation(LinearLayout.VERTICAL);
+        alignSheet.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
+        alignScroll = new android.widget.ScrollView(this) {
+            @Override protected void onMeasure(int widthSpec, int heightSpec) {
+                // Portrait: the scrolling part takes at most 40% of the screen, so the picture above keeps room.
+                if (getResources().getConfiguration().orientation != Configuration.ORIENTATION_LANDSCAPE) {
+                    int cap = Math.round(getResources().getDisplayMetrics().heightPixels * 0.4f);
+                    int size = View.MeasureSpec.getMode(heightSpec) == View.MeasureSpec.UNSPECIFIED ? cap : Math.min(cap, View.MeasureSpec.getSize(heightSpec));
+                    heightSpec = View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.AT_MOST);
+                }
+                super.onMeasure(widthSpec, heightSpec);
+            }
+        };
+        alignPanel = new LinearLayout(this); alignPanel.setOrientation(LinearLayout.VERTICAL); alignPanel.setPadding(dp(16), dp(8), dp(16), dp(8));
+        label(alignPanel, "Line the yellow outline up with the bed in the picture. Turn the phone sideways to see all of it.", 12, muted, false);
+        // The main way in: tap along the bed's edges, then Fit. Open from the start.
+        A11y.heading(label(alignPanel, "Line up from taps", 15, ink, true));
         buildMarking();
+        // Nudging by hand, after Fit or instead of it (the sliders are added below).
+        LinearLayout fine = section("Fine-tune by hand", false);
+        // How the picture looks, and whether a drag turns the view.
+        LinearLayout viewOpts = section("View options", false);
+        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL); viewOpts.addView(lockRow);
+        alignLockButton = rowButton(lockRow, "", () -> { viewerPrefs().edit().putBoolean("alignLock", !viewerPrefs().getBoolean("alignLock", true)).apply(); sendLock(); });
+        LinearLayout zoom = new LinearLayout(this); zoom.setOrientation(LinearLayout.HORIZONTAL); viewOpts.addView(zoom);
+        rowButton(zoom, "Zoom in", () -> js("viewer.zoomPicture(1.5)"));
+        rowButton(zoom, "Zoom out", () -> js("viewer.zoomPicture(1 / 1.5)"));
+        rowButton(zoom, "Reset zoom", () -> js("viewer.resetZoom()"));
+        // How the outline and the taps look over the picture (kept between line-ups).
+        LinearLayout look = new LinearLayout(this); look.setOrientation(LinearLayout.HORIZONTAL); viewOpts.addView(look);
+        gridButton = rowButton(look, "", () -> {
+            String now = viewerPrefs().getString("alignGrid", "all");
+            viewerPrefs().edit().putString("alignGrid", "all".equals(now) ? "edges" : "edges".equals(now) ? "none" : "all").apply();
+            sendAlignStyle();
+        });
+        styleSlider(viewOpts, "Outline strength", "alignAlpha", 15, 100, 90, "%");
+        styleSlider(viewOpts, "Dot size", "alignDot", 4, 32, 12, " px");
+        // Other bed heights: the bed's note, the moves of the real printer, and the saved line-ups.
+        LinearLayout other = section("Other bed heights", false);
+        bedNote = A11y.polite(label(other, "", 12, muted, false));
+        buildBedMoves(other);
+        LinearLayout forget = new LinearLayout(this); forget.setOrientation(LinearLayout.HORIZONTAL); other.addView(forget);
+        rowButton(forget, "Forget saved line-ups", this::forgetLineUps);
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -491,14 +526,44 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 @Override public void onStopTrackingTouch(SeekBar b) { }
             });
             alignLabels.add(name); alignBars.add(bar);
-            alignPanel.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            fine.addView(row, new LinearLayout.LayoutParams(-1, -2));
         }
-        LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(buttons);
-        rowButton(buttons, "Cancel", () -> finishAligning(false));
-        rowButton(buttons, "Start over", () -> { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
-        rowButton(buttons, "Save", () -> finishAligning(true));
         alignScroll.addView(alignPanel);
-        root.addView(alignScroll, new LinearLayout.LayoutParams(-1, -2));
+        alignSheet.addView(alignScroll, new LinearLayout.LayoutParams(-1, -2));
+        View rule = new View(this); rule.setBackgroundColor((muted & 0x00ffffff) | 0x40000000);
+        alignSheet.addView(rule, new LinearLayout.LayoutParams(-1, dp(1)));
+        LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); buttons.setPadding(dp(16), dp(4), dp(16), dp(12));
+        rowButton(buttons, "Cancel", () -> finishAligning(false));
+        Button reset = rowButton(buttons, "Reset", () -> { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
+        reset.setContentDescription("Reset to the default camera");
+        rowButton(buttons, "Save", () -> finishAligning(true));
+        alignSheet.addView(buttons);
+        root.addView(alignSheet, new LinearLayout.LayoutParams(-1, -2));
+    }
+    /** A part of the panel that opens and closes: its header speaks "expanded" or "collapsed", and a tap toggles it. */
+    private LinearLayout section(String title, boolean open) {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(0, dp(4), 0, 0);
+        boolean[] expanded = {open};
+        Button header = new Button(this); header.setAllCaps(false); header.setTextSize(14); header.setTextColor(ink);
+        header.setTypeface(Typeface.DEFAULT, Typeface.BOLD); header.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
+        header.setMinHeight(dp(48)); header.setMinimumHeight(dp(48)); header.setPadding(dp(12), dp(4), dp(12), dp(4));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12));
+        header.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
+        A11y.heading(header);
+        Runnable show = () -> {
+            header.setText((expanded[0] ? "▼  " : "►  ") + title);
+            header.setContentDescription(title);   // the arrow is not spoken; the state is
+            A11y.expandable(header, expanded[0]);
+            body.setVisibility(expanded[0] ? View.VISIBLE : View.GONE);
+        };
+        header.setOnClickListener(v -> { expanded[0] = !expanded[0]; show.run(); });
+        show.run();
+        LinearLayout block = new LinearLayout(this); block.setOrientation(LinearLayout.VERTICAL);
+        block.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        block.addView(body, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-1, -2); gap.topMargin = dp(8);
+        alignPanel.addView(block, gap);
+        return body;
     }
     private void syncAlignRow(int i) {
         alignBars.get(i).setProgress((int) Math.round((Math.max(ALIGN_RANGE[i][0], Math.min(ALIGN_RANGE[i][1], aligning[i])) - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
@@ -509,42 +574,23 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private int markEdge = 1;
     private double markAspect = 16.0 / 9;
     private boolean marking;
-    private LinearLayout markBox;
     private TextView markNote;
     private final java.util.List<Button> edgeButtons = new java.util.ArrayList<>();
-    private Button markToggle;
     private static final String[] EDGE_NAMES = {"Front", "Back", "Left", "Right"};
     private static final int[] EDGE_COLOURS = {0xffff5252, 0xff40c4ff, 0xff69f0ae, 0xffff4dd2};
     private void buildMarking() {
-        LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(toggleRow);
-        markToggle = rowButton(toggleRow, "Line up from taps…", () -> setMarking(!marking));
-        markBox = new LinearLayout(this); markBox.setOrientation(LinearLayout.VERTICAL); markBox.setVisibility(View.GONE); alignPanel.addView(markBox);
-        label(markBox, "Pick an edge of the bed, then tap 2–4 points along it in the picture, on the line where the bed's top surface ends. "
-            + "Mark three or four edges (the far edge and both sides help most), then Fit. Sideways gives the biggest picture; pinch and drag are off while marking.", 12, muted, false);
-        LinearLayout edges = new LinearLayout(this); edges.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(edges);
+        label(alignPanel, "1. Pick an edge.\n2. Tap 2–4 points along it, where the bed's top surface ends (drag to pan, pinch to zoom).\n3. Fit.\nDo three or four edges; the far edge and both sides help most.", 12, ink, false);
+        LinearLayout edges = new LinearLayout(this); edges.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(edges);
         for (int i = 0; i < EDGE_NAMES.length; i++) {
             int edge = i;
             Button b = rowButton(edges, EDGE_NAMES[i], () -> { markEdge = edge; syncEdgeButtons(); });
             edgeButtons.add(b);
         }
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(actions);
+        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(actions);
         rowButton(actions, "Undo tap", () -> { if (!marks.isEmpty()) marks.remove(marks.size() - 1); sendMarks(); });
         rowButton(actions, "Clear taps", () -> { marks.clear(); sendMarks(); });
-        rowButton(actions, "Fit", this::fitToMarks);
-        LinearLayout zoom = new LinearLayout(this); zoom.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(zoom);
-        rowButton(zoom, "Zoom in", () -> js("viewer.zoomPicture(1.5)"));
-        rowButton(zoom, "Zoom out", () -> js("viewer.zoomPicture(1 / 1.5)"));
-        rowButton(zoom, "Reset zoom", () -> js("viewer.resetZoom()"));
-        markNote = A11y.polite(label(markBox, "", 12, ink, false));
-        // How the outline and the taps look over the picture (kept between line-ups).
-        LinearLayout look = new LinearLayout(this); look.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(look);
-        gridButton = rowButton(look, "", () -> {
-            String now = viewerPrefs().getString("alignGrid", "all");
-            viewerPrefs().edit().putString("alignGrid", "all".equals(now) ? "edges" : "edges".equals(now) ? "none" : "all").apply();
-            sendAlignStyle();
-        });
-        styleSlider(markBox, "Outline strength", "alignAlpha", 15, 100, 90, "%");
-        styleSlider(markBox, "Dot size", "alignDot", 4, 32, 12, " px");
+        primaryButton(actions, "Fit", this::fitToMarks);
+        markNote = A11y.polite(label(alignPanel, "", 12, ink, false));
         syncEdgeButtons();
     }
     private Button gridButton, alignLockButton;
@@ -552,16 +598,16 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private TextView moveNote;
     private boolean moveWarned;
     private String lastMoveFeedback = "";   // the warning was accepted with "don't ask again" for this line-up
-    private void buildBedMoves() {
-        label(alignPanel, "Move the bed (moves the real printer)", 13, ink, true);
-        LinearLayout first = new LinearLayout(this); first.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(first);
+    private void buildBedMoves(LinearLayout parent) {
+        A11y.heading(label(parent, "Move the bed (moves the real printer)", 13, ink, true));
+        LinearLayout first = new LinearLayout(this); first.setOrientation(LinearLayout.HORIZONTAL); parent.addView(first);
         rowButton(first, "Home Z", () -> confirmBedMove(0));
         rowButton(first, "Raise 10 mm", () -> confirmBedMove(-10));
         rowButton(first, "Lower 10 mm", () -> confirmBedMove(10));
-        LinearLayout second = new LinearLayout(this); second.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(second);
+        LinearLayout second = new LinearLayout(this); second.setOrientation(LinearLayout.HORIZONTAL); parent.addView(second);
         rowButton(second, "Raise 50 mm", () -> confirmBedMove(-50));
         rowButton(second, "Lower 50 mm", () -> confirmBedMove(50));
-        moveNote = A11y.polite(label(alignPanel, "", 12, muted, false));
+        moveNote = A11y.polite(label(parent, "", 12, muted, false));
     }
     /** Why a bed move cannot be sent now, or null. The printer service checks the same again before sending. */
     private String bedMoveBlocked(double distance) {
@@ -641,16 +687,30 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void syncEdgeButtons() {
         for (int i = 0; i < edgeButtons.size(); i++) {
             Button b = edgeButtons.get(i); boolean on = i == markEdge;
-            b.setText((on ? "● " : "") + EDGE_NAMES[i]);
-            b.setTextColor(on ? EDGE_COLOURS[i] : muted);
+            b.setText(EDGE_NAMES[i]);
+            styleEdge(b, EDGE_COLOURS[i], on);
             A11y.state(b, on ? "Selected" : "Not selected");
             b.setContentDescription(EDGE_NAMES[i] + " edge of the bed");
         }
     }
+    /** The selected edge: a fill in its colour (faint), and bold text. */
+    private void styleEdge(Button b, int colour, boolean on) {
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(on ? (colour & 0x00ffffff) | 0x3d000000 : buttonColor); shape.setCornerRadius(dp(12));
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
+        b.setTypeface(Typeface.DEFAULT, on ? Typeface.BOLD : Typeface.NORMAL);
+        b.setTextColor(on ? ink : muted);
+    }
+    /** The main action of a row: a filled teal button, dark text in the dark theme for contrast. */
+    private Button primaryButton(LinearLayout row, String text, Runnable action) {
+        Button b = rowButton(row, text, action);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(teal); shape.setCornerRadius(dp(12));
+        b.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x66000000 : 0x55ffffff), shape, null));
+        b.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, dark ? 0xff0e1417 : Color.WHITE}));
+        b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        return b;
+    }
     private void setMarking(boolean on) {
         marking = on;
-        if (markBox != null) markBox.setVisibility(on ? View.VISIBLE : View.GONE);
-        if (markToggle != null) markToggle.setText(on ? "Stop marking" : "Line up from taps…");
         sendMarks();
     }
     private void sendMarks() {
@@ -753,7 +813,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         StringBuilder heights = new StringBuilder();
         if (viewerPrefs().getInt("cameraSpot", 0) == LINED_UP) for (double[] point : savedPoints()) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.1f", point[0]));
         return now + (heights.length() == 0 ? "No line-ups saved yet." : "Line-ups saved at bed Z " + heights + " mm.")
-            + " Line up from taps and Save at two or more bed heights (move the bed from Controls): the taps from all of them are fitted as one camera.";
+            + " Line up from taps and Save at two or more bed heights (use Move the bed below): the taps from all of them are fitted as one camera.";
     }
     private void forgetLineUps() {
         viewerPrefs().edit().remove("cameraPoints").remove("cameraTaps").remove("cameraCustomBed0").putInt("cameraSpot", 0).apply();
@@ -775,7 +835,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         sendLock();
         double[] shown = currentParams();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
-        if (alignScroll != null) alignScroll.setVisibility(View.GONE);
+        if (alignSheet != null) alignSheet.setVisibility(View.GONE);
         mainPanel.setVisibility(View.VISIBLE); arrange();
         try { if (web != null && shown != null) web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(shown) + ")", null); } catch (Exception ignored) { }
         if (alignOnly) finish();
