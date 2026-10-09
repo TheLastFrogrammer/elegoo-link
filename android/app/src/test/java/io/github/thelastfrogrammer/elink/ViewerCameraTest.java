@@ -76,7 +76,8 @@ public class ViewerCameraTest {
     }
 
     @Test public void handLinedUpCameraIsReadBackOnlyWhenWhole() {
-        assertArrayEquals(new double[] {1, 2, 3, 4, 5, 6, 0.25}, GcodeViewerActivity.parseParams("1,2,3,4,5,6,0.25"), 1e-12);
+        assertArrayEquals("saved before roll existed: no roll", new double[] {1, 2, 3, 4, 5, 6, 0.25, 0}, GcodeViewerActivity.parseParams("1,2,3,4,5,6,0.25"), 1e-12);
+        assertArrayEquals(new double[] {1, 2, 3, 4, 5, 6, 0.25, -2}, GcodeViewerActivity.parseParams("1,2,3,4,5,6,0.25,-2"), 1e-12);
         assertNull(GcodeViewerActivity.parseParams("1,2,3"));
         assertNull(GcodeViewerActivity.parseParams("1,2,3,4,5,6,x"));
         assertNull(GcodeViewerActivity.parseParams(null));

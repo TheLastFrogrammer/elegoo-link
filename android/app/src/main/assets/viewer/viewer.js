@@ -192,8 +192,11 @@
     const p = pose.position, t = pose.target;
     let f = [t[0] - p[0], t[1] - p[1], t[2] - p[2]]; let l = Math.hypot(...f); f = f.map((v) => v / l);
     let r = [f[1], -f[0], 0]; l = Math.hypot(...r) || 1; r = r.map((v) => v / l);   // f × z
-    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
-    return { f, r, u };
+    const u0 = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    // Roll about the view axis, as CameraFit.project: the camera's own right and up turn by -roll.
+    const a = (pose.roll || 0) * Math.PI / 180, cos = Math.cos(a), sin = Math.sin(a);
+    const rr = [0, 1, 2].map((i) => r[i] * cos - u0[i] * sin), u = [0, 1, 2].map((i) => r[i] * sin + u0[i] * cos);
+    return { f, r: rr, u };
   }
   function buildPrinterCamera() {
     const pose = printerCam.pose; if (!pose) return;
@@ -418,8 +421,10 @@
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (!data.meta && !printerCam.pose) return;   // without a toolpath, the bed and the camera can still be shown
     const viewMatrix = lookAt(eye(), camera.target, [0, 0, 1]);
-    const fitK = fitScale(width, height);
-    const viewProj = multiply([fitK, 0, 0, 0, 0, fitK, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+    const fitK = fitScale(width, height), aspect = width / Math.max(1, height);
+    // Seen from the camera, its roll turns the drawing about the view's centre (in screen-shaped units, so it stays square).
+    const roll = printerCam.looking && printerCam.pose ? (printerCam.pose.roll || 0) * Math.PI / 180 : 0, rc = Math.cos(roll), rs = Math.sin(roll);
+    const viewProj = multiply([fitK * rc, fitK * aspect * rs, 0, 0, -fitK * rs / aspect, fitK * rc, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
       multiply(perspective(camera.fov, width / Math.max(1, height), Math.max(0.5, camera.distance / 500), camera.distance * 20), viewMatrix));
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
@@ -481,7 +486,7 @@
     tapStart = pointers.size === 1 ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!pointers.has(e.pointerId)) return;
+    if (!pointers.has(e.pointerId) || marking) return;   // while marking the bed, the view holds still
     const before = [...pointers.values()].map((p) => ({ ...p }));
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const after = [...pointers.values()];
@@ -507,6 +512,11 @@
   }
   function release(e) {
     pointers.delete(e.pointerId);
+    if (marking && tapStart && Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) < 12) {
+      const uv = pictureAt(e.clientX, e.clientY);
+      if (uv && android && android.onMark) android.onMark(uv[0], uv[1], printerCam.aspect);
+      tapStart = null; return;
+    }
     if (tapStart && Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) < 10 && Date.now() - tapStart.t < 250) {
       if (Date.now() - lastTap < 350) { fit(); lastTap = 0; } else lastTap = Date.now();
     }
@@ -559,6 +569,39 @@
   setPalette(PALETTE);
   try { setupStatic(); setupBed([0, 0, 256, 0, 256, 256, 0, 256]); } catch (error) { fail("WebGL setup failed: " + error.message); return; }
   // setView("top") looks straight down, to check a layer's lines; anything else is the usual three-quarter view.
+  // ---------------------------------------------------------------- marking the bed in the picture
+  // While lining the camera up from taps, a tap on the picture reports where it is (u, v from the picture's top-left), and
+  // the taps so far show as coloured dots, one colour per edge of the bed.
+  let marking = false, marks = [];
+  const EDGE_COLOURS = ["#ff5252", "#40c4ff", "#69f0ae", "#ff4dd2"];
+  function pictureFrame() {
+    const width = canvas.clientWidth, height = canvas.clientHeight, k = fitScale(width, height);
+    const w = printerCam.aspect / (width / Math.max(1, height)) * k;   // picture's half-width and half-height in the view's -1..1 units
+    return { width, height, w, k };
+  }
+  function pictureAt(x, y) {
+    const box = canvas.getBoundingClientRect(), f = pictureFrame();
+    const nx = (x - box.left) / f.width * 2 - 1, ny = 1 - (y - box.top) / f.height * 2;
+    const u = (nx / f.w + 1) / 2, v = (1 - ny / f.k) / 2;
+    return u < 0 || u > 1 || v < 0 || v > 1 ? null : [u, v];
+  }
+  function drawMarks() {
+    let layer = document.getElementById("marks");
+    if (!layer) { layer = document.createElement("div"); layer.id = "marks"; layer.style.cssText = "position:absolute;inset:0;pointer-events:none"; document.body.appendChild(layer); }
+    layer.innerHTML = "";
+    if (!marking && !marks.length) return;
+    const f = pictureFrame();
+    for (const m of marks) {
+      const nx = (m.u * 2 - 1) * f.w, ny = (1 - m.v * 2) * f.k;
+      const dot = document.createElement("div");
+      dot.style.cssText = "position:absolute;width:12px;height:12px;margin:-8px 0 0 -8px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 2px #000;background:" + EDGE_COLOURS[m.edge % 4];
+      dot.style.left = ((nx + 1) / 2 * f.width) + "px"; dot.style.top = ((1 - ny) / 2 * f.height) + "px";
+      layer.appendChild(dot);
+    }
+  }
+  function setMarking(on, list) { marking = !!on; marks = list || []; drawMarks(); }
+  window.addEventListener("resize", drawMarks);
+
   // "printer" looks from where the printer's camera is, at what it looks at.
   function setView(name) {
     fit();
@@ -583,6 +626,6 @@
     if (!printerCam.looking) fit();
     lookFromCamera();
   }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

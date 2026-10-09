@@ -138,3 +138,6 @@ If the download fails, the error and the history entry help: share the diagnosti
 7. (v0.14.6) Height calibration: line up and Save with the bed near the top (Z ≈ 5), then move the bed down (Controls →
    Z, e.g. to Z 100 and Z 200), line up and Save at each. Share diagnostics: the "camera lined up by hand" lines list every
    saved height, which shows how the camera really follows the bed.
+8. (v0.15.0) In the line-up, **Line up from taps…**: choose Back, tap 3–4 points along the far edge of the bed in the
+   picture; then Left and Right (and Front if it shows), then **Fit**. The note gives the average miss as a share of the
+   picture's height; under 1% is a good line-up. Save, and Share diagnostics (the fit is logged).

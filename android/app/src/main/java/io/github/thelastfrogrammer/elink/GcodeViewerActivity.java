@@ -241,27 +241,27 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     static JSONObject cameraPose(int spot) throws org.json.JSONException { return poseJson(spotParams(spot)); }
     /** A preset spot as camera parameters: x, y, z (mm), turn and tilt-down (degrees), vertical field of view, lens curve. */
     /** The CC2's camera, lined up by hand against its live picture (v0.14.2): just right of the bed, low, looking back-left. */
-    static final double[] CC2_CAMERA = {308, -9, 28, 134, 8, 37, 0.23};   // height with the bed at 0 (lined up with it at Z ≈ 3.8)
+    static final double[] CC2_CAMERA = {308, -9, 28, 134, 8, 37, 0.23, 0};   // height with the bed at 0 (lined up with it at Z ≈ 3.8)
     static double[] spotParams(int spot) {
         if (spot <= 0) return CC2_CAMERA.clone();
         double[][] spots = {{-10, -20, 240}, {266, -20, 240}, {-10, 276, 240}, {266, 276, 240}, {128, -40, 240}};
         double[] p = spots[Math.max(0, Math.min(spots.length - 1, spot))];
         double dx = 128 - p[0], dy = 128 - p[1];
-        return new double[] {p[0], p[1], p[2], Math.toDegrees(Math.atan2(dy, dx)), Math.toDegrees(Math.atan2(p[2], Math.hypot(dx, dy))), 50, 0};
+        return new double[] {p[0], p[1], p[2], Math.toDegrees(Math.atan2(dy, dx)), Math.toDegrees(Math.atan2(p[2], Math.hypot(dx, dy))), 50, 0, 0};
     }
     static JSONObject poseJson(double[] c) throws org.json.JSONException {
         double yaw = Math.toRadians(c[3]), pitch = Math.toRadians(c[4]), reach = 200;
         double[] target = {c[0] + reach * Math.cos(pitch) * Math.cos(yaw), c[1] + reach * Math.cos(pitch) * Math.sin(yaw), c[2] - reach * Math.sin(pitch)};
         return new JSONObject().put("position", new JSONArray(new double[] {c[0], c[1], c[2]})).put("target", new JSONArray(target))
-            .put("fov", c[5]).put("screen", 90).put("lens", c[6]);
+            .put("fov", c[5]).put("screen", 90).put("lens", c[6]).put("roll", c.length > 7 ? c[7] : 0);
     }
     /** The saved hand-lined-up camera, or null. */
     static double[] parseParams(String text) {
         if (text == null) return null;
         String[] parts = text.split(",");
-        if (parts.length != 7) return null;
-        double[] c = new double[7];
-        try { for (int i = 0; i < 7; i++) c[i] = Double.parseDouble(parts[i]); } catch (NumberFormatException bad) { return null; }
+        if (parts.length != 7 && parts.length != 8) return null;
+        double[] c = new double[8];   // a line-up from before roll existed has none
+        try { for (int i = 0; i < parts.length; i++) c[i] = Double.parseDouble(parts[i]); } catch (NumberFormatException bad) { return null; }
         return c;
     }
     /**
@@ -280,7 +280,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         java.util.List<double[]> points = parsePoints(viewerPrefs().getString("cameraPoints", null));
         if (points.isEmpty()) {   // v0.14.5 kept one line-up with the bed at 0
             double[] old = parseParams(viewerPrefs().getString("cameraCustomBed0", null));
-            if (old != null) { double[] point = new double[8]; System.arraycopy(old, 0, point, 1, 7); points.add(point); }
+            if (old != null) { double[] point = new double[9]; System.arraycopy(old, 0, point, 1, 8); points.add(point); }
         }
         return points;
     }
@@ -290,8 +290,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         try {
             JSONArray rows = new JSONArray(text);
             for (int i = 0; i < rows.length(); i++) {
-                JSONArray row = rows.getJSONArray(i); if (row.length() != 8) continue;
-                double[] point = new double[8]; for (int j = 0; j < 8; j++) point[j] = row.getDouble(j);
+                JSONArray row = rows.getJSONArray(i); if (row.length() != 8 && row.length() != 9) continue;   // 8: saved before roll
+                double[] point = new double[9]; for (int j = 0; j < row.length(); j++) point[j] = row.getDouble(j);
                 points.add(point);
             }
         } catch (org.json.JSONException bad) { points.clear(); }
@@ -306,26 +306,27 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     static java.util.List<double[]> addPoint(java.util.List<double[]> points, double z, double[] c) {
         java.util.List<double[]> next = new java.util.ArrayList<>();
         for (double[] point : points) if (Math.abs(point[0] - z) >= 2) next.add(point);
-        double[] point = new double[8]; point[0] = z; System.arraycopy(c, 0, point, 1, 7); next.add(point);
+        double[] point = new double[9]; point[0] = z; System.arraycopy(c, 0, point, 1, Math.min(8, c.length)); next.add(point);
         while (next.size() > 6) next.remove(0);
         return next;
     }
+    private static double value(double[] point, int index) { return index < point.length ? point[index] : 0; }
     /** The camera at bed height z from saved line-ups: least-squares line per value, or one line-up moved with the bed. */
     static double[] modelAt(java.util.List<double[]> points, double z) {
         double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
         for (double[] point : points) { min = Math.min(min, point[0]); max = Math.max(max, point[0]); }
-        double[] c = new double[7];
+        double[] c = new double[8];
         if (max - min < 5) {   // all at about one height: no slope to measure
             double[] nearest = points.get(0);
             for (double[] point : points) if (Math.abs(point[0] - z) < Math.abs(nearest[0] - z)) nearest = point;
-            System.arraycopy(nearest, 1, c, 0, 7); c[2] += z - nearest[0]; return c;
+            System.arraycopy(nearest, 1, c, 0, Math.min(8, nearest.length - 1)); c[2] += z - nearest[0]; return c;
         }
         int n = points.size(); double meanZ = 0; for (double[] point : points) meanZ += point[0]; meanZ /= n;
         double szz = 0; for (double[] point : points) szz += (point[0] - meanZ) * (point[0] - meanZ);
-        for (int i = 0; i < 7; i++) {
+        for (int i = 0; i < 8; i++) {
             double mean = 0, szv = 0;
-            for (double[] point : points) mean += point[i + 1]; mean /= n;
-            for (double[] point : points) szv += (point[0] - meanZ) * (point[i + 1] - mean);
+            for (double[] point : points) mean += value(point, i + 1); mean /= n;
+            for (double[] point : points) szv += (point[0] - meanZ) * (value(point, i + 1) - mean);
             c[i] = mean + szv / szz * (z - meanZ);
         }
         return c;
@@ -402,10 +403,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     // Lining the camera up by hand: the view looks from the camera with its picture behind the bed outline (yellow); the
     // sliders move and aim the camera until the outline sits on the real bed. Saved as the "Lined up by hand" spot.
-    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height above the bed", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
+    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height above the bed", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve", "Roll (lean sideways)"};
     // Wide enough for a camera outside the bed's footprint (the CC2's sits off its front-right corner); − and + nudge one step.
-    private static final double[][] ALIGN_RANGE = {{-250, 510}, {-250, 510}, {-20, 400}, {-180, 180}, {-10, 90}, {15, 130}, {0, 1}};
-    private static final double[] ALIGN_STEP = {1, 1, 1, 0.5, 0.5, 0.5, 0.01};
+    private static final double[][] ALIGN_RANGE = CameraFit.RANGE;
+    private static final double[] ALIGN_STEP = {1, 1, 1, 0.5, 0.5, 0.5, 0.01, 0.2};
     private void startAligning() {
         if (web == null || !pageReady || path == null && !alignOnly || aligning != null) return;
         if (!cameraWanted()) viewerPrefs().edit().putBoolean("camera", true).apply();
@@ -456,6 +457,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         bedNote = A11y.polite(label(alignPanel, "", 12, muted, false));
         LinearLayout forget = new LinearLayout(this); forget.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(forget);
         rowButton(forget, "Forget saved line-ups", this::forgetLineUps);
+        buildMarking();
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -498,8 +500,87 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         alignBars.get(i).setProgress((int) Math.round((Math.max(ALIGN_RANGE[i][0], Math.min(ALIGN_RANGE[i][1], aligning[i])) - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
         syncAlignLabel(i);
     }
+    // Lining up from taps: the user marks points along the bed's edges in the picture and CameraFit finds the camera.
+    private final java.util.List<CameraFit.Mark> marks = new java.util.ArrayList<>();
+    private int markEdge = 1;
+    private double markAspect = 16.0 / 9;
+    private boolean marking;
+    private LinearLayout markBox;
+    private TextView markNote;
+    private final java.util.List<Button> edgeButtons = new java.util.ArrayList<>();
+    private Button markToggle;
+    private static final String[] EDGE_NAMES = {"Front", "Back", "Left", "Right"};
+    private static final int[] EDGE_COLOURS = {0xffff5252, 0xff40c4ff, 0xff69f0ae, 0xffff4dd2};
+    private void buildMarking() {
+        LinearLayout toggleRow = new LinearLayout(this); toggleRow.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(toggleRow);
+        markToggle = rowButton(toggleRow, "Line up from taps…", () -> setMarking(!marking));
+        markBox = new LinearLayout(this); markBox.setOrientation(LinearLayout.VERTICAL); markBox.setVisibility(View.GONE); alignPanel.addView(markBox);
+        label(markBox, "Pick an edge of the bed, then tap 2–4 points along it in the picture, on the line where the bed's top surface ends. "
+            + "Mark three or four edges (the far edge and both sides help most), then Fit. Sideways gives the biggest picture; pinch and drag are off while marking.", 12, muted, false);
+        LinearLayout edges = new LinearLayout(this); edges.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(edges);
+        for (int i = 0; i < EDGE_NAMES.length; i++) {
+            int edge = i;
+            Button b = rowButton(edges, EDGE_NAMES[i], () -> { markEdge = edge; syncEdgeButtons(); });
+            edgeButtons.add(b);
+        }
+        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(actions);
+        rowButton(actions, "Undo tap", () -> { if (!marks.isEmpty()) marks.remove(marks.size() - 1); sendMarks(); });
+        rowButton(actions, "Clear taps", () -> { marks.clear(); sendMarks(); });
+        rowButton(actions, "Fit", this::fitToMarks);
+        markNote = A11y.polite(label(markBox, "", 12, ink, false));
+        syncEdgeButtons();
+    }
+    private void syncEdgeButtons() {
+        for (int i = 0; i < edgeButtons.size(); i++) {
+            Button b = edgeButtons.get(i); boolean on = i == markEdge;
+            b.setText((on ? "● " : "") + EDGE_NAMES[i]);
+            b.setTextColor(on ? EDGE_COLOURS[i] : muted);
+            A11y.state(b, on ? "Selected" : "Not selected");
+            b.setContentDescription(EDGE_NAMES[i] + " edge of the bed");
+        }
+    }
+    private void setMarking(boolean on) {
+        marking = on;
+        if (markBox != null) markBox.setVisibility(on ? View.VISIBLE : View.GONE);
+        if (markToggle != null) markToggle.setText(on ? "Stop marking" : "Line up from taps…");
+        sendMarks();
+    }
+    private void sendMarks() {
+        if (web == null) return;
+        JSONArray list = new JSONArray();
+        for (CameraFit.Mark mark : marks) try { list.put(new JSONObject().put("edge", mark.edge).put("u", mark.u).put("v", mark.v)); } catch (org.json.JSONException ignored) { }
+        web.evaluateJavascript("viewer.setMarking(" + marking + "," + list + ")", null);
+        if (markNote != null) {
+            int[] count = new int[4]; for (CameraFit.Mark mark : marks) count[mark.edge]++;
+            StringBuilder text = new StringBuilder(marks.size() + (marks.size() == 1 ? " tap" : " taps"));
+            for (int i = 0; i < 4; i++) if (count[i] > 0) text.append(" · ").append(EDGE_NAMES[i].toLowerCase(Locale.ROOT)).append(' ').append(count[i]);
+            int free = CameraFit.free(marks).length;
+            text.append(free == 0 ? ". Tap at least 3 points to fit." : free < CameraFit.COUNT ? ". Fit now adjusts some values; 8 taps on 3 edges adjust all of them." : ". Ready to fit everything.");
+            markNote.setText(text);
+        }
+    }
+    private void fitToMarks() {
+        if (aligning == null || CameraFit.free(marks).length == 0) { sendMarks(); return; }
+        double[] start = aligning.clone(); java.util.List<CameraFit.Mark> taps = new java.util.ArrayList<>(marks); double aspect = markAspect;
+        if (markNote != null) markNote.setText("Fitting…");
+        worker.execute(() -> {
+            double before = CameraFit.rms(start, aspect, taps);
+            double[] fitted = CameraFit.fit(start, aspect, taps);
+            double after = CameraFit.rms(fitted, aspect, taps);
+            main.post(() -> {
+                if (aligning == null || isDestroyed()) return;
+                aligning = fitted;
+                for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
+                pushAlign();
+                // Picture heights: Y runs -1..1, so half the miss is the share of the picture's height.
+                if (markNote != null) markNote.setText(String.format(Locale.getDefault(), "Fitted: the taps now sit %.1f%% of the picture's height from the outline on average (was %.1f%%). "
+                    + "Nudge with the sliders if needed, then Save.", after * 50, before * 50));
+                Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera fitted to %d taps on the bed's edges: miss %.4f -> %.4f picture heights", taps.size(), before / 2, after / 2));
+            });
+        });
+    }
     private void syncAlignLabel(int i) {
-        String value = i < 3 ? String.format(Locale.getDefault(), "%.0f mm", aligning[i]) : i < 6 ? String.format(Locale.getDefault(), "%.1f°", aligning[i]) : String.format(Locale.getDefault(), "%.2f", aligning[i]);
+        String value = i < 3 ? String.format(Locale.getDefault(), "%.0f mm", aligning[i]) : i == CameraFit.LENS ? String.format(Locale.getDefault(), "%.2f", aligning[i]) : String.format(Locale.getDefault(), "%.1f°", aligning[i]);
         alignLabels.get(i).setText(ALIGN_NAMES[i] + "\n" + value);
         A11y.state(alignBars.get(i), value);
     }
@@ -526,6 +607,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
         }
         aligning = null;
+        marks.clear(); if (marking) setMarking(false); else sendMarks();
         double[] shown = currentParams();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
         if (alignScroll != null) alignScroll.setVisibility(View.GONE);
@@ -537,6 +619,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); if (alignOnly) startAligning(); }); }
         @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); }); }
+        @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
+            if (!marking || aligning == null) return;
+            markAspect = aspect > 0.2 && aspect < 5 ? aspect : markAspect;
+            marks.add(new CameraFit.Mark(markEdge, u, v)); sendMarks();
+        }); }
         @JavascriptInterface public void onCamera(String message) { main.post(() -> {
             if ("playing".equals(message)) cameraMessage("Camera: live video through Elegoo's cloud.");
             else cameraMessage(CloudCameraActivity.explain(message));

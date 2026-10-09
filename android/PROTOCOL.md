@@ -218,3 +218,8 @@ v0.14.6: line-ups are saved with the bed height they were made at (up to six; on
 at two or more heights at least 5 mm apart, each value is a least-squares straight line in the bed's Z, so how the camera
 relates to the bed is measured rather than assumed; with one, the camera sits as much higher as the bed went down. Seen from
 the camera, the whole picture fits in the view and the drawing is scaled with it.
+v0.15.0: roll (turn about the view axis) joins the camera values, and "Line up from taps" fits all of them from points the
+user taps along the bed's edges in the picture: CameraFit runs damped least squares (Levenberg–Marquardt, central-difference
+Jacobian) on each tap's distance to its edge's drawn line, with a slight pull toward the starting values; with fewer than
+8 taps on 3 edges it adjusts only what the taps can determine. CameraFit.project and the viewer page share one camera model
+(checked by drawing CameraFit's points over the page's outline).
