@@ -55,6 +55,32 @@ public final class MainActivity extends Activity {
     private final ExecutorService checks = Executors.newSingleThreadExecutor();
     private LinearLayout content;
     private LinearLayout currentSection, fileRows;
+    private LinearLayout localSettings, cloudSettings;
+    private Button modeLocal, modeCloud;
+    /** Settings shows the local connection or the Elegoo cloud account, not both; the choice is remembered. */
+    private void setSettingsMode(boolean cloud) {
+        if (localSettings == null || cloudSettings == null) return;
+        localSettings.setVisibility(cloud ? View.GONE : View.VISIBLE);
+        cloudSettings.setVisibility(cloud ? View.VISIBLE : View.GONE);
+        styleSegment(modeLocal, !cloud); styleSegment(modeCloud, cloud);
+        settings.edit().putBoolean("settingsCloud", cloud).apply();
+    }
+    /** The remembered choice; the first time, cloud for someone signed in to Elegoo without a saved printer address. */
+    private boolean settingsModeAtStart() {
+        if (settings.contains("settingsCloud")) return settings.getBoolean("settingsCloud", false);
+        boolean signedIn; try { signedIn = cloudAccounts != null && cloudAccounts.load() != null; } catch (Exception unreadable) { signedIn = false; }
+        return signedIn && host.getText().toString().trim().isEmpty();
+    }
+    private Button segment(LinearLayout row, String text, Runnable action) {
+        Button button = rowButton(row, text, action, false); A11y.tab(button, false); return button;
+    }
+    private void styleSegment(Button button, boolean selected) {
+        if (button == null) return;
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12)); shape.setColor(selected ? TEAL : BUTTON);
+        button.setBackground(shape); button.setTextColor(selected ? (dark ? 0xff00201c : Color.WHITE) : TEAL);
+        button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
+        A11y.tab(button, selected);
+    }
     private final LinearLayout[] pages = new LinearLayout[4];
     private final LinearLayout[] tabs = new LinearLayout[4];
     private int page = 3;
@@ -170,8 +196,13 @@ public final class MainActivity extends Activity {
         setContentView(root);
         for (int i = 0; i < 4; i++) { pages[i] = new LinearLayout(this); pages[i].setOrientation(LinearLayout.VERTICAL); content.addView(pages[i]); }
         currentSection = pages[3];
+        // Local or cloud: one connection card at a time, so the page stays short.
+        LinearLayout modeRow = row(pages[3]); ((LinearLayout.LayoutParams) modeRow.getLayoutParams()).topMargin = dp(12);
+        modeLocal = segment(modeRow, "Local (Wi-Fi)", () -> setSettingsMode(false));
+        modeCloud = segment(modeRow, "Elegoo cloud", () -> setSettingsMode(true));
         LinearLayout connectionCard = card("Printer connection");
-        label(connectionCard, "At home: printer IP and access code (LAN Only). Away from home: sign in to Elegoo below.", 13, MUTED, false);
+        localSettings = connectionCard;
+        label(connectionCard, "At home, on the printer's Wi-Fi: its IP address and access code (LAN Only). Away from home, use Elegoo cloud above.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
         connection.setTextIsSelectable(true);
         LinearLayout findRow = row(connectionCard);
@@ -227,7 +258,7 @@ public final class MainActivity extends Activity {
         label(getStarted, "Link Workshop watches and controls your Centauri Carbon 2, and slices models on this phone. Choose one way to begin.", 14, INK, false);
         label(getStarted, "1. At home, on Wi-Fi", 14, INK, true);
         label(getStarted, "Turn the printer on and join the same Wi-Fi as this phone. Then look for the printer.", 13, MUTED, false);
-        rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { selectPage(3); scanPrinters(); }, true);
+        rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { setSettingsMode(false); selectPage(3); scanPrinters(); }, true);
         label(getStarted, "2. Away from home", 14, INK, true);
         label(getStarted, "Sign in with your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
         rowButton(row(getStarted), "Sign in with Elegoo…", this::cloudSignIn, false);
@@ -346,6 +377,7 @@ public final class MainActivity extends Activity {
         currentSection = pages[3];
         cloudAccounts = new CloudAccountStore(this);
         LinearLayout account = card("Elegoo cloud (experimental)");
+        cloudSettings = account;
         label(account, "Watch and control the printer away from home, through Elegoo's cloud.", 13, MUTED, false);
         cloudStatus = label(account, "", 14, INK, false);
         cloudLiveLabel = label(account, "", 13, MUTED, false);
@@ -361,6 +393,7 @@ public final class MainActivity extends Activity {
         });
         label(account, "Your password goes only to Elegoo's own sign-in page. Without a local connection, Monitor shows the cloud's last update.", 13, MUTED, false);
         renderCloudAccount();
+        setSettingsMode(settingsModeAtStart());
         LinearLayout preferences = card("App preferences");
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
         CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
@@ -1020,7 +1053,7 @@ public final class MainActivity extends Activity {
     private void buildCamera() {
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
         cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
-        cameraFix = button(cloudCard, "Open Settings to sign in", () -> selectPage(3)); cameraFix.setVisibility(View.GONE);
+        cameraFix = button(cloudCard, "Open Settings to sign in", () -> { setSettingsMode(true); selectPage(3); }); cameraFix.setVisibility(View.GONE);
         // Opening it asks for the one-time cloud-control agreement first, like every other cloud action.
         cloudCamera = rowButton(row(cloudCard), "Watch through the Elegoo cloud", () -> {
             if (printer == null || printer.cloudSerial.isEmpty()) return;
