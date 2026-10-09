@@ -68,7 +68,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     // The printer's camera in the scene (Live only): its position (an estimate the user can change) and the picture.
     static final String[] CAMERA_SPOTS = {"CC2 camera (lined up on a real printer)", "Front right, top", "Back left, top", "Back right, top", "Front centre, top", "Lined up by hand"};
     static final int LINED_UP = 5;
-    private LinearLayout mainPanel, alignPanel;
+    private LinearLayout root, mainPanel, alignPanel;
+    private android.widget.ScrollView alignScroll;
     private double[] aligning, alignStart;
     private CameraFrames cameraFrames;
     private boolean cameraStarted, cameraCloud;
@@ -121,7 +122,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     // ------------------------------------------------------------------ layout
     private void build() {
-        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(background); root.setFitsSystemWindows(true);
+        root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(background); root.setFitsSystemWindows(true);
         web = new WebView(this);
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12)); mainPanel = panel;
@@ -320,13 +321,32 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         alignStart = currentParams(); aligning = alignStart.clone();
         if (alignPanel == null) buildAlignPanel();
         for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
-        mainPanel.setVisibility(View.GONE); alignPanel.setVisibility(View.VISIBLE);
+        mainPanel.setVisibility(View.GONE); alignScroll.setVisibility(View.VISIBLE); arrange();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack == null) {
             android.window.OnBackInvokedCallback callback = () -> finishAligning(false); alignBack = callback;
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, (android.window.OnBackInvokedCallback) alignBack);
         }
         pushAlign();
     }
+    /**
+     * Sideways while lining up, the sliders sit in a column beside the picture, so the whole camera picture shows (upright,
+     * a tall screen shows only its middle, and the edges are where a lens curve shows). Otherwise the panel is below.
+     */
+    private void arrange() {
+        if (root == null || web == null) return;
+        boolean beside = aligning != null && alignScroll != null
+            && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
+        root.setOrientation(beside ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
+        web.setLayoutParams(beside ? new LinearLayout.LayoutParams(0, -1, 1) : new LinearLayout.LayoutParams(-1, 0, 1));
+        if (alignScroll != null) {
+            alignScroll.setLayoutParams(beside ? new LinearLayout.LayoutParams(dp(340), -1) : new LinearLayout.LayoutParams(-1, -2));
+            android.graphics.drawable.Drawable panel = alignScroll.getBackground();
+            if (panel instanceof GradientDrawable) ((GradientDrawable) panel).setCornerRadii(beside
+                ? new float[] {dp(20), dp(20), 0, 0, 0, 0, dp(20), dp(20)} : new float[] {dp(20), dp(20), dp(20), dp(20), 0, 0, 0, 0});
+        }
+        mainPanel.setLayoutParams(new LinearLayout.LayoutParams(-1, -2));
+    }
+    @Override public void onConfigurationChanged(Configuration changed) { super.onConfigurationChanged(changed); arrange(); }
     /** Back while lining up cancels the line-up instead of closing the screen. */
     private Object alignBack;
     /** Phones before Android 13 have no back-gesture callback API; the system calls this instead (later ones use alignBack). */
@@ -336,8 +356,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private final java.util.List<TextView> alignLabels = new java.util.ArrayList<>();
     private void buildAlignPanel() {
         alignPanel = new LinearLayout(this); alignPanel.setOrientation(LinearLayout.VERTICAL); alignPanel.setPadding(dp(16), dp(8), dp(16), dp(12));
-        alignPanel.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
-        TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture; − and + nudge one step. Match the middle of the bed first, then raise Lens curve until the outline bends like the bed's edges.", 12, muted, false);
+        alignScroll = new android.widget.ScrollView(this);
+        alignScroll.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
+        TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture; − and + nudge one step. Match the middle of the bed first, then raise Lens curve until the outline bends like the bed's edges. Turn the phone sideways to see the whole picture, edges included.", 12, muted, false);
         intro.setPadding(0, 0, 0, dp(4));
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
@@ -374,7 +395,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         rowButton(buttons, "Cancel", () -> finishAligning(false));
         rowButton(buttons, "Start over", () -> { aligning = spotParams(0); for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
         rowButton(buttons, "Save", () -> finishAligning(true));
-        ((LinearLayout) mainPanel.getParent()).addView(alignPanel, new LinearLayout.LayoutParams(-1, -2));
+        alignScroll.addView(alignPanel);
+        root.addView(alignScroll, new LinearLayout.LayoutParams(-1, -2));
     }
     private void syncAlignRow(int i) {
         alignBars.get(i).setProgress((int) Math.round((Math.max(ALIGN_RANGE[i][0], Math.min(ALIGN_RANGE[i][1], aligning[i])) - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
@@ -398,8 +420,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         double[] shown = save ? aligning : alignStart;
         aligning = null;
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
-        if (alignPanel != null) alignPanel.setVisibility(View.GONE);
-        mainPanel.setVisibility(View.VISIBLE);
+        if (alignScroll != null) alignScroll.setVisibility(View.GONE);
+        mainPanel.setVisibility(View.VISIBLE); arrange();
         try { if (web != null && shown != null) web.evaluateJavascript("viewer.showPrinterCamera(" + poseJson(shown) + ")", null); } catch (Exception ignored) { }
     }
 
