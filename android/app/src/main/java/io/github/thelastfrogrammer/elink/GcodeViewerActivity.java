@@ -413,7 +413,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         startCamera();
         alignStart = currentParams(); aligning = alignStart.clone(); alignZ = bedZ;
         if (alignPanel == null) buildAlignPanel();
-        sendAlignStyle();
+        sendAlignStyle(); sendLock();
         for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
         mainPanel.setVisibility(View.GONE); alignScroll.setVisibility(View.VISIBLE); arrange();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack == null) {
@@ -458,6 +458,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         bedNote = A11y.polite(label(alignPanel, "", 12, muted, false));
         LinearLayout forget = new LinearLayout(this); forget.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(forget);
         rowButton(forget, "Forget saved line-ups", this::forgetLineUps);
+        LinearLayout lockRow = new LinearLayout(this); lockRow.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(lockRow);
+        alignLockButton = rowButton(lockRow, "", () -> { viewerPrefs().edit().putBoolean("alignLock", !viewerPrefs().getBoolean("alignLock", true)).apply(); sendLock(); });
         buildMarking();
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
@@ -528,6 +530,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         rowButton(actions, "Undo tap", () -> { if (!marks.isEmpty()) marks.remove(marks.size() - 1); sendMarks(); });
         rowButton(actions, "Clear taps", () -> { marks.clear(); sendMarks(); });
         rowButton(actions, "Fit", this::fitToMarks);
+        LinearLayout zoom = new LinearLayout(this); zoom.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(zoom);
+        rowButton(zoom, "Zoom in", () -> js("viewer.zoomPicture(1.5)"));
+        rowButton(zoom, "Zoom out", () -> js("viewer.zoomPicture(1 / 1.5)"));
+        rowButton(zoom, "Reset zoom", () -> js("viewer.resetZoom()"));
         markNote = A11y.polite(label(markBox, "", 12, ink, false));
         // How the outline and the taps look over the picture (kept between line-ups).
         LinearLayout look = new LinearLayout(this); look.setOrientation(LinearLayout.HORIZONTAL); markBox.addView(look);
@@ -540,7 +546,18 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         styleSlider(markBox, "Dot size", "alignDot", 4, 32, 12, " px");
         syncEdgeButtons();
     }
-    private Button gridButton;
+    private Button gridButton, alignLockButton;
+    private void js(String script) { if (web != null) web.evaluateJavascript(script, null); }
+    /**
+     * Rotation lock: dragging pans instead of turning the view, and from the camera it zooms and pans the picture instead of
+     * leaving it. On by default while lining up (a stray drag would otherwise lose the camera view), off by default otherwise.
+     */
+    private boolean rotationLocked() { return aligning != null ? viewerPrefs().getBoolean("alignLock", true) : viewerPrefs().getBoolean("viewLock", false); }
+    private void sendLock() {
+        boolean on = rotationLocked();
+        js("viewer.setRotationLock(" + on + ")");
+        if (alignLockButton != null) { alignLockButton.setText(on ? "Rotation lock: on (drag pans, pinch zooms)" : "Rotation lock: off"); A11y.state(alignLockButton, on ? "On" : "Off"); }
+    }
     private void styleSlider(LinearLayout parent, String name, String key, int min, int max, int fallback, String unit) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink);
@@ -596,23 +613,68 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             markNote.setText(text);
         }
     }
+    /**
+     * Taps saved at other bed heights (one set per height), so a fit can use them all: the camera stays on the frame while
+     * the bed moves, so they describe one camera whose height above the bed changes by exactly the bed's Z.
+     */
+    private java.util.List<CameraFit.TapSet> savedTaps() { return parseTaps(viewerPrefs().getString("cameraTaps", null)); }
+    static java.util.List<CameraFit.TapSet> parseTaps(String text) {
+        java.util.List<CameraFit.TapSet> sets = new java.util.ArrayList<>();
+        if (text == null) return sets;
+        try {
+            JSONArray rows = new JSONArray(text);
+            for (int i = 0; i < rows.length(); i++) {
+                JSONObject row = rows.getJSONObject(i); JSONArray list = row.getJSONArray("m");
+                java.util.List<CameraFit.Mark> taps = new java.util.ArrayList<>();
+                for (int j = 0; j < list.length(); j++) { JSONArray t = list.getJSONArray(j); taps.add(new CameraFit.Mark(t.getInt(0) & 3, t.getDouble(1), t.getDouble(2))); }
+                sets.add(new CameraFit.TapSet(row.getDouble("z"), row.getDouble("a"), taps));
+            }
+        } catch (org.json.JSONException bad) { sets.clear(); }
+        return sets;
+    }
+    static String tapsJson(java.util.List<CameraFit.TapSet> sets) {
+        JSONArray rows = new JSONArray();
+        try {
+            for (CameraFit.TapSet set : sets) {
+                JSONArray list = new JSONArray();
+                for (CameraFit.Mark mark : set.marks) list.put(new JSONArray().put(mark.edge).put(mark.u).put(mark.v));
+                rows.put(new JSONObject().put("z", set.z).put("a", set.aspect).put("m", list));
+            }
+        } catch (org.json.JSONException ignored) { }
+        return rows.toString();
+    }
+    /** The saved sets with this height's taps in place of any saved within 2 mm of it; the latest six heights. */
+    static java.util.List<CameraFit.TapSet> withTaps(java.util.List<CameraFit.TapSet> saved, CameraFit.TapSet now) {
+        java.util.List<CameraFit.TapSet> sets = new java.util.ArrayList<>();
+        for (CameraFit.TapSet set : saved) if (Math.abs(set.z - now.z) >= 2) sets.add(set);
+        if (!now.marks.isEmpty()) sets.add(now);
+        while (sets.size() > 6) sets.remove(0);
+        return sets;
+    }
+    private CameraFit.TapSet currentTaps() { return new CameraFit.TapSet(bedZ, markAspect, marks); }
     private void fitToMarks() {
-        if (aligning == null || CameraFit.free(marks).length == 0) { sendMarks(); return; }
-        double[] start = aligning.clone(); java.util.List<CameraFit.Mark> taps = new java.util.ArrayList<>(marks); double aspect = markAspect;
+        if (aligning == null) return;
+        java.util.List<CameraFit.TapSet> sets = withTaps(savedTaps(), currentTaps());
+        if (CameraFit.freeSets(sets).length == 0) { sendMarks(); return; }
+        double[] start = CameraFit.atBed(aligning, -bedZ);   // the camera with the bed at 0
+        double heightNow = bedZ;
         if (markNote != null) markNote.setText("Fitting…");
         worker.execute(() -> {
-            double before = CameraFit.rms(start, aspect, taps);
-            double[] fitted = CameraFit.fit(start, aspect, taps);
-            double after = CameraFit.rms(fitted, aspect, taps);
+            double before = CameraFit.rms(start, sets), fitted[] = CameraFit.fit(start, sets), after = CameraFit.rms(fitted, sets);
+            StringBuilder each = new StringBuilder();
+            for (CameraFit.TapSet set : sets)
+                each.append(each.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "Z %.0f: %.1f%%", set.z, CameraFit.rms(fitted, java.util.Collections.singletonList(set)) * 50));
             main.post(() -> {
                 if (aligning == null || isDestroyed()) return;
-                aligning = fitted;
+                aligning = CameraFit.atBed(fitted, heightNow);
                 for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
                 pushAlign();
                 // Picture heights: Y runs -1..1, so half the miss is the share of the picture's height.
-                if (markNote != null) markNote.setText(String.format(Locale.getDefault(), "Fitted: the taps now sit %.1f%% of the picture's height from the outline on average (was %.1f%%). "
-                    + "Nudge with the sliders if needed, then Save.", after * 50, before * 50));
-                Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera fitted to %d taps on the bed's edges: miss %.4f -> %.4f picture heights", taps.size(), before / 2, after / 2));
+                if (markNote != null) markNote.setText(String.format(Locale.getDefault(), "Fitted: the taps now sit %.1f%% of the picture's height from the outline on average (was %.1f%%)", after * 50, before * 50)
+                    + (sets.size() > 1 ? ", using taps from " + sets.size() + " bed heights (" + each + ")" : "")
+                    + ". Nudge with the sliders if needed, then Save.");
+                Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera fitted to %d bed height(s), %s: miss %.4f -> %.4f picture heights; camera with the bed at 0 %s",
+                    sets.size(), each, before / 2, after / 2, java.util.Arrays.toString(fitted)));
             });
         });
     }
@@ -626,25 +688,37 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (bedNote != null) bedNote.setText(bedText());
     }
     private String bedText() {
+        String now = String.format(Locale.getDefault(), "The bed is at Z %.1f mm now. ", bedZ);
+        java.util.List<CameraFit.TapSet> taps = viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedTaps() : java.util.Collections.emptyList();
+        if (!taps.isEmpty()) {
+            StringBuilder heights = new StringBuilder();
+            for (CameraFit.TapSet set : taps) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.0f", set.z));
+            return now + "Taps saved at bed Z " + heights + " mm; Fit uses them all with any taps made now, as one camera fixed to the frame. "
+                + "Tapping at heights far apart (Z 5, 100, 200) pins it down best.";
+        }
         StringBuilder heights = new StringBuilder();
         if (viewerPrefs().getInt("cameraSpot", 0) == LINED_UP) for (double[] point : savedPoints()) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.1f", point[0]));
-        return String.format(Locale.getDefault(), "The bed is at Z %.1f mm now. ", bedZ)
-            + (heights.length() == 0 ? "No line-ups saved yet." : "Line-ups saved at bed Z " + heights + " mm.")
-            + " Save one at two or more bed heights (move the bed from Controls) and the camera follows a line fitted through them.";
+        return now + (heights.length() == 0 ? "No line-ups saved yet." : "Line-ups saved at bed Z " + heights + " mm.")
+            + " Line up from taps and Save at two or more bed heights (move the bed from Controls): the taps from all of them are fitted as one camera.";
     }
     private void forgetLineUps() {
-        viewerPrefs().edit().remove("cameraPoints").remove("cameraCustomBed0").putInt("cameraSpot", 0).apply();
+        viewerPrefs().edit().remove("cameraPoints").remove("cameraTaps").remove("cameraCustomBed0").putInt("cameraSpot", 0).apply();
         if (aligning != null) { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); }
     }
     private void finishAligning(boolean save) {
         if (save && aligning != null) {
-            java.util.List<double[]> points = addPoint(viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedPoints() : new java.util.ArrayList<>(), alignZ, aligning);
-            viewerPrefs().edit().putString("cameraPoints", pointsJson(points)).remove("cameraCustomBed0").putInt("cameraSpot", LINED_UP).apply();
+            java.util.List<CameraFit.TapSet> sets = withTaps(savedTaps(), currentTaps());
+            // With taps (from any height), the camera is one camera on the frame: saved once, it follows the bed exactly.
+            // Without, as before: a line-up per bed height, fitted with a line.
+            java.util.List<double[]> points = !sets.isEmpty() ? addPoint(new java.util.ArrayList<>(), alignZ, aligning)
+                : addPoint(viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedPoints() : new java.util.ArrayList<>(), alignZ, aligning);
+            viewerPrefs().edit().putString("cameraPoints", pointsJson(points)).putString("cameraTaps", tapsJson(sets)).remove("cameraCustomBed0").putInt("cameraSpot", LINED_UP).apply();
             Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera lined up by hand at bed Z %.2f; all line-ups {bed Z, x, y, height, turn, tilt, view, lens}: %s", alignZ, pointsJson(points)));
             status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
         }
         aligning = null;
         marks.clear(); if (marking) setMarking(false); else sendMarks();
+        sendLock();
         double[] shown = currentParams();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
         if (alignScroll != null) alignScroll.setVisibility(View.GONE);
@@ -654,7 +728,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     private final class Bridge {
-        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); if (alignOnly) startAligning(); }); }
+        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); if (alignOnly) startAligning(); }); }
         @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
@@ -784,6 +858,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 names.add("Line up the camera by hand…"); actions.add(this::startAligning);
             }
         }
+        boolean locked = viewerPrefs().getBoolean("viewLock", false);
+        names.add(locked ? "Unlock rotation (drag turns the view)" : "Lock rotation (drag moves the view)");
+        actions.add(() -> { viewerPrefs().edit().putBoolean("viewLock", !locked).apply(); sendLock(); });
         names.add("What am I seeing?"); actions.add(this::helpDialog);
         for (int i = 0; i < names.size(); i++) {
             Runnable action = actions.get(i);

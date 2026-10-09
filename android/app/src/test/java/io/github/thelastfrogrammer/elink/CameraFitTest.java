@@ -67,4 +67,18 @@ public class CameraFitTest {
         double[] fitted = CameraFit.fit(new double[] {300, -3, 40, 130, 10, 40, 0.2, 0}, ASPECT, marks);
         for (int i = 0; i < CameraFit.COUNT; i++) assertTrue(fitted[i] >= CameraFit.RANGE[i][0] && fitted[i] <= CameraFit.RANGE[i][1]);
     }
+
+    @Test public void tapsFromSeveralBedHeightsDescribeOneCamera() {
+        double[] base = TRUTH.clone(); base[CameraFit.Z] = 28;   // the camera with the bed at 0
+        List<CameraFit.TapSet> sets = new ArrayList<>();
+        for (double z : new double[] {5, 100, 200}) sets.add(new CameraFit.TapSet(z, ASPECT, taps(CameraFit.atBed(base, z), new int[] {0, 1, 2, 3}, 0.004)));
+        double[] start = {300, -3, 40, 130, 10, 40, 0.2, 0};
+        double[] fitted = CameraFit.fit(start, sets);
+        // One shared camera from three heights lands much closer than the hand-tap wobble allows from one height.
+        assertEquals(base[CameraFit.X], fitted[CameraFit.X], 3);
+        assertEquals(base[CameraFit.Z], fitted[CameraFit.Z], 2);
+        assertEquals(base[CameraFit.TURN], fitted[CameraFit.TURN], 0.5);
+        assertEquals(base[CameraFit.VIEW], fitted[CameraFit.VIEW], 1);
+        assertTrue(CameraFit.rms(fitted, sets) <= CameraFit.rms(base, sets) + 1e-4);
+    }
 }

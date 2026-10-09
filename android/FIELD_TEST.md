@@ -141,3 +141,8 @@ If the download fails, the error and the history entry help: share the diagnosti
 8. (v0.15.0) In the line-up, **Line up from taps…**: choose Back, tap 3–4 points along the far edge of the bed in the
    picture; then Left and Right (and Front if it shows), then **Fit**. The note gives the average miss as a share of the
    picture's height; under 1% is a good line-up. Save, and Share diagnostics (the fit is logged).
+9. (v0.15.2) While marking, pinch to zoom into the picture and drag to pan (or Zoom in / Zoom out / Reset zoom); taps
+   still mark, and the outline and dots should stay on the same spots of the picture at any zoom. Rotation lock (line-up
+   panel; More… in the toolpath view) makes a drag pan instead of turning the view.
+10. (v0.16.0) Joint fit: tap the edges and Save at bed Z ≈ 5, then again at Z ≈ 100 and Z ≈ 200 (Controls → Z). Each Fit
+    uses all saved heights; the note lists the miss at each. Share diagnostics afterwards.

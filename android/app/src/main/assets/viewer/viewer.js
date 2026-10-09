@@ -58,6 +58,8 @@
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
     uniform float uLens, uScreenAspect, uPictureAspect, uFit;
+    uniform vec3 uZoom;   // seen from the camera: picture zoom (scale, then shift in -1..1 units), after the lens
+    vec4 zoomed(vec4 p) { return vec4(p.xy * uZoom.x + uZoom.yz * p.w, p.zw); }
     vec4 lens(vec4 p) {
       if (uLens <= 0.0 || p.w <= 0.0) return p;
       vec2 n = p.xy / p.w / uFit, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
@@ -79,7 +81,7 @@
       vNormal = mat3(uView) * normalize(d * aNormal.x + side * aNormal.y + up * aNormal.z);
       vColor = uColors[type];
       if (gl_InstanceID + uBase < uDimBelow) vColor = mix(vColor, uDimColor, 0.55);
-      gl_Position = lens(uViewProj * vec4(p, 1.0));
+      gl_Position = zoomed(lens(uViewProj * vec4(p, 1.0)));
     }`, `#version 300 es
     precision mediump float;
     in vec3 vNormal; in vec3 vColor;
@@ -100,6 +102,8 @@
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
     uniform float uLens, uScreenAspect, uPictureAspect, uFit;
+    uniform vec3 uZoom;   // seen from the camera: picture zoom (scale, then shift in -1..1 units), after the lens
+    vec4 zoomed(vec4 p) { return vec4(p.xy * uZoom.x + uZoom.yz * p.w, p.zw); }
     vec4 lens(vec4 p) {
       if (uLens <= 0.0 || p.w <= 0.0) return p;
       vec2 n = p.xy / p.w / uFit, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
@@ -107,7 +111,7 @@
       if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
       return vec4(n / (1.0 + uLens * r2) * uFit * p.w, p.zw);
     }
-    void main() { gl_Position = lens(uViewProj * vec4(aPosition, 1.0)); }`, `#version 300 es
+    void main() { gl_Position = zoomed(lens(uViewProj * vec4(aPosition, 1.0))); }`, `#version 300 es
     precision mediump float;
     uniform vec4 uColor; out vec4 fragment;
     void main() { fragment = uColor; }`);
@@ -118,6 +122,8 @@
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
     uniform float uLens, uScreenAspect, uPictureAspect, uFit;
+    uniform vec3 uZoom;   // seen from the camera: picture zoom (scale, then shift in -1..1 units), after the lens
+    vec4 zoomed(vec4 p) { return vec4(p.xy * uZoom.x + uZoom.yz * p.w, p.zw); }
     vec4 lens(vec4 p) {
       if (uLens <= 0.0 || p.w <= 0.0) return p;
       vec2 n = p.xy / p.w / uFit, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
@@ -125,7 +131,7 @@
       if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
       return vec4(n / (1.0 + uLens * r2) * uFit * p.w, p.zw);
     }
-    void main() { gl_Position = lens(uViewProj * vec4(aPosition, 1.0)); gl_PointSize = uSize; }`, `#version 300 es
+    void main() { gl_Position = zoomed(lens(uViewProj * vec4(aPosition, 1.0))); gl_PointSize = uSize; }`, `#version 300 es
     precision mediump float;
     uniform vec4 uColor; uniform vec4 uRing; out vec4 fragment;
     void main() {
@@ -248,7 +254,7 @@
     const q = [-w, k, 0, 0, 0, w, k, 0, 1, 0, w, -k, 0, 1, 1, -w, k, 0, 0, 0, w, -k, 0, 1, 1, -w, -k, 0, 0, 1];
     gl.bindVertexArray(printerCam.backdropVao); gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.backdropBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(q), gl.DYNAMIC_DRAW);
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
-    gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, [zoom2d.s, 0, 0, 0, 0, zoom2d.s, 0, 0, 0, 0, 1, 0, zoom2d.x, zoom2d.y, 0, 1]);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0); gl.uniform1f(picture.u.uHas, 1); gl.uniform1f(picture.u.uMirror, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
@@ -259,7 +265,19 @@
     if (!printerCam.looking) return 1;
     return Math.min(1, (width / Math.max(1, height)) / printerCam.aspect);
   }
-  function leaveCameraView() { if (printerCam.looking) { printerCam.looking = false; camera.fov = 35; } }
+  function leaveCameraView() { if (printerCam.looking) { printerCam.looking = false; camera.fov = 35; resetZoom(); } }
+  // Zooming into the camera's picture (from the camera): everything drawn over it zooms the same way, so it stays lined up.
+  const zoom2d = { s: 1, x: 0, y: 0 };
+  function resetZoom() { zoom2d.s = 1; zoom2d.x = 0; zoom2d.y = 0; drawMarks(); redraw(); }
+  function zoomBy(factor, cx, cy) {   // about (cx, cy) in -1..1 view units
+    const s = Math.max(1, Math.min(8, zoom2d.s * factor)), f = s / zoom2d.s;
+    zoom2d.x = cx - (cx - zoom2d.x) * f; zoom2d.y = cy - (cy - zoom2d.y) * f; zoom2d.s = s; clampZoom();
+  }
+  function zoomPicture(factor) { if (!printerCam.looking) return; zoomBy(factor, 0, 0); drawMarks(); redraw(); }
+  function clampZoom() { const m = zoom2d.s - 1; zoom2d.x = Math.max(-m, Math.min(m, zoom2d.x)); zoom2d.y = Math.max(-m, Math.min(m, zoom2d.y)); }
+  // With rotation locked, dragging moves the view instead of turning it (and from the camera, never leaves it).
+  let rotationLocked = false;
+  function setRotationLock(on) { rotationLocked = !!on; }
   function drawPrinterCamera(viewProj) {
     if (!printerCam.pose || !printerCam.lineVao || printerCam.looking) return;
     gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, viewProj);
@@ -436,6 +454,7 @@
     for (const prog of [bead, lines, marker]) {
       gl.useProgram(prog.p); gl.uniform1f(prog.u.uLens, bend);
       gl.uniform1f(prog.u.uScreenAspect, width / Math.max(1, height)); gl.uniform1f(prog.u.uPictureAspect, printerCam.aspect); gl.uniform1f(prog.u.uFit, fitK);
+      gl.uniform3f(prog.u.uZoom, printerCam.looking ? zoom2d.s : 1, printerCam.looking ? zoom2d.x : 0, printerCam.looking ? zoom2d.y : 0);
     }
     if (overlay) drawBackdrop(width, height);
     // Plate and grid (over the camera picture, the grid only).
@@ -497,11 +516,27 @@
     tapStart = pointers.size === 1 ? { x: e.clientX, y: e.clientY, t: Date.now() } : null;
   });
   canvas.addEventListener("pointermove", (e) => {
-    if (!pointers.has(e.pointerId) || marking) return;   // while marking the bed, the view holds still
+    if (!pointers.has(e.pointerId)) return;
     const before = [...pointers.values()].map((p) => ({ ...p }));
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const after = [...pointers.values()];
+    if (printerCam.looking && (marking || rotationLocked)) {
+      // From the camera while marking or locked: drag pans and pinch zooms the picture; a short tap still marks.
+      const w = canvas.clientWidth, h = canvas.clientHeight;
+      if (tapStart && Math.hypot(after[0].x - tapStart.x, after[0].y - tapStart.y) < 12 && after.length === 1) return;
+      if (after.length === 1) { zoom2d.x += (after[0].x - before[0].x) / w * 2; zoom2d.y -= (after[0].y - before[0].y) / h * 2; clampZoom(); }
+      else {
+        const span = (ps) => Math.hypot(ps[0].x - ps[1].x, ps[0].y - ps[1].y), s0 = span(before), s1 = span(after);
+        const mx = (after[0].x + after[1].x) / 2, my = (after[0].y + after[1].y) / 2;
+        if (s0 > 0 && s1 > 0) zoomBy(s1 / s0, mx / w * 2 - 1, 1 - my / h * 2);
+        zoom2d.x += ((after[0].x + after[1].x) - (before[0].x + before[1].x)) / 2 / w * 2;
+        zoom2d.y -= ((after[0].y + after[1].y) - (before[0].y + before[1].y)) / 2 / h * 2; clampZoom();
+      }
+      drawMarks(); redraw(); return;
+    }
+    if (marking) return;
     leaveCameraView();
+    if (after.length === 1 && rotationLocked) { pan(after[0].x - before[0].x, after[0].y - before[0].y); redraw(); return; }
     if (after.length === 1) {
       const dx = after[0].x - before[0].x, dy = after[0].y - before[0].y;
       camera.yaw -= dx * 0.35; camera.pitch = Math.max(-89, Math.min(89, camera.pitch + dy * 0.35));
@@ -529,7 +564,7 @@
       tapStart = null; return;
     }
     if (tapStart && Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) < 10 && Date.now() - tapStart.t < 250) {
-      if (Date.now() - lastTap < 350) { fit(); lastTap = 0; } else lastTap = Date.now();
+      if (Date.now() - lastTap < 350) { if (printerCam.looking && rotationLocked) resetZoom(); else fit(); lastTap = 0; } else lastTap = Date.now();
     }
     tapStart = null;
   }
@@ -592,7 +627,7 @@
   }
   function pictureAt(x, y) {
     const box = canvas.getBoundingClientRect(), f = pictureFrame();
-    const nx = (x - box.left) / f.width * 2 - 1, ny = 1 - (y - box.top) / f.height * 2;
+    const nx = ((x - box.left) / f.width * 2 - 1 - zoom2d.x) / zoom2d.s, ny = (1 - (y - box.top) / f.height * 2 - zoom2d.y) / zoom2d.s;
     const u = (nx / f.w + 1) / 2, v = (1 - ny / f.k) / 2;
     return u < 0 || u > 1 || v < 0 || v > 1 ? null : [u, v];
   }
@@ -603,7 +638,7 @@
     if (!marking && !marks.length) return;
     const f = pictureFrame();
     for (const m of marks) {
-      const nx = (m.u * 2 - 1) * f.w, ny = (1 - m.v * 2) * f.k;
+      const nx = (m.u * 2 - 1) * f.w * zoom2d.s + zoom2d.x, ny = (1 - m.v * 2) * f.k * zoom2d.s + zoom2d.y;
       const dot = document.createElement("div");
       const size = alignStyle.dot, edge = Math.max(1, Math.round(size / 6));
       dot.style.cssText = "position:absolute;border-radius:50%;box-shadow:0 0 2px #000;border:" + edge + "px solid #fff;background:" + EDGE_COLOURS[m.edge % 4]
@@ -646,6 +681,6 @@
     if (!printerCam.looking) fit();
     lookFromCamera();
   }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

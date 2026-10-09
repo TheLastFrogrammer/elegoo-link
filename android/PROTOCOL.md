@@ -223,3 +223,7 @@ user taps along the bed's edges in the picture: CameraFit runs damped least squa
 Jacobian) on each tap's distance to its edge's drawn line, with a slight pull toward the starting values; with fewer than
 8 taps on 3 edges it adjusts only what the taps can determine. CameraFit.project and the viewer page share one camera model
 (checked by drawing CameraFit's points over the page's outline).
+v0.16.0: taps are kept per bed height (up to six heights; new taps within 2 mm of a saved height replace it). Fit solves
+one camera for the bed at Z 0 against the taps from every height at once, the camera's height above the bed growing by
+exactly the bed's Z (it stays on the frame while the bed moves); Save then keeps that single camera. The camera picture can
+be zoomed and panned from the camera (the drawing and tap dots zoom with it), and rotation lock turns drags into panning.

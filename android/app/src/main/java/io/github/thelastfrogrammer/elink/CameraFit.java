@@ -21,6 +21,17 @@ final class CameraFit {
         Mark(int edge, double u, double v) { this.edge = edge; this.u = u; this.v = v; }
     }
 
+    /**
+     * Taps made with the bed at height z. The camera is fixed to the printer's frame while the bed moves, so taps from several
+     * bed heights describe one camera: everything shared, its height above the bed larger by exactly z.
+     */
+    static final class TapSet {
+        final double z, aspect; final List<Mark> marks;
+        TapSet(double z, double aspect, List<Mark> marks) { this.z = z; this.aspect = aspect; this.marks = new ArrayList<>(marks); }
+    }
+    /** The camera seen with the bed at z, from the camera with the bed at 0. */
+    static double[] atBed(double[] base, double z) { double[] c = Arrays.copyOf(base, COUNT); c[Z] += z; return c; }
+
     /** Where a point of the bed's frame (mm, bed surface at z 0) shows in the picture, as {X, Y} with Y up, X in picture heights; null if out of view. */
     static double[] project(double[] c, double aspect, double px, double py, double pz) {
         double yaw = Math.toRadians(c[TURN]), pitch = Math.toRadians(c[TILT]);
@@ -71,9 +82,17 @@ final class CameraFit {
         double sum = 0; for (Mark mark : marks) { double m = miss(c, aspect, mark); sum += m * m; }
         return marks.isEmpty() ? 0 : Math.sqrt(sum / marks.size());
     }
+    /** Root-mean-square miss over taps from every bed height, for the camera `base` (bed at 0). */
+    static double rms(double[] base, List<TapSet> sets) {
+        double sum = 0; int n = 0;
+        for (TapSet set : sets) for (Mark mark : set.marks) { double m = miss(atBed(base, set.z), set.aspect, mark); sum += m * m; n++; }
+        return n == 0 ? 0 : Math.sqrt(sum / n);
+    }
 
+    static int[] free(List<Mark> marks) { return freeSets(Collections.singletonList(new TapSet(0, 1, marks))); }
     /** Which values the taps can pin down: all of them with eight or more taps on three or more edges, fewer otherwise. */
-    static int[] free(List<Mark> marks) {
+    static int[] freeSets(List<TapSet> sets) {
+        List<Mark> marks = new ArrayList<>(); for (TapSet set : sets) marks.addAll(set.marks);
         Set<Integer> edges = new HashSet<>(); for (Mark mark : marks) edges.add(mark.edge);
         if (marks.size() >= 8 && edges.size() >= 3) return new int[] {X, Y, Z, TURN, TILT, VIEW, LENS, ROLL};
         if (marks.size() >= 6 && edges.size() >= 2) return new int[] {X, Y, Z, TURN, TILT, VIEW};
@@ -89,19 +108,24 @@ final class CameraFit {
     /** How far each value may drift from where the user left it before that costs as much as a tap missing by `prior`. */
     private static final double[] SCALE = {20, 20, 20, 5, 5, 5, 0.1, 5};
     static double[] fit(double[] start, double aspect, List<Mark> marks) {
+        return fit(start, Collections.singletonList(new TapSet(0, aspect, marks)));
+    }
+    /** The camera (bed at 0) that best fits taps from every bed height at once, starting from `start` (bed at 0). */
+    static double[] fit(double[] start, List<TapSet> sets) {
         double[] c = Arrays.copyOf(start, COUNT);
         final double[] origin = c.clone();
-        int[] free = free(marks);
+        int[] free = freeSets(sets);
         if (free.length == 0) return c;
-        int n = marks.size() + free.length, m = free.length;
-        double[] r = residuals(c, aspect, marks, origin, free);
+        int taps = 0; for (TapSet set : sets) taps += set.marks.size();
+        int n = taps + free.length, m = free.length;
+        double[] r = residuals(c, sets, origin, free);
         double cost = dot(r, r), lambda = 1e-3;
         for (int iteration = 0; iteration < 200; iteration++) {
             double[][] jac = new double[n][m];
             for (int j = 0; j < m; j++) {
                 double h = STEP[free[j]];
                 double[] plus = c.clone(), minus = c.clone(); plus[free[j]] += h; minus[free[j]] -= h;
-                double[] rp = residuals(plus, aspect, marks, origin, free), rm = residuals(minus, aspect, marks, origin, free);
+                double[] rp = residuals(plus, sets, origin, free), rm = residuals(minus, sets, origin, free);
                 for (int i = 0; i < n; i++) jac[i][j] = (rp[i] - rm[i]) / (2 * h);
             }
             double[][] a = new double[m][m]; double[] g = new double[m];
@@ -117,7 +141,7 @@ final class CameraFit {
                 if (step == null) { lambda *= 10; continue; }
                 double[] next = c.clone();
                 for (int j = 0; j < m; j++) next[free[j]] = clamp(free[j], next[free[j]] + step[j]);
-                double[] rn = residuals(next, aspect, marks, origin, free);
+                double[] rn = residuals(next, sets, origin, free);
                 double nextCost = dot(rn, rn);
                 if (nextCost < cost) {
                     boolean small = cost - nextCost < 1e-12 * Math.max(1, cost);
@@ -132,10 +156,12 @@ final class CameraFit {
 
     private static double clamp(int index, double value) { return Math.max(RANGE[index][0], Math.min(RANGE[index][1], value)); }
     /** The taps' misses, then a small pull of each free value toward where it started (keeps what the taps cannot tell apart). */
-    private static double[] residuals(double[] c, double aspect, List<Mark> marks, double[] origin, int[] free) {
-        double[] r = new double[marks.size() + free.length];
-        for (int i = 0; i < marks.size(); i++) r[i] = miss(c, aspect, marks.get(i));
-        for (int j = 0; j < free.length; j++) r[marks.size() + j] = PRIOR * (c[free[j]] - origin[free[j]]) / SCALE[free[j]];
+    private static double[] residuals(double[] c, List<TapSet> sets, double[] origin, int[] free) {
+        int taps = 0; for (TapSet set : sets) taps += set.marks.size();
+        double[] r = new double[taps + free.length];
+        int i = 0;
+        for (TapSet set : sets) { double[] seen = atBed(c, set.z); for (Mark mark : set.marks) r[i++] = miss(seen, set.aspect, mark); }
+        for (int j = 0; j < free.length; j++) r[taps + j] = PRIOR * (c[free[j]] - origin[free[j]]) / SCALE[free[j]];
         return r;
     }
     private static double dot(double[] a, double[] b) { double s = 0; for (int i = 0; i < a.length; i++) s += a[i] * b[i]; return s; }

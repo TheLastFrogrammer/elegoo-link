@@ -104,4 +104,20 @@ public class ViewerCameraTest {
         assertArrayEquals(points.get(1), GcodeViewerActivity.parsePoints(GcodeViewerActivity.pointsJson(points)).get(1), 1e-12);
         assertTrue(GcodeViewerActivity.parsePoints("not json").isEmpty());
     }
+
+    @Test public void tapsAreKeptPerBedHeight() {
+        java.util.List<CameraFit.Mark> a = java.util.Arrays.asList(new CameraFit.Mark(1, 0.2, 0.3), new CameraFit.Mark(3, 0.7, 0.6));
+        java.util.List<CameraFit.TapSet> sets = GcodeViewerActivity.withTaps(new java.util.ArrayList<>(), new CameraFit.TapSet(5, 16.0 / 9, a));
+        sets = GcodeViewerActivity.withTaps(sets, new CameraFit.TapSet(100, 16.0 / 9, a));
+        sets = GcodeViewerActivity.withTaps(sets, new CameraFit.TapSet(101, 16.0 / 9, a.subList(0, 1)));   // replaces the set at 100
+        assertEquals(2, sets.size());
+        assertEquals(101, sets.get(1).z, 0); assertEquals(1, sets.get(1).marks.size());
+        assertEquals("No taps now: the saved ones stay", 2, GcodeViewerActivity.withTaps(sets, new CameraFit.TapSet(50, 1.7, new java.util.ArrayList<>())).size());
+        java.util.List<CameraFit.TapSet> back = GcodeViewerActivity.parseTaps(GcodeViewerActivity.tapsJson(sets));
+        assertEquals(2, back.size());
+        assertEquals(3, back.get(0).marks.get(1).edge);
+        assertEquals(0.7, back.get(0).marks.get(1).u, 1e-12);
+        assertEquals(16.0 / 9, back.get(0).aspect, 1e-12);
+        assertTrue(GcodeViewerActivity.parseTaps("[{]").isEmpty());
+    }
 }
