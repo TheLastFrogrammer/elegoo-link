@@ -14,6 +14,8 @@
 <body>
 <canvas id="view" role="img" aria-label="3D view of the toolpath. Use the layer slider and buttons below the view; Layer and line type information is in the panel."></canvas>
 <div id="message"></div>
+<!-- The cloud camera's video element: kept on screen (1 px) so the WebView keeps decoding it; it is drawn in the scene. -->
+<div id="camera-video" style="position:absolute;left:0;top:0;width:2px;height:2px;opacity:0.01;overflow:hidden;pointer-events:none"></div>
 <script src="viewer.js"></script>
 </body>
 </html>

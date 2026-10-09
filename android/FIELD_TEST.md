@@ -118,3 +118,15 @@ If the download fails, the error and the history entry help: share the diagnosti
    method as answered, refused with an error code, skipped or no reply.
 3. Share diagnostics… and send the **Printer probe** section. Especially wanted: the port line (is 80 refused while 9001 or
    others are open?), the HTTP line for port 80, and whether 1037, 1046 and 1051 answer.
+
+## 14. The printer's camera in Live toolpath (v0.14.0)
+
+1. Start a print and open Live toolpath. More… → **Show the printer's camera in the view**.
+2. Check: a dark camera shape with a faint cone appears above the bed, with a screen in front of it playing the camera.
+   Connected locally, the picture is the printer's own stream (port 8080); watching through the cloud, it is Elegoo's
+   cloud video (needs cloud control turned on once, as for Monitor → Camera).
+3. More… → **Camera position…**: pick the spot that matches where the camera really is on your CC2, then More… →
+   **Look from the camera**: the picture fills the view and the planned toolpath is drawn over it. Tell us which spot
+   lines up best, and whether the print in the picture sits where the toolpath is (field of view and position are
+   estimates for now).
+4. Leave the screen and come back: the camera should stop while away and restart on return.

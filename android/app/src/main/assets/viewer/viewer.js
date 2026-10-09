@@ -3,7 +3,9 @@
 //   meta.json      layer starts, travel starts, layer Z, bed outline, feature names
 //   segments.bin   float32 x0 y0 z0 x1 y1 z1 width height type, per segment
 //   travels.bin    float32 x0 y0 z0 x1 y1 z1, per travel move
-// The app drives it through window.viewer: load(), update(state), setTheme(theme), resetCamera(), setView("top"|"iso").
+// The app drives it through window.viewer: load(), update(state), setTheme(theme), resetCamera(), setView("top"|"iso"|"printer").
+// The printer's camera can be shown in the scene (a camera model, its view cone and a screen with the live picture):
+// showPrinterCamera(pose|null), cameraFrame(url) for JPEG frames the app serves, cameraCloud(...)/cameraStop() for Elegoo's cloud video.
 "use strict";
 (function () {
   const STRIDE = 9 * 4;
@@ -102,6 +104,15 @@
       fragment = r > 0.62 ? uRing : uColor;
     }`);
 
+  // A flat picture in the scene: the printer camera's live image.
+  const picture = program(`#version 300 es
+    layout(location=0) in vec3 aPosition; layout(location=1) in vec2 aUv;
+    uniform mat4 uViewProj; uniform float uMirror; out vec2 vUv;
+    void main() { vUv = vec2(uMirror > 0.5 ? 1.0 - aUv.x : aUv.x, aUv.y); gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
+    precision mediump float;
+    in vec2 vUv; uniform sampler2D uImage; uniform float uHas; uniform vec4 uEmpty; out vec4 fragment;
+    void main() { fragment = uHas > 0.5 ? vec4(texture(uImage, vUv).rgb, 0.96) : uEmpty; }`);
+
   // Bead geometry: top, bottom and two rounded sides (side normals lean up or down so the bead looks round).
   function beadGeometry() {
     const v = [];
@@ -118,7 +129,8 @@
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0 };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
-    travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68] };
+    travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
+    camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85] };
   const camera = { yaw: -55, pitch: 32, distance: 300, target: [128, 128, 10], fov: 35 };
   let dirty = false;
   let beadVao, beadVertices, instanceBuffer, travelVao, travelBuffer, bedVao, bedLineCount = 0, plateVao, markerVao, markerBuffer;
@@ -139,6 +151,153 @@
     markerBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffer); gl.bufferData(gl.ARRAY_BUFFER, 12, gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
     gl.bindVertexArray(null);
+  }
+
+  // ---------------------------------------------------------------- printer camera
+  // pose: { position: [x, y, z], target: [x, y, z], fov: vertical degrees, screen: mm from the lens to the picture }.
+  const printerCam = { pose: null, aspect: 16 / 9, texture: null, has: false, lineVao: null, lineBuffer: null, lineCount: 0,
+    quadVao: null, quadBuffer: null, loading: false, video: null, client: null, track: null, playing: false,
+    looking: false, backdropVao: null, backdropBuffer: null };
+  function camBasis(pose) {
+    const p = pose.position, t = pose.target;
+    let f = [t[0] - p[0], t[1] - p[1], t[2] - p[2]]; let l = Math.hypot(...f); f = f.map((v) => v / l);
+    let r = [f[1], -f[0], 0]; l = Math.hypot(...r) || 1; r = r.map((v) => v / l);   // f × z
+    const u = [r[1] * f[2] - r[2] * f[1], r[2] * f[0] - r[0] * f[2], r[0] * f[1] - r[1] * f[0]];
+    return { f, r, u };
+  }
+  function buildPrinterCamera() {
+    const pose = printerCam.pose; if (!pose) return;
+    const { f, r, u } = camBasis(pose), p = pose.position;
+    const at = (a, b, c) => [p[0] + f[0] * a + r[0] * b + u[0] * c, p[1] + f[1] * a + r[1] * b + u[1] * c, p[2] + f[2] * a + r[2] * b + u[2] * c];
+    const d = pose.screen || 80, hh = d * Math.tan((pose.fov || 50) * Math.PI / 360), hw = hh * printerCam.aspect;
+    const tl = at(d, -hw, hh), tr = at(d, hw, hh), br = at(d, hw, -hh), bl = at(d, -hw, -hh);
+    const v = [];
+    const edge = (a, b) => v.push(...a, ...b);
+    // Body: a small box behind the lens, and a lens ring.
+    const box = []; for (let i = 0; i < 8; i++) box.push(at(i & 1 ? -2 : -26, i & 2 ? 9 : -9, i & 4 ? 7 : -7));
+    for (const [a, b] of [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]]) edge(box[a], box[b]);
+    for (let i = 0; i < 16; i++) { const a = i / 16 * 2 * Math.PI, b = (i + 1) / 16 * 2 * Math.PI; edge(at(0, 5 * Math.cos(a), 5 * Math.sin(a)), at(0, 5 * Math.cos(b), 5 * Math.sin(b))); }
+    const bodyCount = v.length / 3;
+    for (const c of [tl, tr, br, bl]) edge(p, c);
+    edge(tl, tr); edge(tr, br); edge(br, bl); edge(bl, tl);
+    printerCam.bodyCount = bodyCount; printerCam.lineCount = v.length / 3;
+    if (!printerCam.lineVao) {
+      printerCam.lineVao = gl.createVertexArray(); gl.bindVertexArray(printerCam.lineVao);
+      printerCam.lineBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.lineBuffer);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+      printerCam.quadVao = gl.createVertexArray(); gl.bindVertexArray(printerCam.quadVao);
+      printerCam.quadBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.quadBuffer);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+      printerCam.texture = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+      gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.lineBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
+    const q = [];
+    for (const [c, uv] of [[tl, [0, 0]], [tr, [1, 0]], [br, [1, 1]], [tl, [0, 0]], [br, [1, 1]], [bl, [0, 1]]]) q.push(...c, ...uv);
+    gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.quadBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(q), gl.DYNAMIC_DRAW);
+    gl.bindVertexArray(null);
+  }
+  // Seen from the camera: its picture fills the view behind the toolpath, scaled so its height spans the camera's field of view,
+  // which is the view's field of view too; where the estimate of the camera's place is right, the print lines up with the picture.
+  function drawBackdrop(width, height) {
+    if (!printerCam.has) return;
+    if (!printerCam.backdropVao) {
+      printerCam.backdropVao = gl.createVertexArray(); gl.bindVertexArray(printerCam.backdropVao);
+      printerCam.backdropBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.backdropBuffer);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
+    }
+    const w = printerCam.aspect / (width / Math.max(1, height));
+    const q = [-w, 1, 0, 0, 0, w, 1, 0, 1, 0, w, -1, 0, 1, 1, -w, 1, 0, 0, 0, w, -1, 0, 1, 1, -w, -1, 0, 0, 1];
+    gl.bindVertexArray(printerCam.backdropVao); gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.backdropBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(q), gl.DYNAMIC_DRAW);
+    gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
+    gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0); gl.uniform1f(picture.u.uHas, 1); gl.uniform1f(picture.u.uMirror, 0);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
+  }
+  function leaveCameraView() { if (printerCam.looking) { printerCam.looking = false; camera.fov = 35; } }
+  function drawPrinterCamera(viewProj) {
+    if (!printerCam.pose || !printerCam.lineVao || printerCam.looking) return;
+    gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, viewProj);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0);
+    gl.uniform1f(picture.u.uHas, printerCam.has ? 1 : 0); gl.uniform4fv(picture.u.uEmpty, theme.screen);
+    // Seen from the bed side the picture would read back to front: show it the way round it reads from where you look.
+    const { f } = camBasis(printerCam.pose), e = eye(), p = printerCam.pose.position;
+    gl.uniform1f(picture.u.uMirror, (e[0] - p[0]) * f[0] + (e[1] - p[1]) * f[1] + (e[2] - p[2]) * f[2] > (printerCam.pose.screen || 80) ? 1 : 0);
+    gl.bindVertexArray(printerCam.quadVao); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
+    gl.bindVertexArray(printerCam.lineVao);
+    gl.uniform4fv(lines.u.uColor, theme.camera); gl.drawArrays(gl.LINES, 0, printerCam.bodyCount);
+    gl.uniform4fv(lines.u.uColor, theme.cone); gl.drawArrays(gl.LINES, printerCam.bodyCount, printerCam.lineCount - printerCam.bodyCount);
+  }
+  function upload(source, width, height) {
+    if (!printerCam.texture || !width || !height) return;
+    gl.bindTexture(gl.TEXTURE_2D, printerCam.texture);
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_BYTE, source);
+    const aspect = width / height;
+    if (Math.abs(aspect - printerCam.aspect) > 0.01) { printerCam.aspect = aspect; buildPrinterCamera(); }
+    printerCam.has = true; redraw();
+  }
+  function showPrinterCamera(pose) {
+    printerCam.pose = pose || null;
+    if (!pose) { cameraStop(); printerCam.has = false; }
+    else buildPrinterCamera();
+    fit();
+  }
+  // A JPEG the app serves (local camera): fetched only when the previous one is on screen, so frames never queue up.
+  async function cameraFrame(url) {
+    if (printerCam.loading || !printerCam.pose) return;
+    printerCam.loading = true;
+    try {
+      const blob = await (await fetch(url, { cache: "no-store" })).blob();
+      const image = await createImageBitmap(blob);
+      upload(image, image.width, image.height); image.close();
+    } catch (e) { /* the next frame will try again */ } finally { printerCam.loading = false; }
+  }
+  // Elegoo's cloud video (Agora), joined as Elegoo's printer page does; the video element is drawn into the texture each frame.
+  function cameraStatus(text) { if (android && android.onCamera) android.onCamera(String(text)); }
+  function loadAgora() {
+    if (window.AgoraRTC) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script"); script.src = "/assets/camera/AgoraRTC_N-production.js";
+      script.onload = resolve; script.onerror = () => reject(new Error("camera library missing")); document.head.appendChild(script);
+    });
+  }
+  async function cameraCloud(appId, channel, token, uid) {
+    try {
+      await cameraStop(); cameraStatus("Connecting to the camera…");
+      await loadAgora();
+      AgoraRTC.setLogLevel(3); try { AgoraRTC.disableLogUpload(); } catch (e) { }
+      const client = AgoraRTC.createClient({ mode: "live", codec: "vp8" }); printerCam.client = client;
+      const holder = document.getElementById("camera-video");
+      const play = async (user) => {
+        await client.subscribe(user, "video"); printerCam.track = user.videoTrack;
+        holder.innerHTML = ""; user.videoTrack.play(holder, { fit: "contain" });
+        printerCam.video = holder.querySelector("video"); printerCam.playing = true; cameraStatus("playing"); pump();
+      };
+      client.on("user-published", (user, type) => { if (type === "video") play(user); });
+      client.on("user-unpublished", () => { printerCam.playing = false; cameraStatus("The printer stopped sending video."); });
+      await client.join(appId, channel, token, Number(uid));
+      await client.setClientRole("host");
+      for (const user of client.remoteUsers) if (user.hasVideo) { await play(user); break; }
+      if (!printerCam.playing) cameraStatus("Connected. Waiting for the printer to send video…");
+    } catch (e) { cameraStatus("The camera could not start (" + ((e && (e.code || e.message)) || e) + ")."); }
+  }
+  function pump() {
+    if (!printerCam.playing || !printerCam.pose) return;
+    const video = printerCam.video;
+    if (video && video.readyState >= 2 && video.videoWidth) upload(video, video.videoWidth, video.videoHeight);
+    setTimeout(() => requestAnimationFrame(pump), 100);   // about ten pictures a second is plenty for a print
+  }
+  async function cameraStop() {
+    printerCam.playing = false; printerCam.video = null; printerCam.track = null;
+    const client = printerCam.client; printerCam.client = null;
+    if (client) try { await client.leave(); } catch (e) { }
+    const holder = document.getElementById("camera-video"); if (holder) holder.innerHTML = "";
   }
 
   function setupBed(outline) {
@@ -221,9 +380,11 @@
     const viewProj = multiply(perspective(camera.fov, width / Math.max(1, height), Math.max(0.5, camera.distance / 500), camera.distance * 20), viewMatrix);
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-    // Plate and grid.
+    const overlay = printerCam.looking && printerCam.has;
+    if (overlay) drawBackdrop(width, height);
+    // Plate and grid (over the camera picture, the grid only).
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
-    gl.uniform4fv(lines.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
     gl.uniform4fv(lines.u.uColor, theme.grid); gl.bindVertexArray(bedVao); gl.drawArrays(gl.LINES, 0, bedLineCount);
     // Printed / visible beads, then travels, then the rest of the current layer as a translucent ghost.
     drawBeads(view.start, view.end, false, viewProj, viewMatrix);
@@ -232,6 +393,7 @@
       gl.bindVertexArray(travelVao); gl.drawArrays(gl.LINES, view.travelStart * 2, (view.travelEnd - view.travelStart) * 2);
     }
     if (view.ghostEnd > view.end) { gl.depthMask(false); drawBeads(view.end, view.ghostEnd, true, viewProj, viewMatrix); gl.depthMask(true); }
+    drawPrinterCamera(viewProj);
     if (view.nozzle) {
       gl.disable(gl.DEPTH_TEST);
       gl.useProgram(marker.p); gl.uniformMatrix4fv(marker.u.uViewProj, false, viewProj);
@@ -247,7 +409,10 @@
   // Frames the whole model: the distance at which all eight corners of its bounds sit inside the view for the
   // current angle and screen shape (with a margin), so a long model is not cut off at the edge.
   function fit() {
-    const box = data.box || [0, 0, 0, 256, 256, 10];
+    leaveCameraView();
+    const box = (data.box || [0, 0, 0, 256, 256, 10]).slice();
+    if (printerCam.pose) for (const p of [printerCam.pose.position, printerCam.pose.target])
+      for (let i = 0; i < 3; i++) { box[i] = Math.min(box[i], p[i]); box[i + 3] = Math.max(box[i + 3], p[i]); }
     camera.target = [(box[0] + box[3]) / 2, (box[1] + box[4]) / 2, (box[2] + box[5]) / 2];
     camera.yaw = -55; camera.pitch = 32; camera.distance = 100;
     const m = lookAt(eye(), camera.target, [0, 0, 1]);
@@ -272,6 +437,7 @@
     const before = [...pointers.values()].map((p) => ({ ...p }));
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const after = [...pointers.values()];
+    leaveCameraView();
     if (after.length === 1) {
       const dx = after[0].x - before[0].x, dy = after[0].y - before[0].y;
       camera.yaw -= dx * 0.35; camera.pitch = Math.max(-89, Math.min(89, camera.pitch + dy * 0.35));
@@ -345,7 +511,16 @@
   setPalette(PALETTE);
   try { setupStatic(); } catch (error) { fail("WebGL setup failed: " + error.message); return; }
   // setView("top") looks straight down, to check a layer's lines; anything else is the usual three-quarter view.
-  function setView(name) { fit(); if (name === "top") { camera.yaw = -90; camera.pitch = 88; redraw(); } }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera };
+  // "printer" looks from where the printer's camera is, at what it looks at.
+  function setView(name) {
+    fit();
+    if (name === "top") { camera.yaw = -90; camera.pitch = 88; redraw(); }
+    if (name === "printer" && printerCam.pose) {
+      const p = printerCam.pose.position, t = printerCam.pose.target, d = [p[0] - t[0], p[1] - t[1], p[2] - t[2]];
+      camera.target = t.slice(); camera.distance = Math.hypot(...d); camera.fov = printerCam.pose.fov || 50; printerCam.looking = true;
+      camera.yaw = Math.atan2(d[1], d[0]) * 180 / Math.PI; camera.pitch = Math.asin(d[2] / Math.hypot(...d)) * 180 / Math.PI; redraw();
+    }
+  }
+  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

@@ -65,6 +65,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private long loggedAt;
     private PrinterService printer;
     private GcodeLibrary library;
+    // The printer's camera in the scene (Live only): its position (an estimate the user can change) and the picture.
+    static final String[] CAMERA_SPOTS = {"Front left, top", "Front right, top", "Back left, top", "Back right, top", "Front centre, top"};
+    private CameraFrames cameraFrames;
+    private boolean cameraStarted, cameraCloud;
+    private int frameNumber;
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) { printer = ((PrinterService.LocalBinder) binder).service(); if (followMode) printer.watch(GcodeViewerActivity.this); }
@@ -100,9 +105,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (followMode) bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
     }
 
-    @Override protected void onStart() { super.onStart(); if (printer != null && followMode) printer.watch(this); }
-    @Override protected void onStop() { setPlaying(false); if (printer != null) printer.unwatch(this); super.onStop(); }
+    @Override protected void onStart() { super.onStart(); if (printer != null && followMode) printer.watch(this); startCamera(); }
+    @Override protected void onStop() { setPlaying(false); stopCamera(); if (printer != null) printer.unwatch(this); super.onStop(); }
     @Override protected void onDestroy() {
+        stopCamera();
         if (printer != null) printer.unwatch(this);
         if (bound) unbindService(connection);
         worker.shutdownNow(); main.removeCallbacksAndMessages(null);
@@ -165,11 +171,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private void setupWeb() {
         WebSettings settings = web.getSettings();
-        settings.setJavaScriptEnabled(true); settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
+        settings.setJavaScriptEnabled(true); settings.setAllowFileAccess(false); settings.setAllowContentAccess(false); settings.setMediaPlaybackRequiresUserGesture(false); // the cloud camera's muted video
         web.setBackgroundColor(background);
         WebViewAssetLoader loader = new WebViewAssetLoader.Builder()
             .addPathHandler("/assets/", new WebViewAssetLoader.AssetsPathHandler(this))
-            .addPathHandler("/data/", this::serveData).build();
+            .addPathHandler("/data/", this::serveData)
+            .addPathHandler("/live/", this::serveFrame).build();
         web.setWebViewClient(new WebViewClient() {
             @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) { return loader.shouldInterceptRequest(request.getUrl()); }
         });
@@ -189,9 +196,94 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         return new WebResourceResponse(type, null, new ByteArrayInputStream(body));
     }
 
+    /** The newest camera picture for the scene; the page asks for one only after it has shown the previous one. */
+    private WebResourceResponse serveFrame(String name) {
+        CameraFrames frames = cameraFrames;
+        byte[] frame = frames == null || !name.startsWith("frame.jpg") ? null : frames.take();
+        if (frame == null) return new WebResourceResponse("text/plain", "utf-8", 404, "Not found", null, new ByteArrayInputStream(new byte[0]));
+        return new WebResourceResponse("image/jpeg", null, new ByteArrayInputStream(frame));
+    }
+
+    // ------------------------------------------------------------------ the printer's camera in the scene
+    private android.content.SharedPreferences viewerPrefs() { return getSharedPreferences("viewer-hints", MODE_PRIVATE); }
+    private boolean cameraWanted() { return followMode && viewerPrefs().getBoolean("camera", false); }
+    /** Where the CC2's camera sits is not measured yet: five spots around the 256 mm bed, looking at its centre. */
+    static JSONObject cameraPose(int spot) throws org.json.JSONException {
+        double[][] spots = {{-10, -20, 240}, {266, -20, 240}, {-10, 276, 240}, {266, 276, 240}, {128, -40, 240}};
+        double[] p = spots[Math.max(0, Math.min(spots.length - 1, spot))];
+        return new JSONObject().put("position", new JSONArray(p)).put("target", new JSONArray(new double[] {128, 128, 0})).put("fov", 50).put("screen", 90);
+    }
+    private void startCamera() {
+        if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null) return;
+        try { web.evaluateJavascript("viewer.showPrinterCamera(" + cameraPose(viewerPrefs().getInt("cameraSpot", 0)) + ")", null); } catch (Exception ignored) { }
+        if (printer.ready()) {
+            String host = printer.host(), url;
+            try { url = FeatureData.cameraUrl(host, printer.cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : printer.cameraUrl); }
+            catch (Exception invalid) { cameraMessage("The camera address is not on the printer, so it was not opened."); return; }
+            NetworkRoute route;
+            try { route = NetworkRoute.select(this, printer.remote()); } catch (IOException unavailable) { cameraMessage(unavailable.getMessage()); return; }
+            cameraStarted = true; cameraCloud = false;
+            cameraFrames = new CameraFrames(url, route.http(), new CameraFrames.Listener() {
+                public void frame() { main.post(() -> { if (web != null && cameraFrames != null) web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); }); }
+                public void error(String message) { main.post(() -> { cameraStarted = false; cameraFrames = null; cameraMessage(message + " Open the camera from Monitor to check it."); }); }
+            });
+            cameraMessage("Camera: the printer's own stream on this network.");
+        } else if (printer.usingCloud() && !printer.cloudSerial.isEmpty()) {
+            if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false)) {
+                cameraMessage("The camera through Elegoo's cloud needs cloud control turned on: Monitor > Camera explains it. The camera model is shown without a picture."); return;
+            }
+            cameraStarted = true; cameraCloud = true;
+            String serial = printer.cloudSerial;
+            cameraMessage("Getting camera access from Elegoo…");
+            worker.execute(() -> {
+                String error = null; CloudApi.AgoraCredential issued = null;
+                try {
+                    CloudAccountStore store = new CloudAccountStore(this);
+                    CloudLogin.Account account = store.load();
+                    if (account == null) error = "Sign in with Elegoo in Settings first.";
+                    else {
+                        CloudApi api = new CloudApi(store.china(), account, CloudApi.agent(this), CloudApi::https);
+                        issued = api.agoraCredential();
+                        if (api.account() != account) store.save(api.account());
+                        if (issued.rtcToken.isEmpty() || issued.rtcUserId.isEmpty()) error = "Elegoo did not issue camera access for this account.";
+                    }
+                } catch (Exception failure) { error = failure.getMessage() == null ? "Could not reach the Elegoo cloud." : failure.getMessage(); }
+                String text = error; CloudApi.AgoraCredential credential = issued;
+                main.post(() -> {
+                    if (isDestroyed() || web == null || !cameraStarted) return;
+                    if (text != null) { cameraStarted = false; cameraMessage(CloudCameraActivity.explain(text)); return; }
+                    web.evaluateJavascript("viewer.cameraCloud(" + JSONObject.quote(CloudControl.AGORA_APP_ID) + "," + JSONObject.quote(serial) + ","
+                        + JSONObject.quote(credential.rtcToken) + "," + JSONObject.quote(credential.rtcUserId) + ")", null);
+                });
+            });
+        } else cameraMessage("No camera picture: connect to the printer, or watch it through the Elegoo cloud.");
+    }
+    private void stopCamera() {
+        CameraFrames frames = cameraFrames; cameraFrames = null; if (frames != null) frames.close();
+        if (cameraStarted && cameraCloud && web != null) web.evaluateJavascript("viewer.cameraStop()", null);
+        cameraStarted = false;
+    }
+    private void cameraMessage(String text) { if (status != null && text != null && !text.isEmpty()) status.setText(text); }
+    private void toggleCamera() {
+        boolean on = !cameraWanted();
+        viewerPrefs().edit().putBoolean("camera", on).apply();
+        if (on) startCamera(); else { stopCamera(); if (web != null) web.evaluateJavascript("viewer.showPrinterCamera(null)", null); }
+    }
+    private void cameraSpotDialog() {
+        new AlertDialog.Builder(this).setTitle("Where is the camera?")
+            .setSingleChoiceItems(CAMERA_SPOTS, viewerPrefs().getInt("cameraSpot", 0), (d, which) -> {
+                viewerPrefs().edit().putInt("cameraSpot", which).apply(); d.dismiss();
+                try { if (web != null && cameraWanted()) web.evaluateJavascript("viewer.showPrinterCamera(" + cameraPose(which) + ")", null); } catch (Exception ignored) { }
+            }).setNegativeButton("Cancel", null).show();
+    }
+
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); }); }
-        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); }); }
+        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); }); }
+        @JavascriptInterface public void onCamera(String message) { main.post(() -> {
+            if ("playing".equals(message)) cameraMessage("Camera: live video through Elegoo's cloud.");
+            else cameraMessage(CloudCameraActivity.explain(message));
+        }); }
         @JavascriptInterface public void onError(String message) { main.post(() -> status.setText(message)); }
     }
 
@@ -298,13 +390,22 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void moreDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(4), dp(20), dp(8));
         AlertDialog[] dialog = new AlertDialog[1];
-        String[] names = {"Show / hide line types…", showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)",
-            moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…", "What am I seeing?"};
-        Runnable[] actions = {this::featureDialog, () -> { showTravel = !showTravel; pushView(); },
-            () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); }, this::helpDialog};
-        for (int i = 0; i < names.length; i++) {
-            Runnable action = actions[i];
-            Button b = rowButton(body, names[i], () -> { dialog[0].dismiss(); action.run(); });
+        java.util.List<String> names = new java.util.ArrayList<>(java.util.Arrays.asList("Show / hide line types…", showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)",
+            moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…"));
+        java.util.List<Runnable> actions = new java.util.ArrayList<>(java.util.Arrays.asList(this::featureDialog, () -> { showTravel = !showTravel; pushView(); },
+            () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); }));
+        if (followMode) {
+            boolean on = cameraWanted();
+            names.add(on ? "Hide the printer's camera" : "Show the printer's camera in the view"); actions.add(this::toggleCamera);
+            if (on) {
+                names.add("Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt("cameraSpot", 0)))] + "…"); actions.add(this::cameraSpotDialog);
+                names.add("Look from the camera"); actions.add(() -> { if (web != null) web.evaluateJavascript("viewer.setView('printer')", null); });
+            }
+        }
+        names.add("What am I seeing?"); actions.add(this::helpDialog);
+        for (int i = 0; i < names.size(); i++) {
+            Runnable action = actions.get(i);
+            Button b = rowButton(body, names.get(i), () -> { dialog[0].dismiss(); action.run(); });
             ((LinearLayout.LayoutParams) b.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) b.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) b.getLayoutParams()).leftMargin = 0;
             b.setEnabled(path != null);
         }
@@ -341,7 +442,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             .append("Blue lines (Travel moves): the nozzle moving without printing.\n")
             .append("Teal dot: the nozzle.\n\n")
             .append("Gestures: drag to turn the view, two fingers to move and zoom, double-tap to reset.\n\nTap a colour chip to hide that type; hold it to see only that type (the quickest way to find supports or the prime tower). More… > Show / hide line types does the same from a list.");
-        if (followMode) text.append("\n\nLive: the phone shows this G-code file, not a camera. The printer reports its current layer and nozzle position, and the viewer shows the file printed up to there. Scrubbing the bars leaves live mode; “Back to live” returns.");
+        if (followMode) text.append("\n\nCamera (More…): a dark camera shape with a faint cone shows where the printer's camera is and what it sees; the screen in front of it plays the camera's live picture. The position is an estimate: choose the spot that matches your printer under More… > Camera position.");
+        if (followMode) text.append("\n\nLive: the 3D lines are this G-code file, not a camera. The printer reports its current layer and nozzle position, and the viewer shows the file printed up to there. Scrubbing the bars leaves live mode; “Back to live” returns.");
         new AlertDialog.Builder(this).setTitle("What am I seeing?").setMessage(text).setPositiveButton("Got it", null).show();
     }
 

@@ -193,3 +193,13 @@ Settings → Link Workshop → Probe printer (read-only)… records what the pri
 
 Diagnostics keep each reply's field names and kinds, nested two levels, never values; error codes are kept. Unknown method
 numbers are never tried, since neighbouring numbers stop, start, move, delete and update the printer.
+
+## The printer camera in the toolpath viewer (v0.14.0)
+
+Live toolpath can draw the printer's camera in its scene: a camera model and view cone at one of five estimated spots around
+the 256 mm bed (looking at the bed centre, 50° vertical field of view), with the live picture on a screen 90 mm in front of
+the lens. Locally the app reads the MJPEG stream (the 1042 address, else `http://<printer>:8080/?action=stream`), keeps only
+the newest JPEG and serves it to the page at `/live/frame.jpg`; the page asks for the next one only after showing the last.
+Through the cloud the page joins Elegoo's Agora video channel the same way the Camera screen does and draws the video element
+into the scene about ten times a second. "Look from the camera" puts the view at the camera's spot with its field of view and
+draws the picture behind the toolpath. The camera's real position and lens are not measured yet.
