@@ -81,4 +81,26 @@ public class ViewerCameraTest {
         assertNull(GcodeViewerActivity.parseParams("1,2,3,4,5,6,x"));
         assertNull(GcodeViewerActivity.parseParams(null));
     }
+
+    @Test public void oneLineUpMovesWithTheBedAndSeveralAreFitted() {
+        java.util.List<double[]> points = new java.util.ArrayList<>();
+        points = GcodeViewerActivity.addPoint(points, 4, new double[] {308, -9, 32, 134, 8, 37, 0.23});
+        double[] at80 = GcodeViewerActivity.modelAt(points, 80);
+        assertEquals("One line-up: the camera sits as much higher as the bed went down", 108, at80[2], 1e-9);
+        assertEquals(134, at80[3], 1e-9);
+
+        // A second height that says the camera rises 0.9 mm per mm and tilts a little more: the fit follows the measurements.
+        points = GcodeViewerActivity.addPoint(points, 104, new double[] {308, -9, 122, 134, 10, 37, 0.23});
+        double[] at54 = GcodeViewerActivity.modelAt(points, 54);
+        assertEquals(77, at54[2], 1e-9);
+        assertEquals(9, at54[4], 1e-9);
+        assertEquals(308, at54[0], 1e-9);
+
+        // Saving again near a saved height replaces it.
+        points = GcodeViewerActivity.addPoint(points, 105, new double[] {308, -9, 123, 134, 10, 37, 0.23});
+        assertEquals(2, points.size());
+        assertEquals(points.size(), GcodeViewerActivity.parsePoints(GcodeViewerActivity.pointsJson(points)).size());
+        assertArrayEquals(points.get(1), GcodeViewerActivity.parsePoints(GcodeViewerActivity.pointsJson(points)).get(1), 1e-12);
+        assertTrue(GcodeViewerActivity.parsePoints("not json").isEmpty());
+    }
 }

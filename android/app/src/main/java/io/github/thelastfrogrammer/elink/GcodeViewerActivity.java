@@ -71,6 +71,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private LinearLayout root, mainPanel, alignPanel;
     private android.widget.ScrollView alignScroll;
     private double[] aligning, alignStart;
+    private double alignZ;
     private CameraFrames cameraFrames;
     private boolean cameraStarted, cameraCloud;
     private int frameNumber;
@@ -79,7 +80,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
             printer = ((PrinterService.LocalBinder) binder).service(); if (followMode) printer.watch(GcodeViewerActivity.this);
             readBedZ(); startCamera();
-            if (alignOnly && aligning == null) startAligning(); else if (aligning != null) pushAlign();
+            if (alignOnly && aligning == null) startAligning();
+            else if (aligning != null) {   // the line-up began before the bed's height was known: start it from the right height
+                alignStart = currentParams(); aligning = alignStart.clone(); alignZ = bedZ;
+                for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
+                pushAlign();
+            }
         }
         @Override public void onServiceDisconnected(ComponentName name) { printer = null; }
     };
@@ -229,10 +235,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         double z = position == null ? Double.NaN : position.optDouble("z", Double.NaN);
         if (!Double.isNaN(z) && z >= 0 && z < 400) bedZ = z;
     }
-    /** The camera as it sits above the bed right now. */
-    private JSONObject livePose(double[] c) throws org.json.JSONException {
-        double[] raised = c.clone(); raised[2] += bedZ; shownBedZ = bedZ; return poseJson(raised);
-    }
+    /** A pose for the page from camera parameters that already hold for the bed's current height. */
+    private JSONObject livePose(double[] c) throws org.json.JSONException { shownBedZ = bedZ; return poseJson(c); }
     /** Where the CC2's camera sits is not measured yet: five spots around the 256 mm bed, looking at its centre. */
     static JSONObject cameraPose(int spot) throws org.json.JSONException { return poseJson(spotParams(spot)); }
     /** A preset spot as camera parameters: x, y, z (mm), turn and tilt-down (degrees), vertical field of view, lens curve. */
@@ -260,10 +264,71 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         try { for (int i = 0; i < 7; i++) c[i] = Double.parseDouble(parts[i]); } catch (NumberFormatException bad) { return null; }
         return c;
     }
+    /**
+     * The camera for the bed's current height. Line-ups saved at several bed heights are fitted with a straight line per
+     * value (so how the camera relates to the bed is measured, not assumed); with one, or with a preset, the camera simply
+     * sits higher above the bed by as much as the bed went down.
+     */
     private double[] currentParams() {
         int spot = viewerPrefs().getInt("cameraSpot", 0);
-        double[] custom = spot == LINED_UP ? parseParams(viewerPrefs().getString("cameraCustomBed0", null)) : null;
-        return custom != null ? custom : spotParams(spot == LINED_UP ? 0 : spot);
+        java.util.List<double[]> points = spot == LINED_UP ? savedPoints() : java.util.Collections.emptyList();
+        if (!points.isEmpty()) return modelAt(points, bedZ);
+        double[] c = spotParams(spot == LINED_UP ? 0 : spot); c[2] += bedZ; return c;
+    }
+    /** Saved line-ups as {bed Z, x, y, height above the bed, turn, tilt, view angle, lens}. */
+    private java.util.List<double[]> savedPoints() {
+        java.util.List<double[]> points = parsePoints(viewerPrefs().getString("cameraPoints", null));
+        if (points.isEmpty()) {   // v0.14.5 kept one line-up with the bed at 0
+            double[] old = parseParams(viewerPrefs().getString("cameraCustomBed0", null));
+            if (old != null) { double[] point = new double[8]; System.arraycopy(old, 0, point, 1, 7); points.add(point); }
+        }
+        return points;
+    }
+    static java.util.List<double[]> parsePoints(String text) {
+        java.util.List<double[]> points = new java.util.ArrayList<>();
+        if (text == null) return points;
+        try {
+            JSONArray rows = new JSONArray(text);
+            for (int i = 0; i < rows.length(); i++) {
+                JSONArray row = rows.getJSONArray(i); if (row.length() != 8) continue;
+                double[] point = new double[8]; for (int j = 0; j < 8; j++) point[j] = row.getDouble(j);
+                points.add(point);
+            }
+        } catch (org.json.JSONException bad) { points.clear(); }
+        return points;
+    }
+    static String pointsJson(java.util.List<double[]> points) {
+        JSONArray rows = new JSONArray();
+        for (double[] point : points) { JSONArray row = new JSONArray(); for (double v : point) try { row.put(v); } catch (org.json.JSONException ignored) { } rows.put(row); }
+        return rows.toString();
+    }
+    /** Adds a line-up at bed height z, replacing one within 2 mm of it; keeps the latest six. */
+    static java.util.List<double[]> addPoint(java.util.List<double[]> points, double z, double[] c) {
+        java.util.List<double[]> next = new java.util.ArrayList<>();
+        for (double[] point : points) if (Math.abs(point[0] - z) >= 2) next.add(point);
+        double[] point = new double[8]; point[0] = z; System.arraycopy(c, 0, point, 1, 7); next.add(point);
+        while (next.size() > 6) next.remove(0);
+        return next;
+    }
+    /** The camera at bed height z from saved line-ups: least-squares line per value, or one line-up moved with the bed. */
+    static double[] modelAt(java.util.List<double[]> points, double z) {
+        double min = Double.MAX_VALUE, max = -Double.MAX_VALUE;
+        for (double[] point : points) { min = Math.min(min, point[0]); max = Math.max(max, point[0]); }
+        double[] c = new double[7];
+        if (max - min < 5) {   // all at about one height: no slope to measure
+            double[] nearest = points.get(0);
+            for (double[] point : points) if (Math.abs(point[0] - z) < Math.abs(nearest[0] - z)) nearest = point;
+            System.arraycopy(nearest, 1, c, 0, 7); c[2] += z - nearest[0]; return c;
+        }
+        int n = points.size(); double meanZ = 0; for (double[] point : points) meanZ += point[0]; meanZ /= n;
+        double szz = 0; for (double[] point : points) szz += (point[0] - meanZ) * (point[0] - meanZ);
+        for (int i = 0; i < 7; i++) {
+            double mean = 0, szv = 0;
+            for (double[] point : points) mean += point[i + 1]; mean /= n;
+            for (double[] point : points) szv += (point[0] - meanZ) * (point[i + 1] - mean);
+            c[i] = mean + szv / szz * (z - meanZ);
+        }
+        return c;
     }
     private void startCamera() {
         if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null && !alignOnly) return;
@@ -337,7 +402,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     // Lining the camera up by hand: the view looks from the camera with its picture behind the bed outline (yellow); the
     // sliders move and aim the camera until the outline sits on the real bed. Saved as the "Lined up by hand" spot.
-    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height (bed at 0)", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
+    private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height above the bed", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
     // Wide enough for a camera outside the bed's footprint (the CC2's sits off its front-right corner); − and + nudge one step.
     private static final double[][] ALIGN_RANGE = {{-250, 510}, {-250, 510}, {-20, 400}, {-180, 180}, {-10, 90}, {15, 130}, {0, 1}};
     private static final double[] ALIGN_STEP = {1, 1, 1, 0.5, 0.5, 0.5, 0.01};
@@ -345,7 +410,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (web == null || !pageReady || path == null && !alignOnly || aligning != null) return;
         if (!cameraWanted()) viewerPrefs().edit().putBoolean("camera", true).apply();
         startCamera();
-        alignStart = currentParams(); aligning = alignStart.clone();
+        alignStart = currentParams(); aligning = alignStart.clone(); alignZ = bedZ;
         if (alignPanel == null) buildAlignPanel();
         for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i);
         mainPanel.setVisibility(View.GONE); alignScroll.setVisibility(View.VISIBLE); arrange();
@@ -389,6 +454,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture; − and + nudge one step. Match the middle of the bed first, then raise Lens curve until the outline bends like the bed's edges. Turn the phone sideways to see the whole picture, edges included.", 12, muted, false);
         intro.setPadding(0, 0, 0, dp(4));
         bedNote = A11y.polite(label(alignPanel, "", 12, muted, false));
+        LinearLayout forget = new LinearLayout(this); forget.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(forget);
+        rowButton(forget, "Forget saved line-ups", this::forgetLineUps);
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -422,7 +489,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         }
         LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(buttons);
         rowButton(buttons, "Cancel", () -> finishAligning(false));
-        rowButton(buttons, "Start over", () -> { aligning = spotParams(0); for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
+        rowButton(buttons, "Start over", () -> { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
         rowButton(buttons, "Save", () -> finishAligning(true));
         alignScroll.addView(alignPanel);
         root.addView(alignScroll, new LinearLayout.LayoutParams(-1, -2));
@@ -438,17 +505,28 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
     private void pushAlign() {
         try { if (web != null) web.evaluateJavascript("viewer.alignPrinterCamera(" + livePose(aligning) + ")", null); } catch (Exception ignored) { }
-        if (bedNote != null) bedNote.setText(String.format(Locale.getDefault(), "The bed is at Z %.1f mm now; the height is measured with the bed at 0, so the camera stays lined up as the bed moves.", bedZ));
+        if (bedNote != null) bedNote.setText(bedText());
+    }
+    private String bedText() {
+        StringBuilder heights = new StringBuilder();
+        if (viewerPrefs().getInt("cameraSpot", 0) == LINED_UP) for (double[] point : savedPoints()) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.1f", point[0]));
+        return String.format(Locale.getDefault(), "The bed is at Z %.1f mm now. ", bedZ)
+            + (heights.length() == 0 ? "No line-ups saved yet." : "Line-ups saved at bed Z " + heights + " mm.")
+            + " Save one at two or more bed heights (move the bed from Controls) and the camera follows a line fitted through them.";
+    }
+    private void forgetLineUps() {
+        viewerPrefs().edit().remove("cameraPoints").remove("cameraCustomBed0").putInt("cameraSpot", 0).apply();
+        if (aligning != null) { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); }
     }
     private void finishAligning(boolean save) {
         if (save && aligning != null) {
-            StringBuilder text = new StringBuilder(); for (double v : aligning) { if (text.length() > 0) text.append(','); text.append(v); }
-            viewerPrefs().edit().putString("cameraCustomBed0", text.toString()).putInt("cameraSpot", LINED_UP).apply();
-            Diagnostics.note(Diagnostics.FOLLOW, "camera lined up by hand: " + text);
+            java.util.List<double[]> points = addPoint(viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedPoints() : new java.util.ArrayList<>(), alignZ, aligning);
+            viewerPrefs().edit().putString("cameraPoints", pointsJson(points)).remove("cameraCustomBed0").putInt("cameraSpot", LINED_UP).apply();
+            Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera lined up by hand at bed Z %.2f; all line-ups {bed Z, x, y, height, turn, tilt, view, lens}: %s", alignZ, pointsJson(points)));
             status.setText("Camera position saved. More… > Look from the camera shows the picture with the toolpath over it.");
         }
-        double[] shown = save ? aligning : alignStart;
         aligning = null;
+        double[] shown = currentParams();
         if (android.os.Build.VERSION.SDK_INT >= 33 && alignBack != null) { getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) alignBack); alignBack = null; }
         if (alignScroll != null) alignScroll.setVisibility(View.GONE);
         mainPanel.setVisibility(View.VISIBLE); arrange();
@@ -638,8 +716,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         // The bed moved: the camera, fixed to the frame, sits that much higher above it.
         readBedZ();
         if (Math.abs(bedZ - shownBedZ) > 0.05 && web != null) {
-            if (aligning != null) pushAlign();
-            else if (cameraWanted() && pageReady && (path != null || alignOnly)) try { web.evaluateJavascript("viewer.movePrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
+            if (aligning != null) {   // keep what is on the sliders lined up while the bed moves; saved at the new height
+                aligning[2] += bedZ - alignZ; alignZ = bedZ; syncAlignRow(2); pushAlign();
+            } else if (cameraWanted() && pageReady && (path != null || alignOnly)) try { web.evaluateJavascript("viewer.movePrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
         }
         JSONObject live = printer.liveStatus();
         JSONObject machine = live.optJSONObject("machine_status"), print = live.optJSONObject("print_status");

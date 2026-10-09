@@ -57,13 +57,13 @@
     out vec3 vNormal; out vec3 vColor;
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
-    uniform float uLens, uScreenAspect, uPictureAspect;
+    uniform float uLens, uScreenAspect, uPictureAspect, uFit;
     vec4 lens(vec4 p) {
       if (uLens <= 0.0 || p.w <= 0.0) return p;
-      vec2 n = p.xy / p.w, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
+      vec2 n = p.xy / p.w / uFit, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
       float r2 = dot(c, c);
       if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
-      return vec4(n / (1.0 + uLens * r2) * p.w, p.zw);
+      return vec4(n / (1.0 + uLens * r2) * uFit * p.w, p.zw);
     }
     void main() {
       int type = int(aType + 0.5);
@@ -99,13 +99,13 @@
     uniform mat4 uViewProj;
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
-    uniform float uLens, uScreenAspect, uPictureAspect;
+    uniform float uLens, uScreenAspect, uPictureAspect, uFit;
     vec4 lens(vec4 p) {
       if (uLens <= 0.0 || p.w <= 0.0) return p;
-      vec2 n = p.xy / p.w, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
+      vec2 n = p.xy / p.w / uFit, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
       float r2 = dot(c, c);
       if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
-      return vec4(n / (1.0 + uLens * r2) * p.w, p.zw);
+      return vec4(n / (1.0 + uLens * r2) * uFit * p.w, p.zw);
     }
     void main() { gl_Position = lens(uViewProj * vec4(aPosition, 1.0)); }`, `#version 300 es
     precision mediump float;
@@ -117,13 +117,13 @@
     uniform mat4 uViewProj; uniform float uSize;
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
-    uniform float uLens, uScreenAspect, uPictureAspect;
+    uniform float uLens, uScreenAspect, uPictureAspect, uFit;
     vec4 lens(vec4 p) {
       if (uLens <= 0.0 || p.w <= 0.0) return p;
-      vec2 n = p.xy / p.w, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
+      vec2 n = p.xy / p.w / uFit, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
       float r2 = dot(c, c);
       if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
-      return vec4(n / (1.0 + uLens * r2) * p.w, p.zw);
+      return vec4(n / (1.0 + uLens * r2) * uFit * p.w, p.zw);
     }
     void main() { gl_Position = lens(uViewProj * vec4(aPosition, 1.0)); gl_PointSize = uSize; }`, `#version 300 es
     precision mediump float;
@@ -239,14 +239,20 @@
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 20, 0);
       gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 20, 12);
     }
-    const w = printerCam.aspect / (width / Math.max(1, height));
-    const q = [-w, 1, 0, 0, 0, w, 1, 0, 1, 0, w, -1, 0, 1, 1, -w, 1, 0, 0, 0, w, -1, 0, 1, 1, -w, -1, 0, 0, 1];
+    const k = fitScale(width, height), w = printerCam.aspect / (width / Math.max(1, height)) * k;
+    const q = [-w, k, 0, 0, 0, w, k, 0, 1, 0, w, -k, 0, 1, 1, -w, k, 0, 0, 0, w, -k, 0, 1, 1, -w, -k, 0, 0, 1];
     gl.bindVertexArray(printerCam.backdropVao); gl.bindBuffer(gl.ARRAY_BUFFER, printerCam.backdropBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(q), gl.DYNAMIC_DRAW);
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0); gl.uniform1f(picture.u.uHas, 1); gl.uniform1f(picture.u.uMirror, 0);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
+  }
+  // Seen from the camera, the whole picture fits in the view (a squarer view would otherwise cut its sides off); the
+  // drawing shrinks by the same factor so it stays on the picture.
+  function fitScale(width, height) {
+    if (!printerCam.looking) return 1;
+    return Math.min(1, (width / Math.max(1, height)) / printerCam.aspect);
   }
   function leaveCameraView() { if (printerCam.looking) { printerCam.looking = false; camera.fov = 35; } }
   function drawPrinterCamera(viewProj) {
@@ -412,14 +418,16 @@
     gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
     if (!data.meta && !printerCam.pose) return;   // without a toolpath, the bed and the camera can still be shown
     const viewMatrix = lookAt(eye(), camera.target, [0, 0, 1]);
-    const viewProj = multiply(perspective(camera.fov, width / Math.max(1, height), Math.max(0.5, camera.distance / 500), camera.distance * 20), viewMatrix);
+    const fitK = fitScale(width, height);
+    const viewProj = multiply([fitK, 0, 0, 0, 0, fitK, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+      multiply(perspective(camera.fov, width / Math.max(1, height), Math.max(0.5, camera.distance / 500), camera.distance * 20), viewMatrix));
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     const overlay = printerCam.looking && printerCam.has;
     const bend = printerCam.looking && printerCam.pose ? (printerCam.pose.lens || 0) : 0;
     for (const prog of [bead, lines, marker]) {
       gl.useProgram(prog.p); gl.uniform1f(prog.u.uLens, bend);
-      gl.uniform1f(prog.u.uScreenAspect, width / Math.max(1, height)); gl.uniform1f(prog.u.uPictureAspect, printerCam.aspect);
+      gl.uniform1f(prog.u.uScreenAspect, width / Math.max(1, height)); gl.uniform1f(prog.u.uPictureAspect, printerCam.aspect); gl.uniform1f(prog.u.uFit, fitK);
     }
     if (overlay) drawBackdrop(width, height);
     // Plate and grid (over the camera picture, the grid only).

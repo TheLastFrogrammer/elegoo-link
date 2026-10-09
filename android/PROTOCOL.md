@@ -214,3 +214,7 @@ v0.14.5: the CC2's bed moves down as a print grows while the camera stays on the
 the bed at Z 0 and drawn raised by the Z the printer reports (gcode_move.z), live. The default CC2 height is 28 mm (lined up
 with the bed at about Z 3.8). Camera → "Line up the camera in 3D…" opens the line-up without a print; the view then shows
 the bed and camera with no toolpath.
+v0.14.6: line-ups are saved with the bed height they were made at (up to six; one within 2 mm is replaced). With line-ups
+at two or more heights at least 5 mm apart, each value is a least-squares straight line in the bed's Z, so how the camera
+relates to the bed is measured rather than assumed; with one, the camera sits as much higher as the bed went down. Seen from
+the camera, the whole picture fits in the view and the drawing is scaled with it.

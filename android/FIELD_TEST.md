@@ -135,3 +135,6 @@ If the download fails, the error and the history entry help: share the diagnosti
    then Share diagnostics: the saved numbers are in the Live toolpath section, so the best values can become the default.
 6. (v0.14.5) With no print running: Camera tab → **Line up the camera in 3D…**. Line it up, then move the bed (or start a
    print) and check the outline stays on the bed as it moves down; the note above the sliders shows the bed's Z.
+7. (v0.14.6) Height calibration: line up and Save with the bed near the top (Z ≈ 5), then move the bed down (Controls →
+   Z, e.g. to Z 100 and Z 200), line up and Save at each. Share diagnostics: the "camera lined up by hand" lines list every
+   saved height, which shows how the camera really follows the bed.
