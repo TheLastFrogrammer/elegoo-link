@@ -149,3 +149,12 @@ If the download fails, the error and the history entry help: share the diagnosti
 11. (v0.16.1) Line-up → "Move the bed": Home Z, then Lower 50 mm twice to reach about Z 100. The first tap warns (with
     "Don't ask again until I leave the line-up"); each tap sends exactly one move; the bed's Z above the sliders updates
     when the printer reports it. A move is refused while printing, unhomed, without fresh status or outside Z 0–250.
+
+## 15. Getting to things faster (v0.18.1)
+
+1. Monitor, idle: the top card offers Slice a model, Camera, Print again… (opens history on Files; it starts nothing) and
+   Print recordings. While printing: Live toolpath, Camera and Print recordings.
+2. Maintenance is folded away under **Show maintenance ▾**; Emergency stop stays visible. Find a feature → "level" (or
+   "load filament") should open the section and point at the button.
+3. Files tab → **Find models online…** opens the model search directly.
+4. While printing, the ongoing notification has **Live toolpath** and **Camera** buttons; each only opens the app there.

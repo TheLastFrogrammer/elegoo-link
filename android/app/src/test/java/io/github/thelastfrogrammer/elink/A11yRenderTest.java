@@ -294,12 +294,14 @@ public class A11yRenderTest {
         Method history = MainActivity.class.getDeclaredMethod("setHistoryOpen", boolean.class); history.setAccessible(true);
         Method mode = MainActivity.class.getDeclaredMethod("setSettingsMode", boolean.class); mode.setAccessible(true);
         Method more = MainActivity.class.getDeclaredMethod("setMore", boolean.class); more.setAccessible(true);
+        Method upkeep = MainActivity.class.getDeclaredMethod("setMaintenanceOpen", boolean.class); upkeep.setAccessible(true);
         android.widget.LinearLayout[] pages = (android.widget.LinearLayout[]) field(activity, "pages");
         List<String> missing = new java.util.ArrayList<>();
         for (FeatureIndex.Feature f : FeatureIndex.ALL) {
             if (f.id.equals("toolpath")) continue;   // shown only while printing
             switch (f.prepare) {
                 case HISTORY_OPEN: history.invoke(activity, true); break;
+                case MAINTENANCE_OPEN: upkeep.invoke(activity, true); break;
                 case SETTINGS_LOCAL: mode.invoke(activity, false); break;
                 case SETTINGS_CLOUD: mode.invoke(activity, true); break;
                 case ADVANCED_CONNECTION: mode.invoke(activity, false); more.invoke(activity, true); break;
@@ -307,7 +309,8 @@ public class A11yRenderTest {
             }
             page.invoke(activity, f.tab); render.invoke(activity);
             android.view.View found = MainActivity.findByText(pages[f.tab], f.target);
-            if (found == null && !f.fallback.isEmpty()) found = MainActivity.findByText(pages[f.tab], f.fallback);   // e.g. speed mode only while printing
+            // Idle, so the maintenance buttons themselves must be reachable once the section is opened.
+            if (found == null && !f.fallback.isEmpty() && f.prepare != FeatureIndex.Prepare.MAINTENANCE_OPEN) found = MainActivity.findByText(pages[f.tab], f.fallback);   // e.g. speed mode only while printing
             if (found == null) missing.add(f.id + " (\"" + f.target + "\" on " + f.where() + ")");
         }
         assertTrue("Features whose button or heading was not found: " + missing, missing.isEmpty());

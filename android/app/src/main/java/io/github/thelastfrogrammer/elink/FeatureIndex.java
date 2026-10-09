@@ -12,7 +12,7 @@ final class FeatureIndex {
     static final int MONITOR = 0, FILES = 1, CAMERA = 2, SETTINGS = 3;
     static final String[] TABS = {"Monitor", "Files", "Camera", "Settings"};
     /** What has to happen before the target is visible. */
-    enum Prepare { NONE, HISTORY_OPEN, SETTINGS_LOCAL, SETTINGS_CLOUD, ADVANCED_CONNECTION }
+    enum Prepare { NONE, HISTORY_OPEN, MAINTENANCE_OPEN, SETTINGS_LOCAL, SETTINGS_CLOUD, ADVANCED_CONNECTION }
 
     static final class Feature {
         final String id, title, words; final int tab; final String target; final Prepare prepare; final boolean press;
@@ -32,11 +32,11 @@ final class FeatureIndex {
         new Feature("temperature", "Set heater temperatures", "temperature heat preheat nozzle bed hotend", MONITOR, "Set heater temperatures", Prepare.NONE, true).or("Printer controls"),
         new Feature("fan", "Fan setting", "fan cooling part fan aux chamber", MONITOR, "Fan setting", Prepare.NONE, true).or("Printer controls"),
         new Feature("speed", "Print speed mode", "speed silent sport ludicrous balanced", MONITOR, "Print speed mode", Prepare.NONE, true).or("Printer controls"),
-        new Feature("load", "Load or unload filament", "filament load unload change spool feed retract", MONITOR, "Load filament", Prepare.NONE, false).or("Maintenance"),
-        new Feature("tray", "CANVAS tray filament", "canvas tray multicolour multi colour ams refill", MONITOR, "Load or unload a CANVAS tray", Prepare.NONE, false).or("Maintenance"),
-        new Feature("move", "Move axes or home", "move jog axis axes home x y z bed", MONITOR, "Move axes", Prepare.NONE, false).or("Maintenance"),
-        new Feature("level", "Auto-level bed", "level leveling levelling mesh bed calibration probe", MONITOR, "Auto-level bed", Prepare.NONE, false).or("Maintenance"),
-        new Feature("vibration", "Vibration test", "vibration input shaping resonance shaper calibration", MONITOR, "Vibration test", Prepare.NONE, false).or("Maintenance"),
+        new Feature("load", "Load or unload filament", "filament load unload change spool feed retract", MONITOR, "Load filament", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
+        new Feature("tray", "CANVAS tray filament", "canvas tray multicolour multi colour ams refill", MONITOR, "Load or unload a CANVAS tray", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
+        new Feature("move", "Move axes or home", "move jog axis axes home x y z bed", MONITOR, "Move axes", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
+        new Feature("level", "Auto-level bed", "level leveling levelling mesh bed calibration probe", MONITOR, "Auto-level bed", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
+        new Feature("vibration", "Vibration test", "vibration input shaping resonance shaper calibration", MONITOR, "Vibration test", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
         // Files
         new Feature("printer-files", "Files on the printer", "files gcode printer storage usb print start delete download", FILES, "Printer files", Prepare.NONE, false),
         new Feature("history", "Print history and Print again", "history past prints reprint print again details", FILES, "Refresh history", Prepare.HISTORY_OPEN, false),

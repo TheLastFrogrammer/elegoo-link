@@ -98,6 +98,13 @@ public final class MainActivity extends Activity {
     private Button cloudCamera, cameraFix;
     /** First run only: the three ways in. Hidden for good once the phone has connected or a model has been sliced. */
     private LinearLayout getStarted, heroCard;
+    /** Monitor quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Print again and Print recordings. */
+    private LinearLayout quickRow, recordingsRow;
+    private Button quickSlice, quickCamera, quickAgain;
+    /** Maintenance starts collapsed; the Emergency stop button stays outside the collapsed part. */
+    private Button maintenanceToggle;
+    private LinearLayout maintenanceBody;
+    private boolean maintenanceOpen;
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
@@ -263,12 +270,12 @@ public final class MainActivity extends Activity {
         currentSection = pages[0];
         // Get started: one line on what the app does, then the three ways in, each with one button.
         getStarted = card("Get started");
-        label(getStarted, "Link Workshop watches and controls your Centauri Carbon 2, and slices models on this phone. Choose one way to begin.", 14, INK, false);
+        label(getStarted, "Watch and control your Centauri Carbon 2, or slice models on this phone. Pick one way to start.", 14, INK, false);
         label(getStarted, "1. At home, on Wi-Fi", 14, INK, true);
-        label(getStarted, "Turn the printer on and join the same Wi-Fi as this phone. Then look for the printer.", 13, MUTED, false);
+        label(getStarted, "Turn the printer on and join this phone's Wi-Fi, then look for it.", 13, MUTED, false);
         rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { setSettingsMode(false); selectPage(3); scanPrinters(); }, true);
         label(getStarted, "2. Away from home", 14, INK, true);
-        label(getStarted, "Sign in with your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
+        label(getStarted, "Use your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
         rowButton(row(getStarted), "Sign in with Elegoo…", this::cloudSignIn, false);
         label(getStarted, "3. Just want a print", 14, INK, true);
         label(getStarted, "Slice a model on this phone, then send the file to the printer.", 13, MUTED, false);
@@ -281,9 +288,16 @@ public final class MainActivity extends Activity {
         job = label(heroText, "", 14, INK, false); job.setMaxLines(2); job.setEllipsize(android.text.TextUtils.TruncateAt.END);
         detail = label(heroText, "", 13, MUTED, false);
         faults = A11y.assertive(label(hero, "", 14, ERROR, true));
-        LinearLayout heroButtons = row(hero);
-        liveToolpath = rowButton(heroButtons, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), false);
-        graphs = rowButton(heroButtons, "Print recordings", () -> {
+        // Quick actions: they only navigate or open a screen, never send a printer command. render() shows the ones that fit the state.
+        // Row 1 while printing: Live toolpath and Camera. Idle and connected: Slice a model and Camera. Row 2: Print again (idle, with history) and Print recordings.
+        quickRow = row(hero);
+        liveToolpath = rowButton(quickRow, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), true);
+        quickSlice = rowButton(quickRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
+        quickCamera = rowButton(quickRow, "Camera", () -> selectPage(2), false);
+        recordingsRow = row(hero);
+        quickAgain = rowButton(recordingsRow, "Print again…", () -> { setHistoryOpen(true); selectPage(1); }, false);
+        quickAgain.setContentDescription("Print again: opens print history on the Files tab, where the latest print can be printed again");
+        graphs = rowButton(recordingsRow, "Print recordings", () -> {
             PrintRecorder.Recording current = printer == null || printer.recorder == null ? null : printer.recorder.current();
             Intent intent = new Intent(this, RecordingsActivity.class);
             if (current != null) intent.putExtra(RecordingsActivity.EXTRA_META, current.meta.getAbsolutePath());
@@ -314,7 +328,9 @@ public final class MainActivity extends Activity {
         speed = button(tuning, "Print speed mode…", this::speedDialog);
         LinearLayout upkeep = card("Maintenance"); upkeepCard = upkeep;
         upkeepHint = label(upkeep, "", 13, MUTED, false);
-        LinearLayout group = new LinearLayout(this); group.setOrientation(LinearLayout.VERTICAL); upkeep.addView(group); upkeepButtons = group;
+        maintenanceToggle = button(upkeep, "", this::toggleMaintenance);
+        LinearLayout collapsible = new LinearLayout(this); collapsible.setOrientation(LinearLayout.VERTICAL); upkeep.addView(collapsible); maintenanceBody = collapsible;
+        LinearLayout group = new LinearLayout(this); group.setOrientation(LinearLayout.VERTICAL); collapsible.addView(group); upkeepButtons = group;
         LinearLayout filamentRow = row(group);
         loadFilament = rowButton(filamentRow, "Load filament", () -> maintenanceConfirm("Load filament?", "The printer heats the nozzle and feeds filament. This can take a few minutes.", Cc2Codec.FEED), false);
         unloadFilament = rowButton(filamentRow, "Unload filament", () -> maintenanceConfirm("Unload filament?", "The printer heats the nozzle and retracts the filament. This can take a few minutes.", Cc2Codec.RETREAT), false);
@@ -328,6 +344,7 @@ public final class MainActivity extends Activity {
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
         urgentStop = button(upkeep, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
         urgentStop.setTextColor(ERROR);
+        setMaintenanceOpen(false);
         currentSection = pages[1];
         // Order on the Files tab: what is on the printer, then sending a new file, then the rarely needed storage and history.
         buildFileBrowser();
@@ -764,6 +781,7 @@ public final class MainActivity extends Activity {
         }
         switch (f.prepare) {
             case HISTORY_OPEN: setHistoryOpen(true); break;
+            case MAINTENANCE_OPEN: setMaintenanceOpen(true); break;
             case SETTINGS_LOCAL: setSettingsMode(false); break;
             case SETTINGS_CLOUD: setSettingsMode(true); break;
             case ADVANCED_CONNECTION: setSettingsMode(false); setMore(true); break;
@@ -975,6 +993,24 @@ public final class MainActivity extends Activity {
         saveTimelapse.setVisibility(View.GONE);
         label(historyBody, "Graphs of progress, layers, temperatures and fans for each print this app has watched.", 13, MUTED, false);
         button(historyBody, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
+    }
+    /** Maintenance is collapsed by default; its header says what a tap does and speaks its state. Emergency stop is never inside the body. */
+    private void toggleMaintenance() { setMaintenanceOpen(!maintenanceOpen); }
+    public void setMaintenanceOpen(boolean open) {
+        maintenanceOpen = open;
+        maintenanceBody.setVisibility(open && maintenanceToggle.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+        maintenanceToggle.setText(open ? "Hide maintenance ▴" : "Show maintenance ▾");
+        maintenanceToggle.setContentDescription(open ? "Hide maintenance options" : "Show maintenance options");
+        A11y.expandable(maintenanceToggle, open);
+    }
+    /** Spaces the visible buttons of a quick-action row: a gap only between buttons that sit side by side. */
+    private void spaceActions(LinearLayout row) {
+        boolean beside = row.getOrientation() == LinearLayout.HORIZONTAL, first = true;
+        for (int i = 0; i < row.getChildCount(); i++) {
+            View child = row.getChildAt(i); if (child.getVisibility() != View.VISIBLE) continue;
+            ((LinearLayout.LayoutParams) child.getLayoutParams()).leftMargin = beside && !first ? dp(8) : 0;
+            first = false;
+        }
     }
     /** Expands or collapses the storage, history and recordings section; the header says what a tap does and speaks its state. */
     private void setHistoryOpen(boolean open) {
@@ -1343,7 +1379,10 @@ public final class MainActivity extends Activity {
         for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
         trayFilament.setEnabled(upkeepOk && printer.canvas != null); urgentStop.setEnabled(canControl);
         upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE);
-        upkeepHint.setText(upkeepOk ? "Commands follow Elegoo's own printer page and are never repeated automatically." : upkeepReason + " Emergency stop stays available.");
+        // The toggle and its body appear only when maintenance can run; the reason and Emergency stop stay visible otherwise.
+        maintenanceToggle.setVisibility(upkeepOk ? View.VISIBLE : View.GONE);
+        maintenanceBody.setVisibility(upkeepOk && maintenanceOpen ? View.VISIBLE : View.GONE);
+        upkeepHint.setText(upkeepOk ? "Follows Elegoo's own printer page. Never repeated automatically." : upkeepReason + " Emergency stop stays available.");
         tuningCard.setVisibility(canControl ? View.VISIBLE : View.GONE); upkeepCard.setVisibility(canControl ? View.VISIBLE : View.GONE);
         // On a new install the Get started card already offers Find, Sign in and Slice, so the empty Controls card waits.
         controlsCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
@@ -1410,9 +1449,15 @@ public final class MainActivity extends Activity {
             detail.setText("");
         }
         graphs.setText("Print recordings");
-        JSONObject machineNow = snapshot.optJSONObject("machine_status");
-        liveToolpath.setVisibility(machineNow != null && machineNow.optInt("status", -1) == 2 ? View.VISIBLE : View.GONE);
-        ((LinearLayout.LayoutParams) graphs.getLayoutParams()).leftMargin = liveToolpath.getVisibility() == View.VISIBLE ? dp(8) : 0;
+        // Quick actions by state. Printing: Live toolpath and Camera. Connected and idle: Slice a model, Camera and, with history, Print again.
+        // Not connected: only Print recordings, as before (Get started and the fix guidance cover the rest). None of these sends a printer command.
+        boolean idleOnline = live && !inJobNow, hasHistory = printer != null && !FeatureData.historyRows(printer.history).isEmpty();
+        liveToolpath.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
+        quickSlice.setVisibility(idleOnline ? View.VISIBLE : View.GONE);
+        quickCamera.setVisibility(inJobNow || idleOnline ? View.VISIBLE : View.GONE);
+        quickRow.setVisibility(inJobNow || idleOnline ? View.VISIBLE : View.GONE);
+        quickAgain.setVisibility(idleOnline && hasHistory ? View.VISIBLE : View.GONE);
+        spaceActions(quickRow); spaceActions(recordingsRow);
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
         String faultText = codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen."; if (!faultText.contentEquals(faults.getText())) faults.setText(faultText);
