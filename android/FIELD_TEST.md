@@ -131,5 +131,5 @@ If the download fails, the error and the history entry help: share the diagnosti
    estimates for now).
 4. Leave the screen and come back: the camera should stop while away and restart on return.
 5. (v0.14.1) More… → **Line up the camera by hand…**: the view looks from the camera with the yellow bed outline over the
-   picture. Move the sliders until the outline sits on the bed; use Lens curve when the bed's edges bow outwards. Save,
+   picture. Move the sliders until the outline sits on the bed; raise Lens curve until the outline bends like the bed's edges. Save,
    then Share diagnostics: the saved numbers are in the Live toolpath section, so the best values can become the default.

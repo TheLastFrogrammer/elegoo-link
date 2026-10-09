@@ -308,7 +308,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     // Lining the camera up by hand: the view looks from the camera with its picture behind the bed outline (yellow); the
     // sliders move and aim the camera until the outline sits on the real bed. Saved as the "Lined up by hand" spot.
     private static final String[] ALIGN_NAMES = {"Left – right", "Front – back", "Height", "Turn", "Tilt down", "Zoom (view angle)", "Lens curve"};
-    private static final double[][] ALIGN_RANGE = {{-80, 340}, {-80, 340}, {0, 340}, {-180, 180}, {0, 90}, {30, 130}, {0, 0.6}};
+    // Wide enough for a camera outside the bed's footprint (the CC2's sits off its front-right corner); − and + nudge one step.
+    private static final double[][] ALIGN_RANGE = {{-250, 510}, {-250, 510}, {-20, 400}, {-180, 180}, {-10, 90}, {15, 130}, {0, 1}};
     private static final double[] ALIGN_STEP = {1, 1, 1, 0.5, 0.5, 0.5, 0.01};
     private void startAligning() {
         if (web == null || path == null) return;
@@ -333,17 +334,28 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void buildAlignPanel() {
         alignPanel = new LinearLayout(this); alignPanel.setOrientation(LinearLayout.VERTICAL); alignPanel.setPadding(dp(16), dp(8), dp(16), dp(12));
         alignPanel.setBackground(mainPanel.getBackground().getConstantState().newDrawable());
-        TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture. Fit the corners nearest the middle first; a wide lens bends the edges (Lens curve straightens them).", 12, muted, false);
+        TextView intro = label(alignPanel, "Line up the camera: move the sliders until the yellow bed outline sits on the bed in the picture; − and + nudge one step. Match the middle of the bed first, then raise Lens curve until the outline bends like the bed's edges.", 12, muted, false);
         intro.setPadding(0, 0, 0, dp(4));
         for (int i = 0; i < ALIGN_NAMES.length; i++) {
             int index = i;
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             TextView name = new TextView(this); name.setTextSize(12); name.setTextColor(ink);
-            row.addView(name, new LinearLayout.LayoutParams(dp(132), -2));
+            row.addView(name, new LinearLayout.LayoutParams(dp(112), -2));
             SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
             bar.setMax((int) Math.round((ALIGN_RANGE[i][1] - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
-            row.addView(bar, new LinearLayout.LayoutParams(0, dp(44), 1));
+            row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1));
             A11y.labelFor(name, bar);
+            for (int direction : new int[] {-1, 1}) {
+                Button nudge = new Button(this); nudge.setText(direction < 0 ? "−" : "+"); nudge.setTextSize(18); nudge.setTextColor(teal); nudge.setBackground(null);
+                nudge.setMinWidth(dp(44)); nudge.setMinimumWidth(dp(44)); nudge.setMinHeight(dp(48)); nudge.setMinimumHeight(dp(48)); nudge.setPadding(0, 0, 0, 0);
+                nudge.setContentDescription((direction < 0 ? "Less " : "More ") + ALIGN_NAMES[i].toLowerCase(Locale.ROOT));
+                nudge.setOnClickListener(v -> {
+                    if (aligning == null) return;
+                    aligning[index] = Math.max(ALIGN_RANGE[index][0], Math.min(ALIGN_RANGE[index][1], aligning[index] + direction * ALIGN_STEP[index]));
+                    syncAlignRow(index); pushAlign();
+                });
+                row.addView(nudge, new LinearLayout.LayoutParams(dp(44), dp(48)));
+            }
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) {
                     if (!fromUser || aligning == null) return;

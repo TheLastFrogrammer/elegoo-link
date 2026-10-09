@@ -55,6 +55,16 @@
     uniform int uBase, uDimBelow;   // index of the first instance drawn; instances before uDimBelow are dimmed
     uniform vec3 uDimColor;
     out vec3 vNormal; out vec3 vColor;
+    // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
+    // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
+    uniform float uLens, uScreenAspect, uPictureAspect;
+    vec4 lens(vec4 p) {
+      if (uLens <= 0.0 || p.w <= 0.0) return p;
+      vec2 n = p.xy / p.w, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
+      float r2 = dot(c, c);
+      if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
+      return vec4(n / (1.0 + uLens * r2) * p.w, p.zw);
+    }
     void main() {
       int type = int(aType + 0.5);
       if (((uHidden >> type) & 1) == 1) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
@@ -69,7 +79,7 @@
       vNormal = mat3(uView) * normalize(d * aNormal.x + side * aNormal.y + up * aNormal.z);
       vColor = uColors[type];
       if (gl_InstanceID + uBase < uDimBelow) vColor = mix(vColor, uDimColor, 0.55);
-      gl_Position = uViewProj * vec4(p, 1.0);
+      gl_Position = lens(uViewProj * vec4(p, 1.0));
     }`, `#version 300 es
     precision mediump float;
     in vec3 vNormal; in vec3 vColor;
@@ -87,7 +97,17 @@
   const lines = program(`#version 300 es
     layout(location=0) in vec3 aPosition;
     uniform mat4 uViewProj;
-    void main() { gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
+    // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
+    // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
+    uniform float uLens, uScreenAspect, uPictureAspect;
+    vec4 lens(vec4 p) {
+      if (uLens <= 0.0 || p.w <= 0.0) return p;
+      vec2 n = p.xy / p.w, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
+      float r2 = dot(c, c);
+      if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
+      return vec4(n / (1.0 + uLens * r2) * p.w, p.zw);
+    }
+    void main() { gl_Position = lens(uViewProj * vec4(aPosition, 1.0)); }`, `#version 300 es
     precision mediump float;
     uniform vec4 uColor; out vec4 fragment;
     void main() { fragment = uColor; }`);
@@ -95,7 +115,17 @@
   const marker = program(`#version 300 es
     layout(location=0) in vec3 aPosition;
     uniform mat4 uViewProj; uniform float uSize;
-    void main() { gl_Position = uViewProj * vec4(aPosition, 1.0); gl_PointSize = uSize; }`, `#version 300 es
+    // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
+    // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
+    uniform float uLens, uScreenAspect, uPictureAspect;
+    vec4 lens(vec4 p) {
+      if (uLens <= 0.0 || p.w <= 0.0) return p;
+      vec2 n = p.xy / p.w, c = vec2(n.x * uScreenAspect, n.y) / sqrt(uPictureAspect * uPictureAspect + 1.0);
+      float r2 = dot(c, c);
+      if (uLens * r2 > 1.0) return vec4(2.0, 2.0, 2.0, 1.0);   // far outside the picture: would fold back in
+      return vec4(n / (1.0 + uLens * r2) * p.w, p.zw);
+    }
+    void main() { gl_Position = lens(uViewProj * vec4(aPosition, 1.0)); gl_PointSize = uSize; }`, `#version 300 es
     precision mediump float;
     uniform vec4 uColor; uniform vec4 uRing; out vec4 fragment;
     void main() {
@@ -110,14 +140,8 @@
     uniform mat4 uViewProj; uniform float uMirror; out vec2 vUv;
     void main() { vUv = vec2(uMirror > 0.5 ? 1.0 - aUv.x : aUv.x, aUv.y); gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
     precision mediump float;
-    in vec2 vUv; uniform sampler2D uImage; uniform float uHas, uLens, uAspect; uniform vec4 uEmpty; out vec4 fragment;
-    // uLens straightens a wide-angle lens's curve (simple radial model): each point reads the picture a little further out.
-    void main() {
-      if (uHas < 0.5) { fragment = uEmpty; return; }
-      vec2 c = (vUv - 0.5) * vec2(uAspect, 1.0) * 2.0;
-      vec2 uv = 0.5 + c * (1.0 + uLens * dot(c, c)) / vec2(uAspect, 1.0) * 0.5;
-      fragment = (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) ? vec4(0.0, 0.0, 0.0, 0.96) : vec4(texture(uImage, uv).rgb, 0.96);
-    }`);
+    in vec2 vUv; uniform sampler2D uImage; uniform float uHas; uniform vec4 uEmpty; out vec4 fragment;
+    void main() { fragment = uHas > 0.5 ? vec4(texture(uImage, vUv).rgb, 0.96) : uEmpty; }`);
 
   // Bead geometry: top, bottom and two rounded sides (side normals lean up or down so the bead looks round).
   function beadGeometry() {
@@ -221,7 +245,6 @@
     gl.disable(gl.DEPTH_TEST); gl.depthMask(false);
     gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0); gl.uniform1f(picture.u.uHas, 1); gl.uniform1f(picture.u.uMirror, 0);
-    gl.uniform1f(picture.u.uLens, printerCam.pose.lens || 0); gl.uniform1f(picture.u.uAspect, printerCam.aspect);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.depthMask(true); gl.enable(gl.DEPTH_TEST);
   }
@@ -231,7 +254,6 @@
     gl.useProgram(picture.p); gl.uniformMatrix4fv(picture.u.uViewProj, false, viewProj);
     gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, printerCam.texture); gl.uniform1i(picture.u.uImage, 0);
     gl.uniform1f(picture.u.uHas, printerCam.has ? 1 : 0); gl.uniform4fv(picture.u.uEmpty, theme.screen);
-    gl.uniform1f(picture.u.uLens, printerCam.pose.lens || 0); gl.uniform1f(picture.u.uAspect, printerCam.aspect);
     // Seen from the bed side the picture would read back to front: show it the way round it reads from where you look.
     const { f } = camBasis(printerCam.pose), e = eye(), p = printerCam.pose.position;
     gl.uniform1f(picture.u.uMirror, (e[0] - p[0]) * f[0] + (e[1] - p[1]) * f[1] + (e[2] - p[2]) * f[2] > (printerCam.pose.screen || 80) ? 1 : 0);
@@ -312,9 +334,14 @@
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (let i = 0; i < outline.length; i += 2) { minX = Math.min(minX, outline[i]); maxX = Math.max(maxX, outline[i]); minY = Math.min(minY, outline[i + 1]); maxY = Math.max(maxY, outline[i + 1]); }
     const v = [];
-    for (let x = Math.ceil(minX / 10) * 10; x <= maxX; x += 10) v.push(x, minY, 0, x, maxY, 0);
-    for (let y = Math.ceil(minY / 10) * 10; y <= maxY; y += 10) v.push(minX, y, 0, maxX, y, 0);
-    for (let i = 0; i < outline.length; i += 2) { const j = (i + 2) % outline.length; v.push(outline[i], outline[i + 1], 0, outline[j], outline[j + 1], 0); }
+    // Lines in 8 mm pieces, so they can bend with the camera's lens curve.
+    const line = (x0, y0, x1, y1) => {
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 8));
+      for (let k = 0; k < n; k++) v.push(x0 + (x1 - x0) * k / n, y0 + (y1 - y0) * k / n, 0, x0 + (x1 - x0) * (k + 1) / n, y0 + (y1 - y0) * (k + 1) / n, 0);
+    };
+    for (let x = Math.ceil(minX / 10) * 10; x <= maxX; x += 10) line(x, minY, x, maxY);
+    for (let y = Math.ceil(minY / 10) * 10; y <= maxY; y += 10) line(minX, y, maxX, y);
+    for (let i = 0; i < outline.length; i += 2) { const j = (i + 2) % outline.length; line(outline[i], outline[i + 1], outline[j], outline[j + 1]); }
     bedLineCount = v.length / 3;
     bedVao = gl.createVertexArray(); gl.bindVertexArray(bedVao);
     const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
@@ -389,6 +416,11 @@
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL);
     gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     const overlay = printerCam.looking && printerCam.has;
+    const bend = printerCam.looking && printerCam.pose ? (printerCam.pose.lens || 0) : 0;
+    for (const prog of [bead, lines, marker]) {
+      gl.useProgram(prog.p); gl.uniform1f(prog.u.uLens, bend);
+      gl.uniform1f(prog.u.uScreenAspect, width / Math.max(1, height)); gl.uniform1f(prog.u.uPictureAspect, printerCam.aspect);
+    }
     if (overlay) drawBackdrop(width, height);
     // Plate and grid (over the camera picture, the grid only).
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);

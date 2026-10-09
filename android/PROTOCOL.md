@@ -206,3 +206,7 @@ draws the picture behind the toolpath. The camera's real position and lens are n
 
 v0.14.1 adds lining the camera up by hand: position (x, y, z), turn, tilt, vertical field of view and a radial lens-curve
 term (the picture is read at c·(1 + k·|c|²), straightening a wide-angle lens), saved as the "Lined up by hand" spot.
+v0.14.2: the lens curve bends the drawing instead of the picture (the v0.14.1 picture correction curved the wrong way).
+Seen from the camera, every projected point p (in units of the picture's half-diagonal) is drawn at p / (1 + k·|p|²), the
+division model of barrel distortion, so the bed outline curves like the wide-angle picture; bed lines are drawn in 8 mm
+pieces so they can bend. Slider ranges widened (x, y −250…510 mm, height −20…400 mm, view angle 15…130°, k 0…1).
