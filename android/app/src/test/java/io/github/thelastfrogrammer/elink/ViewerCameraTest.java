@@ -53,14 +53,17 @@ public class ViewerCameraTest {
         for (int spot = -1; spot <= GcodeViewerActivity.CAMERA_SPOTS.length; spot++) {
             JSONObject pose = GcodeViewerActivity.cameraPose(spot);
             JSONArray position = pose.getJSONArray("position"), target = pose.getJSONArray("target");
-            assertTrue(position.getDouble(2) > 100);
+            assertTrue(position.getDouble(2) > 0);
             assertTrue("Aims downwards", target.getDouble(2) < position.getDouble(2));
             assertTrue(pose.getDouble("fov") > 20 && pose.getDouble("fov") < 120);
         }
     }
 
     @Test public void presetSpotsBecomeParametersThatAimAtTheBedCentre() throws Exception {
-        for (int spot = 0; spot < GcodeViewerActivity.LINED_UP; spot++) {
+        assertArrayEquals(GcodeViewerActivity.CC2_CAMERA, GcodeViewerActivity.spotParams(0), 0);
+        assertNotSame("A copy, so lining up never changes the default", GcodeViewerActivity.CC2_CAMERA, GcodeViewerActivity.spotParams(0));
+        assertEquals(0.23, GcodeViewerActivity.cameraPose(0).getDouble("lens"), 1e-9);
+        for (int spot = 1; spot < GcodeViewerActivity.LINED_UP; spot++) {
             JSONObject preset = GcodeViewerActivity.cameraPose(spot);
             double[] c = GcodeViewerActivity.spotParams(spot);
             JSONArray position = preset.getJSONArray("position"), target = preset.getJSONArray("target");

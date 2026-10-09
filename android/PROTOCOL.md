@@ -202,7 +202,7 @@ the lens. Locally the app reads the MJPEG stream (the 1042 address, else `http:/
 the newest JPEG and serves it to the page at `/live/frame.jpg`; the page asks for the next one only after showing the last.
 Through the cloud the page joins Elegoo's Agora video channel the same way the Camera screen does and draws the video element
 into the scene about ten times a second. "Look from the camera" puts the view at the camera's spot with its field of view and
-draws the picture behind the toolpath. The camera's real position and lens are not measured yet.
+draws the picture behind the toolpath. The default spot is the CC2 camera as lined up by hand on a real printer (v0.14.3): x 308, y −9, z 32 mm, turn 134°, tilt 8°, 37° vertical view, lens curve 0.23.
 
 v0.14.1 adds lining the camera up by hand: position (x, y, z), turn, tilt, vertical field of view and a radial lens-curve
 term (the picture is read at c·(1 + k·|c|²), straightening a wide-angle lens), saved as the "Lined up by hand" spot.

@@ -66,7 +66,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private PrinterService printer;
     private GcodeLibrary library;
     // The printer's camera in the scene (Live only): its position (an estimate the user can change) and the picture.
-    static final String[] CAMERA_SPOTS = {"Front left, top", "Front right, top", "Back left, top", "Back right, top", "Front centre, top", "Lined up by hand"};
+    static final String[] CAMERA_SPOTS = {"CC2 camera (lined up on a real printer)", "Front right, top", "Back left, top", "Back right, top", "Front centre, top", "Lined up by hand"};
     static final int LINED_UP = 5;
     private LinearLayout mainPanel, alignPanel;
     private double[] aligning, alignStart;
@@ -213,7 +213,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** Where the CC2's camera sits is not measured yet: five spots around the 256 mm bed, looking at its centre. */
     static JSONObject cameraPose(int spot) throws org.json.JSONException { return poseJson(spotParams(spot)); }
     /** A preset spot as camera parameters: x, y, z (mm), turn and tilt-down (degrees), vertical field of view, lens curve. */
+    /** The CC2's camera, lined up by hand against its live picture (v0.14.2): just right of the bed, low, looking back-left. */
+    static final double[] CC2_CAMERA = {308, -9, 32, 134, 8, 37, 0.23};
     static double[] spotParams(int spot) {
+        if (spot <= 0) return CC2_CAMERA.clone();
         double[][] spots = {{-10, -20, 240}, {266, -20, 240}, {-10, 276, 240}, {266, 276, 240}, {128, -40, 240}};
         double[] p = spots[Math.max(0, Math.min(spots.length - 1, spot))];
         double dx = 128 - p[0], dy = 128 - p[1];
