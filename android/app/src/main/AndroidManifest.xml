@@ -98,6 +98,8 @@
                 <data android:mimeType="application/x-step" />
             </intent-filter>
         </activity>
+        <activity android:name=".ModelSearchActivity" android:exported="false" android:label="Find models"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
         <activity android:name=".SliceSettingsActivity" android:exported="false" android:label="Print settings" />
         <activity android:name=".PlateActivity" android:exported="false" android:label="Layout"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />

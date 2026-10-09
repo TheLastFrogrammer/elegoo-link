@@ -232,3 +232,22 @@ v0.16.3: the bed's height for the camera comes only from Z positions reported wh
 height counts as moving until two status reports past a 3 s lag agree (and, for a move, the bed is within 0.5 mm of where
 it was sent), with status asked for at 3, 6, 10, 20 and 40 s; after 90 s it is "not confirmed". Taps and Fit wait for a
 known height; a slider-only line-up can be saved at an unconfirmed height after a warning, without its taps.
+
+## Finding models on model sites (v0.17.0)
+
+Slice → Find models online… searches model sites only through their official ways in:
+
+- **Thingiverse**: REST API at `https://api.thingiverse.com` with the user's own App Token (thingiverse.com/developers),
+  sent as `Authorization: Bearer` only to that host. Search `GET /search/{term}/?type=things&per_page=20&page=N` (answer
+  `{hits:[{id, name, thumbnail, public_url, creator{name}}]}`), files `GET /things/{id}/files` (`[{id, name, size,
+  download_url}]`), download `download_url` (redirects to storage; followed https-only, up to five hops, **without** the
+  token, at most 200 MB). STL, 3MF, OBJ, STEP and AMF files download into the app's cache and open on the Slice screen.
+- **MyMiniFactory**: API v2 `GET https://www.myminifactory.com/api/v2/search?q=…&key=…` with the user's own key
+  (`{items:[{id, name, url, images[{thumbnail{url}}], designer{name|username}}]}`). Its guidelines require a MyMiniFactory
+  login to download, so its models open on its page.
+- **Printables, MakerWorld, Cults3D** (no public file API; Cults3D's API gives metadata only): their search opens in the
+  browser; a downloaded file opens in the app through Open with / Share (existing intent filters).
+
+Token and key are stored encrypted (Android Keystore, AES-GCM) and never logged. The answers' shapes above are from the
+sites' documentation and third-party clients; the app logs the field names (never values) of each site's first answer
+under "Model sites" in Share diagnostics, so a different shape shows up there.

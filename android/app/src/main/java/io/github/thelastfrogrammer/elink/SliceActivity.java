@@ -36,7 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public final class SliceActivity extends Activity {
     static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", RESULT_PRINT_SETUP = "printSetup", TRAY_PLANS = "tray-plans";
     static final int ALL_PLATES = -1;
-    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5, OBJECT_SETTINGS = 6;
+    private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5, OBJECT_SETTINGS = 6, FIND_MODELS = 7;
     private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
     private static final Set<String> MODEL_TYPES = new HashSet<>(Arrays.asList("stl", "3mf", "obj", "drc", "step", "stp", "amf"));
@@ -116,7 +116,7 @@ public final class SliceActivity extends Activity {
         final Map<String, String> edits = new LinkedHashMap<>(); // this slot's filament settings changes
     }
     private EditText infill;
-    private Button chooseModels, slice, cancel, useInFiles, saveCopy, restoreLast;
+    private Button chooseModels, findModels, slice, cancel, useInFiles, saveCopy, restoreLast;
     private boolean choosePrimary = true;     // filled only while nothing is loaded: Slice is the main action after that
     private ProgressBar progress;
     private ImageView preview;
@@ -365,6 +365,7 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
         }, true);
+        findModels = button(modelCard, "Find models online…", () -> startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS), false);
         restoreLast = button(modelCard, "Restore your last models and settings", this::restoreLastSelection, false); restoreLast.setVisibility(View.GONE);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
@@ -806,6 +807,13 @@ public final class SliceActivity extends Activity {
                 if (map.isEmpty()) objectSettings.remove(id[0] + "," + id[1]); else objectSettings.put(id[0] + "," + id[1], map);
                 showObjectSettings();
             } catch (org.json.JSONException | NullPointerException ignored) { }
+            return;
+        }
+        if (request == FIND_MODELS) {
+            ArrayList<String> paths = data.getStringArrayListExtra(ModelSearchActivity.RESULT_PATHS);
+            List<Uri> uris = new ArrayList<>();
+            if (paths != null) for (String path : paths) { File file = new File(path); if (file.isFile() && file.getAbsolutePath().startsWith(getCacheDir().getAbsolutePath())) uris.add(Uri.fromFile(file)); }
+            if (!uris.isEmpty()) importModels(uris);
             return;
         }
         if (request == PICK_MODELS) {
@@ -1362,7 +1370,7 @@ public final class SliceActivity extends Activity {
         sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
         restoreLast.setVisibility(!busy && models.isEmpty() && calibration == null && hasSavedSelection ? View.VISIBLE : View.GONE);
         keepAwake(SliceActivity.slicing);
-        chooseModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Change model files…");
+        chooseModels.setEnabled(!busy); if (findModels != null) findModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Change model files…");
         boolean primary = models.isEmpty() && calibration == null;
         if (primary != choosePrimary) { choosePrimary = primary; restyle(chooseModels, primary); }
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);

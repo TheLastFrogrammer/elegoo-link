@@ -284,6 +284,18 @@ public class A11yRenderTest {
         }
     }
 
+    /** Find models (Slice > Find models online), before any search. */
+    @Test public void modelSearch() throws Exception {
+        out();
+        for (float scale : SCALES) {
+            RuntimeEnvironment.setFontScale(scale);
+            theme(false);
+            ModelSearchActivity activity = Robolectric.buildActivity(ModelSearchActivity.class).setup().get();
+            shot(activity.getWindow().getDecorView(), 2340, "find-models", scale);
+            activity.finish();
+        }
+    }
+
     /** The camera line-up panel (Camera tab > Line up the camera in 3D), as it opens and with every section expanded. */
     @Test public void viewerLineUp() throws Exception {
         out();
