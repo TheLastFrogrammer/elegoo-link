@@ -170,8 +170,8 @@ public final class MainActivity extends Activity {
         setContentView(root);
         for (int i = 0; i < 4; i++) { pages[i] = new LinearLayout(this); pages[i].setOrientation(LinearLayout.VERTICAL); content.addView(pages[i]); }
         currentSection = pages[3];
-        LinearLayout connectionCard = card("Local connection (LAN Only)");
-        label(connectionCard, "For a printer on your home Wi-Fi.", 13, MUTED, false);
+        LinearLayout connectionCard = card("Printer connection");
+        label(connectionCard, "At home: printer IP and access code (LAN Only). Away from home: sign in to Elegoo below.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
         connection.setTextIsSelectable(true);
         LinearLayout findRow = row(connectionCard);
@@ -180,11 +180,7 @@ public final class MainActivity extends Activity {
         host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "Access code (LAN Only)", true); access.setTypeface(Typeface.DEFAULT); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        lanHint = label(connectionCard, "On the printer: the IP is in Settings → Network. The code shows once LAN Only is on.", 13, MUTED, false);
-        pairingPin = input(connectionCard, "Current printer pairing PIN (probe only)", true); pairingPin.setTypeface(Typeface.DEFAULT); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        pinProbeHelp = label(connectionCard, "Experimental and read-only: use the pairing PIN the printer currently shows, not the access code. The PIN is never saved.", 13, MUTED, false);
-        serial = input(connectionCard, "Serial number (optional)", false);
-        serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        lanHint = label(connectionCard, "Printer IP: Settings → Network. Access code: shown once LAN Only is on.", 13, MUTED, false);
         remember = new CheckBox(this); remember.setMinHeight(dp(48)); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
         remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
         LinearLayout connectRow = row(connectionCard);
@@ -192,20 +188,13 @@ public final class MainActivity extends Activity {
         check = rowButton(connectRow, "Check connection", this::checkConnection, false);
         diagnostics = label(connectionCard, "Check connection tests whether the printer is reachable and how it is set up.", 13, MUTED, false);
         diagnostics.setTextIsSelectable(true);
-        button(connectionCard, "Connection help…", this::connectionHelp);
-        // Saved printers, route and authentication are rarely changed, so they sit behind one toggle (open already when the route or PIN probe is in use).
+        // Advanced options (serial, route VPN, authentication, saved printers) are rarely changed, so they sit behind one toggle (open already when the route or PIN probe is in use).
         moreToggle = button(connectionCard, "", this::toggleMore);
         LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.VERTICAL); connectionCard.addView(more); moreOptions = more;
-        subheading(more, "Save this printer");
-        profileName = input(more, "Printer profile name", false);
-        serial.setText(profiles.find(host.getText().toString()).optString("serial"));
-        profileName.setText(profiles.find(host.getText().toString()).optString("name"));
-        LinearLayout profileRow = row(more);
-        saveProfile = rowButton(profileRow, "Save", this::savePrinter, false);
-        removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
-        forget = button(more, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
-        subheading(more, "Advanced");
-        label(more, "Connection route", 13, MUTED, false);
+        label(more, "Serial number: leave blank to find it automatically. If that fails, enter it from printer Settings → Device.", 13, MUTED, false);
+        serial = input(more, "Serial number (optional)", false);
+        serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        subheading(more, "Connection route");
         routePicker = spinner(more, new String[] {"Local Wi-Fi / Ethernet", "Remote through home VPN"});
         routePicker.setSelection(settings.getBoolean("remoteVPN", false) ? 1 : 0);
         routePicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
@@ -213,14 +202,24 @@ public final class MainActivity extends Activity {
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("remoteVPN", position == 1).apply(); stopCamera(); if (connect != null) { diagnostics.setText("Connection route changed. Run Check connection before reconnecting."); render(); } }
         });
         button(more, "Remote access setup…", this::remoteHelp);
-        label(more, "Printer authentication", 13, MUTED, false);
+        subheading(more, "Printer authentication");
         authPicker = spinner(more, new String[] {"Access code (LAN Only)", "Cloud-mode PIN probe (read-only)"});
         authPicker.setSelection(settings.getBoolean("pinProbe", false) ? 1 : 0);
         authPicker.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("pinProbe", position == 1).apply(); if (connect != null) { diagnostics.setText("Authentication mode changed. Run Check connection; PIN probe preserves the printer's cloud setting."); render(); } }
         });
+        pairingPin = input(more, "Current printer pairing PIN (probe only)", true); pairingPin.setTypeface(Typeface.DEFAULT); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        pinProbeHelp = label(more, "Experimental and read-only: use the pairing PIN the printer currently shows, not the access code. The PIN is never saved.", 13, MUTED, false);
         button(more, "Matrix coexistence test…", this::coexistenceHelp);
+        subheading(more, "Saved printer");
+        profileName = input(more, "Printer profile name", false);
+        serial.setText(profiles.find(host.getText().toString()).optString("serial"));
+        profileName.setText(profiles.find(host.getText().toString()).optString("name"));
+        LinearLayout profileRow = row(more);
+        saveProfile = rowButton(profileRow, "Save", this::savePrinter, false);
+        removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
+        forget = button(more, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
         setMore(settings.getBoolean("remoteVPN", false) || settings.getBoolean("pinProbe", false));
         currentSection = pages[0];
         // Get started: one line on what the app does, then the three ways in, each with one button.
@@ -346,19 +345,20 @@ public final class MainActivity extends Activity {
         currentSection = pages[2]; buildCamera();
         currentSection = pages[3];
         cloudAccounts = new CloudAccountStore(this);
-        LinearLayout account = card("Elegoo account (experimental)");
-        label(account, "To watch and control it away from home, through Elegoo's cloud.", 13, MUTED, false);
+        LinearLayout account = card("Elegoo cloud (experimental)");
+        label(account, "Watch and control the printer away from home, through Elegoo's cloud.", 13, MUTED, false);
         cloudStatus = label(account, "", 14, INK, false);
         cloudLiveLabel = label(account, "", 13, MUTED, false);
         button(account, "Sign in with Elegoo…", this::cloudSignIn);
+        // Cloud details and sign-out only appear while signed in (renderCloudAccount).
+        cloudPrinters = button(account, "Cloud details…", () -> startActivity(new Intent(this, CloudStatusActivity.class)));
+        cloudSignOut = button(account, "Sign out on this phone", this::cloudSignOut);
         cloudBackground = checkbox(account, "Keep watching through the cloud in the background", settings.getBoolean("cloudBackground", false));
         cloudBackground.setOnCheckedChangeListener((view, enabled) -> {
             settings.edit().putBoolean("cloudBackground", enabled).apply();
             if (enabled) { requestNotifications(); try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { } }
             if (printer != null) printer.cloudSettingsChanged();
         });
-        cloudPrinters = button(account, "Cloud details…", () -> startActivity(new Intent(this, CloudStatusActivity.class)));
-        cloudSignOut = button(account, "Sign out on this phone", this::cloudSignOut);
         label(account, "Your password goes only to Elegoo's own sign-in page. Without a local connection, Monitor shows the cloud's last update.", 13, MUTED, false);
         renderCloudAccount();
         LinearLayout preferences = card("App preferences");
@@ -367,12 +367,17 @@ public final class MainActivity extends Activity {
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
-        label(preferences, "Alerts require notification permission and an active monitoring session. They do not run after you disconnect or Android stops the process.", 13, MUTED, false);
-        LinearLayout about = card("Link Workshop " + appVersion());
+        label(preferences, "Alerts need notification permission and an active monitoring session. They stop after you disconnect or Android stops the process.", 13, MUTED, false);
+        LinearLayout help = card("Help & diagnostics");
+        button(help, "Connection help…", this::connectionHelp);
+        probeButton = button(help, "Probe printer (read-only)…", this::probeDialog);
+        // The probe result scrolls inside a fixed-height area, so a long answer does not push the rest of the page down.
+        probeResult = A11y.polite(new TextView(this)); probeResult.setTextSize(13); probeResult.setTextColor(MUTED); probeResult.setPadding(0, dp(5), 0, dp(7)); probeResult.setTextIsSelectable(true);
+        ScrollView probeArea = new ScrollView(this); probeArea.addView(probeResult);
+        help.addView(probeArea, new LinearLayout.LayoutParams(-1, dp(200))); probeArea.setVisibility(View.GONE);
+        button(help, "Share diagnostics…", this::shareDiagnostics);
+        LinearLayout about = card("About Link Workshop " + appVersion());
         label(about, "Development build: printer behavior still needs hardware testing. Planned next: painting tools in the slicer, slicing all plates of a project at once, and other printer models.", 13, MUTED, false);
-        probeButton = button(about, "Probe printer (read-only)…", this::probeDialog);
-        probeResult = A11y.polite(label(about, "", 13, MUTED, false)); probeResult.setTextIsSelectable(true); probeResult.setVisibility(View.GONE);
-        button(about, "Share diagnostics…", this::shareDiagnostics);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
@@ -695,8 +700,8 @@ public final class MainActivity extends Activity {
     private void toggleMore() { setMore(!moreOpen); }
     private void setMore(boolean open) {
         moreOpen = open; moreOptions.setVisibility(open ? View.VISIBLE : View.GONE);
-        moreToggle.setText(open ? "Fewer options ▴" : "More options: saved printers, route, authentication ▾");
-        moreToggle.setContentDescription(open ? "Fewer options" : "More options: saved printers, route, authentication"); A11y.expandable(moreToggle, open);
+        moreToggle.setText(open ? "Hide advanced options ▴" : "Advanced connection options ▾");
+        moreToggle.setContentDescription(open ? "Hide advanced connection options" : "Advanced connection options"); A11y.expandable(moreToggle, open);
     }
     private boolean pinProbe() { return authPicker != null && authPicker.getSelectedItemPosition() == 1; }
     private boolean remoteMode() { return routePicker != null && routePicker.getSelectedItemPosition() == 1; }
@@ -1134,7 +1139,7 @@ public final class MainActivity extends Activity {
             probeButton.setText(probing ? "Stop probe" : "Probe printer (read-only)…");
             String probeText = printer == null ? "" : printer.probeText;
             if (!probeText.contentEquals(probeResult.getText())) probeResult.setText(probeText);
-            probeResult.setVisibility(probeText.isEmpty() ? View.GONE : View.VISIBLE);
+            ((View) probeResult.getParent()).setVisibility(probeText.isEmpty() ? View.GONE : View.VISIBLE);
         }
         if (cameraPlayer != null && cameraRoute != null && !cameraRoute.available()) { stopCamera(); cameraInfo.setText("Home VPN is unavailable. Enable it and restart the camera."); }
         boolean ready = printer != null && printer.ready(), fresh = ready && printer.fresh(), writable = fresh && !printer.pinProbe(), busy = printer != null && printer.uploading(), connecting = printer != null && printer.connecting();
@@ -1442,6 +1447,14 @@ public final class MainActivity extends Activity {
             button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, dark ? 0xff00201c : Color.WHITE}));
         }
         button.setOnClickListener(view -> action.run());
+        // With large text, a row of buttons stacks so no label breaks mid-word ("Disconnec / t").
+        boolean onlyButtons = true; for (int i = 0; i < row.getChildCount(); i++) onlyButtons &= row.getChildAt(i) instanceof Button;
+        if (getResources().getConfiguration().fontScale >= 1.3f && onlyButtons) {
+            row.setOrientation(LinearLayout.VERTICAL);
+            for (int i = 0; i < row.getChildCount(); i++) { LinearLayout.LayoutParams p = (LinearLayout.LayoutParams) row.getChildAt(i).getLayoutParams(); p.width = -1; p.weight = 0; p.leftMargin = 0; }
+            LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6);
+            row.addView(button, layout); return button;
+        }
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(6);
         if (row.getChildCount() > 0) layout.leftMargin = dp(8);
         row.addView(button, layout); return button;
