@@ -30,10 +30,11 @@ import org.json.JSONObject;
 /**
  * Find models: searches Thingiverse and MyMiniFactory through their official APIs with the user's own token and key, lists
  * the results together, downloads a Thingiverse file straight into the Slice screen, and opens other sites' searches in the
- * browser (their files then open here through "Open with"). Returns the downloaded files' paths to the Slice screen.
+ * in-app browser (ModelBrowserActivity), whose downloads come straight back. Returns the downloaded files' paths to the Slice screen.
  */
 public final class ModelSearchActivity extends Activity {
     static final String RESULT_PATHS = "paths";
+    private static final int BROWSE = 1;
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newFixedThreadPool(3);
     private boolean dark;
@@ -76,15 +77,16 @@ public final class ModelSearchActivity extends Activity {
         rowButton(searchRow, "Site keys…", this::keysDialog, false);
         status = A11y.polite(label(content, "", 13, muted, false));
 
-        label(content, "Search on other sites (in the browser)", 13, ink, true);
-        label(content, "Printables, MakerWorld and Cults3D have no way for apps to search them. Their search opens in the browser; download a file there and choose Open with › Link Workshop.", 12, muted, false);
+        label(content, "Browse the sites", 13, ink, true);
+        label(content, "Each site opens here with your search. Sign in on the site as usual; files you download come straight to the slicer.", 12, muted, false);
         // Three and two to a row; one to a row with large text, so no site name breaks mid-word.
         boolean large = getResources().getConfiguration().fontScale >= 1.3f;
         LinearLayout sites = row(content);
         for (int i = 0; i < ModelSites.BROWSER_SITES.length; i++) {
             String site = ModelSites.BROWSER_SITES[i];
             if (i > 0 && (large || i == 3)) sites = row(content);
-            rowButton(sites, site, () -> openBrowser(ModelSites.webSearch(site, query.getText().toString())), false);
+            rowButton(sites, site, () -> startActivityForResult(new Intent(this, ModelBrowserActivity.class)
+                .putExtra(ModelBrowserActivity.EXTRA_SITE, site).putExtra(ModelBrowserActivity.EXTRA_TERM, query.getText().toString().trim()), BROWSE), false);
         }
         results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); content.addView(results);
         more = button(content, "More results", () -> search(page + 1)); more.setVisibility(View.GONE);
@@ -97,7 +99,7 @@ public final class ModelSearchActivity extends Activity {
     private void showStatus() {
         boolean thingiverse = keys.has(SiteKeys.THINGIVERSE), mmf = keys.has(SiteKeys.MYMINIFACTORY);
         status.setText(thingiverse || mmf ? "Searches " + (thingiverse && mmf ? "Thingiverse and MyMiniFactory" : thingiverse ? "Thingiverse" : "MyMiniFactory") + " here."
-            : "To search here, add your own free Thingiverse app token or MyMiniFactory API key (Site keys…). Without one, use the browser buttons below.");
+            : "To search here, add your own free Thingiverse app token or MyMiniFactory API key (Site keys…). Without one, browse the sites below.");
     }
 
     // ------------------------------------------------------------------ searching
@@ -260,9 +262,17 @@ public final class ModelSearchActivity extends Activity {
 
     // ------------------------------------------------------------------ helpers
     private HttpURLConnection open(URL url) throws IOException { return (HttpURLConnection) url.openConnection(); }
+    /** Opens a model's page in the in-app browser, where its downloads come straight to the slicer. */
     private void openBrowser(String address) {
-        try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(address))); }
-        catch (android.content.ActivityNotFoundException none) { status.setText("No browser is installed to open " + address); }
+        if (!address.startsWith("https://")) return;
+        startActivityForResult(new Intent(this, ModelBrowserActivity.class).putExtra(ModelBrowserActivity.EXTRA_URL, address), BROWSE);
+    }
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == BROWSE && result == RESULT_OK && data != null && data.getStringArrayListExtra(RESULT_PATHS) != null) {
+            setResult(RESULT_OK, new Intent().putStringArrayListExtra(RESULT_PATHS, data.getStringArrayListExtra(RESULT_PATHS)));
+            finish();
+        }
     }
     private void loadThumbnail(String address, ImageView into) {
         worker.execute(() -> {

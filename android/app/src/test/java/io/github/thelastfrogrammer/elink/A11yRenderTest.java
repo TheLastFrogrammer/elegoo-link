@@ -329,6 +329,23 @@ public class A11yRenderTest {
         }
     }
 
+    /** The in-app model browser's own controls, with a model downloaded and ready for the slicer. */
+    @Test public void modelBrowser() throws Exception {
+        out();
+        for (float scale : SCALES) {
+            RuntimeEnvironment.setFontScale(scale);
+            theme(false);
+            android.content.Intent intent = new android.content.Intent(context(), ModelBrowserActivity.class)
+                .putExtra(ModelBrowserActivity.EXTRA_SITE, "Printables").putExtra(ModelBrowserActivity.EXTRA_TERM, "cable clip");
+            ModelBrowserActivity activity = Robolectric.buildActivity(ModelBrowserActivity.class, intent).setup().get();
+            @SuppressWarnings("unchecked") java.util.List<String> ready = (java.util.List<String>) field(activity, "ready");
+            ready.add(new File(context().getCacheDir(), "Cable clip remix.stl").getAbsolutePath());
+            invoke(activity, "showReady");
+            shot(activity.getWindow().getDecorView(), 2340, "model-browser", scale);
+            activity.finish();
+        }
+    }
+
     /** The camera line-up panel (Camera tab > Line up the camera in 3D), as it opens and with every section expanded. */
     @Test public void viewerLineUp() throws Exception {
         out();

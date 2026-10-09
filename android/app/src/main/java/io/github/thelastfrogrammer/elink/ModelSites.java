@@ -136,13 +136,21 @@ final class ModelSites {
      * never to the storage a download redirects to), https only, at most MAX_DOWNLOAD bytes.
      */
     static void download(Http http, String address, String token, File target, Progress progress) throws IOException {
+        download(http, address, (url, connection) -> {
+            if (!token.isEmpty() && THINGIVERSE_API.equals(url.getHost())) connection.setRequestProperty("Authorization", "Bearer " + token);
+        }, target, progress);
+    }
+    /** Adds what a request to `url` may carry (a token, or the in-app browser's own cookies for that address); asked at every hop. */
+    interface Credentials { void apply(URL url, HttpURLConnection connection); }
+    /** As above, with the credentials for each hop chosen by `credentials`; returns the final answer's Content-Disposition (or ""). */
+    static String download(Http http, String address, Credentials credentials, File target, Progress progress) throws IOException {
         URL url = new URL(address);
         for (int hop = 0; hop <= 5; hop++) {
             if (!"https".equals(url.getProtocol())) throw new IOException("The download moved to an address that is not secure; it was not followed.");
             HttpURLConnection connection = http.open(url);
             try {
                 connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(15_000); connection.setReadTimeout(30_000);
-                if (!token.isEmpty() && THINGIVERSE_API.equals(url.getHost())) connection.setRequestProperty("Authorization", "Bearer " + token);
+                credentials.apply(url, connection);
                 int code = connection.getResponseCode();
                 if (code >= 300 && code < 400) {
                     String next = connection.getHeaderField("Location");
@@ -162,10 +170,91 @@ final class ModelSites {
                         if (!progress.update(done, total)) throw new InterruptedIOException("Download cancelled.");
                     }
                 }
-                return;
+                String disposition = connection.getHeaderField("Content-Disposition");
+                return disposition == null ? "" : disposition;
             } finally { connection.disconnect(); }
         }
         throw new IOException("The download was redirected too many times.");
+    }
+
+    // ------------------------------------------------------------------ files from the in-app browser
+    /** Whether the in-app browser takes a file of this name: a model file or a ZIP of them (or no extension yet: sniffed later). */
+    static boolean browserTakes(String name) { String e = extension(name); return e.isEmpty() || e.equals("zip") || MODEL_TYPES.contains(e) || e.equals("bin"); }
+
+    /** A file name for a download: Content-Disposition's filename* or filename, else the address's last segment, else "model". */
+    static String fileNameFor(String address, String disposition, String mimeType) {
+        String name = "";
+        if (disposition != null) {
+            java.util.regex.Matcher star = java.util.regex.Pattern.compile("(?i)filename\\*\\s*=\\s*([^']*)'[^']*'([^;]+)").matcher(disposition);
+            java.util.regex.Matcher plain = java.util.regex.Pattern.compile("(?i)filename\\s*=\\s*(\"([^\"]*)\"|[^;]+)").matcher(disposition);
+            try {
+                if (star.find()) name = URLDecoder.decode(star.group(2).trim().replace("+", "%2B"), star.group(1).isEmpty() ? "UTF-8" : star.group(1).trim());
+                else if (plain.find()) name = plain.group(2) != null ? plain.group(2) : plain.group(1).trim();
+            } catch (Exception unreadable) { name = ""; }
+        }
+        if (name.isEmpty() && address != null && address.startsWith("https://")) {
+            try {
+                String path = new URL(address).getPath();
+                name = URLDecoder.decode(path.substring(path.lastIndexOf('/') + 1).replace("+", "%2B"), "UTF-8");
+            } catch (Exception unreadable) { name = ""; }
+        }
+        name = safeName(name);
+        if (extension(name).isEmpty() && mimeType != null) {
+            String m = mimeType.toLowerCase(Locale.ROOT);
+            if (m.contains("zip") && !m.contains("3mf")) name += ".zip";
+            else if (m.contains("3mf")) name += ".3mf";
+            else if (m.contains("stl")) name += ".stl";
+        }
+        return name;
+    }
+
+    /** The model type a downloaded file really is, from its first bytes: "3mf", "zip", "stl", "obj", "step", or "" if unknown. */
+    static String sniff(File file) throws IOException {
+        byte[] head = new byte[512]; int n;
+        try (InputStream in = new FileInputStream(file)) { n = Math.max(0, in.read(head)); }
+        if (n >= 4 && head[0] == 'P' && head[1] == 'K' && head[2] == 3 && head[3] == 4) {
+            try (java.util.zip.ZipFile zip = new java.util.zip.ZipFile(file)) { return zip.getEntry("3D/3dmodel.model") != null ? "3mf" : "zip"; }
+            catch (IOException broken) { return "zip"; }
+        }
+        String text = new String(head, 0, n, StandardCharsets.ISO_8859_1).trim();
+        if (text.startsWith("ISO-10303-21")) return "step";
+        if (n >= 84) {
+            long triangles = (head[80] & 0xffL) | (head[81] & 0xffL) << 8 | (head[82] & 0xffL) << 16 | (head[83] & 0xffL) << 24;
+            if (84 + 50 * triangles == file.length()) return "stl";
+        }
+        if (text.startsWith("solid") && text.contains("facet")) return "stl";
+        if (text.matches("(?s)^(#[^\\n]*\\n\\s*)*(v|o|g|mtllib|vn|vt)\\s.*")) return "obj";
+        return "";
+    }
+
+    static final int MAX_ZIP_ENTRIES = 500;
+    static final long MAX_UNZIPPED = 1024L * 1024 * 1024;
+    /**
+     * Unpacks the model files of a ZIP into `folder` (flattened: no folders, so nothing can land outside it; a name already
+     * taken gets a number), at most MAX_ZIP_ENTRIES entries and MAX_UNZIPPED bytes in all. Returns the model files.
+     */
+    static List<File> unzipModels(File zipFile, File folder) throws IOException {
+        List<File> out = new ArrayList<>(); long written = 0; int entries = 0;
+        try (java.util.zip.ZipInputStream zip = new java.util.zip.ZipInputStream(new BufferedInputStream(new FileInputStream(zipFile)))) {
+            java.util.zip.ZipEntry entry; byte[] buffer = new byte[64 * 1024];
+            while ((entry = zip.getNextEntry()) != null) {
+                if (++entries > MAX_ZIP_ENTRIES) throw new IOException("The ZIP holds too many files.");
+                String name = safeName(entry.getName());
+                if (entry.isDirectory() || name.startsWith(".") || entry.getName().contains("__MACOSX") || !MODEL_TYPES.contains(extension(name))) continue;
+                File target = new File(folder, name);
+                for (int i = 2; target.exists(); i++) { int dot = name.lastIndexOf('.'); target = new File(folder, name.substring(0, dot) + " (" + i + ")" + name.substring(dot)); }
+                try (OutputStream file = new FileOutputStream(target)) {
+                    int n;
+                    while ((n = zip.read(buffer)) >= 0) {
+                        written += n;
+                        if (written > MAX_UNZIPPED) throw new IOException("The ZIP unpacks to more than 1 GB.");
+                        file.write(buffer, 0, n);
+                    }
+                } catch (IOException failed) { target.delete(); throw failed; }
+                out.add(target);
+            }
+        }
+        return out;
     }
 
     // ------------------------------------------------------------------ helpers

@@ -158,3 +158,15 @@ If the download fails, the error and the history entry help: share the diagnosti
    "load filament") should open the section and point at the button.
 3. Files tab → **Find models online…** opens the model search directly.
 4. While printing, the ongoing notification has **Live toolpath** and **Camera** buttons; each only opens the app there.
+
+## 16. Model sites in the app's own browser (v0.19.0)
+
+1. Files → Find models online… → type a search → tap **Printables** (or MakerWorld, Cults3D…). The site opens inside the
+   app with your search; the line at the top shows the site's address (🔒 = secure). The tabs switch site with the same search.
+2. Sign in on a site as usual (email and password). Google/Apple sign-in may refuse to work inside an app: More… → **Open
+   this page in the phone's browser** is the way round it.
+3. Tap a model's download button: a bar shows the download, then "1 model ready". A ZIP is unpacked to its model files.
+   Download a second model, then **Slice all 2**: both open in the slicer.
+4. Tell us any download that does nothing or says "Not added" (and which site): Share diagnostics lists, under Model
+   sites, how each download went (link or page data, file type), never the addresses.
+5. More… → **Sign out of all sites** clears every site's sign-in in the app's browser.

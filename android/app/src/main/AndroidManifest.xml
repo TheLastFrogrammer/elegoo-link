@@ -101,6 +101,8 @@
         </activity>
         <activity android:name=".ModelSearchActivity" android:exported="false" android:label="Find models"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
+        <activity android:name=".ModelBrowserActivity" android:exported="false" android:label="Model sites"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation" />
         <activity android:name=".SliceSettingsActivity" android:exported="false" android:label="Print settings" />
         <activity android:name=".PlateActivity" android:exported="false" android:label="Layout"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
