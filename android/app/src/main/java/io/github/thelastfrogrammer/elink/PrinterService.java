@@ -955,10 +955,22 @@ public final class PrinterService extends Service {
         if (ready() && fresh() && !StatusPresentation.faultCodes(status).isEmpty()) text += " · Printer reports a fault";
         if (uploading()) text = feedback;
         String title = wanted || cloudName.isEmpty() ? host : StatusPresentation.clean(cloudName);
-        return new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("Link Workshop · " + title)
-            .setContentText(text).setContentIntent(view).setOngoing(true).setOnlyAlertOnce(true)
-            .addAction(wanted ? new Notification.Action.Builder(null, "Disconnect", disconnect).build()
+        Notification.Builder builder = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("Link Workshop · " + title)
+            .setContentText(text).setContentIntent(view).setOngoing(true).setOnlyAlertOnce(true);
+        // While printing: shortcuts that only open the app at a feature; nothing here sends the printer a command.
+        JSONObject shown = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
+        JSONObject machine = shown == null ? null : shown.optJSONObject("machine_status");
+        if (machine != null && machine.optInt("status", -1) == 2 && !uploading()) {
+            builder.addAction(new Notification.Action.Builder(null, "Live toolpath", openFeature("toolpath", 3)).build());
+            builder.addAction(new Notification.Action.Builder(null, "Camera", openFeature("camera", 4)).build());
+        }
+        return builder.addAction(wanted ? new Notification.Action.Builder(null, "Disconnect", disconnect).build()
                 : new Notification.Action.Builder(null, "Stop watching", PendingIntent.getService(this, 2, new Intent(this, PrinterService.class).setAction(STOP_CLOUD), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE)).build()).build();
+    }
+    /** Opens the app at a "Find a feature" entry (navigation only). */
+    private PendingIntent openFeature(String feature, int request) {
+        Intent open = new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_FEATURE, feature).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        return PendingIntent.getActivity(this, request, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
     private void startMonitoring() {
         if (android.os.Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
