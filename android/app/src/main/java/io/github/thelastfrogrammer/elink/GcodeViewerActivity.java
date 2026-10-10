@@ -106,6 +106,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         int appearance = getSharedPreferences("workshop-settings", MODE_PRIVATE).getInt("theme", 0);
         dark = appearance == 2 || appearance == 0 && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
+        applyPlate();
         super.onCreate(saved);
         ink = dark ? 0xffe6eef1 : 0xff17252c; muted = dark ? 0xff9fb3bb : 0xff5a6d76; teal = dark ? 0xff5fd4c4 : 0xff00796b;
         background = dark ? 0xff0e1417 : 0xfff2f5f6; surface = dark ? 0xff182227 : Color.WHITE; buttonColor = dark ? 0xff21343a : 0xffe2efed;
@@ -507,6 +508,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         });
         styleSlider(viewOpts, "Outline strength", "alignAlpha", 15, 100, 90, "%");
         styleSlider(viewOpts, "Dot size", "alignDot", 4, 32, 12, " px");
+        // The plate can be larger than the 256 mm print area; the taps mark the plate's edges, so the fit needs to know by how much.
+        LinearLayout plateBox = section("Plate edges", false);
+        label(plateBox, "The taps mark the plate's edges, but the print area (256 × 256 mm) can sit inside a larger plate. If the outline matches the plate "
+            + "but prints land off to one side, set how far the plate reaches past the print area. Each change fits again from your saved taps; Save when it lines up.", 12, muted, false);
+        String[] plateNames = {"Left", "Right", "Front", "Back"}, plateKeys = {"plateLeft", "plateRight", "plateFront", "plateBack"};
+        for (int i = 0; i < 4; i++) styleSlider(plateBox, plateNames[i] + " margin", plateKeys[i], 0, 40, 0, " mm", this::plateChanged);
         // Other bed heights: the bed's note, the moves of the real printer, and the saved line-ups.
         LinearLayout other = section("Other bed heights", false);
         bedNote = A11y.polite(label(other, "", 12, muted, false));
@@ -697,13 +704,24 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         });
         parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
     }
+    /** The plate's margins to the fit and the outline; while lining up with saved or current taps, fit again. */
+    private void applyPlate() {
+        android.content.SharedPreferences p = viewerPrefs();
+        CameraFit.setPlate(p.getInt("plateLeft", 0), p.getInt("plateRight", 0), p.getInt("plateFront", 0), p.getInt("plateBack", 0));
+    }
+    private void plateChanged() {
+        applyPlate(); sendAlignStyle();
+        main.removeCallbacks(refitForPlate); main.postDelayed(refitForPlate, 400);   // once the slider settles
+    }
+    private final Runnable refitForPlate = () -> { if (aligning != null && (!marks.isEmpty() || !savedTaps().isEmpty())) fitToMarks(); };
     private void sendAlignStyle() {
         String grid = viewerPrefs().getString("alignGrid", "all");
         if (gridButton != null) gridButton.setText("all".equals(grid) ? "Grid: all lines" : "edges".equals(grid) ? "Grid: bed edges only" : "Grid: hidden");
         if (web == null) return;
         try {
             web.evaluateJavascript("viewer.setAlignStyle(" + new JSONObject().put("grid", grid).put("alpha", viewerPrefs().getInt("alignAlpha", 90) / 100.0)
-                .put("dot", viewerPrefs().getInt("alignDot", 12)) + ")", null);
+                .put("dot", viewerPrefs().getInt("alignDot", 12))
+                .put("plate", new JSONArray().put(viewerPrefs().getInt("plateLeft", 0)).put(viewerPrefs().getInt("plateRight", 0)).put(viewerPrefs().getInt("plateFront", 0)).put(viewerPrefs().getInt("plateBack", 0))) + ")", null);
         } catch (org.json.JSONException ignored) { }
     }
     private void syncEdgeButtons() {

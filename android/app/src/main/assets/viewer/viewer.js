@@ -174,7 +174,9 @@
   const camera = { yaw: -55, pitch: 32, distance: 300, target: [128, 128, 10], fov: 35 };
   let dirty = false;
   let gridLineCount = 0;
-  const alignStyle = { grid: "all", alpha: 0.9, dot: 12 };
+  // plate: how far the plate reaches past the print area (left, right, front, back, mm); its edges are what the taps mark.
+  const alignStyle = { grid: "all", alpha: 0.9, dot: 12, plate: [0, 0, 0, 0] };
+  let bedBounds = [0, 0, 256, 256], plateEdgeVao = null, plateEdgeCount = 0;
   let beadVao, beadVertices, instanceBuffer, travelVao, travelBuffer, bedVao, bedLineCount = 0, plateVao, markerVao, markerBuffer;
   const colors = new Float32Array(PALETTE.length * 3);
 
@@ -391,7 +393,21 @@
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([minX, minY, z, maxX, minY, z, maxX, maxY, z, minX, minY, z, maxX, maxY, z, minX, maxY, z]), gl.STATIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
     gl.bindVertexArray(null);
+    bedBounds = [minX, minY, maxX, maxY]; setupPlateEdges();
     return [minX, minY, maxX, maxY];
+  }
+  // The plate's own edges, when it is larger than the print area: a rectangle around it, in 8 mm pieces for the lens curve.
+  function setupPlateEdges() {
+    const [l, r, f, b] = alignStyle.plate; plateEdgeCount = 0;
+    if (!(l || r || f || b)) return;
+    const x0 = bedBounds[0] - l, x1 = bedBounds[2] + r, y0 = bedBounds[1] - f, y1 = bedBounds[3] + b, v = [];
+    const line = (ax, ay, bx, by) => { const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 8)); for (let k = 0; k < n; k++) v.push(ax + (bx - ax) * k / n, ay + (by - ay) * k / n, 0, ax + (bx - ax) * (k + 1) / n, ay + (by - ay) * (k + 1) / n, 0); };
+    line(x0, y0, x1, y0); line(x1, y0, x1, y1); line(x1, y1, x0, y1); line(x0, y1, x0, y0);
+    if (!plateEdgeVao) plateEdgeVao = gl.createVertexArray();
+    gl.bindVertexArray(plateEdgeVao);
+    const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0); gl.bindVertexArray(null);
+    plateEdgeCount = v.length / 3;
   }
 
   // ---------------------------------------------------------------- math
@@ -484,8 +500,10 @@
       // Over the camera picture: the grid can be hidden or kept to the bed's edges, at the chosen strength.
       const colour = [theme.align[0], theme.align[1], theme.align[2], alignStyle.alpha];
       gl.uniform4fv(lines.u.uColor, colour);
+      // With a larger plate, its own edges are what lines up with the picture; the print area's outline shows with the full grid.
       if (alignStyle.grid === "all") gl.drawArrays(gl.LINES, 0, bedLineCount);
-      else if (alignStyle.grid === "edges") gl.drawArrays(gl.LINES, gridLineCount, bedLineCount - gridLineCount);
+      else if (alignStyle.grid === "edges" && !plateEdgeCount) gl.drawArrays(gl.LINES, gridLineCount, bedLineCount - gridLineCount);
+      if (alignStyle.grid !== "none" && plateEdgeCount) { gl.bindVertexArray(plateEdgeVao); gl.drawArrays(gl.LINES, 0, plateEdgeCount); }
     }
     // The printhead as an invisible occluder: it writes depth only, so lines behind it are hidden as the real head hides
     // them in the camera's picture.
@@ -787,6 +805,7 @@
     if (style.grid === "all" || style.grid === "edges" || style.grid === "none") alignStyle.grid = style.grid;
     if (style.alpha >= 0 && style.alpha <= 1) alignStyle.alpha = style.alpha;
     if (style.dot >= 4 && style.dot <= 40) alignStyle.dot = style.dot;
+    if (Array.isArray(style.plate) && style.plate.length === 4 && style.plate.every((m) => m >= 0 && m <= 60)) { alignStyle.plate = style.plate.map(Number); setupPlateEdges(); }
     drawMarks(); redraw();
   }
   window.addEventListener("resize", drawMarks);

@@ -9,13 +9,15 @@ public class CameraFitTest {
     private static final double[] TRUTH = {308, -9, 33, 134, 8, 37, 0.34, 2.0};
 
     /** Taps along each edge where it shows in the picture, as a user would place them (with a little hand wobble). */
-    private static List<CameraFit.Mark> taps(double[] camera, int[] edges, double wobble) {
+    private static List<CameraFit.Mark> taps(double[] camera, int[] edges, double wobble) { return taps(camera, edges, wobble, new double[] {0, CameraFit.BED, 0, CameraFit.BED}); }
+    /** As above, on a plate whose edges are at x0, x1, y0, y1 (print-area millimetres). */
+    private static List<CameraFit.Mark> taps(double[] camera, int[] edges, double wobble, double[] plate) {
         Random random = new Random(7);
         List<CameraFit.Mark> marks = new ArrayList<>();
         for (int edge : edges)
             for (int i = 2; i <= 46; i += 4) {
-                double t = CameraFit.BED * i / 48;
-                double x = edge == 2 ? 0 : edge == 3 ? CameraFit.BED : t, y = edge == 0 ? 0 : edge == 1 ? CameraFit.BED : t;
+                double along = i / 48.0;
+                double x = edge == 2 ? plate[0] : edge == 3 ? plate[1] : plate[0] + (plate[1] - plate[0]) * along, y = edge == 0 ? plate[2] : edge == 1 ? plate[3] : plate[2] + (plate[3] - plate[2]) * along;
                 double[] p = CameraFit.project(camera, ASPECT, x, y, 0);
                 if (p == null) continue;
                 double u = (p[0] / ASPECT + 1) / 2 + random.nextGaussian() * wobble, v = (1 - p[1]) / 2 + random.nextGaussian() * wobble;
@@ -80,5 +82,22 @@ public class CameraFitTest {
         assertEquals(base[CameraFit.TURN], fitted[CameraFit.TURN], 0.5);
         assertEquals(base[CameraFit.VIEW], fitted[CameraFit.VIEW], 1);
         assertTrue(CameraFit.rms(fitted, sets) <= CameraFit.rms(base, sets) + 1e-4);
+    }
+
+    /** Taps on a plate larger than the print area: told the plate's margins, the fit puts the print area where it really is. */
+    @Test public void aLargerPlateIsFittedWithItsMargins() {
+        double[] plate = {-12, CameraFit.BED + 4, -6, CameraFit.BED + 10};
+        List<CameraFit.Mark> marks = taps(TRUTH, new int[] {0, 1, 2, 3}, 0, plate);
+        double[] start = {300, -3, 40, 130, 10, 40, 0.2, 0};
+        double[] want = CameraFit.project(TRUTH, ASPECT, 128, 128, 0);
+        try {
+            CameraFit.setPlate(0, 0, 0, 0);
+            double[] wrong = CameraFit.project(CameraFit.fit(start, ASPECT, marks), ASPECT, 128, 128, 0);
+            CameraFit.setPlate(12, 4, 6, 10);
+            double[] fitted = CameraFit.fit(start, ASPECT, marks), right = CameraFit.project(fitted, ASPECT, 128, 128, 0);
+            assertEquals(0, CameraFit.rms(fitted, ASPECT, marks), 1e-3);
+            assertEquals(0, Math.hypot(want[0] - right[0], want[1] - right[1]), 0.005);
+            assertTrue("without the margins the print area lands elsewhere", Math.hypot(want[0] - wrong[0], want[1] - wrong[1]) > 0.01);
+        } finally { CameraFit.setPlate(0, 0, 0, 0); }
     }
 }

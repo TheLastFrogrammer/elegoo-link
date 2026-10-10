@@ -13,6 +13,10 @@ final class CameraFit {
     /** Camera values, in GcodeViewerActivity's order. */
     static final int X = 0, Y = 1, Z = 2, TURN = 3, TILT = 4, VIEW = 5, LENS = 6, ROLL = 7, COUNT = 8;
     static final double BED = 256;
+    /** Where the plate's edges are, in print-area millimetres: the plate can reach past the 256 mm print area on each side. */
+    private static volatile double[] plate = {0, BED, 0, BED};
+    /** How far the plate reaches past the print area: left, right, front, back (mm). */
+    static void setPlate(double left, double right, double front, double back) { plate = new double[] {-left, BED + right, -front, BED + back}; }
     static final String[] EDGES = {"Front edge", "Back edge", "Left edge", "Right edge"};
 
     /** A tap on the picture (u, v from its top-left, 0..1) said to lie on one of the bed's edges. */
@@ -56,8 +60,8 @@ final class CameraFit {
     static List<double[]> edgeLine(double[] c, double aspect, int edge) {
         List<double[]> points = new ArrayList<>();
         for (int i = 0; i <= 48; i++) {
-            double t = BED * i / 48;
-            double x = edge == 2 ? 0 : edge == 3 ? BED : t, y = edge == 0 ? 0 : edge == 1 ? BED : t;
+            double[] p = plate; double along = i / 48.0;
+            double x = edge == 2 ? p[0] : edge == 3 ? p[1] : p[0] + (p[1] - p[0]) * along, y = edge == 0 ? p[2] : edge == 1 ? p[3] : p[2] + (p[3] - p[2]) * along;
             points.add(project(c, aspect, x, y, 0));
         }
         return points;
