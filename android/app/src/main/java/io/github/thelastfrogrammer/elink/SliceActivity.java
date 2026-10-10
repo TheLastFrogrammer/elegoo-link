@@ -161,7 +161,7 @@ public final class SliceActivity extends Activity {
         bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         if (saved != null) restore(saved);
         else {
-            List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) importModels(incoming);
+            List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) chooseFromZips(incoming);
             // Opened from "Find a feature" or a launcher shortcut straight to one of this screen's tools.
             String open = getIntent().getStringExtra(EXTRA_OPEN);
             if ("find".equals(open)) startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS);
@@ -852,7 +852,7 @@ public final class SliceActivity extends Activity {
             List<Uri> uris = new ArrayList<>();
             if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
             else if (data.getData() != null) uris.add(data.getData());
-            importModels(uris);
+            chooseFromZips(uris);
         } else if (request == SAVE && data.getData() != null && sliced != null) {
             File source = sliced; Uri target = data.getData();
             worker.execute(() -> {
@@ -878,6 +878,56 @@ public final class SliceActivity extends Activity {
     }
     /** Memory the engine needs just to read these files, guessed from their size: binary STL is 50 bytes a triangle; other formats are compressed or textual, so 40 bytes is used as a rough guide. */
     static SliceEstimate importEstimate(long stlBytes, long otherBytes) { return new SliceEstimate(stlBytes / 50 + otherBytes / 40, 0, 0.2); }
+    /**
+     * A ZIP with several model files (a kit's parts, or one model in several versions) asks which to load, all ticked; a ZIP
+     * with one model, and every other file, goes straight to importModels. The chosen files are unpacked under the cache.
+     */
+    private void chooseFromZips(List<Uri> uris) {
+        boolean anyZip = false;
+        for (Uri uri : uris) { String type = null; try { type = getContentResolver().getType(uri); } catch (RuntimeException ignored) { } anyZip |= modelExtension(displayName(uri), type).isEmpty() && isZip(displayName(uri), type); }
+        if (!anyZip) { importModels(uris); return; }
+        status.setText("Opening the ZIP…"); status.setTextColor(ink);
+        File root = new File(getCacheDir(), "zip-pick"); deleteTree(root);
+        worker.execute(() -> {
+            List<Uri> direct = new ArrayList<>(); List<File> unpacked = new ArrayList<>(); String problem = null;
+            for (Uri uri : uris) {
+                String name = displayName(uri), type = null;
+                try { type = getContentResolver().getType(uri); } catch (RuntimeException ignored) { }
+                if (!(modelExtension(name, type).isEmpty() && isZip(name, type))) { direct.add(uri); continue; }
+                File folder = new File(root, Long.toString(System.nanoTime())); folder.mkdirs();
+                File zip = new File(folder, "download.zip");
+                try (InputStream in = getContentResolver().openInputStream(uri)) {
+                    if (in == null) throw new IOException("Cannot open " + name);
+                    ModelSites.save(in, zip, 512L * 1024 * 1024, -1, (done, total) -> true);
+                    List<File> found = ModelSites.unzipModels(zip, folder);
+                    if (found.isEmpty()) problem = name + " has no STL, 3MF, OBJ, STEP or AMF file in it.";
+                    unpacked.addAll(found);
+                } catch (IOException failure) { problem = name + ": " + failure.getMessage(); }
+                finally { zip.delete(); }
+            }
+            String why = problem;
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (unpacked.size() <= 1) {   // nothing to choose between
+                    List<Uri> all = new ArrayList<>(direct); for (File f : unpacked) all.add(Uri.fromFile(f));
+                    if (all.isEmpty()) { status.setText(why == null ? "No model was added." : why); status.setTextColor(error); return; }
+                    importModels(all); return;
+                }
+                String[] names = new String[unpacked.size()]; boolean[] chosen = new boolean[unpacked.size()];
+                for (int i = 0; i < names.length; i++) { names[i] = unpacked.get(i).getName() + " · " + size(unpacked.get(i).length()); chosen[i] = true; }
+                new AlertDialog.Builder(this).setTitle("Which files to load?")
+                    .setMultiChoiceItems(names, chosen, (d, which, on) -> chosen[which] = on)
+                    .setNegativeButton("Cancel", (d, w) -> status.setText(models.isEmpty() ? "" : "Ready."))
+                    .setPositiveButton("Load", (d, w) -> {
+                        List<Uri> all = new ArrayList<>(direct);
+                        for (int i = 0; i < chosen.length; i++) if (chosen[i]) all.add(Uri.fromFile(unpacked.get(i)));
+                        if (all.isEmpty()) { status.setText("Nothing was chosen."); return; }
+                        importModels(all);
+                    }).show();
+            });
+        });
+    }
+
     private void importModels(List<Uri> uris) {
         if (!largeImportConfirmed) {
             long stl = 0, other = 0;
