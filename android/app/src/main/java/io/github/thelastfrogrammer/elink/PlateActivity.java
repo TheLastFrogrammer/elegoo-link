@@ -64,8 +64,8 @@ public final class PlateActivity extends Activity {
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(ui.dp(16), ui.dp(8), ui.dp(16), ui.dp(12));
         panel.setBackgroundColor(ui.surface); panel.setElevation(ui.dp(8)); root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
         status = A11y.polite(ui.label(panel, "Placing the models…", 13, ui.muted, false));
-        selectedLabel = A11y.polite(ui.label(panel, "Tap a model to select it, or use More… > Select a model.", 14, ui.ink, true));
-        selectedLabel.setMaxLines(2); selectedLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        selectedLabel = A11y.polite(ui.label(panel, "Tap a model to select it, or open More… and choose Select a model.", 14, ui.ink, true));
+        selectedLabel.setMaxLines(3); selectedLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setPadding(0, ui.dp(2), 0, ui.dp(2)); selectedLabel.setPadding(0, ui.dp(2), 0, ui.dp(2));
         LinearLayout turn = ui.row(panel);
         rotateLeft = ui.rowButton(turn, "Left 15°", () -> js("plate.rotate(15)"), false);
@@ -108,7 +108,7 @@ public final class PlateActivity extends Activity {
     private void finishWithResult() {
         if (problemCount > 0 && placements.length() > 0) {
             new android.app.AlertDialog.Builder(this).setTitle("Some models have a problem")
-                .setMessage((problemCount == 1 ? "One model has" : problemCount + " models have") + " a problem (striped red in the layout): off the bed, overlapping, or in a no-print zone. Slicing like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
+                .setMessage((problemCount == 1 ? "One model has" : problemCount + " models have") + " a problem, shown in red stripes: it is off the bed, overlapping another model, or in a no-print zone. Printing it like this may fail or print badly.\n\nTip: Arrange all puts them back on the bed.")
                 .setNegativeButton("Fix it", null).setPositiveButton("Go back anyway", (d, w) -> leave()).show();
             return;
         }
@@ -146,7 +146,7 @@ public final class PlateActivity extends Activity {
                     if (isDestroyed()) return;
                     scene = built; placements = initial; sceneReady = true;
                     int unfit = layout.optInt("unfit");
-                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, then More… > Scale… > Fit to the bed."
+                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, open More…, choose Scale…, then tap Fit to the bed."
                         : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
                     status.setTextColor(unfit > 0 ? ui.error : ui.muted);
                     load();
@@ -217,13 +217,15 @@ public final class PlateActivity extends Activity {
         if (selected < 0 || selected >= placements.length()) return;
         JSONObject p = placements.optJSONObject(selected); JSONArray k = p.optJSONArray("stretch");
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0);
-        EditText all = percentField(body, "Even scale, % of the original size", p.optDouble("scale", 1) * 100);
-        ui.label(body, "Each axis, % on top of that (100 = unchanged). Z is height.", 13, ui.muted, false);
+        EditText all = percentField(body, "Even scale (all axes)", p.optDouble("scale", 1) * 100);
+        ui.label(body, "Makes the whole model bigger or smaller, keeping its shape. 100 = original size.", 13, ui.muted, false);
+        android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
+        ui.label(body, "Too big for the bed? One tap shrinks it to fit.", 13, ui.muted, false);
+        ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
+            status.setText("Scaled to fit the bed and the printer height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
+        ui.label(body, "Then each axis, on top of the even scale. 100 = unchanged. Z is height.", 13, ui.muted, false);
         EditText[] axes = new EditText[3]; String[] names = {"X (width)", "Y (depth)", "Z (height)"};
         for (int i = 0; i < 3; i++) axes[i] = percentField(body, names[i], k == null ? 100 : k.optDouble(i, 1) * 100);
-        android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
-        ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
-            status.setText("Scaled evenly to fit the bed and the printer's height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle("Scale " + name(selected)).setView(scrollOf(body))
             .setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> applyScale(all.getText().toString(), axes)).show();
     }
@@ -251,7 +253,7 @@ public final class PlateActivity extends Activity {
         EditText count = new EditText(this); count.setSingleLine(true); count.setInputType(InputType.TYPE_CLASS_NUMBER); count.setText("1"); count.setSelectAllOnFocus(true);
         count.setContentDescription("Number of extra copies"); count.setMinHeight(ui.dp(48));
         FrameLayout box = new FrameLayout(this); box.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0); box.addView(count);
-        new android.app.AlertDialog.Builder(this).setTitle("Extra copies of " + name(selected)).setMessage("How many more copies? They are added, then everything is arranged on the bed.").setView(box)
+        new android.app.AlertDialog.Builder(this).setTitle("Extra copies of " + name(selected)).setMessage("How many more copies, from 1 to 50? They are added, then everything is arranged on the bed.").setView(box)
             .setNegativeButton("Cancel", null).setPositiveButton("Add", (d, w) -> {
                 int n; try { n = Integer.parseInt(count.getText().toString().trim()); } catch (NumberFormatException e) { return; }
                 if (n < 1 || n > 50) { status.setText("Add between 1 and 50 copies at a time."); status.setTextColor(ui.error); return; }
@@ -264,7 +266,7 @@ public final class PlateActivity extends Activity {
     /** The less used actions on the selected model, kept out of the panel so the 3D view stays large. */
     private void moreDialog() {
         if (laying) { laying = false; js("plate.setLayMode(false)"); more.setText("More…"); status.setText("Lay flat cancelled."); status.setTextColor(ui.muted); return; }
-        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), ui.dp(8));
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
         String[] names = {"Select a model…", "Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
@@ -276,7 +278,7 @@ public final class PlateActivity extends Activity {
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
             b.setEnabled(i == 0 ? placements.length() > 0 : i == names.length - 1 || on);
         }
-        if (!on) ui.label(body, "Select a model first: tap it in the layout, or use Select a model.", 13, ui.muted, false);
+        if (!on) ui.label(body, "Pick a model first: tap it in the layout, or use Select a model…", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
     }
@@ -293,7 +295,7 @@ public final class PlateActivity extends Activity {
     /** Moves the selected model by buttons instead of dragging: the dialog stays open so a model can be nudged several times. */
     private void moveDialog() {
         if (selected < 0 || selected >= placements.length()) return;
-        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), ui.dp(8));
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
         TextView readout = A11y.polite(ui.label(body, positionText(), 14, ui.ink, true));
         Runnable refresh = () -> readout.setText(positionText());
         String[] directions = {"Left", "Right", "Front", "Back"};
@@ -307,7 +309,7 @@ public final class PlateActivity extends Activity {
                 b.setTextSize(13); b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8));
             }
         }
-        ui.label(body, "Millimetres on the bed. Problems (off the bed, overlap) are reported in the panel as when dragging.", 12, ui.muted, false);
+        ui.label(body, "Steps are in millimetres. Problems (off the bed, overlapping) show in the panel, as when dragging.", 12, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         new android.app.AlertDialog.Builder(this).setTitle("Move " + name(selected)).setView(scroll).setNegativeButton("Done", null).show();
     }
@@ -413,7 +415,7 @@ public final class PlateActivity extends Activity {
         scalePercent = p.optDouble("scale", 1) * 100;
         JSONArray k = p.optJSONArray("stretch");
         String axes = k == null ? "" : String.format(Locale.getDefault(), " (X %.0f%% · Y %.0f%% · Z %.0f%%)", k.optDouble(0, 1) * 100, k.optDouble(1, 1) * 100, k.optDouble(2, 1) * 100);
-        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s · turned %.0f° · %.0f%%", name(selected), p.optDouble("rotation"), scalePercent) + axes);
+        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s · turned %.0f° · size %.0f%%", name(selected), p.optDouble("rotation"), scalePercent) + axes);
     }
 
     private String name(int index) {
