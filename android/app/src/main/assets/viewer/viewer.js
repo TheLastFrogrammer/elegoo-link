@@ -167,7 +167,7 @@
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
     nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false,
-    headSize: { w: 70, d: 80, h: 80, block: 24, offset: 0 }, headShow: false };
+    headSize: { w: 70, d: 80, h: 80, block: 24, offset: 0 }, headShow: false, headLook: "mask" };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
     camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
@@ -496,10 +496,15 @@
     if (view.ghostEnd > view.end) { gl.depthMask(false); drawBeads(view.end, view.ghostEnd, true, viewProj, viewMatrix); gl.depthMask(true); }
     drawPrinterCamera(viewProj);
     // Outside the camera view the stand-in head shows faintly, so it is clear what hides the lines.
-    if (view.head && view.nozzle && (view.headShow || !printerCam.looking)) {
-      // While it is being sized, tinted over the camera picture so it can be matched to the real head.
+    // How the head shows: tinted while it is being sized; otherwise as chosen ("mask" hides lines but is not drawn from the
+    // camera, where the real head is in the picture; "outline" draws its edges; "tint" shades it). Outside the camera view a
+    // mask still shows faintly, so it is clear what hides the lines.
+    if (view.head && view.nozzle) {
+      const accent = (a) => [theme.nozzle[0], theme.nozzle[1], theme.nozzle[2], a], look = view.headShow ? "tint" : view.headLook;
       gl.depthMask(false);
-      drawHead(viewProj, view.headShow ? [theme.nozzle[0], theme.nozzle[1], theme.nozzle[2], 0.35] : [theme.ghost[0], theme.ghost[1], theme.ghost[2], 0.18]);
+      if (look === "tint") drawHead(viewProj, accent(view.headShow ? 0.35 : 0.25));
+      else if (look === "outline") { gl.disable(gl.DEPTH_TEST); drawHead(viewProj, accent(0.9), true); gl.enable(gl.DEPTH_TEST); }
+      else if (!printerCam.looking) drawHead(viewProj, [theme.ghost[0], theme.ghost[1], theme.ghost[2], 0.18]);
       gl.depthMask(true);
     }
     if (view.nozzle) {
@@ -622,7 +627,7 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, travelBuffer); gl.bufferData(gl.ARRAY_BUFFER, travels, gl.STATIC_DRAW);
       // Model bounds for the camera. Layer 1 also holds the start G-code's purge line, so with more than one layer
       // the bounds come from layer 2 up, plus layer 1's Z.
-      const f = new Float32Array(segments); data.f = f; let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      const f = new Float32Array(segments); data.f = f; cum = null; glide.on = false; glide.lastTarget = -1; let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
       const from = meta.starts && meta.starts.length > 1 ? meta.starts[1] * 9 : 0;
       if (from > 0) box[2] = 0;
       for (let i = from; i < f.length; i += 9) for (const o of [0, 3]) {
@@ -640,32 +645,62 @@
       if (android && android.onLoaded) android.onLoaded(data.count);
     } catch (error) { fail("The toolpath could not be shown: " + error.message); }
   }
-  // Live updates arrive every second or two: with smoothMs the drawing glides there along the toolpath (the nozzle
-  // following each line) instead of jumping, finishing as the next update is due.
-  const anim = { running: false, pos: 0, from: 0, to: 0, t0: 0, ms: 0, nozzle: null };
+  // Live updates arrive every second or two, irregularly. With smoothMs the drawing moves continuously along the toolpath's
+  // own length (mm, so long walls and short infill zigzags pass at the same pace) at the speed recent updates show, a little
+  // faster when it falls behind and slower as it catches up, about one update behind the printer. Small backward corrections
+  // are held rather than jumped back to; a layer change or a scrub still jumps.
+  let cum = null;   // cum[i]: toolpath length (mm) before segment i
+  function lengths() {
+    const f = data.f; cum = new Float64Array(data.count + 1);
+    for (let i = 0, o = 0; i < data.count; i++, o += 9) cum[i + 1] = cum[i] + Math.hypot(f[o + 3] - f[o], f[o + 4] - f[o + 1], f[o + 5] - f[o + 2]);
+  }
+  const glide = { on: false, pos: 0, target: 0, end: 0, speed: 0, vel: 0, lastTarget: -1, lastTime: 0, frame: 0 };
   function update(state) {
-    const ms = state.smoothMs || 0; delete state.smoothMs;
-    if (anim.running && !ms && state.end === anim.to) {   // the same position again (other settings changed): keep gliding
-      anim.nozzle = state.nozzle || null; delete state.end; delete state.nozzle; Object.assign(view, state); return;
+    const smooth = (state.smoothMs || 0) > 0; delete state.smoothMs;
+    if (glide.on && !smooth && state.end === glide.end) {   // the same position again (other settings changed): keep moving
+      delete state.end; delete state.nozzle; Object.assign(view, state); return;
     }
-    const shown = anim.running ? anim.pos : view.end;
-    Object.assign(view, state);
-    if (ms > 0 && data.f && state.end > shown && state.end - shown < 100000) {
-      anim.from = shown; anim.to = state.end; anim.t0 = performance.now(); anim.ms = ms; anim.nozzle = state.nozzle || null;
-      if (!anim.running) { anim.running = true; step(); }   // one frame loop; a later update just moves its goal
+    if (smooth && data.f && state.end <= data.count) {
+      if (!cum || cum.length !== data.count + 1) lengths();
+      const now = performance.now(), endIndex = state.end, target = cum[endIndex];
+      const shown = glide.on ? glide.pos : cum[Math.min(view.end, data.count)];
+      delete state.end; delete state.nozzle; Object.assign(view, state);
+      if (glide.lastTarget >= 0 && target > glide.lastTarget) {
+        const v = (target - glide.lastTarget) / Math.max(0.25, (now - glide.lastTime) / 1000);
+        glide.speed = glide.speed > 0 ? glide.speed * 0.6 + v * 0.4 : v;
+      }
+      glide.lastTarget = target; glide.lastTime = now; glide.end = endIndex;
+      glide.pos = target < shown - 5 ? target : shown;      // a real step back is shown; a few mm of noise is not
+      glide.target = Math.max(target, glide.pos);
+      if (!glide.on) { glide.on = true; glide.frame = now; requestAnimationFrame(move); }
       return;
     }
-    anim.running = false; redraw();
+    glide.on = false; glide.lastTarget = -1; glide.speed = 0; glide.vel = 0;
+    Object.assign(view, state); redraw();
   }
-  function step() {
-    if (!anim.running) return;
-    const t = Math.min(1, (performance.now() - anim.t0) / anim.ms);
-    anim.pos = anim.from + (anim.to - anim.from) * t;
-    if (t >= 1) { anim.running = false; view.end = anim.to; view.nozzle = anim.nozzle; redraw(); return; }
-    const k = Math.floor(anim.pos), frac = anim.pos - k, f = data.f, o = k * 9;
-    view.end = Math.max(view.start, k);
-    if (k < data.count) view.nozzle = [f[o] + (f[o + 3] - f[o]) * frac, f[o + 1] + (f[o + 4] - f[o + 1]) * frac, f[o + 2] + (f[o + 5] - f[o + 2]) * frac];
-    redraw(); requestAnimationFrame(step);
+  function indexAt(d) {   // [segment, fraction along it] at toolpath length d
+    let lo = 0, hi = data.count;
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= d) lo = mid; else hi = mid - 1; }
+    const k = Math.min(lo, data.count - 1), span = cum[k + 1] - cum[k];
+    return [k, span > 0 ? Math.max(0, Math.min(1, (d - cum[k]) / span)) : 1];
+  }
+  function move(now) {
+    if (!glide.on) return;
+    const dt = Math.min(0.1, Math.max(0, (now - glide.frame) / 1000)); glide.frame = now;
+    const behind = glide.target - glide.pos;
+    if (behind > 0) {
+      const speed = glide.speed > 0 ? glide.speed : behind;
+      // Aim to stay about 1.2 s of travel behind: faster when further back, slower when nearly there.
+      const factor = Math.max(0.35, Math.min(3, behind / Math.max(0.5, speed * 1.2)));
+      // Speed eases toward that (about half a second), so the motion never lurches.
+      glide.vel += (speed * factor - glide.vel) * (1 - Math.exp(-dt / 0.5));
+      glide.pos = Math.min(glide.target, glide.pos + Math.max(0, glide.vel) * dt);
+      const [k, frac] = indexAt(glide.pos), f = data.f, o = k * 9;
+      view.end = Math.max(view.start, k);
+      view.nozzle = [f[o] + (f[o + 3] - f[o]) * frac, f[o + 1] + (f[o + 4] - f[o + 1]) * frac, f[o + 2] + (f[o + 5] - f[o + 2]) * frac];
+      redraw();
+    }
+    requestAnimationFrame(move);
   }
   // A low-poly stand-in for the CC2's printhead, in mm from the nozzle tip: the heater block and nozzle, then the body with
   // its fan duct. Close enough to hide what the real head hides; not a measured model.
@@ -676,7 +711,7 @@
     return [[-b / 2, b / 2, -b / 2, b / 2, 1.2, top], [-w / 2, w / 2, -d / 2 + off, d / 2 + off, top, top + h]];
   }
   let headVao = null, headBuffer = null;
-  function drawHead(viewProj, colour) {
+  function drawHead(viewProj, colour, edges) {
     if (!headVao) {
       headVao = gl.createVertexArray(); gl.bindVertexArray(headVao);
       headBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer);
@@ -686,13 +721,14 @@
     for (const [x0, x1, y0, y1, z0, z1] of headBoxes()) {
       const c = [[x + x0, y + y0, z + z0], [x + x1, y + y0, z + z0], [x + x1, y + y1, z + z0], [x + x0, y + y1, z + z0],
         [x + x0, y + y0, z + z1], [x + x1, y + y0, z + z1], [x + x1, y + y1, z + z1], [x + x0, y + y1, z + z1]];
-      for (const [a, b, d, e] of [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]])
+      if (edges) for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) v.push(...c[a], ...c[b]);
+      else for (const [a, b, d, e] of [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]])
         v.push(...c[a], ...c[b], ...c[d], ...c[a], ...c[d], ...c[e]);
     }
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
     gl.uniform4fv(lines.u.uColor, colour || [0, 0, 0, 0]);
     gl.bindVertexArray(headVao); gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
-    gl.drawArrays(gl.TRIANGLES, 0, v.length / 3);
+    gl.drawArrays(edges ? gl.LINES : gl.TRIANGLES, 0, v.length / 3);
   }
   function setPalette(hexes) {
     hexes.forEach((hex, i) => { if (i < PALETTE.length) for (let c = 0; c < 3; c++) colors[i * 3 + c] = parseInt(hex.substr(1 + 2 * c, 2), 16) / 255; });
@@ -772,6 +808,8 @@
     if (!printerCam.looking) fit();
     lookFromCamera();
   }
-  window.viewer = { load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
+  function probe() { return { end: view.end, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
+  window.viewer = { probe, load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();
