@@ -22,6 +22,42 @@ public final class FeatureData {
         if (file.has("color_map")) text.append("\nSliced filament information: ").append(StatusPresentation.clean(file.opt("color_map").toString()));
         return text.toString();
     }
+    /**
+     * The printer's file list with every entry as {"filename", …}: entries that name the file differently (file_name, name,
+     * path, file_path) or are plain names are given "filename"; folders (is_dir) and nameless entries are dropped. The CC2 answers
+     * locally with "filename", but other routes (the cloud) may not.
+     */
+    public static JSONObject normalizeFiles(JSONObject result) {
+        JSONArray list = result == null ? null : result.optJSONArray("file_list");
+        if (list == null) return result == null ? new JSONObject() : result;
+        JSONArray out = new JSONArray();
+        for (int i = 0; i < list.length(); i++) {
+            Object entry = list.opt(i);
+            try {
+                if (entry instanceof String) { if (!((String) entry).isEmpty()) out.put(new JSONObject().put("filename", entry)); continue; }
+                if (!(entry instanceof JSONObject)) continue;
+                JSONObject file = (JSONObject) entry;
+                if (file.optBoolean("is_dir", false)) continue;
+                String name = file.optString("filename", "");
+                for (String key : new String[] {"file_name", "name", "file_path", "path"}) if (name.isEmpty()) name = file.optString(key, "");
+                name = name.replaceFirst("^.*/", "");
+                if (name.isEmpty()) continue;
+                JSONObject copy = new JSONObject(file.toString()).put("filename", name);
+                if (!copy.has("size") && copy.has("file_size")) copy.put("size", copy.opt("file_size"));
+                if (!copy.has("layer") && copy.has("total_layer")) copy.put("layer", copy.opt("total_layer"));
+                out.put(copy);
+            } catch (JSONException skipped) { }
+        }
+        try { return new JSONObject(result.toString()).put("file_list", out); } catch (JSONException impossible) { return result; }
+    }
+    /** What a file list's entries look like, for diagnostics: the type and field names of the first entry, never its values. */
+    public static String fileEntryShape(JSONObject result) {
+        JSONArray list = result == null ? null : result.optJSONArray("file_list");
+        if (list == null || list.length() == 0) return "no entries";
+        Object first = list.opt(0);
+        if (first instanceof JSONObject) { java.util.List<String> keys = new java.util.ArrayList<>(); java.util.Iterator<String> it = ((JSONObject) first).keys(); while (it.hasNext()) keys.add(it.next()); java.util.Collections.sort(keys); return "objects with " + keys; }
+        return first == null ? "null entries" : first.getClass().getSimpleName() + " entries";
+    }
     /** Header for the printer file list: storage, count, page offset, and a warning when the list may be out of date. A benign "received" message is not repeated. */
     public static String fileSummary(String message, String storage, boolean haveList, int count, int offset, boolean fresh, boolean refreshing) {
         if (!haveList) return message;

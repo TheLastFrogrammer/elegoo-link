@@ -34,4 +34,19 @@ public class FileSummaryTest {
         assertEquals("A · C", StatusPresentation.joinParts("A", null, " ", "C"));
         assertEquals("", StatusPresentation.joinParts("", null));
     }
+
+    @Test public void fileListsAreReadWhateverTheyCallTheName() throws Exception {
+        org.json.JSONObject raw = new org.json.JSONObject("{\"total\":5,\"file_list\":[{\"filename\":\"a.gcode\",\"size\":1},{\"file_name\":\"/local/b.gcode\",\"file_size\":2},"
+            + "{\"name\":\"c.gcode\",\"total_layer\":9},\"d.gcode\",{\"name\":\"folder\",\"is_dir\":true},{\"size\":3},7]}");
+        org.json.JSONArray list = FeatureData.normalizeFiles(raw).getJSONArray("file_list");
+        org.junit.Assert.assertEquals(4, list.length());
+        org.junit.Assert.assertEquals("a.gcode", list.getJSONObject(0).getString("filename"));
+        org.junit.Assert.assertEquals("b.gcode", list.getJSONObject(1).getString("filename")); org.junit.Assert.assertEquals(2, list.getJSONObject(1).getInt("size"));
+        org.junit.Assert.assertEquals(9, list.getJSONObject(2).getInt("layer"));
+        org.junit.Assert.assertEquals("d.gcode", list.getJSONObject(3).getString("filename"));
+        org.junit.Assert.assertEquals(5, FeatureData.normalizeFiles(raw).getInt("total"));
+        org.junit.Assert.assertEquals("objects with [filename, size]", FeatureData.fileEntryShape(raw));
+        org.junit.Assert.assertEquals("String entries", FeatureData.fileEntryShape(new org.json.JSONObject("{\"file_list\":[\"x\"]}")));
+        org.junit.Assert.assertEquals(0, FeatureData.normalizeFiles(new org.json.JSONObject()).length());
+    }
 }

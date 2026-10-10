@@ -179,10 +179,11 @@ public final class PrinterService extends Service {
     private void handleQuery(int method, JSONObject params, JSONObject result) {
         queryBusy.remove(method);
         if (method == Cc2Codec.FILES) {
-            filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer.";
+            String shape = FeatureData.fileEntryShape(result);
+            filePage = FeatureData.normalizeFiles(result); storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer.";
             org.json.JSONArray list = result.optJSONArray("file_list");
             // Field names only (never file names): an empty or differently shaped answer shows what the printer sent instead.
-            Diagnostics.note(Diagnostics.FILES, "file list (" + storage + ", offset " + fileOffset + "): " + (list == null ? "no file_list; fields " + CloudApi.shape(result) : list.length() + " entr" + (list.length() == 1 ? "y" : "ies") + ", total " + result.optInt("total", -1)));
+            Diagnostics.note(Diagnostics.FILES, "file list (" + storage + ", offset " + fileOffset + "): " + (list == null ? "no file_list; fields " + CloudApi.shape(result) : list.length() + " entr" + (list.length() == 1 ? "y" : "ies") + " (" + shape + "), " + filePage.optJSONArray("file_list").length() + " shown, total " + result.optInt("total", -1)));
         }
         if (method == Cc2Codec.FILES && viewerDownload != null) {
             String wanted = viewerDownload; viewerDownload = null;
