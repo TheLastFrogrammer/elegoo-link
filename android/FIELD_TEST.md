@@ -201,3 +201,11 @@ The app no longer carries Firefox's engine (it is about 17 MB again). Instead:
 3. Download a ZIP (Thingiverse "Download all files", Printables): opening it in Link Workshop unpacks the model files
    inside and loads them all. Tell us if a site's download does not offer Link Workshop under Open.
 4. **In this app** works as in section 16 (no ad blocker; downloads go straight to the slicer).
+
+## 20. Smoother live toolpath and the printhead mask (v0.24.0)
+
+1. Live toolpath during a print: between the printer's updates the line and the nozzle dot glide along the toolpath instead
+   of jumping (about one update behind the printer). More… → Layers, transparency and nozzle dot… → untick "Smooth live
+   movement" to compare.
+2. Same dialog → tick "Printhead mask". From the camera, the toolpath behind the real printhead should be hidden by it; in
+   the 3D view a faint box rides on the nozzle. Tell us if it hides too much or too little (its size is an estimate).

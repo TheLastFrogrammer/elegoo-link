@@ -955,6 +955,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     /** Sends the current range, nozzle and filters to the page. `nozzle` is null outside follow mode. */
     private void pushView() { pushView(null); }
+    /** Live following: how long the next update should take to glide to its position (0 = jump), and when the last step came. */
+    private int smoothNext; private long lastStepAt;
     private void pushView(double[] nozzle) {
         if (path == null || web == null || !pageReady) return;
         try {
@@ -966,7 +968,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 .put("travelStart", only ? path.layerTravelStart[layer] : 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount)
                 .put("nozzleSize", viewerPrefs().getInt("nozzleSize", 16)).put("nozzleAlpha", viewerPrefs().getInt("nozzleAlpha", 100) / 100.0)
                 .put("nozzleFlat", viewerPrefs().getBoolean("nozzleFlat", false))
+                .put("head", followMode && viewerPrefs().getBoolean("headMask", false))
                 .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0);
+            if (smoothNext > 0 && viewerPrefs().getBoolean("smoothLive", true)) state.put("smoothMs", smoothNext);
+            smoothNext = 0;
             if (nozzle != null) state.put("nozzle", new JSONArray(nozzle));
             else if (end > 0 && end < layerEnd) state.put("nozzle", new JSONArray(new double[] {path.x1[end - 1], path.y1[end - 1], path.z1[end - 1]}));
             else state.put("nozzle", JSONObject.NULL);
@@ -1045,6 +1050,16 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         flat.setChecked(viewerPrefs().getBoolean("nozzleFlat", false));
         flat.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("nozzleFlat", on).apply(); pushView(); });
         body.addView(flat);
+        android.widget.CheckBox smooth = new android.widget.CheckBox(this); smooth.setTextColor(ink); smooth.setMinHeight(dp(48));
+        smooth.setText("Smooth live movement (glide between the printer's updates, about one update behind)");
+        smooth.setChecked(viewerPrefs().getBoolean("smoothLive", true));
+        smooth.setOnCheckedChangeListener((v, on) -> viewerPrefs().edit().putBoolean("smoothLive", on).apply());
+        body.addView(smooth);
+        android.widget.CheckBox head = new android.widget.CheckBox(this); head.setTextColor(ink); head.setMinHeight(dp(48));
+        head.setText("Printhead mask: a simple printhead rides on the nozzle and hides the lines behind it, as the real one does in the camera picture");
+        head.setChecked(viewerPrefs().getBoolean("headMask", false));
+        head.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("headMask", on).apply(); pushView(); });
+        body.addView(head);
         android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
         only.setText("Show only the current layer (hide the layers below)");
         only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
@@ -1147,6 +1162,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         boolean hasPosition = position != null && position.has("x") && position.has("y");
         double x = hasPosition ? position.optDouble("x") : 0, y = hasPosition ? position.optDouble("y") : 0;
         int located = path.locate(currentLayer, x, y, hasPosition, lastLocated);
+        // A step forward within the layer glides there over about the time since the last step (the next one is due then).
+        long now = System.currentTimeMillis();
+        if (located != lastLocated) {
+            boolean sameLayer = lastLocated >= 0 && located > lastLocated && located < path.count && lastLocated < path.count && path.layerOf(located) == path.layerOf(lastLocated);
+            smoothNext = sameLayer && lastStepAt > 0 ? (int) Math.max(250, Math.min(4000, now - lastStepAt)) : 0;
+            lastStepAt = now;
+        }
         lastLocated = located;
         layer = located >= path.count ? path.layerCount - 1 : path.layerOf(located);
         move = located - path.layerStart(layer);

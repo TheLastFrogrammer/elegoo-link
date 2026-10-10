@@ -166,7 +166,7 @@
   // ---------------------------------------------------------------- state
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
-    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1 };
+    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
     camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
@@ -478,6 +478,9 @@
       if (alignStyle.grid === "all") gl.drawArrays(gl.LINES, 0, bedLineCount);
       else if (alignStyle.grid === "edges") gl.drawArrays(gl.LINES, gridLineCount, bedLineCount - gridLineCount);
     }
+    // The printhead as an invisible occluder: it writes depth only, so lines behind it are hidden as the real head hides
+    // them in the camera's picture.
+    if (view.head && view.nozzle) { gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.colorMask(false, false, false, false); drawHead(viewProj, null); gl.colorMask(true, true, true, true); }
     // Printed / visible beads, then travels, then the rest of the current layer as a translucent ghost.
     drawBeads(view.start, view.end, false, viewProj, viewMatrix);
     if (view.showTravel && view.travelEnd > view.travelStart) {
@@ -486,6 +489,8 @@
     }
     if (view.ghostEnd > view.end) { gl.depthMask(false); drawBeads(view.end, view.ghostEnd, true, viewProj, viewMatrix); gl.depthMask(true); }
     drawPrinterCamera(viewProj);
+    // Outside the camera view the stand-in head shows faintly, so it is clear what hides the lines.
+    if (view.head && view.nozzle && !printerCam.looking) { gl.depthMask(false); drawHead(viewProj, [theme.ghost[0], theme.ghost[1], theme.ghost[2], 0.18]); gl.depthMask(true); }
     if (view.nozzle) {
       gl.disable(gl.DEPTH_TEST);
       const a = Math.max(0.1, Math.min(1, view.nozzleAlpha)), size = Math.max(4, Math.min(48, view.nozzleSize));
@@ -606,7 +611,7 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, travelBuffer); gl.bufferData(gl.ARRAY_BUFFER, travels, gl.STATIC_DRAW);
       // Model bounds for the camera. Layer 1 also holds the start G-code's purge line, so with more than one layer
       // the bounds come from layer 2 up, plus layer 1's Z.
-      const f = new Float32Array(segments); let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      const f = new Float32Array(segments); data.f = f; let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
       const from = meta.starts && meta.starts.length > 1 ? meta.starts[1] * 9 : 0;
       if (from > 0) box[2] = 0;
       for (let i = from; i < f.length; i += 9) for (const o of [0, 3]) {
@@ -624,8 +629,54 @@
       if (android && android.onLoaded) android.onLoaded(data.count);
     } catch (error) { fail("The toolpath could not be shown: " + error.message); }
   }
+  // Live updates arrive every second or two: with smoothMs the drawing glides there along the toolpath (the nozzle
+  // following each line) instead of jumping, finishing as the next update is due.
+  const anim = { running: false, pos: 0, from: 0, to: 0, t0: 0, ms: 0, nozzle: null };
   function update(state) {
-    Object.assign(view, state); redraw();
+    const ms = state.smoothMs || 0; delete state.smoothMs;
+    if (anim.running && !ms && state.end === anim.to) {   // the same position again (other settings changed): keep gliding
+      anim.nozzle = state.nozzle || null; delete state.end; delete state.nozzle; Object.assign(view, state); return;
+    }
+    const shown = anim.running ? anim.pos : view.end;
+    Object.assign(view, state);
+    if (ms > 0 && data.f && state.end > shown && state.end - shown < 100000) {
+      anim.from = shown; anim.to = state.end; anim.t0 = performance.now(); anim.ms = ms; anim.nozzle = state.nozzle || null;
+      if (!anim.running) { anim.running = true; step(); }   // one frame loop; a later update just moves its goal
+      return;
+    }
+    anim.running = false; redraw();
+  }
+  function step() {
+    if (!anim.running) return;
+    const t = Math.min(1, (performance.now() - anim.t0) / anim.ms);
+    anim.pos = anim.from + (anim.to - anim.from) * t;
+    if (t >= 1) { anim.running = false; view.end = anim.to; view.nozzle = anim.nozzle; redraw(); return; }
+    const k = Math.floor(anim.pos), frac = anim.pos - k, f = data.f, o = k * 9;
+    view.end = Math.max(view.start, k);
+    if (k < data.count) view.nozzle = [f[o] + (f[o + 3] - f[o]) * frac, f[o + 1] + (f[o + 4] - f[o + 1]) * frac, f[o + 2] + (f[o + 5] - f[o + 2]) * frac];
+    redraw(); requestAnimationFrame(step);
+  }
+  // A low-poly stand-in for the CC2's printhead, in mm from the nozzle tip: the heater block and nozzle, then the body with
+  // its fan duct. Close enough to hide what the real head hides; not a measured model.
+  const HEAD = [[-9, 9, -9, 9, 1.2, 14], [-31, 31, -33, 35, 14, 64]];
+  let headVao = null, headBuffer = null;
+  function drawHead(viewProj, colour) {
+    if (!headVao) {
+      headVao = gl.createVertexArray(); gl.bindVertexArray(headVao);
+      headBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+    }
+    const [x, y, z] = view.nozzle, v = [];
+    for (const [x0, x1, y0, y1, z0, z1] of HEAD) {
+      const c = [[x + x0, y + y0, z + z0], [x + x1, y + y0, z + z0], [x + x1, y + y1, z + z0], [x + x0, y + y1, z + z0],
+        [x + x0, y + y0, z + z1], [x + x1, y + y0, z + z1], [x + x1, y + y1, z + z1], [x + x0, y + y1, z + z1]];
+      for (const [a, b, d, e] of [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]])
+        v.push(...c[a], ...c[b], ...c[d], ...c[a], ...c[d], ...c[e]);
+    }
+    gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
+    gl.uniform4fv(lines.u.uColor, colour || [0, 0, 0, 0]);
+    gl.bindVertexArray(headVao); gl.bindBuffer(gl.ARRAY_BUFFER, headBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
+    gl.drawArrays(gl.TRIANGLES, 0, v.length / 3);
   }
   function setPalette(hexes) {
     hexes.forEach((hex, i) => { if (i < PALETTE.length) for (let c = 0; c < 3; c++) colors[i * 3 + c] = parseInt(hex.substr(1 + 2 * c, 2), 16) / 255; });
