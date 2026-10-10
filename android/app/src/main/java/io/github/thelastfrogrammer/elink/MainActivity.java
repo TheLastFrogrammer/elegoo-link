@@ -1344,6 +1344,17 @@ public final class MainActivity extends Activity {
                 JSONObject row = rows.optJSONObject(i); if (row == null) continue; String storage = printer.storage;
                 fileRow(StatusPresentation.clean(row.optString("filename", "Unnamed entry")), FeatureData.size(row.optLong("size", -1)) + (row.has("layer") ? " · " + row.optInt("layer") + " layers" : ""), i > 0, () -> fileActions(row, storage));
             }
+            // A list received while the tab was drawn empty has shown no rows on a phone: ask for a fresh layout, and record
+            // what is really on screen a moment later (counts and sizes only).
+            if (count > 0) {
+                fileRows.requestLayout(); ((View) fileRows.getParent()).requestLayout();
+                int expected = count;
+                main.postDelayed(() -> {
+                    View card = (View) fileRows.getParent();
+                    Diagnostics.note(Diagnostics.FILES, "file rows on screen: " + expected + " listed, " + fileRows.getChildCount() + " views, list " + fileRows.getHeight() + " px high, card "
+                        + card.getHeight() + " px, shown " + fileRows.isShown() + ", help " + (fileHelp.getVisibility() == View.VISIBLE ? fileHelp.getHeight() + " px" : "hidden") + ", tab " + page);
+                }, 1500);
+            }
         }
         diskInfo.setText(printer == null || printer.disk.length() == 0 ? "Storage usage not loaded." : FeatureData.disk(printer.disk));
         JSONObject historyNow = printer == null ? null : printer.history;
