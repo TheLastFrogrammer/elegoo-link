@@ -33,6 +33,8 @@ struct Selection {
         double x = 0, y = 0;            // bed position of the copy's footprint center, mm
         double rotation = 0;            // degrees about Z, on top of the file's own orientation
         double scale = 1;               // uniform, on top of the file's own scale
+        // Per-axis stretch of the laid-down copy before it is turned (X, Y across the bed, Z up), on top of `scale`.
+        double stretch[3] = {1, 1, 1};
         // The outward normal (in the file's own orientation) of a face to lay on the bed, or zero to keep it upright.
         // Applied before `rotation`.
         double down[3] = {0, 0, 0};
@@ -113,7 +115,8 @@ public:
 
 private:
     struct Loaded;
-    Loaded load(const std::vector<std::string>& models, const Selection& selection, bool keep_layout_info);
+    // `lenient`: for the layout view, copies that do not fit stay on the bed (counted in Loaded::unfit) instead of failing.
+    Loaded load(const std::vector<std::string>& models, const Selection& selection, bool keep_layout_info, bool lenient = false);
     struct State;
     std::unique_ptr<State> m_state;
 };

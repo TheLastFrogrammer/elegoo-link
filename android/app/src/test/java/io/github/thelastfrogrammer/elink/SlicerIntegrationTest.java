@@ -231,6 +231,44 @@ public class SlicerIntegrationTest {
         }
     }
 
+    /** Stretched per axis: a 20 mm box made 40 wide and 15 tall prints that size, and arranging keeps the stretch. */
+    @Test public void stretchesPerAxis() throws Exception {
+        List<File> model = Collections.singletonList(box(20, 20, 10));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("brim_type", "no_brim"); selection.overrides.put("skirt_loops", "0");
+            selection.placements.add(new double[] {0, 0, 100, 100, 0, 1, 0, 0, 0, 2, 1, 1.5});
+            File output = new File(context().getCacheDir(), "stretched.gcode");
+            slicer.slice(model, selection, output, null);
+            double minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9; int layer = 0;
+            List<String> lines = Files.readAllLines(output.toPath());
+            for (String line : lines) {
+                if (line.startsWith(";LAYER_CHANGE")) layer++;
+                java.util.regex.Matcher m = java.util.regex.Pattern.compile("^G1 X([\\d.]+) Y([\\d.]+) E").matcher(line);
+                if (layer == 5 && m.find()) { double x = Double.parseDouble(m.group(1)), y = Double.parseDouble(m.group(2)); minX = Math.min(minX, x); maxX = Math.max(maxX, x); minY = Math.min(minY, y); maxY = Math.max(maxY, y); }
+            }
+            assertEquals(40, maxX - minX, 1.0); assertEquals(20, maxY - minY, 1.0);
+            assertTrue(String.join("\n", lines).contains("; max_z_height: 15.00"));
+            org.json.JSONObject item = slicer.arrange(model, selection).getJSONArray("placements").getJSONObject(0);
+            assertEquals(1, item.getDouble("scale"), 1e-6);
+            assertEquals(2, item.getJSONArray("stretch").getDouble(0), 1e-9); assertEquals(1.5, item.getJSONArray("stretch").getDouble(2), 1e-9);
+        }
+    }
+
+    /** A model too big for the bed still gets a layout (in the middle, counted as unfit) so it can be scaled down; slicing it still refuses. */
+    @Test public void tooBigModelsStillGetALayout() throws Exception {
+        List<File> model = Collections.singletonList(box(400, 50, 10));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            org.json.JSONObject layout = slicer.arrange(model, selection);
+            assertEquals(1, layout.getInt("unfit"));
+            assertEquals(1, layout.getJSONArray("placements").length());
+            assertEquals(128, layout.getJSONArray("placements").getJSONObject(0).getDouble("x"), 1);
+            try { slicer.slice(model, selection, new File(context().getCacheDir(), "toobig.gcode"), null); fail("slicing a model that does not fit must refuse"); }
+            catch (java.io.IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("do not fit")); }
+        }
+    }
+
     @Test public void calibrationPrintsAndFilamentSettings() throws Exception {
         File output = new File(context().getCacheDir(), "calibration.gcode");
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {

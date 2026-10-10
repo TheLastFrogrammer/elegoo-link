@@ -91,6 +91,7 @@ final class NativeSlicer implements AutoCloseable {
                 for (double[] p : placements) {
                     JSONObject place = new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", p[5]);
                     if (p.length >= 9 && (p[6] != 0 || p[7] != 0 || p[8] != 0)) place.put("down", new JSONArray().put(p[6]).put(p[7]).put(p[8]));
+                    if (p.length >= 12 && (p[9] != 1 || p[10] != 1 || p[11] != 1)) place.put("stretch", new JSONArray().put(p[9]).put(p[10]).put(p[11]));
                     places.put(place);
                 }
                 json.put("placements", places);

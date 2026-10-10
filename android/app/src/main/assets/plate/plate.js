@@ -2,8 +2,8 @@
 // The app serves /data/scene.json (bed outline, excluded area, prime tower, printable height, objects with their
 // simplified meshes, filament colours and the placements) and /data/mesh/N (the engine's "LKM1" mesh files:
 // "LKM1", uint32 triangle count, float32 xyz per corner, uint8 filament per triangle; centered on X/Y, base at Z 0).
-// A placement is {file, object, x, y, rotation, scale}: the copy's footprint center on the bed, degrees about Z and
-// a uniform scale, as the engine applies them. The app drives the page through window.plate and hears back through
+// A placement is {file, object, x, y, rotation, scale, stretch?}: the copy's footprint center on the bed, degrees about Z,
+// a uniform scale and an optional per-axis stretch [x, y, z] of the laid-down copy before it is turned, as the engine applies them. The app drives the page through window.plate and hears back through
 // Android.onReady(), onSelect(index), onChanged(json) and onError(text). onChanged's json is
 // {placements, problems, advice, selected}: problems[i] lists the issue keys of copy i ("off the bed", ...) and
 // advice[i] the same issues as sentences saying what to do. The page also draws its own labels over the models
@@ -153,9 +153,11 @@
             t * ax * ay + s * az, t * ay * ay + k, t * ay * az - s * ax,
             t * ax * az - s * ay, t * ay * az + s * ax, t * az * az + k];
   }
-  // The copy's linear part: turned about Z and scaled, after laying a face down (row-major 3x3).
+  // The copy's linear part: turned about Z and scaled, after stretching per axis and laying a face down (row-major 3x3).
   function linear(p) {
-    const L = layDown(p.down), c = Math.cos(p.rotation * Math.PI / 180) * p.scale, s = Math.sin(p.rotation * Math.PI / 180) * p.scale;
+    const L0 = layDown(p.down), k = p.stretch || [1, 1, 1];
+    const L = L0.map((v, i) => v * k[Math.floor(i / 3)]);
+    const c = Math.cos(p.rotation * Math.PI / 180) * p.scale, s = Math.sin(p.rotation * Math.PI / 180) * p.scale;
     const R = [c, -s, 0, s, c, 0, 0, 0, p.scale];
     const out = new Array(9);
     for (let r = 0; r < 3; r++) for (let q = 0; q < 3; q++) out[r * 3 + q] = R[r * 3] * L[q] + R[r * 3 + 1] * L[3 + q] + R[r * 3 + 2] * L[6 + q];
@@ -164,7 +166,7 @@
   // The bounding box of the copy's mesh under its turn and scale, relative to the mesh origin. The engine centers the
   // box's footprint on (x, y) and rests its bottom on the bed.
   function footprint(object, p) {
-    const key = p.rotation.toFixed(3) + "/" + p.scale.toFixed(4) + "/" + (p.down ? p.down.map((v) => v.toFixed(4)).join(",") : "");
+    const key = p.rotation.toFixed(3) + "/" + p.scale.toFixed(4) + "/" + (p.down ? p.down.map((v) => v.toFixed(4)).join(",") : "") + "/" + (p.stretch ? p.stretch.map((v) => v.toFixed(4)).join(",") : "");
     if (object.footprints[key]) return object.footprints[key];
     const m = linear(p), v = object.positions;
     let minX = Infinity, minY = Infinity, minZ = Infinity, maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
@@ -594,9 +596,29 @@
     move(dx, dy) { const p = current(); if (!p || !isFinite(dx) || !isFinite(dy)) return; p.x = Math.round((p.x + dx) * 10) / 10; p.y = Math.round((p.y + dy) * 10) / 10; changed(); },
     rotate(degrees) { const p = current(); if (!p) return; p.rotation = ((p.rotation + degrees) % 360 + 540) % 360 - 180; changed(); },
     setScale(scale) { const p = current(); if (!p || !(scale > 0.001)) return; p.scale = scale; changed(); },
+    /** Per-axis stretch of the selected copy (1 = as is); all three at 1 removes it. */
+    setStretch(x, y, z) {
+      const p = current(); if (!p || ![x, y, z].every((v) => v > 0.001 && v < 1000)) return;
+      if (x === 1 && y === 1 && z === 1) delete p.stretch; else p.stretch = [x, y, z];
+      changed();
+    },
+    /** Scales the selected copy evenly so it fits the bed (2 mm clear of the edges) and the printer's height; returns the new scale. */
+    fitToBed() {
+      const p = current(); if (!p) return 0;
+      const bed = boxOf(scene.bed) || [0, 0, 256, 256], r = rect(p);
+      const w = r[2] - r[0], d = r[3] - r[1], h = r[4];
+      const k = Math.min((bed[2] - bed[0] - 4) / Math.max(w, 1e-6), (bed[3] - bed[1] - 4) / Math.max(d, 1e-6), scene.height / Math.max(h, 1e-6));
+      if (!(k > 0) || !isFinite(k)) return p.scale;
+      p.scale = Math.floor(p.scale * k * 1000) / 1000;
+      p.x = (bed[0] + bed[2]) / 2; p.y = (bed[1] + bed[3]) / 2;
+      changed(); return p.scale;
+    },
+    /** The selected copy's size on the bed now (width, depth, height in mm). */
+    size() { const p = current(); if (!p) return null; const r = rect(p); return [r[2] - r[0], r[3] - r[1], r[4]]; },
     duplicate() {
       const p = current(); if (!p) return;
       const r = rect(p), copy = Object.assign({}, p, { x: p.x + (r[2] - r[0]) + 5 });
+      if (p.stretch) copy.stretch = p.stretch.slice(); if (p.down) copy.down = p.down.slice();
       const bed = boxOf(scene.bed);
       if (bed && copy.x + (r[2] - r[0]) / 2 > bed[2]) { copy.x = p.x; copy.y = p.y - (r[3] - r[1]) - 5; }
       scene.placements.push(copy); select(scene.placements.length - 1); changed();

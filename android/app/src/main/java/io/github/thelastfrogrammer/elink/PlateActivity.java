@@ -35,7 +35,7 @@ public final class PlateActivity extends Activity {
     private WebView web;
     private TextView status, selectedLabel;
     private double scalePercent = 100;
-    private Button rotateLeft, rotateRight, rotate45, more, arrange, done;
+    private Button rotateLeft, rotateRight, copyButton, more, arrange, done;
     private boolean laying;
     private int problemCount;
     private final List<File> models = new ArrayList<>();
@@ -70,13 +70,13 @@ public final class PlateActivity extends Activity {
         LinearLayout turn = ui.row(panel);
         rotateLeft = ui.rowButton(turn, "Left 15°", () -> js("plate.rotate(15)"), false);
         rotateRight = ui.rowButton(turn, "Right 15°", () -> js("plate.rotate(-15)"), false);
-        rotate45 = ui.rowButton(turn, "Left 45°", () -> js("plate.rotate(45)"), false);
+        copyButton = ui.rowButton(turn, "Copy", () -> js("plate.duplicate()"), false);
         more = ui.rowButton(turn, "More…", this::moreDialog, false);
         // The compact panel keeps its buttons' text to at most 1.3x so the 3D view stays large; longer labels wrap onto a second line.
         float panelText = 12 * getResources().getDisplayMetrics().density * Math.min(1.3f, getResources().getConfiguration().fontScale);
-        for (Button b : new Button[] {rotateLeft, rotateRight, rotate45, more}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, panelText); }
+        for (Button b : new Button[] {rotateLeft, rotateRight, copyButton, more}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, panelText); }
         rotateLeft.setContentDescription("Turn 15 degrees left"); rotateRight.setContentDescription("Turn 15 degrees right");
-        rotate45.setContentDescription("Turn 45 degrees left"); more.setContentDescription("More: select a model, move, copy, lay flat, scale, remove, model settings, reset view");
+        copyButton.setContentDescription("Copy the selected model"); more.setContentDescription("More: select a model, move, several copies, turn 45 degrees, lay flat, scale, remove, model settings, reset view");
         LinearLayout finish = ui.row(panel);
         arrange = ui.rowButton(finish, "Arrange all", this::arrangeAll, false);
         done = ui.rowButton(finish, "Done · back to Slice", this::finishWithResult, true);
@@ -145,8 +145,10 @@ public final class PlateActivity extends Activity {
                 main.post(() -> {
                     if (isDestroyed()) return;
                     scene = built; placements = initial; sceneReady = true;
-                    status.setText(layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
-                    status.setTextColor(ui.muted);
+                    int unfit = layout.optInt("unfit");
+                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, then More… > Scale… > Fit to the bed."
+                        : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
+                    status.setTextColor(unfit > 0 ? ui.error : ui.muted);
                     load();
                 });
             } catch (Exception failure) {
@@ -210,22 +212,53 @@ public final class PlateActivity extends Activity {
 
     private void js(String script) { if (web != null && pageReady) web.evaluateJavascript(script, null); }
 
+    /** Scale: evenly in percent, or each axis on its own (X and Y across the bed before turning, Z up), or to fit the bed. */
     private void scaleDialog() {
-        EditText input = new EditText(this); input.setSingleLine(true); input.setText(String.format(Locale.ROOT, "%.0f", scalePercent));
-        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL); input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        input.setContentDescription("Scale in percent"); input.setSelectAllOnFocus(true);
-        FrameLayout box = new FrameLayout(this); box.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0); box.addView(input);
-        new android.app.AlertDialog.Builder(this).setTitle("Scale (percent of the original size)").setView(box)
-            .setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> applyScale(input.getText().toString())).show();
+        if (selected < 0 || selected >= placements.length()) return;
+        JSONObject p = placements.optJSONObject(selected); JSONArray k = p.optJSONArray("stretch");
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0);
+        EditText all = percentField(body, "Even scale, % of the original size", p.optDouble("scale", 1) * 100);
+        ui.label(body, "Each axis, % on top of that (100 = unchanged). Z is height.", 13, ui.muted, false);
+        EditText[] axes = new EditText[3]; String[] names = {"X (width)", "Y (depth)", "Z (height)"};
+        for (int i = 0; i < 3; i++) axes[i] = percentField(body, names[i], k == null ? 100 : k.optDouble(i, 1) * 100);
+        android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
+        ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
+            status.setText("Scaled evenly to fit the bed and the printer's height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
+        dialog[0] = new android.app.AlertDialog.Builder(this).setTitle("Scale " + name(selected)).setView(scrollOf(body))
+            .setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> applyScale(all.getText().toString(), axes)).show();
+    }
+    private ScrollView scrollOf(View body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); return scroll; }
+    private EditText percentField(LinearLayout parent, String label, double value) {
+        ui.label(parent, label, 13, ui.ink, false);
+        EditText input = new EditText(this); input.setSingleLine(true); input.setText(String.format(Locale.ROOT, "%.1f", value).replaceFirst("\\.0$", ""));
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL); input.setImeOptions(EditorInfo.IME_ACTION_NEXT);
+        input.setContentDescription(label + " in percent"); input.setSelectAllOnFocus(true); input.setMinHeight(ui.dp(48));
+        parent.addView(input); return input;
     }
 
-    private void applyScale(String text) {
+    private void applyScale(String text, EditText[] axes) {
         if (selected < 0) return;
         try {
-            double percent = Double.parseDouble(text.trim());
-            if (percent < 1 || percent > 2000) { status.setText("Scale between 1% and 2000%."); status.setTextColor(ui.error); return; }
-            js("plate.setScale(" + (percent / 100) + ")");
-        } catch (NumberFormatException ignored) { }
+            double percent = Double.parseDouble(text.trim()), x = Double.parseDouble(axes[0].getText().toString().trim()), y = Double.parseDouble(axes[1].getText().toString().trim()), z = Double.parseDouble(axes[2].getText().toString().trim());
+            for (double v : new double[] {percent, x, y, z}) if (v < 1 || v > 2000) { status.setText("Scale between 1% and 2000%."); status.setTextColor(ui.error); return; }
+            js(scaleScript(percent, x, y, z));
+        } catch (NumberFormatException invalid) { status.setText("Enter numbers, such as 80 or 112.5."); status.setTextColor(ui.error); }
+    }
+
+    /** Several copies of the selected model at once, then arranged so they all sit on the bed. */
+    private void copiesDialog() {
+        if (selected < 0) return;
+        EditText count = new EditText(this); count.setSingleLine(true); count.setInputType(InputType.TYPE_CLASS_NUMBER); count.setText("1"); count.setSelectAllOnFocus(true);
+        count.setContentDescription("Number of extra copies"); count.setMinHeight(ui.dp(48));
+        FrameLayout box = new FrameLayout(this); box.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0); box.addView(count);
+        new android.app.AlertDialog.Builder(this).setTitle("Extra copies of " + name(selected)).setMessage("How many more copies? They are added, then everything is arranged on the bed.").setView(box)
+            .setNegativeButton("Cancel", null).setPositiveButton("Add", (d, w) -> {
+                int n; try { n = Integer.parseInt(count.getText().toString().trim()); } catch (NumberFormatException e) { return; }
+                if (n < 1 || n > 50) { status.setText("Add between 1 and 50 copies at a time."); status.setTextColor(ui.error); return; }
+                int from = selected; StringBuilder script = new StringBuilder();
+                for (int i = 0; i < n; i++) script.append(selectScript(from)).append(";plate.duplicate();");
+                web.evaluateJavascript(script.toString(), value -> main.postDelayed(this::arrangeAll, 300));
+            }).show();
     }
 
     /** The less used actions on the selected model, kept out of the panel so the 3D view stays large. */
@@ -234,14 +267,14 @@ public final class PlateActivity extends Activity {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(20), ui.dp(4), ui.dp(20), ui.dp(8));
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
-        String[] names = {"Select a model…", "Move…", "Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
-        Runnable[] actions = {this::selectDialog, this::moveDialog, () -> js("plate.duplicate()"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
+        String[] names = {"Select a model…", "Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
+        Runnable[] actions = {this::selectDialog, this::moveDialog, this::copiesDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
                 status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
             () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings, () -> js("plate.resetCamera()")};
         for (int i = 0; i < names.length; i++) {
             Runnable action = actions[i];
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
-            b.setEnabled(i == 0 ? placements.length() > 0 : i == 8 || on && (i != 3 || placements.length() > 0));
+            b.setEnabled(i == 0 ? placements.length() > 0 : i == names.length - 1 || on);
         }
         if (!on) ui.label(body, "Select a model first: tap it in the layout, or use Select a model.", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
@@ -287,6 +320,10 @@ public final class PlateActivity extends Activity {
     static final int[] MOVE_STEPS = {1, 5, 10};
     /** The page call that moves the selected model; plain numbers whatever the phone's language. */
     static String moveScript(double dx, double dy) { return String.format(Locale.ROOT, "plate.move(%s,%s)", number(dx), number(dy)); }
+    /** The page calls that set the selected model's even scale and per-axis stretch, from percentages. */
+    static String scaleScript(double percent, double x, double y, double z) {
+        return "plate.setScale(" + number(percent / 100) + ");plate.setStretch(" + number(x / 100) + "," + number(y / 100) + "," + number(z / 100) + ")";
+    }
     static String selectScript(int index) { return "plate.select(" + index + ")"; }
     private static String number(double value) { return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value); }
 
@@ -308,7 +345,7 @@ public final class PlateActivity extends Activity {
 
     private void setButtons() {
         boolean on = selected >= 0;
-        for (View view : new View[] {rotateLeft, rotateRight, rotate45}) view.setEnabled(on);
+        for (View view : new View[] {rotateLeft, rotateRight, copyButton}) view.setEnabled(on);
         more.setEnabled(true);
     }
 
@@ -374,7 +411,9 @@ public final class PlateActivity extends Activity {
         if (selected < 0 || selected >= placements.length()) { selectedLabel.setText("Tap a model to select it."); return; }
         JSONObject p = placements.optJSONObject(selected);
         scalePercent = p.optDouble("scale", 1) * 100;
-        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s · turned %.0f° · %.0f%%", name(selected), p.optDouble("rotation"), scalePercent));
+        JSONArray k = p.optJSONArray("stretch");
+        String axes = k == null ? "" : String.format(Locale.getDefault(), " (X %.0f%% · Y %.0f%% · Z %.0f%%)", k.optDouble(0, 1) * 100, k.optDouble(1, 1) * 100, k.optDouble(2, 1) * 100);
+        selectedLabel.setText(String.format(Locale.getDefault(), "Selected: %s · turned %.0f° · %.0f%%", name(selected), p.optDouble("rotation"), scalePercent) + axes);
     }
 
     private String name(int index) {

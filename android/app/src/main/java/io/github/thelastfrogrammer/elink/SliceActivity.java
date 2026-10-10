@@ -596,9 +596,10 @@ public final class SliceActivity extends Activity {
         if (withPlacements && placements != null)
             for (int i = 0; i < placements.length(); i++) {
                 org.json.JSONObject p = placements.optJSONObject(i);
-                org.json.JSONArray down = p.optJSONArray("down");
+                org.json.JSONArray down = p.optJSONArray("down"), stretch = p.optJSONArray("stretch");
                 selection.placements.add(new double[] {p.optInt("file"), p.optInt("object"), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation"), p.optDouble("scale", 1),
-                    down == null ? 0 : down.optDouble(0), down == null ? 0 : down.optDouble(1), down == null ? 0 : down.optDouble(2)});
+                    down == null ? 0 : down.optDouble(0), down == null ? 0 : down.optDouble(1), down == null ? 0 : down.optDouble(2),
+                    stretch == null ? 1 : stretch.optDouble(0, 1), stretch == null ? 1 : stretch.optDouble(1, 1), stretch == null ? 1 : stretch.optDouble(2, 1)});
             }
         return selection;
     }
@@ -609,7 +610,7 @@ public final class SliceActivity extends Activity {
         Map<String, Double> scales = null;
         if (!selection.placements.isEmpty()) {
             scales = new HashMap<>();
-            for (double[] p : selection.placements) scales.merge((int) p[0] + ":" + (int) p[1], p[5], Math::max);
+            for (double[] p : selection.placements) scales.merge((int) p[0] + ":" + (int) p[1], p[5] * (p.length >= 12 ? Math.max(p[9], Math.max(p[10], p[11])) : 1), Math::max);
         }
         double layer = 0.2;
         try { if (selection.overrides.containsKey("layer_height")) layer = Double.parseDouble(selection.overrides.get("layer_height")); } catch (NumberFormatException ignored) { }

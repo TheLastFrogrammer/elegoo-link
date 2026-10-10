@@ -338,12 +338,16 @@ static std::optional<arrangement::ArrangePolygon> place_prime_tower(DynamicPrint
     return tower;
 }
 
-static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrangement::ArrangePolygons unselected)
+// With `unfit` given, copies that do not fit are left centred on the bed (overlapping, for the layout view to show and the
+// user to scale or remove) and counted there; without it, they stop the slice.
+static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrangement::ArrangePolygons unselected, int* unfit = nullptr)
 {
     using namespace arrangement;
     ArrangePolygons selected, excluded_regions;
+    std::vector<ModelInstance*> instances;
     for (ModelObject* object : model.objects)
         for (ModelInstance* instance : object->instances) {
+            instances.push_back(instance);
             ArrangePolygon ap = get_instance_arrange_poly(instance, config);
             ap.itemid = int(selected.size());
             selected.emplace_back(std::move(ap));
@@ -383,10 +387,17 @@ static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrange
     if (bed.size() < 3)
         throw std::runtime_error("The printer preset has no printable_area");
     arrange(selected, unselected, bed, params);
-    for (ArrangePolygon& ap : selected) {
-        if (ap.bed_idx != 0)
+    BoundingBox bed_box; for (const Point& p : bed) bed_box.merge(p);
+    const Vec2d centre = unscale(bed_box.center()).cast<double>();
+    for (size_t i = 0; i < selected.size(); ++i) {
+        ArrangePolygon& ap = selected[i];
+        if (ap.bed_idx == 0) { ap.apply(); continue; }
+        if (unfit == nullptr)
             throw std::runtime_error("The objects do not fit on the bed");
-        ap.apply();
+        ++*unfit;
+        ModelInstance* instance = instances[size_t(ap.itemid)];
+        const BoundingBoxf3 box = instance->get_object()->instance_bounding_box(*instance, false);
+        instance->set_offset(instance->get_offset() + Vec3d(centre.x() - box.center().x(), centre.y() - box.center().y(), 0));
     }
 }
 
@@ -505,7 +516,11 @@ void apply_placements(ModelObject* object, const std::vector<const Selection::Pl
         if (!(placement->scale > 0.001 && placement->scale < 1000))
             throw std::runtime_error("Scale must be between 0.001 and 1000");
         Transform3d matrix = Transform3d::Identity();
-        matrix.linear() = (Eigen::AngleAxisd(placement->rotation * PI / 180., Vec3d::UnitZ()).toRotationMatrix() * placement->scale) * lay_down(placement->down) * base;
+        for (double k : placement->stretch)
+            if (!(k > 0.001 && k < 1000))
+                throw std::runtime_error("Scale must be between 0.001 and 1000");
+        const Matrix3d stretch = Vec3d(placement->stretch[0], placement->stretch[1], placement->stretch[2]).asDiagonal();
+        matrix.linear() = (Eigen::AngleAxisd(placement->rotation * PI / 180., Vec3d::UnitZ()).toRotationMatrix() * placement->scale) * stretch * lay_down(placement->down) * base;
         ModelInstance* instance = object->add_instance();
         instance->set_transformation(Geometry::Transformation(matrix));
         const BoundingBoxf3 box = object->instance_bounding_box(*instance, false);
@@ -875,6 +890,8 @@ struct Engine::Loaded {
     std::vector<std::vector<int>> objects;  // per file: index in `model` of each file object, -1 when left out
     std::vector<Matrix3d> base;             // per model object: the file's own orientation and scale (first copy)
     std::vector<std::vector<std::array<double, 3>>> downs; // per model object: each placed copy's laid-down face
+    std::vector<std::vector<std::array<double, 3>>> stretches; // per model object: each placed copy's per-axis stretch
+    int unfit = 0;                          // layout view only: copies that did not fit, left centred on the bed
     std::set<int> used;
     bool keep_layout = false;               // positions come from placements or the project plate
     Calib_Params calibration;
@@ -883,7 +900,7 @@ struct Engine::Loaded {
     std::shared_ptr<PaPattern> pattern;     // pressure advance pattern: its custom G-code comes last
 };
 
-Engine::Loaded Engine::load(const std::vector<std::string>& models, const Selection& selection, bool need_models)
+Engine::Loaded Engine::load(const std::vector<std::string>& models, const Selection& selection, bool need_models, bool lenient)
 {
     if (!m_state->loaded)
         throw std::runtime_error("No vendor loaded");
@@ -959,8 +976,11 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
                 continue;
             ModelObject* object = loaded.model.add_object(*source);
             loaded.base.push_back(source->instances.front()->get_matrix_no_offset().linear());
-            loaded.downs.emplace_back();
-            for (const Selection::Placement* p : placed) loaded.downs.back().push_back({p->down[0], p->down[1], p->down[2]});
+            loaded.downs.emplace_back(); loaded.stretches.emplace_back();
+            for (const Selection::Placement* p : placed) {
+                loaded.downs.back().push_back({p->down[0], p->down[1], p->down[2]});
+                loaded.stretches.back().push_back({p->stretch[0], p->stretch[1], p->stretch[2]});
+            }
             if (!selection.placements.empty())
                 apply_placements(object, placed);
             else if (keep[o].size() != object->instances.size()) {
@@ -1058,7 +1078,7 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
         arrangement::ArrangePolygons keep_clear;
         if (loaded.tower)
             keep_clear.push_back(*loaded.tower);
-        place_on_bed(loaded.model, config, keep_clear);
+        place_on_bed(loaded.model, config, keep_clear, lenient ? &loaded.unfit : nullptr);
     }
     // The pattern is drawn by custom G-code around the handle cube, from the final settings (Plater::_calib_pa_pattern_gen_gcode).
     if (loaded.pattern && !loaded.model.objects.empty()) {
@@ -1118,6 +1138,8 @@ Selection selection_from_json(const std::string& text)
             placement.file = item.value("file", 0); placement.object = item.value("object", 0);
             placement.x = item.value("x", 0.0); placement.y = item.value("y", 0.0);
             placement.rotation = item.value("rotation", 0.0); placement.scale = item.value("scale", 1.0);
+            if (item.contains("stretch") && item["stretch"].is_array() && item["stretch"].size() == 3)
+                for (int k = 0; k < 3; ++k) placement.stretch[k] = item["stretch"][k].get<double>();
             if (item.contains("down") && item["down"].is_array() && item["down"].size() == 3)
                 for (int k = 0; k < 3; ++k) placement.down[k] = item["down"][k].get<double>();
             selection.placements.push_back(placement);
@@ -1203,12 +1225,12 @@ std::string Engine::inspect(const std::vector<std::string>& models, const std::s
 std::string Engine::arrange(const std::vector<std::string>& models, const Selection& selection)
 {
     // Without placements: the layout slicing would use. With them: those copies (turned, scaled, duplicated) arranged.
-    Loaded loaded = load(models, selection, true);
+    Loaded loaded = load(models, selection, true, true);
     if (!selection.placements.empty()) {
         arrangement::ArrangePolygons keep_clear;
         if (loaded.tower)
             keep_clear.push_back(*loaded.tower);
-        place_on_bed(loaded.model, loaded.config, keep_clear);
+        place_on_bed(loaded.model, loaded.config, keep_clear, &loaded.unfit);
     }
     nlohmann::json placements = nlohmann::json::array();
     for (size_t f = 0; f < loaded.objects.size(); ++f)
@@ -1220,9 +1242,13 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
                 const BoundingBoxf3 box = object->instance_bounding_box(i, false);
                 std::array<double, 3> down = {0, 0, 0};
                 if (i < loaded.downs[index].size()) down = loaded.downs[index][i];
+                std::array<double, 3> stretch = {1, 1, 1};
+                if (i < loaded.stretches[index].size()) stretch = loaded.stretches[index][i];
                 const Matrix3d base = lay_down(down.data()) * loaded.base[index];
-                const auto [rotation, scale] = relative_rotation_scale(object->instances[i]->get_matrix_no_offset().linear(), base);
+                const auto [rotation, overall] = relative_rotation_scale(object->instances[i]->get_matrix_no_offset().linear(), base);
+                const double scale = overall / std::cbrt(stretch[0] * stretch[1] * stretch[2]);   // the uniform part, without the stretch
                 nlohmann::json item = {{"file", f}, {"object", o}, {"x", box.center().x()}, {"y", box.center().y()}, {"rotation", rotation}, {"scale", scale}};
+                if (stretch[0] != 1 || stretch[1] != 1 || stretch[2] != 1) item["stretch"] = {stretch[0], stretch[1], stretch[2]};
                 if (down[0] != 0 || down[1] != 0 || down[2] != 0) item["down"] = {down[0], down[1], down[2]};
                 placements.push_back(item);
             }
@@ -1233,7 +1259,7 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
     if (const auto* area = loaded.config.option<ConfigOptionPoints>("bed_exclude_area"))
         for (const Vec2d& p : area->values) excluded.push_back({p.x(), p.y()});
     nlohmann::json result = {{"placements", placements}, {"bed", bed}, {"excluded", excluded}, {"height", loaded.config.opt_float("printable_height")},
-                             {"kept_layout", loaded.keep_layout && selection.placements.empty()}, {"warnings", loaded.warnings}};
+                             {"kept_layout", loaded.keep_layout && selection.placements.empty()}, {"warnings", loaded.warnings}, {"unfit", loaded.unfit}};
     if (loaded.tower) {
         const BoundingBox box = loaded.tower->poly.contour.bounding_box();
         result["tower"] = {unscale<double>(box.min.x()), unscale<double>(box.min.y()), unscale<double>(box.max.x()), unscale<double>(box.max.y())};

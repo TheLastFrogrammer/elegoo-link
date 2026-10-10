@@ -80,22 +80,24 @@ public class PlateDialogsTest {
         more().performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Select a model…", "Move…", "Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view", "Close"), names);
-        for (String name : names.subList(0, 9)) assertTrue(name, button(d, name).isEnabled());
-        assertTrue(button(d, "Copy").getMinHeight() >= 0);
+        assertEquals(Arrays.asList("Select a model…", "Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view", "Close"), names);
+        for (String name : names.subList(0, 10)) assertTrue(name, button(d, name).isEnabled());
     }
 
     @Test public void moreIsDisabledUntilAModelIsSelected() throws Exception {
         select(-1);
         more().performClick(); idle();
         AlertDialog d = dialog();
-        for (String name : new String[] {"Move…", "Copy", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
+        for (String name : new String[] {"Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
         assertTrue("choosing a model works without a selection", button(d, "Select a model…").isEnabled());
         assertTrue(button(d, "Reset view").isEnabled());
     }
 
     @Test public void copyRemoveAndUprightCallThePage() throws Exception {
-        for (String[] pair : new String[][] {{"Copy", "plate.duplicate()"}, {"Remove", "plate.remove()"}, {"Upright again", "plate.upright()"}}) {
+        // Copy sits on the panel itself; the rest are under More….
+        ((Button) get("copyButton")).performClick(); idle();
+        assertEquals("plate.duplicate()", lastScript());
+        for (String[] pair : new String[][] {{"Turn 45° left", "plate.rotate(45)"}, {"Remove", "plate.remove()"}, {"Upright again", "plate.upright()"}}) {
             more().performClick(); idle();
             button(dialog(), pair[0]).performClick(); idle();
             assertEquals(pair[0], pair[1], lastScript());
@@ -148,11 +150,12 @@ public class PlateDialogsTest {
         button(dialog(), "Scale…").performClick(); idle();
         AlertDialog scale = dialog();
         List<View> all = new ArrayList<>(); collect(scale.getWindow().getDecorView(), all);
-        EditText input = null; for (View v : all) if (v instanceof EditText) input = (EditText) v;
-        assertNotNull(input); assertEquals("100", input.getText().toString());
-        input.setText("150");
+        List<EditText> inputs = new ArrayList<>(); for (View v : all) if (v instanceof EditText) inputs.add((EditText) v);
+        assertEquals("even scale, then X, Y and Z", 4, inputs.size());
+        for (EditText input : inputs) assertEquals("100", input.getText().toString());
+        inputs.get(0).setText("150"); inputs.get(3).setText("80");
         scale.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); idle();
-        assertEquals("plate.setScale(1.5)", lastScript());
+        assertEquals("plate.setScale(1.5);plate.setStretch(1,1,0.8)", lastScript());
     }
 
     @Test public void scaleOutOfRangeIsRefusedInWords() throws Exception {
