@@ -20,7 +20,7 @@ checklist is [FIELD_TEST.md](FIELD_TEST.md); Settings → Share diagnostics reco
 ## Next
 
 1. Hardware round: work through FIELD_TEST.md on the phone and CC2 and fix what the diagnostics show (Files tab blank, plate margins).
-2. Layout: size in millimetres (type a width, depth or height), scale with a lock, and a handle to drag-scale.
+2. Layout: a handle to drag-scale a model in the 3D view (sizes in millimetres are done).
 3. Slicer: supports and seam painting on models; modifier volumes (a box or cylinder with its own settings inside a model).
 4. Find out why the printer refused a cloud-mode download on port 80 (Elegoo's own cloud page uses the same request); check with the phone's browser and diagnostics.
 5. Other printer models (the Centauri Carbon 1 uses a different protocol).

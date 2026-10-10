@@ -226,8 +226,69 @@ public final class PlateActivity extends Activity {
         ui.label(body, "Then each axis, on top of the even scale. 100 = unchanged. Z is height.", 13, ui.muted, false);
         EditText[] axes = new EditText[3]; String[] names = {"X (width)", "Y (depth)", "Z (height)"};
         for (int i = 0; i < 3; i++) axes[i] = percentField(body, names[i], k == null ? 100 : k.optDouble(i, 1) * 100);
+        ui.button(body, "Size in millimetres…", () -> { dialog[0].dismiss(); sizeDialog(); }, false);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle("Scale " + name(selected)).setView(scrollOf(body))
             .setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> applyScale(all.getText().toString(), axes)).show();
+    }
+    /** Size in millimetres: the model's own width, depth and height (before turning), typed; kept in proportion unless unticked. */
+    private void sizeDialog() {
+        if (selected < 0 || selected >= placements.length() || web == null) return;
+        int which = selected;
+        web.evaluateJavascript("plate.ownSize()", value -> {
+            double[] size = new double[3];
+            try { JSONArray a = new JSONArray(value); for (int i = 0; i < 3; i++) size[i] = a.getDouble(i); } catch (JSONException | NullPointerException e) { return; }
+            if (isDestroyed() || selected != which) return;
+            JSONObject p = placements.optJSONObject(which); JSONArray k = p.optJSONArray("stretch");
+            double scale = p.optDouble("scale", 1); double[] stretch = {k == null ? 1 : k.optDouble(0, 1), k == null ? 1 : k.optDouble(1, 1), k == null ? 1 : k.optDouble(2, 1)};
+            LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0);
+            ui.label(body, String.format(Locale.getDefault(), "Now %.1f × %.1f × %.1f mm (width × depth × height, before turning).", size[0], size[1], size[2]), 13, ui.muted, false);
+            String[] names = {"Width (X), mm", "Depth (Y), mm", "Height (Z), mm"};
+            EditText[] fields = new EditText[3];
+            for (int i = 0; i < 3; i++) { fields[i] = percentField(body, names[i], size[i]); fields[i].setText(mm(size[i])); fields[i].setContentDescription(names[i]); }
+            android.widget.CheckBox keep = new android.widget.CheckBox(this); keep.setText("Keep proportions"); keep.setChecked(true); keep.setTextColor(ui.ink); keep.setMinHeight(ui.dp(48)); body.addView(keep);
+            // In proportion, typing one size fills in the other two.
+            boolean[] filling = {false};
+            for (int i = 0; i < 3; i++) {
+                int axis = i;
+                fields[i].addTextChangedListener(new android.text.TextWatcher() {
+                    public void beforeTextChanged(CharSequence t, int a, int b, int c) { }
+                    public void onTextChanged(CharSequence t, int a, int b, int c) { }
+                    public void afterTextChanged(android.text.Editable t) {
+                        if (filling[0] || !keep.isChecked() || !fields[axis].hasFocus()) return;
+                        double wanted; try { wanted = Double.parseDouble(t.toString().trim()); } catch (NumberFormatException e) { return; }
+                        if (!(wanted > 0) || !(size[axis] > 0)) return;
+                        filling[0] = true;
+                        for (int o = 0; o < 3; o++) if (o != axis) fields[o].setText(mm(size[o] * wanted / size[axis]));
+                        filling[0] = false;
+                    }
+                });
+            }
+            new android.app.AlertDialog.Builder(this).setTitle("Size of " + name(which)).setView(scrollOf(body)).setNegativeButton("Cancel", null)
+                .setPositiveButton("Set", (d, w) -> {
+                    double[] wanted = new double[3];
+                    try { for (int i = 0; i < 3; i++) wanted[i] = Double.parseDouble(fields[i].getText().toString().trim()); }
+                    catch (NumberFormatException e) { status.setText("Enter sizes in millimetres, such as 120 or 42.5."); status.setTextColor(ui.error); return; }
+                    double[] result = resize(scale, stretch, size, wanted, keep.isChecked());
+                    if (result == null) { status.setText("Sizes must be between 0.1 and 1000 mm, and within 1%–2000% of the original."); status.setTextColor(ui.error); return; }
+                    js(selectScript(which) + ";plate.setScale(" + number(result[0]) + ");plate.setStretch(" + number(result[1]) + "," + number(result[2]) + "," + number(result[3]) + ")");
+                }).show();
+        });
+    }
+    private static String mm(double value) { return String.format(Locale.ROOT, "%.1f", value).replaceFirst("\\.0$", ""); }
+    /**
+     * New even scale and stretch for typed sizes: in proportion, the first size that changed sets one factor for the even scale;
+     * otherwise each axis's stretch takes its own factor. Null when a size or the result is out of range.
+     */
+    static double[] resize(double scale, double[] stretch, double[] size, double[] wanted, boolean keep) {
+        for (double v : wanted) if (!(v >= 0.1 && v <= 1000)) return null;
+        double[] out = {scale, stretch[0], stretch[1], stretch[2]};
+        if (keep) {
+            double factor = 1;
+            for (int i = 0; i < 3; i++) if (size[i] > 0 && Math.abs(wanted[i] - size[i]) > 0.05) { factor = wanted[i] / size[i]; break; }
+            out[0] = Math.round(scale * factor * 1e6) / 1e6;
+        } else for (int i = 0; i < 3; i++) if (size[i] > 0) out[i + 1] = Math.round(stretch[i] * wanted[i] / size[i] * 1e6) / 1e6;
+        for (int i = 0; i < 4; i++) if (!(out[i] >= 0.01 && out[i] <= 20)) return null;
+        return out;
     }
     private ScrollView scrollOf(View body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); return scroll; }
     private EditText percentField(LinearLayout parent, String label, double value) {

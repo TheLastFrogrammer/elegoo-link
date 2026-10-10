@@ -613,6 +613,8 @@
       p.x = (bed[0] + bed[2]) / 2; p.y = (bed[1] + bed[3]) / 2;
       changed(); return p.scale;
     },
+    /** The selected copy's own size before it is turned (X, Y, Z in mm): what the per-axis stretch acts on. */
+    ownSize() { const p = current(); if (!p) return null; const b = footprint(objectOf(p), Object.assign({}, p, { rotation: 0 })); return [b.w, b.d, b.h]; },
     /** The selected copy's size on the bed now (width, depth, height in mm). */
     size() { const p = current(); if (!p) return null; const r = rect(p); return [r[2] - r[0], r[3] - r[1], r[4]]; },
     duplicate() {
