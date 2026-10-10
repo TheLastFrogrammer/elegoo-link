@@ -323,7 +323,7 @@ public final class MainActivity extends Activity {
         faults = A11y.assertive(label(hero, "", 14, ERROR, true));
         // Quick actions: they only navigate or open a screen, never send a printer command. render() shows the ones that fit the state.
         // Row 1 while printing: Live toolpath and Camera. Idle and connected: Slice a model and Camera. Row 2: Print again (idle, with history) and Print recordings.
-        quickRow = row(hero);
+        quickRow = row(hero); ((LinearLayout.LayoutParams) quickRow.getLayoutParams()).topMargin = dp(12); // apart from Pause, Resume and Stop
         liveToolpath = rowButton(quickRow, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), true);
         quickSlice = rowButton(quickRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
         quickCamera = rowButton(quickRow, "Camera", () -> selectPage(2), false);
@@ -351,7 +351,7 @@ public final class MainActivity extends Activity {
         // One colour bar per tray, the active one outlined; tapping it opens the full tray list.
         trayStrip = new LinearLayout(this); trayStrip.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayStrip);
         trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList); trayList.setVisibility(View.GONE);
-        trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 14, MUTED, false);
+        trays = label(canvas, "Connect to see reported trays, materials, colours and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
         LinearLayout tuning = card("Printer controls"); tuningCard = tuning;
         tuningHint = label(tuning, "", 13, MUTED, false);
