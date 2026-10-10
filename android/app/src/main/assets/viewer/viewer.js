@@ -163,7 +163,8 @@
 
   // ---------------------------------------------------------------- state
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
-  const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0 };
+  const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
+    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
     camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
@@ -479,10 +480,22 @@
     drawPrinterCamera(viewProj);
     if (view.nozzle) {
       gl.disable(gl.DEPTH_TEST);
-      gl.useProgram(marker.p); gl.uniformMatrix4fv(marker.u.uViewProj, false, viewProj);
-      gl.uniform1f(marker.u.uSize, 16 * devicePixelRatio); gl.uniform4fv(marker.u.uColor, theme.nozzle); gl.uniform4fv(marker.u.uRing, theme.ring);
-      gl.bindVertexArray(markerVao); gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffer); gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(view.nozzle));
-      gl.drawArrays(gl.POINTS, 0, 1);
+      const a = Math.max(0.1, Math.min(1, view.nozzleAlpha)), size = Math.max(4, Math.min(48, view.nozzleSize));
+      const colour = [theme.nozzle[0], theme.nozzle[1], theme.nozzle[2], theme.nozzle[3] * a], ring = [theme.ring[0], theme.ring[1], theme.ring[2], theme.ring[3] * a];
+      if (view.nozzleFlat) {
+        // A disc lying on the layer, drawn in the scene: it shrinks with distance, flattens with the view and bends with the
+        // lens curve exactly like the bed grid. Size: 16 px on the slider is a 4 mm disc.
+        const [x, y, z] = view.nozzle, r = size / 4, disc = (radius) => { const v = [x, y, z]; for (let i = 0; i <= 32; i++) { const t = i / 32 * Math.PI * 2; v.push(x + radius * Math.cos(t), y + radius * Math.sin(t), z); } return new Float32Array(v); };
+        gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
+        gl.bindVertexArray(markerVao); gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffer);
+        gl.uniform4fv(lines.u.uColor, ring); gl.bufferData(gl.ARRAY_BUFFER, disc(r), gl.DYNAMIC_DRAW); gl.drawArrays(gl.TRIANGLE_FAN, 0, 34);
+        gl.uniform4fv(lines.u.uColor, colour); gl.bufferData(gl.ARRAY_BUFFER, disc(r * 0.62), gl.DYNAMIC_DRAW); gl.drawArrays(gl.TRIANGLE_FAN, 0, 34);
+      } else {
+        gl.useProgram(marker.p); gl.uniformMatrix4fv(marker.u.uViewProj, false, viewProj);
+        gl.uniform1f(marker.u.uSize, size * devicePixelRatio); gl.uniform4fv(marker.u.uColor, colour); gl.uniform4fv(marker.u.uRing, ring);
+        gl.bindVertexArray(markerVao); gl.bindBuffer(gl.ARRAY_BUFFER, markerBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(view.nozzle), gl.DYNAMIC_DRAW);
+        gl.drawArrays(gl.POINTS, 0, 1);
+      }
     }
     gl.bindVertexArray(null);
   }

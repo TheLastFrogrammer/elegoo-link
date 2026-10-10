@@ -678,7 +678,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         js("viewer.setRotationLock(" + on + ")");
         if (alignLockButton != null) { alignLockButton.setText(on ? "Rotation lock: on (drag pans, pinch zooms)" : "Rotation lock: off"); A11y.state(alignLockButton, on ? "On" : "Off"); }
     }
-    private void styleSlider(LinearLayout parent, String name, String key, int min, int max, int fallback, String unit) {
+    private void styleSlider(LinearLayout parent, String name, String key, int min, int max, int fallback, String unit) { styleSlider(parent, name, key, min, max, fallback, unit, this::sendAlignStyle); }
+    private void styleSlider(LinearLayout parent, String name, String key, int min, int max, int fallback, String unit, Runnable changed) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink);
         row.addView(label, new LinearLayout.LayoutParams(dp(112), -2));
@@ -689,7 +690,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         Runnable show = () -> { String value = (bar.getProgress() + min) + unit; label.setText(name + "\n" + value); A11y.state(bar, value); };
         show.run();
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-            @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (!fromUser) return; viewerPrefs().edit().putInt(key, value + min).apply(); show.run(); sendAlignStyle(); }
+            @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (!fromUser) return; viewerPrefs().edit().putInt(key, value + min).apply(); show.run(); changed.run(); }
             @Override public void onStartTrackingTouch(SeekBar b) { }
             @Override public void onStopTrackingTouch(SeekBar b) { }
         });
@@ -957,9 +958,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         try {
             int start = path.layerStart(layer), end = start + Math.min(move, layerSize(layer)), layerEnd = path.layerEnd(layer);
             boolean partial = following || end < layerEnd;
-            JSONObject state = new JSONObject().put("start", 0).put("end", end).put("ghostEnd", layerEnd)
-                .put("dimBelow", partial ? start : 0).put("hidden", hidden).put("showTravel", showTravel)
-                .put("travelStart", 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount);
+            boolean only = viewerPrefs().getBoolean("layerOnly", false);   // just this layer, nothing printed below it
+            JSONObject state = new JSONObject().put("start", only ? start : 0).put("end", end).put("ghostEnd", layerEnd)
+                .put("dimBelow", partial && !only ? start : 0).put("hidden", hidden).put("showTravel", showTravel)
+                .put("travelStart", only ? path.layerTravelStart[layer] : 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount)
+                .put("nozzleSize", viewerPrefs().getInt("nozzleSize", 16)).put("nozzleAlpha", viewerPrefs().getInt("nozzleAlpha", 100) / 100.0)
+                .put("nozzleFlat", viewerPrefs().getBoolean("nozzleFlat", false));
             if (nozzle != null) state.put("nozzle", new JSONArray(nozzle));
             else if (end > 0 && end < layerEnd) state.put("nozzle", new JSONArray(new double[] {path.x1[end - 1], path.y1[end - 1], path.z1[end - 1]}));
             else state.put("nozzle", JSONObject.NULL);
@@ -1012,6 +1016,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 names.add("Line up the camera by hand…"); actions.add(this::startAligning);
             }
         }
+        names.add("Nozzle dot and layers…"); actions.add(this::nozzleDialog);
         boolean locked = viewerPrefs().getBoolean("viewLock", false);
         names.add(locked ? "Unlock rotation (drag turns the view)" : "Lock rotation (drag moves the view)");
         actions.add(() -> { viewerPrefs().edit().putBoolean("viewLock", !locked).apply(); sendLock(); });
@@ -1023,6 +1028,24 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             b.setEnabled(path != null);
         }
         dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(body).setNegativeButton("Close", null).show();
+    }
+
+    /** How the nozzle dot looks (size, transparency, flat on the bed or a fixed screen dot), and whether only this layer shows. */
+    private void nozzleDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        styleSlider(body, "Nozzle dot size", "nozzleSize", 4, 48, 16, " px", this::pushView);
+        styleSlider(body, "Dot opacity", "nozzleAlpha", 10, 100, 100, "%", this::pushView);
+        android.widget.CheckBox flat = new android.widget.CheckBox(this); flat.setTextColor(ink); flat.setMinHeight(dp(48));
+        flat.setText("Lie flat on the bed (follows the grid's perspective and the lens curve)");
+        flat.setChecked(viewerPrefs().getBoolean("nozzleFlat", false));
+        flat.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("nozzleFlat", on).apply(); pushView(); });
+        body.addView(flat);
+        android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
+        only.setText("Show only the current layer (hide the layers below)");
+        only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
+        only.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("layerOnly", on).apply(); pushView(); });
+        body.addView(only);
+        new AlertDialog.Builder(this).setTitle("Nozzle dot and layers").setView(body).setPositiveButton("Done", null).show();
     }
 
     /** The bed grid drawn over the camera picture (seen from the camera): all lines, edges only or hidden, and how strong. */

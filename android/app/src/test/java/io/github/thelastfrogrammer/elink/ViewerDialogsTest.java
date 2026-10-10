@@ -89,7 +89,7 @@ public class ViewerDialogsTest {
         ((Button) get("more")).performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : PlateDialogsTest.buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Show / hide line types…", "Show travel moves (blue)", "Step through this layer…", "Lock rotation (drag moves the view)", "What am I seeing?", "Close"), names);
+        assertEquals(Arrays.asList("Show / hide line types…", "Show travel moves (blue)", "Step through this layer…", "Nozzle dot and layers…", "Lock rotation (drag moves the view)", "What am I seeing?", "Close"), names);
         PlateDialogsTest.button(d, "Show travel moves (blue)").performClick(); idle();
         assertTrue(lastScript().contains("\"showTravel\":true"));
         ((Button) get("more")).performClick(); idle();
