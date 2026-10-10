@@ -870,6 +870,31 @@ public final class MainActivity extends Activity {
             A11y.tab(tabs[i], i == page);
         }
         settings.edit().putInt("page", page).apply();
+        // A tab shown blank on a phone (even its fixed cards) means its views were never laid out: force a fresh layout now and
+        // once more after this frame, and note what was stuck (sizes and flags only).
+        View shown = pages[page]; int tab = page;
+        String before_ = layoutState(shown); unstick(shown);
+        main.post(() -> unstick(shown));
+        main.postDelayed(() -> { if (page == tab) Diagnostics.note(Diagnostics.FILES, "tab " + tab + " shown: before " + before_ + "; now " + layoutState(shown)); }, 1200);
+    }
+    /** Marks a view, everything inside it and every parent as needing layout, then asks the window for a layout pass. */
+    private void unstick(View view) {
+        forceAll(view);
+        for (android.view.ViewParent parent = view.getParent(); parent instanceof View; parent = parent.getParent()) ((View) parent).forceLayout();
+        view.getRootView().requestLayout(); view.invalidate();
+    }
+    private static void forceAll(View view) {
+        view.forceLayout();
+        if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) forceAll(((ViewGroup) view).getChildAt(i));
+    }
+    /** "1080x2400, 3 of 3 children sized, waiting: page,content" — sizes and which views still wait for layout. */
+    private static String layoutState(View view) {
+        int sized = 0, count = 0;
+        if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) { View child = ((ViewGroup) view).getChildAt(i); if (child.getVisibility() == View.GONE) continue; count++; if (child.getHeight() > 0) sized++; }
+        StringBuilder waiting = new StringBuilder(); if (view.isLayoutRequested()) waiting.append("page");
+        int depth = 0;
+        for (android.view.ViewParent parent = view.getParent(); parent instanceof View; parent = parent.getParent(), depth++) if (((View) parent).isLayoutRequested()) waiting.append(waiting.length() > 0 ? "," : "").append("parent").append(depth + 1);
+        return view.getWidth() + "x" + view.getHeight() + ", " + sized + " of " + count + " cards sized" + (waiting.length() > 0 ? ", waiting: " + waiting : "");
     }
     private void fixControl() {
         if (block == ControlState.Block.CLOUD_AGREEMENT) cloudGate(true, this::render); else if (block == ControlState.Block.DISCONNECTED) selectPage(3);
@@ -1382,7 +1407,7 @@ public final class MainActivity extends Activity {
             // A list received while the tab was drawn empty has shown no rows on a phone: ask for a fresh layout, and record
             // what is really on screen a moment later (counts and sizes only).
             if (count > 0) {
-                fileRows.requestLayout(); ((View) fileRows.getParent()).requestLayout();
+                unstick(fileRows); main.post(() -> unstick(fileRows));
                 int expected = count;
                 main.postDelayed(() -> {
                     View card = (View) fileRows.getParent();
