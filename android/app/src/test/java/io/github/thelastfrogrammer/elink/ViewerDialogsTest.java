@@ -2,6 +2,7 @@ package io.github.thelastfrogrammer.elink;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertFalse;
 
 import android.app.AlertDialog;
 import android.content.Intent;
@@ -89,11 +90,11 @@ public class ViewerDialogsTest {
         ((Button) get("more")).performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : PlateDialogsTest.buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Show / hide line types…", "Show travel moves (blue)", "Step through this layer…", "Nozzle dot and layers…", "Lock rotation (drag moves the view)", "What am I seeing?", "Close"), names);
+        assertEquals(Arrays.asList("Filter by line type (walls, infill, support…)…", "Show travel moves (blue)", "Step through this layer…", "Layers, transparency and nozzle dot…", "Lock rotation (drag moves the view)", "What am I seeing?", "Close"), names);
         PlateDialogsTest.button(d, "Show travel moves (blue)").performClick(); idle();
         assertTrue(lastScript().contains("\"showTravel\":true"));
         ((Button) get("more")).performClick(); idle();
-        PlateDialogsTest.button(dialog(), "Show / hide line types…").performClick(); idle();
+        PlateDialogsTest.button(dialog(), "Filter by line type (walls, infill, support…)…").performClick(); idle();
         List<View> all = new ArrayList<>(); PlateDialogsTest.collect(dialog().getWindow().getDecorView(), all);
         List<CheckBox> boxes = new ArrayList<>(); for (View v : all) if (v instanceof CheckBox) boxes.add((CheckBox) v);
         assertTrue(boxes.size() >= 5);
@@ -101,7 +102,9 @@ public class ViewerDialogsTest {
         assertTrue(named);
         boxes.get(0).setChecked(false); idle();
         assertEquals(1, ((Integer) get("hidden")) & 1);
-        dialog().getButton(AlertDialog.BUTTON_NEUTRAL).performClick(); idle();
+        PlateDialogsTest.button(dialog(), "Hide all").performClick(); idle();
+        for (CheckBox b : boxes) assertFalse(b.isChecked());
+        PlateDialogsTest.button(dialog(), "Show all").performClick(); idle();
         assertEquals(0, (int) (Integer) get("hidden"));
     }
 

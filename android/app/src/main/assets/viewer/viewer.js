@@ -54,7 +54,8 @@
     uniform int uHidden;
     uniform int uBase, uDimBelow;   // index of the first instance drawn; instances before uDimBelow are dimmed
     uniform vec3 uDimColor;
-    out vec3 vNormal; out vec3 vColor;
+    uniform int uLayerStart; uniform float uAlpha, uBelowAlpha;   // opacity of the current layer, and of the layers below it
+    out vec3 vNormal; out vec3 vColor; out float vAlpha;
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
     uniform float uLens, uScreenAspect, uPictureAspect, uFit;
@@ -81,10 +82,11 @@
       vNormal = mat3(uView) * normalize(d * aNormal.x + side * aNormal.y + up * aNormal.z);
       vColor = uColors[type];
       if (gl_InstanceID + uBase < uDimBelow) vColor = mix(vColor, uDimColor, 0.55);
+      vAlpha = gl_InstanceID + uBase < uLayerStart ? uBelowAlpha : uAlpha;
       gl_Position = zoomed(lens(uViewProj * vec4(p, 1.0)));
     }`, `#version 300 es
     precision mediump float;
-    in vec3 vNormal; in vec3 vColor;
+    in vec3 vNormal; in vec3 vColor; in float vAlpha;
     uniform float uGhost; uniform vec3 uGhostColor;
     out vec4 fragment;
     void main() {
@@ -93,7 +95,7 @@
       float diffuse = max(dot(n, key), 0.0), back = max(dot(n, fill), 0.0);
       float shine = pow(max(dot(reflect(-key, n), vec3(0.0, 0.0, 1.0)), 0.0), 24.0);
       vec3 color = vColor * (0.36 + 0.56 * diffuse + 0.16 * back) + vec3(0.14) * shine;
-      fragment = uGhost > 0.5 ? vec4(mix(uGhostColor, color, 0.2), 0.3) : vec4(color, 1.0);
+      fragment = uGhost > 0.5 ? vec4(mix(uGhostColor, color, 0.2), 0.3 * vAlpha) : vec4(color, vAlpha);
     }`);
 
   const lines = program(`#version 300 es
@@ -164,7 +166,7 @@
   // ---------------------------------------------------------------- state
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
-    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false };
+    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1 };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
     camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
@@ -430,8 +432,14 @@
     gl.uniform3fv(bead.u.uColors, colors); gl.uniform1i(bead.u.uHidden, view.hidden);
     gl.uniform1f(bead.u.uGhost, ghost ? 1 : 0); gl.uniform3fv(bead.u.uGhostColor, theme.ghost);
     gl.uniform1i(bead.u.uBase, first); gl.uniform1i(bead.u.uDimBelow, ghost ? 0 : view.dimBelow); gl.uniform3fv(bead.u.uDimColor, theme.dim);
+    const a = Math.max(0.05, Math.min(1, view.alpha)), b = Math.max(0.05, Math.min(1, view.belowAlpha));
+    gl.uniform1i(bead.u.uLayerStart, view.layerStart); gl.uniform1f(bead.u.uAlpha, a); gl.uniform1f(bead.u.uBelowAlpha, b);
+    // See-through lines must not hide the ones behind them (nor the camera picture), so they do not write depth.
+    const solid = a > 0.99 && b > 0.99;
+    if (!solid) gl.depthMask(false);
     gl.bindVertexArray(beadVao); bindInstances(first);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, beadVertices.length / 6, end - first);
+    if (!solid) gl.depthMask(true);
   }
 
   function render() {

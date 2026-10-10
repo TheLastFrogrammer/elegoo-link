@@ -152,6 +152,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
         status = A11y.polite(label(titles, "Reading G-code…", 12, muted, false)); status.setPadding(0, 0, 0, 0);
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
+        TextView legendTip = new TextView(this); legendTip.setText("Tap a line type to hide it; hold it to show only that type."); legendTip.setTextSize(12); legendTip.setTextColor(muted);
+        panel.addView(legendTip, new LinearLayout.LayoutParams(-1, -2));
         int shown = hintsShown();
         if (shown < 3 || followMode) {
             liveCaption = label(panel, followMode ? "Live view of the file, up to the nozzle. Grey = still to print on this layer."
@@ -963,7 +965,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 .put("dimBelow", partial && !only ? start : 0).put("hidden", hidden).put("showTravel", showTravel)
                 .put("travelStart", only ? path.layerTravelStart[layer] : 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount)
                 .put("nozzleSize", viewerPrefs().getInt("nozzleSize", 16)).put("nozzleAlpha", viewerPrefs().getInt("nozzleAlpha", 100) / 100.0)
-                .put("nozzleFlat", viewerPrefs().getBoolean("nozzleFlat", false));
+                .put("nozzleFlat", viewerPrefs().getBoolean("nozzleFlat", false))
+                .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0);
             if (nozzle != null) state.put("nozzle", new JSONArray(nozzle));
             else if (end > 0 && end < layerEnd) state.put("nozzle", new JSONArray(new double[] {path.x1[end - 1], path.y1[end - 1], path.z1[end - 1]}));
             else state.put("nozzle", JSONObject.NULL);
@@ -1002,7 +1005,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void moreDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(4), dp(20), dp(8));
         AlertDialog[] dialog = new AlertDialog[1];
-        java.util.List<String> names = new java.util.ArrayList<>(java.util.Arrays.asList("Show / hide line types…", showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)",
+        java.util.List<String> names = new java.util.ArrayList<>(java.util.Arrays.asList("Filter by line type (walls, infill, support…)…", showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)",
             moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…"));
         java.util.List<Runnable> actions = new java.util.ArrayList<>(java.util.Arrays.asList(this::featureDialog, () -> { showTravel = !showTravel; pushView(); },
             () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); }));
@@ -1016,7 +1019,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 names.add("Line up the camera by hand…"); actions.add(this::startAligning);
             }
         }
-        names.add("Nozzle dot and layers…"); actions.add(this::nozzleDialog);
+        names.add("Layers, transparency and nozzle dot…"); actions.add(this::nozzleDialog);
         boolean locked = viewerPrefs().getBoolean("viewLock", false);
         names.add(locked ? "Unlock rotation (drag turns the view)" : "Lock rotation (drag moves the view)");
         actions.add(() -> { viewerPrefs().edit().putBoolean("viewLock", !locked).apply(); sendLock(); });
@@ -1033,6 +1036,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** How the nozzle dot looks (size, transparency, flat on the bed or a fixed screen dot), and whether only this layer shows. */
     private void nozzleDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        styleSlider(body, "This layer's opacity", "layerOpacity", 5, 100, 100, "%", this::pushView);
+        styleSlider(body, "Layers below: opacity", "belowOpacity", 5, 100, 100, "%", this::pushView);
         styleSlider(body, "Nozzle dot size", "nozzleSize", 4, 48, 16, " px", this::pushView);
         styleSlider(body, "Dot opacity", "nozzleAlpha", 10, 100, 100, "%", this::pushView);
         android.widget.CheckBox flat = new android.widget.CheckBox(this); flat.setTextColor(ink); flat.setMinHeight(dp(48));
@@ -1045,7 +1050,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
         only.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("layerOnly", on).apply(); pushView(); });
         body.addView(only);
-        new AlertDialog.Builder(this).setTitle("Nozzle dot and layers").setView(body).setPositiveButton("Done", null).show();
+        new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(body).setPositiveButton("Done", null).show();
     }
 
     /** The bed grid drawn over the camera picture (seen from the camera): all lines, edges only or hidden, and how strong. */
@@ -1325,6 +1330,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (path == null) return;
         double[] lengths = path.featureLengths();
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
+        TextView tip = new TextView(this); tip.setTextSize(13); tip.setTextColor(muted);
+        tip.setText("Untick a type to hide it. On the main screen, tap a type's chip to hide it, or hold it to show only that type.");
+        body.addView(tip);
+        java.util.List<CheckBox> boxes = new java.util.ArrayList<>();
+        LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL); body.addView(quick);
+        rowButton(quick, "Show all", () -> { for (CheckBox box : boxes) box.setChecked(true); });
+        rowButton(quick, "Hide all", () -> { for (CheckBox box : boxes) box.setChecked(false); });
         for (int i = 0; i < lengths.length; i++) {
             if (lengths[i] <= 0) continue;
             final int feature = i;
@@ -1333,11 +1345,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             box.setMinHeight(dp(48));
             box.setTextColor(ink); box.setChecked((hidden >> i & 1) == 0); box.setButtonTintList(ColorStateList.valueOf(Color.parseColor(PALETTE[i])));
             box.setOnCheckedChangeListener((view, checked) -> { hidden = checked ? hidden & ~(1 << feature) : hidden | (1 << feature); buildLegend(); pushView(); });
-            body.addView(box);
+            body.addView(box); boxes.add(box);
         }
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        new AlertDialog.Builder(this).setTitle("Show or hide line types").setView(scroll).setPositiveButton("Done", null)
-            .setNeutralButton("Show all", (d, w) -> { hidden = 0; buildLegend(); pushView(); }).show();
+        new AlertDialog.Builder(this).setTitle("Filter by line type").setView(scroll).setPositiveButton("Done", null).show();
     }
 
     // ------------------------------------------------------------------ helpers
