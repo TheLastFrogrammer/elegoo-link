@@ -472,6 +472,9 @@
       gl.uniform3f(prog.u.uZoom, printerCam.looking ? zoom2d.s : 1, printerCam.looking ? zoom2d.x : 0, printerCam.looking ? zoom2d.y : 0);
     }
     if (overlay) drawBackdrop(width, height);
+    // From the camera the head is written to depth before anything else, so it hides the bed grid and outline too, as the
+    // real head hides the bed in the picture. (In the 3D view it is written after the bed, so the bed stays whole.)
+    if (view.head && view.nozzle && overlay) { gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.colorMask(false, false, false, false); drawHead(viewProj, null); gl.colorMask(true, true, true, true); }
     // Plate and grid (over the camera picture, the grid only).
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
     if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
@@ -486,7 +489,7 @@
     }
     // The printhead as an invisible occluder: it writes depth only, so lines behind it are hidden as the real head hides
     // them in the camera's picture.
-    if (view.head && view.nozzle) { gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.colorMask(false, false, false, false); drawHead(viewProj, null); gl.colorMask(true, true, true, true); }
+    if (view.head && view.nozzle && !overlay) { gl.enable(gl.DEPTH_TEST); gl.depthMask(true); gl.colorMask(false, false, false, false); drawHead(viewProj, null); gl.colorMask(true, true, true, true); }
     // Printed / visible beads, then travels, then the rest of the current layer as a translucent ghost.
     drawBeads(view.start, view.end, false, viewProj, viewMatrix);
     if (view.showTravel && view.travelEnd > view.travelStart) {
