@@ -125,7 +125,14 @@ public final class MainActivity extends Activity {
     private CheckBox remember;
     private TextView connection, state, job, feedback, selected, faults, trays, identity, diagnostics;
     private Button connect, pause, stop, refresh, upload, pick, refill, check, forget, recentSlices;
-    private ProgressRing ring;
+    /** Monitor while printing: the live camera on top (local stream, only while this tab is on screen), then the job with its thumbnail. */
+    private LinearLayout monitorCamera, trayStrip;
+    private ImageView monitorImage, jobThumb;
+    private TextView monitorCameraInfo, percentText;
+    private Button monitorCameraStart, monitorCameraSize, trayDetails;
+    private ProgressBar jobBar;
+    private boolean monitorCameraTried, traysOpen;
+    private String jobThumbAsked = "", jobThumbKey = "";
     private TextView title, detail, controlSource, tileNozzle, tileBed, tileChamber;
     private CredentialStore credentials;
     private PrinterService printer;
@@ -188,6 +195,7 @@ public final class MainActivity extends Activity {
         if (lens != null) { lens = lens.mutate(); lens.setTint(MUTED); lens.setBounds(0, 0, dp(22), dp(22)); find.setCompoundDrawables(lens, null, null, null); find.setCompoundDrawablePadding(dp(8)); }
         GradientDrawable findShape = new GradientDrawable(); findShape.setColor(SURFACE); findShape.setCornerRadius(dp(24)); findShape.setStroke(dp(1), (MUTED & 0x00ffffff) | 0x40000000); find.setBackground(findShape);
         find.setContentDescription("Find a feature"); find.setOnClickListener(v -> featureDialog());
+        title.setOnClickListener(v -> switchPrinter()); A11y.clickLabel(title, "Switch printer");
         LinearLayout.LayoutParams findLayout = new LinearLayout.LayoutParams(-1, -2); findLayout.topMargin = dp(8); content.addView(find, findLayout);
         // Results of actions show here, on every tab, until tapped away or replaced.
         feedback = new TextView(this); feedback.setTextSize(14); feedback.setTextColor(INK); feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
@@ -281,12 +289,37 @@ public final class MainActivity extends Activity {
         label(getStarted, "Slice a model on this phone, then send the file to the printer.", 13, MUTED, false);
         rowButton(row(getStarted), "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), false);
         LinearLayout hero = card(null); heroCard = hero;
+        // Live camera on top while printing: the printer's own stream on this network, started by the user (then remembered),
+        // and stopped whenever this tab or the app is out of sight. Through the cloud the button opens the cloud camera.
+        monitorCamera = new LinearLayout(this); monitorCamera.setOrientation(LinearLayout.VERTICAL); hero.addView(monitorCamera);
+        monitorImage = new ImageView(this); monitorImage.setContentDescription("Live printer camera"); monitorImage.setScaleType(ImageView.ScaleType.FIT_CENTER); monitorImage.setBackgroundColor(Color.BLACK);
+        monitorImage.setVisibility(View.GONE); monitorCamera.addView(monitorImage, new LinearLayout.LayoutParams(-1, dp(200)));
+        monitorCameraInfo = label(monitorCamera, "", 12, MUTED, false);
+        LinearLayout cameraButtons = row(monitorCamera);
+        monitorCameraStart = rowButton(cameraButtons, "Watch camera", this::monitorCameraTap, false);
+        monitorCameraSize = rowButton(cameraButtons, "Larger view", () -> {
+            boolean big = monitorImage.getLayoutParams().height == dp(200); monitorImage.getLayoutParams().height = big ? dp(380) : dp(200); monitorImage.requestLayout();
+            monitorCameraSize.setText(big ? "Smaller view" : "Larger view");
+        }, false);
+        View cameraGap = new View(this); monitorCamera.addView(cameraGap, new LinearLayout.LayoutParams(-1, dp(12)));
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
-        ring = new ProgressRing(this, TRACK, TEAL, INK, MUTED); heroRow.addView(ring, new LinearLayout.LayoutParams(dp(116), dp(116)));
-        LinearLayout heroText = new LinearLayout(this); heroText.setOrientation(LinearLayout.VERTICAL); heroText.setPadding(dp(16), 0, 0, 0); heroRow.addView(heroText, new LinearLayout.LayoutParams(0, -2, 1));
+        // The file's own preview (from the printer), beside the job, as on the printer's screen.
+        jobThumb = new ImageView(this); jobThumb.setScaleType(ImageView.ScaleType.FIT_CENTER); jobThumb.setContentDescription("Preview of the file being printed");
+        GradientDrawable thumbShape = new GradientDrawable(); thumbShape.setColor(TILE); thumbShape.setCornerRadius(dp(12)); jobThumb.setBackground(thumbShape); jobThumb.setPadding(dp(4), dp(4), dp(4), dp(4));
+        LinearLayout.LayoutParams thumbLayout = new LinearLayout.LayoutParams(dp(88), dp(88)); thumbLayout.rightMargin = dp(14); heroRow.addView(jobThumb, thumbLayout); jobThumb.setVisibility(View.GONE);
+        LinearLayout heroText = new LinearLayout(this); heroText.setOrientation(LinearLayout.VERTICAL); heroRow.addView(heroText, new LinearLayout.LayoutParams(0, -2, 1));
         state = A11y.polite(label(heroText, "Waiting for printer", 20, INK, true));
         job = label(heroText, "", 14, INK, false); job.setMaxLines(2); job.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        percentText = label(heroText, "", 34, INK, true); percentText.setVisibility(View.GONE);
         detail = label(heroText, "", 13, MUTED, false);
+        jobBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); jobBar.setMax(100); jobBar.setProgressTintList(tint(TEAL)); jobBar.setProgressBackgroundTintList(tint(TRACK));
+        jobBar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); // the percentage above says it
+        LinearLayout.LayoutParams barLayout = new LinearLayout.LayoutParams(-1, dp(8)); barLayout.topMargin = dp(12); hero.addView(jobBar, barLayout); jobBar.setVisibility(View.GONE);
+        // Pause / Resume and Stop sit with the job they act on; each still asks first.
+        printRow = row(hero);
+        pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
+        resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume after checking why the printer paused?", Cc2Codec.RESUME), true);
+        stop = rowButton(printRow, "Stop", () -> confirmCommand("Stop the current print? It cannot be resumed.", Cc2Codec.STOP), false); stop.setTextColor(ERROR);
         faults = A11y.assertive(label(hero, "", 14, ERROR, true));
         // Quick actions: they only navigate or open a screen, never send a printer command. render() shows the ones that fit the state.
         // Row 1 while printing: Live toolpath and Camera. Idle and connected: Slice a model and Camera. Row 2: Print again (idle, with history) and Print recordings.
@@ -309,16 +342,15 @@ public final class MainActivity extends Activity {
         LinearLayout controls = card("Controls"); controlsCard = controls;
         controlSource = label(controls, "", 13, MUTED, false);
         controlFix = rowButton(row(controls), "", this::fixControl, true); ((View) controlFix.getParent()).setVisibility(View.GONE);
-        printRow = row(controls);
-        pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
-        resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume after checking why the printer paused?", Cc2Codec.RESUME), true);
-        stop = rowButton(printRow, "Stop", () -> confirmCommand("Stop the current print? It cannot be resumed.", Cc2Codec.STOP), false); stop.setTextColor(ERROR);
         lightRow = row(controls);
         lightOn = rowButton(lightRow, "Light on", () -> light(true), false);
         lightOff = rowButton(lightRow, "Light off", () -> light(false), false);
         refresh = button(controls, "Refresh status", () -> { if (printer == null) return; if (printer.ready()) printer.refresh(); else printer.cloudVisible(true); });
-        LinearLayout canvas = card("CANVAS filament trays"); canvasCard = canvas;
-        trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList);
+        LinearLayout canvas = card(null); canvasCard = canvas;
+        trayDetails = cardHeader(canvas, "CANVAS filament", "Details ›", () -> { traysOpen = !traysOpen; renderTrayDetails(); });
+        // One colour bar per tray, the active one outlined; tapping it opens the full tray list.
+        trayStrip = new LinearLayout(this); trayStrip.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayStrip);
+        trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList); trayList.setVisibility(View.GONE);
         trays = label(canvas, "Connect to see reported trays, materials, colors and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
         LinearLayout tuning = card("Printer controls"); tuningCard = tuning;
@@ -326,9 +358,9 @@ public final class MainActivity extends Activity {
         heater = button(tuning, "Set heater temperatures now…", this::temperatureDialog);
         fan = button(tuning, "Fan setting…", this::fanDialog);
         speed = button(tuning, "Print speed mode…", this::speedDialog);
-        LinearLayout upkeep = card("Maintenance"); upkeepCard = upkeep;
+        LinearLayout upkeep = card(null); upkeepCard = upkeep;
+        maintenanceToggle = cardHeader(upkeep, "Maintenance", "More ›", this::toggleMaintenance);
         upkeepHint = label(upkeep, "", 13, MUTED, false);
-        maintenanceToggle = button(upkeep, "", this::toggleMaintenance);
         LinearLayout collapsible = new LinearLayout(this); collapsible.setOrientation(LinearLayout.VERTICAL); upkeep.addView(collapsible); maintenanceBody = collapsible;
         LinearLayout group = new LinearLayout(this); group.setOrientation(LinearLayout.VERTICAL); collapsible.addView(group); upkeepButtons = group;
         LinearLayout filamentRow = row(group);
@@ -825,8 +857,10 @@ public final class MainActivity extends Activity {
         target.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED);
     }
     private void selectPage(int selected) {
-        page = Math.max(0, Math.min(3, selected));
-        if (page != 2) stopCamera();
+        int before = page; page = Math.max(0, Math.min(3, selected));
+        // Monitor and Camera share one stream: it stops whenever the tab changes, and on any other tab.
+        if (page != before || page != 2 && page != 0) stopCamera();
+        if (page == 0 && before != 0) monitorCameraTried = false;
         if (page == 1) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
         for (int i = 0; i < 4; i++) {
             pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE);
@@ -1000,7 +1034,7 @@ public final class MainActivity extends Activity {
     public void setMaintenanceOpen(boolean open) {
         maintenanceOpen = open;
         maintenanceBody.setVisibility(open && maintenanceToggle.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
-        maintenanceToggle.setText(open ? "Hide maintenance ▴" : "Show maintenance ▾");
+        maintenanceToggle.setText(open ? "Less ▴" : "More ›");
         maintenanceToggle.setContentDescription(open ? "Hide maintenance options" : "Show maintenance options");
         A11y.expandable(maintenanceToggle, open);
     }
@@ -1307,12 +1341,13 @@ public final class MainActivity extends Activity {
             NetworkRoute route = NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
-                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true); }
-                public void error(String text) { stopCamera(); cameraInfo.setText(text); }
-            }); cameraStart.setText("Stop camera");
-        } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
+                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true);
+                    monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE); }
+                public void error(String text) { stopCamera(); cameraInfo.setText(text); monitorCameraInfo.setText(text); monitorCameraInfo.setVisibility(View.VISIBLE); }
+            }); cameraStart.setText("Stop camera"); monitorCameraStart.setText("Stop camera");
+        } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab → Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
     }
-    private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); }
+    private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
     /** On the Files tab, ask for the printer's file list when there is none (or it is out of date): a read, at most once a minute. */
     private long filesAutoAt;
     private void autoLoadFiles() {
@@ -1509,37 +1544,61 @@ public final class MainActivity extends Activity {
             name = printer.cloudName.isEmpty() ? "Cloud printer" : StatusPresentation.clean(printer.cloudName);
             String sn = printer.cloudSerial; model = StatusPresentation.clean(printer.cloudModel.isEmpty() ? "Centauri Carbon 2" : printer.cloudModel) + " · SN …" + (sn.length() > 4 ? sn.substring(sn.length() - 4) : sn);
         }
-        title.setText(name); identity.setText(model);
-        // Hero: state, progress ring, job.
+        // The name doubles as the printer switcher once a printer is saved.
+        boolean canSwitch = profiles.all().length() > 0;
+        title.setText(canSwitch ? name + " ▾" : name); title.setClickable(canSwitch);
+        title.setContentDescription(canSwitch ? name + ", switch printer" : name); identity.setText(model);
+        // Hero: state and job.
         JSONObject machine = snapshot.optJSONObject("machine_status"), print = snapshot.optJSONObject("print_status");
         boolean printing = machine != null && machine.optInt("status", -1) == 2;
         int percent = machine == null ? 0 : Math.max(0, Math.min(100, machine.optInt("progress", 0)));
         String stateText = snapshot.length() == 0 ? (printer == null ? "Starting…" : connecting ? "Connecting…" : cloud ? "Waiting for printer" : "Not connected") : StatusPresentation.state(snapshot);
         if (snapshot.length() > 0 && !live) stateText += " · stale";
         if (!stateText.contentEquals(state.getText())) state.setText(stateText);
-        // The title beside the ring already names the state, so the ring holds only progress (and stays empty while idle).
+        // Job: the file's preview, a large percentage, layer and time left, and a bar; while idle the title stands alone.
         boolean inJobNow = machine != null && machine.optInt("status", -1) == 2;
-        ring.set(inJobNow ? percent : -1, inJobNow ? percent + "%" : "", inJobNow && print != null && print.optInt("total_layer", 0) > 0 ? "layer " + print.optInt("current_layer", 0) + "/" + print.optInt("total_layer", 0) : "");
-        if (!inJobNow) ring.setContentDescription(stateText);
-        // Without a print there is no progress to draw, so the ring gives its space to the title.
-        ring.setVisibility(inJobNow ? View.VISIBLE : View.GONE); ((View) state.getParent()).setPadding(inJobNow ? dp(16) : 0, 0, 0, 0);
+        String printFile = print == null ? "" : print.optString("filename", "");
+        percentText.setText(inJobNow ? percent + "%" : ""); percentText.setContentDescription(percent + " percent complete");
+        percentText.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
+        jobBar.setProgress(percent); jobBar.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
+        // The preview is a read, asked once per file; the printer keeps it under the file's name on its own storage.
+        if (inJobNow && !printFile.isEmpty() && !printFile.equals(jobThumbAsked) && printer.canQuery()) { jobThumbAsked = printFile; printer.thumbnail("local", printFile); }
+        String thumbData = inJobNow && printer != null ? printer.thumbnails.get("local/" + printFile) : null;
+        String thumbKey = thumbData == null ? "" : printFile + "#" + thumbData.length();
+        if (!thumbKey.equals(jobThumbKey)) { jobThumbKey = thumbKey; Bitmap picture = thumbData == null ? null : decodeThumbnail(thumbData); jobThumb.setImageBitmap(picture); jobThumb.setTag(picture == null ? null : "shown"); }
+        jobThumb.setVisibility(inJobNow && jobThumb.getTag() != null ? View.VISIBLE : View.GONE);
         if (printing && print != null) {
             long remaining = print.optLong("remaining_time_sec", -1);
+            int layers = print.optInt("total_layer", 0);
             job.setText(StatusPresentation.clean(print.optString("filename", "Current print")).replaceFirst("(?i)\\.gcode$", ""));
-            detail.setText(remaining < 0 ? "Time remaining unavailable" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left · done ≈ "
-                + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault()) + (live ? "" : " · stale"));
+            String layerText = layers > 0 ? "Layer " + print.optInt("current_layer", 0) + "/" + layers : "";
+            String timeText = remaining < 0 ? "Time remaining unavailable" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left · done ≈ "
+                + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault());
+            detail.setText(StatusPresentation.joinParts(layerText, timeText) + (live ? "" : " · stale"));
         } else {
             job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in with Elegoo to watch through the cloud.") : "No active print.");
             detail.setText("");
         }
+        // Camera on top while printing. It starts by itself only after the user started it here once, and only while this tab is on screen.
+        boolean cloudCameraOk = !ready && printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1;
+        boolean showCamera = inJobNow && (ready || cloudCameraOk);
+        monitorCamera.setVisibility(showCamera ? View.VISIBLE : View.GONE);
+        if (page == 0 && cameraPlayer != null && !showCamera) stopCamera();
+        if (page == 0 && active && showCamera && ready && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
+        monitorImage.setVisibility(showCamera && ready && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
+        if (!ready) monitorCameraStart.setText("Watch through the Elegoo cloud");
+        else if (cameraPlayer == null && monitorCameraStart.getText().toString().startsWith("Watch through")) monitorCameraStart.setText("Watch camera");
+        monitorCameraSize.setVisibility(ready && monitorImage.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+        if (monitorCameraInfo.getText().length() == 0) monitorCameraInfo.setVisibility(View.GONE);
+        spaceActions((LinearLayout) monitorCameraStart.getParent());
         graphs.setText("Print recordings");
         // Quick actions by state. Printing: Live toolpath and Camera. Connected and idle: Slice a model, Camera and, with history, Print again.
         // Not connected: only Print recordings, as before (Get started and the fix guidance cover the rest). None of these sends a printer command.
         boolean idleOnline = live && !inJobNow, hasHistory = printer != null && !FeatureData.historyRows(printer.history).isEmpty();
         liveToolpath.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
         quickSlice.setVisibility(idleOnline ? View.VISIBLE : View.GONE);
-        quickCamera.setVisibility(inJobNow || idleOnline ? View.VISIBLE : View.GONE);
-        quickRow.setVisibility(inJobNow || idleOnline ? View.VISIBLE : View.GONE);
+        quickCamera.setVisibility(inJobNow && !showCamera || idleOnline ? View.VISIBLE : View.GONE); // while printing the camera is already on top
+        quickRow.setVisibility(liveToolpath.getVisibility() == View.VISIBLE || quickSlice.getVisibility() == View.VISIBLE || quickCamera.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         quickAgain.setVisibility(idleOnline && hasHistory ? View.VISIBLE : View.GONE);
         spaceActions(quickRow); spaceActions(recordingsRow);
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
@@ -1575,7 +1634,10 @@ public final class MainActivity extends Activity {
     private void renderTrays(JSONObject canvas) {
         String key = canvas == null ? null : canvas.toString();
         if (java.util.Objects.equals(key, renderedCanvas)) return;
-        renderedCanvas = key; trayList.removeAllViews();
+        renderedCanvas = key; trayList.removeAllViews(); trayStrip.removeAllViews();
+        try { buildTrays(canvas); } finally { renderTrayDetails(); }
+    }
+    private void buildTrays(JSONObject canvas) {
         JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
         if (units == null) return;
         for (int u = 0; u < Math.min(units.length(), 8); u++) {
@@ -1585,6 +1647,9 @@ public final class MainActivity extends Activity {
             Object connected = unit.opt("connected");
             boolean online = connected == null || Boolean.TRUE.equals(connected) || unit.optInt("connected", 0) == 1;
             if (units.length() > 1 || !online) label(trayList, "CANVAS " + id + (online ? "" : " · Not connected"), 12, MUTED, true);
+            if (units.length() > 1 || !online) label(trayStrip, "CANVAS " + id + (online ? "" : " · Not connected"), 12, MUTED, true);
+            LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams stripLayout = new LinearLayout.LayoutParams(-1, -2); stripLayout.topMargin = dp(8); trayStrip.addView(strip, stripLayout);
             for (int t = 0; t < Math.min(list.length(), 16); t++) {
                 JSONObject tray = list.optJSONObject(t); if (tray == null) continue;
                 int trayId = tray.optInt("tray_id", -1);
@@ -1606,10 +1671,30 @@ public final class MainActivity extends Activity {
                 if (active) { TextView chip = new TextView(this); chip.setTextSize(12); chip.setTypeface(Typeface.DEFAULT, Typeface.BOLD); chip.setPadding(dp(10), dp(4), dp(10), dp(4)); chip(chip, "Active", TEAL); row.addView(chip); }
                 row.setContentDescription("Tray " + trayId + ", " + (type.isEmpty() ? "empty" : type + " " + name) + (colour == null ? "" : ", " + colourWords(colour)) + (active ? ", active" : ""));
                 trayList.addView(row);
+                strip.addView(trayCell(trayId, type, colour, active, row.getContentDescription()), stripCell(strip.getChildCount()));
             }
         }
     }
+    private LinearLayout.LayoutParams stripCell(int index) { LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); if (index > 0) layout.leftMargin = dp(8); return layout; }
+    /** One tray in the strip: a colour bar (outlined when active, hollow when empty), its number and material. Tapping it opens the details. */
+    private View trayCell(int trayId, String type, String colour, boolean active, CharSequence description) {
+        LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setGravity(Gravity.CENTER_HORIZONTAL); cell.setPadding(0, dp(2), 0, dp(2));
+        View bar = new View(this); GradientDrawable fill = new GradientDrawable(); fill.setCornerRadius(dp(8));
+        fill.setColor(colour == null ? Color.TRANSPARENT : Color.parseColor(colour));
+        fill.setStroke(active ? dp(3) : dp(1), active ? TEAL : (MUTED & 0x00ffffff) | 0x80000000); bar.setBackground(fill);
+        cell.addView(bar, new LinearLayout.LayoutParams(-1, dp(36)));
+        TextView name = new TextView(this); name.setText(trayId + " · " + (type.isEmpty() ? "Empty" : type)); name.setTextSize(12); name.setGravity(Gravity.CENTER);
+        name.setTextColor(active ? INK : MUTED); name.setTypeface(Typeface.DEFAULT, active ? Typeface.BOLD : Typeface.NORMAL); name.setMaxLines(1); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        LinearLayout.LayoutParams nameLayout = new LinearLayout.LayoutParams(-1, -2); nameLayout.topMargin = dp(4); cell.addView(name, nameLayout);
+        cell.setMinimumHeight(dp(48)); cell.setContentDescription(description); A11y.clickLabel(cell, "Show or hide tray details");
+        cell.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
+        cell.setOnClickListener(v -> { traysOpen = !traysOpen; renderTrayDetails(); });
+        return cell;
+    }
     private void setTile(TextView view, String text) {
+        // The tile speaks as one item: "Nozzle 219 degrees, heating to 220 degrees".
+        View tile = (View) view.getParent(); String caption = ((TextView) ((ViewGroup) tile).getChildAt(0)).getText().toString();
+        tile.setContentDescription(caption + " " + (text.equals("—") ? "not reported" : text.replace("\n", ", ").replace("↑ ", "").replace("↓ ", "").replace("°", " degrees")));
         int split = text.indexOf('\n');
         if (split < 0) { view.setText(text); return; }
         android.text.SpannableString styled = new android.text.SpannableString(text);
@@ -1617,11 +1702,15 @@ public final class MainActivity extends Activity {
         styled.setSpan(new android.text.style.ForegroundColorSpan(MUTED), split, text.length(), 0);
         view.setText(styled);
     }
+    /** "219°" over "↑ heating to 220°", "↓ cooling to 60°", "at 220°" or "off". */
     private String temperature(String key) {
         JSONObject value = snapshot.optJSONObject(key); if (value == null || !value.has("temperature")) return "—";
-        String text = String.format(Locale.ROOT, "%.0f°", value.optDouble("temperature", 0));
-        double target = value.optDouble("target", 0);
-        return text + (value.has("target") ? (target > 0 ? String.format(Locale.ROOT, "\n→ %.0f°", target) : "\noff") : "");
+        double now = value.optDouble("temperature", 0), target = value.optDouble("target", 0);
+        String text = String.format(Locale.ROOT, "%.0f°", now);
+        if (!value.has("target")) return text;
+        if (target <= 0) return text + "\noff";
+        String goal = String.format(Locale.ROOT, "%.0f°", target);
+        return text + (now < target - 3 ? "\n↑ heating to " + goal : now > target + 3 ? "\n↓ cooling to " + goal : "\nat " + goal);
     }
     private void message(String text) { if (printer != null) printer.feedback = text; else pendingFeedback = text; showFeedback(text); }
     private void showFeedback(String text) {
@@ -1668,7 +1757,7 @@ public final class MainActivity extends Activity {
         printer.exportPhoneCopy(pendingExportUri, pendingExportHash); pendingExportUri = null; pendingExportHash = "";
     }
     @Override protected void onStart() {
-        super.onStart(); active = true;
+        super.onStart(); active = true; monitorCameraTried = false;
         // Background cloud watching runs as a started foreground service; start it while the app is visible.
         if (settings.getBoolean("cloudBackground", false) && cloudBackground != null && cloudBackground.isEnabled()) try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { }
         if (printer != null) { printer.observe(this::render); printer.cloudVisible(true); } main.post(clock);
@@ -1715,6 +1804,63 @@ public final class MainActivity extends Activity {
             .setPositiveButton("Share…", (d, w) -> startActivity(Intent.createChooser(send, "Share diagnostics"))).show();
     }
     private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { return "dev"; } }
+    /** A card heading with a "More ›" style link on the right that opens the card's details. Returns the link. */
+    private Button cardHeader(LinearLayout card, String heading, String link, Runnable action) {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); card.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        TextView name = new TextView(this); name.setText(heading); name.setTextSize(17); name.setTextColor(INK); name.setTypeface(Typeface.DEFAULT, Typeface.BOLD); A11y.heading(name);
+        row.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        Button button = new A11y.DimButton(this); button.setText(link); button.setAllCaps(false); button.setTextSize(14); button.setTypeface(Typeface.DEFAULT, Typeface.BOLD); button.setTextColor(tint(TEAL));
+        button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48)); button.setMinWidth(dp(48)); button.setMinimumWidth(dp(48)); button.setPadding(dp(12), 0, dp(4), 0);
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
+        button.setOnClickListener(view -> action.run()); row.addView(button, new LinearLayout.LayoutParams(-2, -2));
+        return button;
+    }
+    /** The Monitor camera button: the local stream here (remembered for next time), or the cloud camera screen when only the cloud reaches the printer. */
+    private void monitorCameraTap() {
+        if (printer != null && printer.ready()) {
+            boolean on = cameraPlayer == null;
+            settings.edit().putBoolean("monitorCamera", on).apply(); monitorCameraTried = true;
+            if (on) toggleCamera(); else stopCamera();
+            render();
+        } else cloudCamera.performClick();
+    }
+    /** Header printer name: pick another saved printer. Connecting is a read; nothing is sent to either printer, and a running print carries on. */
+    private void switchPrinter() {
+        JSONArray rows = profiles.all();
+        boolean connected = printer != null && printer.connecting();
+        String current = connected ? printer.host() : host.getText().toString().trim();
+        List<String> names = new ArrayList<>(); List<JSONObject> picks = new ArrayList<>();
+        for (int i = 0; i < rows.length(); i++) {
+            JSONObject row = rows.optJSONObject(i); if (row == null || row.optString("host").isEmpty()) continue;
+            String name = StatusPresentation.clean(row.optString("name")).trim(); if (name.isEmpty()) name = "Printer at " + row.optString("host");
+            names.add(name + (connected && row.optString("host").equals(current) ? " · connected" : "")); picks.add(row);
+        }
+        names.add("Connection settings…");
+        new AlertDialog.Builder(this).setTitle(picks.isEmpty() ? "No saved printers yet" : "Switch printer").setItems(names.toArray(new String[0]), (dialog, which) -> {
+            if (which >= picks.size()) { setSettingsMode(false); selectPage(3); return; }
+            JSONObject row = picks.get(which); String address = row.optString("host");
+            String name = StatusPresentation.clean(row.optString("name")).trim(); String shown = name.isEmpty() ? address : name;
+            if (connected && address.equals(current)) return;
+            Runnable go = () -> {
+                if (printer != null && printer.connecting()) printer.disconnect();
+                selectPrinter(address, row.optString("serial"), row.optString("name"));
+                routePicker.setSelection(row.optBoolean("remote_vpn", false) ? 1 : 0); authPicker.setSelection(row.optBoolean("pin_probe", false) ? 1 : 0);
+                if (!row.optBoolean("pin_probe", false) && !access.getText().toString().isEmpty()) toggleConnection();
+                else { setSettingsMode(false); selectPage(3); message("Enter the " + (row.optBoolean("pin_probe", false) ? "pairing PIN" : "access code") + " for " + shown + ", then Connect."); }
+            };
+            if (connected) new AlertDialog.Builder(this).setTitle("Switch to " + shown + "?").setMessage("This disconnects from the current printer. Nothing is sent to either printer; a running print carries on.")
+                .setNegativeButton("Cancel", null).setPositiveButton("Switch", (d, w) -> go.run()).show();
+            else go.run();
+        }).setNegativeButton("Cancel", null).show();
+    }
+    /** The tray list under the colour strip opens and closes with Details. */
+    private void renderTrayDetails() {
+        boolean any = trayList.getChildCount() > 0;
+        trayList.setVisibility(traysOpen && any ? View.VISIBLE : View.GONE);
+        trayDetails.setVisibility(any ? View.VISIBLE : View.GONE);
+        trayDetails.setText(traysOpen ? "Less ▴" : "Details ›");
+        trayDetails.setContentDescription(traysOpen ? "Hide tray details" : "Show tray details"); A11y.expandable(trayDetails, traysOpen);
+    }
     private LinearLayout card(String title) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(14), dp(16), dp(14));
         GradientDrawable background = new GradientDrawable(); background.setColor(SURFACE); background.setCornerRadius(dp(20)); card.setBackground(background);
@@ -1754,6 +1900,7 @@ public final class MainActivity extends Activity {
         GradientDrawable background = new GradientDrawable(); background.setColor(SURFACE); background.setCornerRadius(dp(16)); tile.setBackground(background);
         TextView name = new TextView(this); name.setText(caption); name.setTextSize(12); name.setTextColor(MUTED); tile.addView(name);
         TextView value = new TextView(this); value.setText("—"); value.setTextSize(20); value.setTextColor(INK); value.setTypeface(Typeface.DEFAULT, Typeface.BOLD); tile.addView(value);
+        tile.setFocusable(true); name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); value.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         boolean stacked = row.getOrientation() == LinearLayout.VERTICAL; // at large font sizes the tiles stack instead of breaking words
         LinearLayout.LayoutParams layout = stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
         if (stacked) layout.topMargin = gap == 0 ? 0 : dp(8); else layout.leftMargin = gap;
