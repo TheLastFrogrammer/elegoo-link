@@ -1159,12 +1159,14 @@ public final class MainActivity extends Activity {
         subheading(body, "3 · Filament");
         label(body, "Filaments used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 filament", "2 filaments", "3 filaments", "4 filaments", "5 filaments", "6 filaments", "7 filaments", "8 filaments"});
-        // Loaded trays of connected CANVAS units (what print start accepts), each with its material and colour in words.
-        List<TrayPlan.Tray> trays = printer.canvasFresh() ? TrayPlan.trays(printer.canvas, true) : new ArrayList<>();
+        // Loaded trays of connected CANVAS units (what print start accepts), each with its material and colour in words. The last
+        // report is offered straight away; a fresh one is asked for now (a read) and replaces it, and starting with chosen trays waits for it.
+        List<TrayPlan.Tray> trays = new ArrayList<>(printer.canvas != null ? TrayPlan.trays(printer.canvas, true) : new ArrayList<>());
         List<String> choices = new ArrayList<>(), dots = new ArrayList<>(); choices.add("Printer / G-code default"); dots.add(null);
         for (TrayPlan.Tray tray : trays) {
             choices.add(tray.material() + "\n" + tray.where()); dots.add(tray.colour);
         }
+        if (!printer.canvasFresh()) printer.refresh();
         // What the file was sliced for, per tool: a plan saved when slicing on this phone, the printer's file details, or the
         // slicer notes of the same file inspected on this phone.
         TrayPlan plan = TrayPlan.parse(getSharedPreferences(SliceActivity.TRAY_PLANS, MODE_PRIVATE).getString(GcodeLibrary.safeName(name), null));
@@ -1189,7 +1191,7 @@ public final class MainActivity extends Activity {
         Runnable judge = () -> {
             int count = toolCount.getSelectedItemPosition() + 1;
             for (int t = 0; t < 8; t++) {
-                boolean shown = t < count && choices.size() > 1;
+                boolean shown = t < count;
                 rows[t].setVisibility(shown ? View.VISIBLE : View.GONE);
                 if (!shown) continue;
                 int selected = maps[t].getSelectedItemPosition();
@@ -1237,17 +1239,43 @@ public final class MainActivity extends Activity {
             else if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); source.setText("Filament count taken from the file's own T commands (" + guess + "). Check it against your slice."); }
             if (known > 0 && trays.size() > 0) main.post(suggestTrays);
         }
-        if (choices.size() > 1) {
-            LinearLayout tools = row(body);
-            rowButton(tools, "Suggest trays", suggestTrays, false);
-            rowButton(tools, "Clear trays", () -> { for (Spinner map : maps) map.setSelection(0); source.setText(""); judge.run(); }, false);
-        }
-        label(body, choices.size() > 1 ? "Leave every filament at Printer / G-code default, or choose a loaded tray for every filament." : printer.canvasFresh()
-            ? "No loaded CANVAS trays reported: the printer's own G-code mapping is used." : "Tray status is not fresh: refresh the printer to choose trays. Until then the printer's own mapping is used.", 13, MUTED, false);
+        LinearLayout tools = row(body);
+        rowButton(tools, "Suggest trays", suggestTrays, false);
+        rowButton(tools, "Clear trays", () -> { for (Spinner map : maps) map.setSelection(0); source.setText(""); judge.run(); }, false);
+        rowButton(row(body), "Refresh trays", () -> { if (printer != null) printer.refresh(); }, false);
+        TextView trayState = A11y.polite(label(body, "", 13, MUTED, false));
+        // While the dialog is open: say how current the trays are, and take a fresh report in, keeping each choice on the same tray.
+        Runnable[] watch = new Runnable[1]; long opened = System.currentTimeMillis(); boolean[] fresh = {printer.canvasFresh()};
+        watch[0] = () -> {
+            if (printer == null || isDestroyed()) return;
+            boolean nowFresh = printer.canvasFresh();
+            if (nowFresh && !fresh[0]) {
+                TrayPlan.Tray[] picked = new TrayPlan.Tray[8];
+                for (int t = 0; t < 8; t++) { int at = maps[t].getSelectedItemPosition(); picked[t] = at > 0 && at - 1 < trays.size() ? trays.get(at - 1) : null; }
+                trays.clear(); trays.addAll(TrayPlan.trays(printer.canvas, true));
+                choices.subList(1, choices.size()).clear(); dots.subList(1, dots.size()).clear();
+                for (TrayPlan.Tray tray : trays) { choices.add(tray.material() + "\n" + tray.where()); dots.add(tray.colour); }
+                for (int t = 0; t < 8; t++) {
+                    ((ArrayAdapter<?>) maps[t].getAdapter()).notifyDataSetChanged();
+                    int again = 0; if (picked[t] != null) for (int i = 0; i < trays.size(); i++) if (trays.get(i).same(picked[t].canvasId, picked[t].trayId)) again = i + 1;
+                    maps[t].setSelection(again);
+                }
+                judge.run();
+            }
+            fresh[0] = nowFresh;
+            boolean waited = System.currentTimeMillis() - opened > 20_000;
+            trayState.setText(trays.isEmpty() && nowFresh ? "No loaded CANVAS trays reported: the printer's own G-code mapping is used."
+                : nowFresh ? "Trays are up to date. Leave every filament at Printer / G-code default, or choose a loaded tray for every filament."
+                : waited ? "The printer has not reported its trays yet. You can choose from the last report, but starting with chosen trays needs a fresh one: tap Refresh trays."
+                : "Checking the trays… You can choose from the last report meanwhile.");
+            trayState.setTextColor(nowFresh ? MUTED : AMBER);
+            main.postDelayed(watch[0], 1000);
+        };
         label(body, "A timelapse is recorded on the printer; download it later from the Files tab (local connection).", 12, MUTED, false);
         main.post(judge);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog setup = new AlertDialog.Builder(this).setTitle("Print setup").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Next: review…", null).create();
+        main.post(watch[0]); setup.setOnDismissListener(d -> main.removeCallbacks(watch[0]));
         setup.setOnShowListener(d -> setup.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             JSONArray mapping = new JSONArray(); int count = toolCount.getSelectedItemPosition() + 1, explicit = 0, wrong = 0, check = 0;
             StringBuilder lines = new StringBuilder();
@@ -1257,6 +1285,7 @@ public final class MainActivity extends Activity {
                     if (selected > 0) { TrayPlan.Tray tray = trays.get(selected - 1); mapping.put(new JSONObject().put("t", t).put("canvas_id", tray.canvasId).put("tray_id", tray.trayId)); explicit++; }
                 }
                 if (explicit != 0 && explicit != count) { new AlertDialog.Builder(this).setTitle("Choose every filament").setMessage("Choose a tray for every filament, or set them all to Printer / G-code default.").setPositiveButton("OK", null).show(); return; }
+                if (explicit > 0 && !printer.canvasFresh()) { printer.refresh(); new AlertDialog.Builder(this).setTitle("Trays not up to date").setMessage("The trays may have changed since the printer last reported them. Asked for a fresh report; try again once the dialog says the trays are up to date.").setPositiveButton("OK", null).show(); return; }
                 for (int t = 0; t < count && explicit > 0; t++) {
                     int selected = maps[t].getSelectedItemPosition(); TrayPlan.Tray tray = trays.get(selected - 1);
                     List<Integer> shared = new ArrayList<>();
@@ -1275,7 +1304,7 @@ public final class MainActivity extends Activity {
                 + (wrong > 0 ? "\n\n" + wrong + " filament(s) are a different material from what the file was sliced for. Printing with the wrong material can fail or clog the nozzle." : "")
                 + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
             int wrongCount = wrong, checkCount = check;
-            new AlertDialog.Builder(this).setTitle(wrong > 0 ? "Materials don't match" : "Start this print?").setMessage(text).setNegativeButton(wrong > 0 ? "Go back" : "Cancel", (b2, w2) -> { if (wrongCount > 0) setup.show(); })
+            new AlertDialog.Builder(this).setTitle(wrong > 0 ? "Materials don't match" : "Start this print?").setMessage(text).setNegativeButton(wrong > 0 ? "Go back" : "Cancel", (b2, w2) -> { if (wrongCount > 0) { setup.show(); main.post(watch[0]); } })
                 .setPositiveButton(wrong > 0 ? "Start anyway" : "Start print", (confirm, which) -> {
                     if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
                         + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
