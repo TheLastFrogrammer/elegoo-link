@@ -119,7 +119,7 @@ public final class SliceActivity extends Activity {
         final Map<String, String> edits = new LinkedHashMap<>(); // this slot's filament settings changes
     }
     private EditText infill;
-    private Button chooseModels, findModels, slice, cancel, useInFiles, saveCopy, restoreLast;
+    private Button chooseModels, removeModels, findModels, slice, cancel, useInFiles, saveCopy, restoreLast;
     private boolean choosePrimary = true;     // filled only while nothing is loaded: Slice is the main action after that
     private ProgressBar progress;
     private ImageView preview;
@@ -389,6 +389,7 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
         }, true);
+        removeModels = button(modelCard, "Remove models…", this::removeModelsDialog, false); removeModels.setVisibility(View.GONE);
         findModels = button(modelCard, "Find models online…", () -> startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS), false);
         restoreLast = button(modelCard, "Restore your last models and settings", this::restoreLastSelection, false); restoreLast.setVisibility(View.GONE);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
@@ -951,6 +952,7 @@ public final class SliceActivity extends Activity {
         // Each pick gets its own folders, so a pick that fails leaves the models and previews already chosen untouched.
         String stamp = Long.toString(System.nanoTime());
         File inputDir = new File(inputRoot, stamp), meshDir = new File(meshRoot, stamp);
+        List<File> earlier = new ArrayList<>(models); boolean customLayout = placements != null;
         worker.execute(() -> {
             List<File> imported = new ArrayList<>(); String problem = null;
             inputDir.mkdirs(); meshDir.mkdirs();
@@ -988,8 +990,10 @@ public final class SliceActivity extends Activity {
             // What the files hold: objects, 3MF plates and project settings, and simplified meshes for the plate view.
             org.json.JSONObject read = null;
             boolean unreadable = false;
+            // New picks are added after the models already chosen (still in their own folders), and all are read together.
+            List<File> all = new ArrayList<>(); for (File kept : earlier) if (kept.isFile()) all.add(kept); all.addAll(imported);
             if (!imported.isEmpty()) {
-                try { read = engine(getApplicationContext()).inspect(imported, meshDir, PREVIEW_TRIANGLES); }
+                try { read = engine(getApplicationContext()).inspect(all, meshDir, PREVIEW_TRIANGLES); }
                 catch (IOException failure) {
                     unreadable = true;
                     problem = unreadableMessage(imported, failure.getMessage());
@@ -998,7 +1002,7 @@ public final class SliceActivity extends Activity {
             clearRunning();
             boolean keepPrevious = unreadable || imported.isEmpty();
             if (keepPrevious) { deleteTree(inputDir); deleteTree(meshDir); }
-            else { deleteOthers(inputRoot, inputDir); deleteOthers(meshRoot, meshDir); }
+            else { keepOnly(inputRoot, all); deleteOthers(meshRoot, meshDir); }
             String shownProblem = problem;
             org.json.JSONObject shownRead = read;
             main.post(() -> {
@@ -1009,9 +1013,13 @@ public final class SliceActivity extends Activity {
                     status.setText((shownProblem == null ? "No model was added." : shownProblem) + (models.isEmpty() ? "" : " Your earlier models are still selected.")); status.setTextColor(error); updateButtons();
                     return;
                 }
-                inspected = shownRead; plate = 0; placements = null; projectSettings = true; objectSettings.clear(); showObjectSettings();
-                models.clear(); modelSlots.clear(); models.addAll(imported); showModels(); showProject(); showLayout();
-                status.setText(shownProblem != null ? shownProblem : "Ready."); status.setTextColor(shownProblem != null ? error : ink);
+                // Earlier models keep their place, filament and per-object settings; a hand-made layout starts again so the new ones are placed too.
+                boolean added = !models.isEmpty();
+                if (!added) { plate = 0; projectSettings = true; objectSettings.clear(); }
+                inspected = shownRead; placements = null; showObjectSettings();
+                models.clear(); models.addAll(all); showModels(); showProject(); showLayout();
+                String done = added ? "Added " + imported.size() + " model file" + (imported.size() == 1 ? "" : "s") + "; " + models.size() + " in all." + (customLayout ? " The layout is arranged automatically again; edit it to place the new ones." : "") : "Ready.";
+                status.setText(shownProblem != null ? shownProblem : done); status.setTextColor(shownProblem != null ? error : ink);
                 resultCard.setVisibility(View.GONE); updateButtons();
             });
         });
@@ -1027,6 +1035,41 @@ public final class SliceActivity extends Activity {
         return files.get(0).getName() + " could not be read: " + reason;
     }
 
+    /** Ticks the models to take off the list; the rest are read again, and per-object settings and the layout start over. */
+    private void removeModelsDialog() {
+        if (models.isEmpty() || busy) return;
+        String[] names = new String[models.size()]; boolean[] chosen = new boolean[models.size()];
+        for (int i = 0; i < names.length; i++) names[i] = models.get(i).getName() + " · " + size(models.get(i).length());
+        new AlertDialog.Builder(this).setTitle("Remove which models?").setMultiChoiceItems(names, chosen, (d, which, on) -> chosen[which] = on)
+            .setNegativeButton("Cancel", null).setPositiveButton("Remove", (d, w) -> {
+                List<File> keep = new ArrayList<>(); List<Integer> keepSlots = new ArrayList<>();
+                for (int i = 0; i < chosen.length; i++) if (!chosen[i]) { keep.add(models.get(i)); if (i < modelSlots.size()) keepSlots.add(modelSlots.get(i)); }
+                if (keep.size() == models.size()) return;
+                placements = null; objectSettings.clear(); showObjectSettings();
+                if (keep.isEmpty()) { models.clear(); modelSlots.clear(); inspected = null; plate = 0; showModels(); showProject(); showLayout(); status.setText(""); updateButtons(); return; }
+                busy = true; status.setText("Reading the remaining models…"); status.setTextColor(ink); updateButtons();
+                File meshRoot = new File(getCacheDir(), "slice-meshes"), meshDir = new File(meshRoot, Long.toString(System.nanoTime()));
+                worker.execute(() -> {
+                    org.json.JSONObject read = null; String problem = null;
+                    meshDir.mkdirs();
+                    try { read = engine(getApplicationContext()).inspect(keep, meshDir, PREVIEW_TRIANGLES); } catch (IOException failure) { problem = failure.getMessage(); }
+                    if (read != null) { deleteOthers(meshRoot, meshDir); keepOnly(new File(getCacheDir(), "slice-input"), keep); } else deleteTree(meshDir);
+                    org.json.JSONObject shownRead = read; String why = problem;
+                    main.post(() -> {
+                        if (isDestroyed()) return;
+                        busy = slicing;
+                        if (shownRead == null) { status.setText("The remaining models could not be read again: " + why); status.setTextColor(error); updateButtons(); return; }
+                        inspected = shownRead; plate = 0; models.clear(); models.addAll(keep); modelSlots.clear(); modelSlots.addAll(keepSlots);
+                        showModels(); showProject(); showLayout(); status.setText("Removed. " + models.size() + " model file" + (models.size() == 1 ? "" : "s") + " left."); status.setTextColor(ink); updateButtons();
+                    });
+                });
+            }).show();
+    }
+    /** Deletes the pick folders under `root` that hold none of `files`. */
+    private static void keepOnly(File root, List<File> files) {
+        File[] children = root.listFiles(); if (children == null) return;
+        for (File child : children) { boolean used = false; for (File file : files) used |= child.equals(file.getParentFile()); if (!used) deleteTree(child); }
+    }
     private void showModels() {
         modelAssign.removeAllViews();
         while (modelSlots.size() > models.size()) modelSlots.remove(modelSlots.size() - 1);
@@ -1467,7 +1510,8 @@ public final class SliceActivity extends Activity {
         sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
         restoreLast.setVisibility(!busy && models.isEmpty() && calibration == null && hasSavedSelection ? View.VISIBLE : View.GONE);
         keepAwake(SliceActivity.slicing);
-        chooseModels.setEnabled(!busy); if (findModels != null) findModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Change model files…");
+        chooseModels.setEnabled(!busy); if (findModels != null) findModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Add more models…");
+        removeModels.setVisibility(models.isEmpty() ? View.GONE : View.VISIBLE); removeModels.setEnabled(!busy);
         boolean primary = models.isEmpty() && calibration == null;
         if (primary != choosePrimary) { choosePrimary = primary; restyle(chooseModels, primary); }
         printerSpinner.setEnabled(!busy); processSpinner.setEnabled(!busy);

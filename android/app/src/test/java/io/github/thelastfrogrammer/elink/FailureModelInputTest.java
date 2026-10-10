@@ -81,8 +81,7 @@ public class FailureModelInputTest {
     }
 
     /**
-     * Choosing a new model replaces the selection: importModels() clears `models` and per-object settings even when the new file
-     * cannot be read, so one bad pick throws away a good selection (and with it the per-object settings and layout).
+     * A pick that cannot be read must not touch the models already chosen: they stay selected and their copies stay on disk.
      */
     @Test public void aRejectedModelPickKeepsThePreviousSelection() throws Exception {
         SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();

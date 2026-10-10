@@ -708,6 +708,27 @@ public class SlicerIntegrationTest {
         assertEquals("PLA Matte · red · CANVAS 0 tray 0", adapter.getItem(1)); assertEquals("PLA · white · CANVAS 0 tray 1", adapter.getItem(2));
     }
 
+    /** Each pick adds to the models already chosen (the same file twice gives two models); Remove models… takes ticked ones off. */
+    @Test public void picksAddToTheModelsAndCanBeRemoved() throws Exception {
+        SliceActivity activity = Robolectric.buildActivity(SliceActivity.class).setup().get();
+        waitFor(() -> spinnerFilled(activity, "processSpinner") && firstSlotFilled(activity));
+        File first = box(20, 20, 10), second = box(30, 15, 8);
+        importFiles(activity, first);
+        @SuppressWarnings("unchecked") List<File> models = (List<File>) field(activity, "models");
+        importFiles(activity, second, first);
+        waitFor(() -> models.size() == 3 && ((org.json.JSONObject) field(activity, "inspected")).getJSONArray("files").length() == 3);
+        for (File model : models) assertTrue("earlier picks keep their copies: " + model, model.isFile());
+        assertEquals("Add more models…", buttonText(activity, "chooseModels"));
+        File removed = models.get(0), kept = models.get(1);
+        java.lang.reflect.Method remove = SliceActivity.class.getDeclaredMethod("removeModelsDialog"); remove.setAccessible(true); remove.invoke(activity);
+        android.app.AlertDialog dialog = (android.app.AlertDialog) org.robolectric.shadows.ShadowAlertDialog.getLatestDialog();
+        android.widget.ListView list = dialog.getListView(); list.performItemClick(list.getAdapter().getView(0, null, list), 0, 0);
+        dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).performClick();
+        waitFor(() -> models.size() == 2 && !(Boolean) field(activity, "busy"));
+        assertFalse(models.contains(removed)); assertTrue(models.contains(kept));
+        assertEquals(2, ((org.json.JSONObject) field(activity, "inspected")).getJSONArray("files").length());
+    }
+
     /** Imports files as the Slice screen's picker does: the real import copies them and inspects them on the worker. */
     private static void importFiles(Object activity, File... files) throws Exception {
         List<android.net.Uri> uris = new ArrayList<>(); for (File file : files) uris.add(android.net.Uri.fromFile(file));
