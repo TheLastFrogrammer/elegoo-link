@@ -209,3 +209,6 @@ The app no longer carries Firefox's engine (it is about 17 MB again). Instead:
    movement" to compare.
 2. Same dialog → tick "Printhead mask". From the camera, the toolpath behind the real printhead should be hidden by it; in
    the 3D view a faint box rides on the nozzle. Tell us if it hides too much or too little (its size is an estimate).
+3. (v0.24.2) More… → Layers, transparency and nozzle dot… → **Printhead size…**: the mask shows tinted over the camera
+   picture; size it to cover the real printhead (easiest between prints, with the head parked). **Defaults** resets it.
+4. **Delay to match the camera**: if the real head in the picture trails the drawing, raise it until they move together.

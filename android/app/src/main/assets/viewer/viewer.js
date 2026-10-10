@@ -166,7 +166,8 @@
   // ---------------------------------------------------------------- state
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
-    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false };
+    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false,
+    headSize: { w: 70, d: 80, h: 80, block: 24, offset: 0 }, headShow: false };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
     camera: [0.16, 0.22, 0.25, 1], cone: [0.16, 0.22, 0.25, 0.35], screen: [0.1, 0.12, 0.13, 0.85], align: [1, 0.8, 0.2, 0.9] };
@@ -495,7 +496,12 @@
     if (view.ghostEnd > view.end) { gl.depthMask(false); drawBeads(view.end, view.ghostEnd, true, viewProj, viewMatrix); gl.depthMask(true); }
     drawPrinterCamera(viewProj);
     // Outside the camera view the stand-in head shows faintly, so it is clear what hides the lines.
-    if (view.head && view.nozzle && !printerCam.looking) { gl.depthMask(false); drawHead(viewProj, [theme.ghost[0], theme.ghost[1], theme.ghost[2], 0.18]); gl.depthMask(true); }
+    if (view.head && view.nozzle && (view.headShow || !printerCam.looking)) {
+      // While it is being sized, tinted over the camera picture so it can be matched to the real head.
+      gl.depthMask(false);
+      drawHead(viewProj, view.headShow ? [theme.nozzle[0], theme.nozzle[1], theme.nozzle[2], 0.35] : [theme.ghost[0], theme.ghost[1], theme.ghost[2], 0.18]);
+      gl.depthMask(true);
+    }
     if (view.nozzle) {
       gl.disable(gl.DEPTH_TEST);
       const a = Math.max(0.1, Math.min(1, view.nozzleAlpha)), size = Math.max(4, Math.min(48, view.nozzleSize));
@@ -663,7 +669,12 @@
   }
   // A low-poly stand-in for the CC2's printhead, in mm from the nozzle tip: the heater block and nozzle, then the body with
   // its fan duct. Close enough to hide what the real head hides; not a measured model.
-  const HEAD = [[-9, 9, -9, 9, 1.2, 14], [-31, 31, -33, 35, 14, 64]];
+  // Sized by the user against the camera picture (mm): body width (X) and depth (Y), its height above the heater block,
+  // the heater block's width, and how far the body sits forward (+Y) of the nozzle.
+  function headBoxes() {
+    const z = view.headSize || {}, w = z.w || 70, d = z.d || 80, h = z.h || 80, b = z.block || 24, off = z.offset || 0, top = 1.2 + b * 0.5;
+    return [[-b / 2, b / 2, -b / 2, b / 2, 1.2, top], [-w / 2, w / 2, -d / 2 + off, d / 2 + off, top, top + h]];
+  }
   let headVao = null, headBuffer = null;
   function drawHead(viewProj, colour) {
     if (!headVao) {
@@ -672,7 +683,7 @@
       gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
     }
     const [x, y, z] = view.nozzle, v = [];
-    for (const [x0, x1, y0, y1, z0, z1] of HEAD) {
+    for (const [x0, x1, y0, y1, z0, z1] of headBoxes()) {
       const c = [[x + x0, y + y0, z + z0], [x + x1, y + y0, z + z0], [x + x1, y + y1, z + z0], [x + x0, y + y1, z + z0],
         [x + x0, y + y0, z + z1], [x + x1, y + y0, z + z1], [x + x1, y + y1, z + z1], [x + x0, y + y1, z + z1]];
       for (const [a, b, d, e] of [[0, 1, 2, 3], [4, 5, 6, 7], [0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]])

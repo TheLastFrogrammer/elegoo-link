@@ -957,6 +957,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void pushView() { pushView(null); }
     /** Live following: how long the next update should take to glide to its position (0 = jump), and when the last step came. */
     private int smoothNext; private long lastStepAt;
+    /** While the printhead size dialog is open: the mask is shown tinted so it can be matched to the real head. */
+    private boolean headPreview; private double[] previewNozzle;
     private void pushView(double[] nozzle) {
         if (path == null || web == null || !pageReady) return;
         try {
@@ -968,10 +970,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 .put("travelStart", only ? path.layerTravelStart[layer] : 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount)
                 .put("nozzleSize", viewerPrefs().getInt("nozzleSize", 16)).put("nozzleAlpha", viewerPrefs().getInt("nozzleAlpha", 100) / 100.0)
                 .put("nozzleFlat", viewerPrefs().getBoolean("nozzleFlat", false))
-                .put("head", followMode && viewerPrefs().getBoolean("headMask", false))
+                .put("head", followMode && (viewerPrefs().getBoolean("headMask", false) || headPreview)).put("headShow", headPreview)
+                .put("headSize", new JSONObject().put("w", viewerPrefs().getInt("headW", 70)).put("d", viewerPrefs().getInt("headD", 80))
+                    .put("h", viewerPrefs().getInt("headH", 80)).put("block", viewerPrefs().getInt("headBlock", 24)).put("offset", viewerPrefs().getInt("headOffset", 0)))
                 .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0);
             if (smoothNext > 0 && viewerPrefs().getBoolean("smoothLive", true)) state.put("smoothMs", smoothNext);
             smoothNext = 0;
+            if (nozzle == null && headPreview && previewNozzle != null) nozzle = previewNozzle;
             if (nozzle != null) state.put("nozzle", new JSONArray(nozzle));
             else if (end > 0 && end < layerEnd) state.put("nozzle", new JSONArray(new double[] {path.x1[end - 1], path.y1[end - 1], path.z1[end - 1]}));
             else state.put("nozzle", JSONObject.NULL);
@@ -985,7 +990,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (playing) { if (layer >= path.layerCount - 1 && move >= layerSize(layer)) { layer = 0; move = 0; } main.post(player); }
     }
 
+    /** Groups the delayed live updates, so leaving live view drops the ones still waiting. */
+    private final Object delayToken = new Object();
     private void stopFollowing() {
+        main.removeCallbacksAndMessages(delayToken);
         if (following) {
             following = false; if (follow != null) follow.setEnabled(true);
             status.setText("Not live any more: you are looking at the file. Tap “Back to live” to jump to the printer's position.");
@@ -1038,6 +1046,41 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(body).setNegativeButton("Close", null).show();
     }
 
+    private final AlertDialog[] dialogs = new AlertDialog[1];
+    /**
+     * Sizing the printhead mask against the camera picture: while this is open the mask is drawn tinted over the picture (from
+     * the camera), so its width, depth, height and offset can be matched to the real head, best with the head parked.
+     */
+    private void headSizeDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        TextView note = new TextView(this); note.setTextSize(13); note.setTextColor(ink);
+        note.setText("The mask shows tinted over the camera picture while this is open. Move the sliders until it covers the real printhead. Easiest with the head still (between prints).");
+        body.addView(note);
+        styleSlider(body, "Width (left – right)", "headW", 20, 160, 70, " mm", this::pushView);
+        styleSlider(body, "Depth (front – back)", "headD", 20, 160, 80, " mm", this::pushView);
+        styleSlider(body, "Height", "headH", 20, 160, 80, " mm", this::pushView);
+        styleSlider(body, "Heater block", "headBlock", 6, 60, 24, " mm", this::pushView);
+        styleSlider(body, "Forward of the nozzle", "headOffset", -60, 60, 0, " mm", this::pushView);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        headPreview = true; viewerPrefs().edit().putBoolean("headMask", true).apply();
+        // Between prints there is no live nozzle on the toolpath: use where the printer reports the head (parked).
+        previewNozzle = null;
+        JSONObject position = printer == null ? null : Cc2Codec.position(printer.liveStatus());
+        if (position != null && position.has("x") && position.has("y")) previewNozzle = new double[] {position.optDouble("x"), position.optDouble("y"), Math.max(0, position.optDouble("z", 0))};
+        else if (path == null || printer == null) note.append("\n\nThe printer has not reported where the head is, so the mask cannot be placed yet.");
+        if (web != null && pageReady) web.evaluateJavascript("viewer.setView('printer')", null);
+        pushView();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printhead size").setView(scroll).setPositiveButton("Done", null)
+            .setNeutralButton("Defaults", null).create();
+        dialog.setOnDismissListener(d -> { headPreview = false; pushView(); });
+        // Kept low on the screen, so the camera picture above stays visible while adjusting.
+        if (dialog.getWindow() != null) { dialog.getWindow().setGravity(android.view.Gravity.BOTTOM); dialog.getWindow().setDimAmount(0f); }
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+            viewerPrefs().edit().remove("headW").remove("headD").remove("headH").remove("headBlock").remove("headOffset").apply();
+            dialog.dismiss(); headSizeDialog();
+        }));
+        dialog.show();
+    }
     /** How the nozzle dot looks (size, transparency, flat on the bed or a fixed screen dot), and whether only this layer shows. */
     private void nozzleDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
@@ -1055,17 +1098,40 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         smooth.setChecked(viewerPrefs().getBoolean("smoothLive", true));
         smooth.setOnCheckedChangeListener((v, on) -> viewerPrefs().edit().putBoolean("smoothLive", on).apply());
         body.addView(smooth);
+        if (followMode) {
+            // Delay in tenths of a second, 0–10 s.
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink); row.addView(label, new LinearLayout.LayoutParams(dp(112), -2));
+            SeekBar bar = new SeekBar(this); bar.setMax(100); bar.setProgress(viewerPrefs().getInt("liveDelay", 0));
+            bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+            row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1)); A11y.labelFor(label, bar);
+            Runnable showValue = () -> { String v = String.format(Locale.getDefault(), "%.1f s", bar.getProgress() / 10.0); label.setText("Delay to match the camera\n" + v); A11y.state(bar, v); };
+            showValue.run();
+            bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (fromUser) { viewerPrefs().edit().putInt("liveDelay", value).apply(); showValue.run(); } }
+                @Override public void onStartTrackingTouch(SeekBar b) { }
+                @Override public void onStopTrackingTouch(SeekBar b) { }
+            });
+            body.addView(row);
+            TextView hint = new TextView(this); hint.setTextSize(12); hint.setTextColor(muted);
+            hint.setText("If the real printhead in the picture trails the drawing, raise this until they move together (often 2–5 s through the cloud).");
+            body.addView(hint);
+        }
         android.widget.CheckBox head = new android.widget.CheckBox(this); head.setTextColor(ink); head.setMinHeight(dp(48));
         head.setText("Printhead mask: a simple printhead rides on the nozzle and hides the lines behind it, as the real one does in the camera picture");
         head.setChecked(viewerPrefs().getBoolean("headMask", false));
         head.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("headMask", on).apply(); pushView(); });
         body.addView(head);
+        if (followMode) {
+            Button size = rowButton(body, "Printhead size…", () -> { if (dialogs[0] != null) dialogs[0].dismiss(); headSizeDialog(); });
+            ((LinearLayout.LayoutParams) size.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) size.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) size.getLayoutParams()).leftMargin = 0;
+        }
         android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
         only.setText("Show only the current layer (hide the layers below)");
         only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
         only.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("layerOnly", on).apply(); pushView(); });
         body.addView(only);
-        new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(body).setPositiveButton("Done", null).show();
+        dialogs[0] = new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(body).setPositiveButton("Done", null).show();
     }
 
     /** The bed grid drawn over the camera picture (seen from the camera): all lines, edges only or hidden, and how strong. */
@@ -1169,12 +1235,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             smoothNext = sameLayer && lastStepAt > 0 ? (int) Math.max(250, Math.min(4000, now - lastStepAt)) : 0;
             lastStepAt = now;
         }
+        boolean moved = located != lastLocated;
         lastLocated = located;
-        layer = located >= path.count ? path.layerCount - 1 : path.layerOf(located);
-        move = located - path.layerStart(layer);
-        syncBars();
-        double z = path.layerZ(layer);
-        pushView(hasPosition ? new double[] {x, y, z} : null);
+        int newLayer = located >= path.count ? path.layerCount - 1 : path.layerOf(located), newMove = located - path.layerStart(newLayer);
+        double[] nozzle = hasPosition ? new double[] {x, y, path.layerZ(newLayer)} : null;
+        int glide = smoothNext; smoothNext = 0;
+        Runnable show = () -> {
+            if (!following || path == null || isDestroyed()) return;
+            layer = newLayer; move = newMove; syncBars(); smoothNext = glide; pushView(nozzle);
+        };
+        // The camera's picture arrives seconds late (the cloud's video most of all): the drawing can wait as long, so the two
+        // show the same moment. Only a new position waits; the status line below is never delayed.
+        long delay = Math.round(viewerPrefs().getInt("liveDelay", 0) * 100L);
+        if (delay > 0 && moved) main.postAtTime(show, delayToken, android.os.SystemClock.uptimeMillis() + delay);
+        else if (delay == 0) show.run();
         int progress = live.optJSONObject("machine_status").optInt("progress", -1);
         logFollow(print, position, hasPosition, currentLayer, located);
         status.setText(String.format(Locale.getDefault(), "Live · printing layer %d of %d%s%s", currentLayer, path.layerCount,
