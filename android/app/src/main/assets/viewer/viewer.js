@@ -596,7 +596,10 @@
       data.box = box;
       setupBed(meta.bed && meta.bed.length >= 6 ? meta.bed : [0, 0, 256, 0, 256, 256, 0, 256]);
       view.end = data.count; view.ghostEnd = data.count; view.travelEnd = data.travelCount;
+      // A file that arrives while looking from the camera (a live print, or while lining up) keeps that view and its zoom.
+      const keep = printerCam.looking ? { ...zoom2d } : null;
       fit();
+      if (keep) { lookFromCamera(); Object.assign(zoom2d, keep); drawMarks(); redraw(); }
       if (android && android.onLoaded) android.onLoaded(data.count);
     } catch (error) { fail("The toolpath could not be shown: " + error.message); }
   }
