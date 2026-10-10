@@ -708,7 +708,11 @@
   // the heater block's width, and how far the body sits forward (+Y) of the nozzle.
   function headBoxes() {
     const z = view.headSize || {}, w = z.w || 70, d = z.d || 80, h = z.h || 80, b = z.block || 24, off = z.offset || 0, top = 1.2 + b * 0.5;
-    return [[-b / 2, b / 2, -b / 2, b / 2, 1.2, top], [-w / 2, w / 2, -d / 2 + off, d / 2 + off, top, top + h]];
+    const boxes = [[-b / 2, b / 2, -b / 2, b / 2, 1.2, top], [-w / 2, w / 2, -d / 2 + off, d / 2 + off, top, top + h]];
+    // The part-cooling fan on the head's side, placed by its centre (x, y from the nozzle) and its bottom (z above the tip).
+    const fan = z.fan;
+    if (fan && fan.on) boxes.push([fan.x - fan.w / 2, fan.x + fan.w / 2, fan.y - fan.d / 2, fan.y + fan.d / 2, fan.z, fan.z + fan.h]);
+    return boxes;
   }
   let headVao = null, headBuffer = null;
   function drawHead(viewProj, colour, edges) {
