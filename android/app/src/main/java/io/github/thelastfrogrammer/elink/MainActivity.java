@@ -827,6 +827,7 @@ public final class MainActivity extends Activity {
     private void selectPage(int selected) {
         page = Math.max(0, Math.min(3, selected));
         if (page != 2) stopCamera();
+        if (page == 1) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
         for (int i = 0; i < 4; i++) {
             pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE);
             int color = i == page ? TEAL : MUTED;
@@ -1312,7 +1313,15 @@ public final class MainActivity extends Activity {
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); }
     }
     private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); }
+    /** On the Files tab, ask for the printer's file list when there is none (or it is out of date): a read, at most once a minute. */
+    private long filesAutoAt;
+    private void autoLoadFiles() {
+        if (page != 1 || printer == null || !printer.canQuery() || printer.busy(Cc2Codec.FILES) || printer.filesFresh()) return;
+        long now = System.currentTimeMillis(); if (now - filesAutoAt < 60_000) return;
+        filesAutoAt = now; printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0);
+    }
     private void renderFeatures(boolean query, boolean ready) {
+        if (query) main.post(this::autoLoadFiles);
         listFiles.setEnabled(query && !printer.busy(Cc2Codec.FILES)); storagePicker.setEnabled(!query || !printer.busy(Cc2Codec.FILES));
         loadHistory.setEnabled(query && !printer.busy(Cc2Codec.HISTORY)); loadDisk.setEnabled(query && !printer.busy(Cc2Codec.DISK)); cameraQuery.setEnabled(ready && !printer.busy(Cc2Codec.CAMERA));
         JSONObject files = printer == null ? new JSONObject() : printer.filePage;

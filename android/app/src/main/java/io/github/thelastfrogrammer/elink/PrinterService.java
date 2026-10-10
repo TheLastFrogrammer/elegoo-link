@@ -178,7 +178,12 @@ public final class PrinterService extends Service {
     /** Query results from the local session or the cloud land here. */
     private void handleQuery(int method, JSONObject params, JSONObject result) {
         queryBusy.remove(method);
-        if (method == Cc2Codec.FILES) { filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer."; }
+        if (method == Cc2Codec.FILES) {
+            filePage = result; storage = params.optString("storage_media", "local"); fileOffset = params.optInt("offset"); filesAt = System.nanoTime(); fileMessage = "Files received from printer.";
+            org.json.JSONArray list = result.optJSONArray("file_list");
+            // Field names only (never file names): an empty or differently shaped answer shows what the printer sent instead.
+            Diagnostics.note(Diagnostics.FILES, "file list (" + storage + ", offset " + fileOffset + "): " + (list == null ? "no file_list; fields " + CloudApi.shape(result) : list.length() + " entr" + (list.length() == 1 ? "y" : "ies") + ", total " + result.optInt("total", -1)));
+        }
         if (method == Cc2Codec.FILES && viewerDownload != null) {
             String wanted = viewerDownload; viewerDownload = null;
             if (knownFile("local", wanted)) download("local", wanted);
@@ -205,7 +210,8 @@ public final class PrinterService extends Service {
     private void handleQueryError(int method, String text) {
         queryBusy.remove(method);
         if (method == Cc2Codec.HISTORY_DETAIL) { historyDetailMessages.put(lastDetailTask, "The printer did not give more details for this print (" + StatusPresentation.clean(text) + ")"); changed(); return; }
-        if (method == Cc2Codec.FILES) fileMessage = text; if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text;
+        if (method == Cc2Codec.FILES) { fileMessage = text; Diagnostics.note(Diagnostics.FILES, "file list refused: " + StatusPresentation.clean(text)); }
+        if (method == Cc2Codec.HISTORY) historyMessage = text; feedback = text;
     }
     /** What the printer answered to the detail query (1037), by history task id, and why it did not where it could not. */
     public final Map<String, JSONObject> historyDetails = new HashMap<>();
@@ -485,11 +491,23 @@ public final class PrinterService extends Service {
         } catch (Exception error) { if (local != null) local.delete(); feedback = "Could not begin download. Use a listed .gcode file and check phone storage."; changed(); }
     }
     public boolean busy(int method) { return queryBusy.contains(method); }
+    static final long FILES_WAIT_MS = 45_000;
+    private long filesAsked;
     public boolean filesFresh() { return canQuery() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
     public void browse(String storage, int offset) {
         if (!canQuery() || busy(Cc2Codec.FILES)) return; Cc2Codec.storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid offset");
         queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files…";
-        if (ready()) session.files(storage, offset); else cloudSafe(() -> Cc2Codec.filesRequest(0, storage, offset));
+        boolean local = ready();
+        if (local) session.files(storage, offset); else cloudSafe(() -> Cc2Codec.filesRequest(0, storage, offset));
+        // An answer that never comes (a reply lost on the way, mostly through the cloud) must not leave the list loading for ever.
+        long asked = ++filesAsked;
+        main.postDelayed(() -> {
+            if (asked != filesAsked || !busy(Cc2Codec.FILES)) return;
+            queryBusy.remove(Cc2Codec.FILES);
+            fileMessage = "The printer did not send its file list" + (local ? "." : " through the Elegoo cloud.") + " Refresh to ask again.";
+            Diagnostics.note(Diagnostics.FILES, "file list: no answer within " + FILES_WAIT_MS / 1000 + " s (" + (local ? "local" : "cloud") + ", " + storage + ")");
+            changed();
+        }, FILES_WAIT_MS);
         changed();
     }
     public void loadHistory() {
