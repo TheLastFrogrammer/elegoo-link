@@ -235,7 +235,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void readBedZ() {
         if (printer == null) return;
         bed.report(printer.liveStatus(), System.currentTimeMillis());
-        if (!Double.isNaN(bed.z())) bedZ = Math.max(0, bed.z());   // only heights reported while Z is homed
+        double layerZ = printingLayerZ();
+        // While printing, the bed sits at the height of the layer being printed: the reported Z also carries every Z-hop
+        // and lift, which would make the camera overlay jump about between layers.
+        if (!Double.isNaN(layerZ)) bedZ = layerZ;
+        else if (!Double.isNaN(bed.z())) bedZ = Math.max(0, bed.z());   // only heights reported while Z is homed
+    }
+    /** The height of the layer the printer reports printing, from this file; NaN when not printing it. */
+    private double printingLayerZ() {
+        if (path == null || printer == null) return Double.NaN;
+        JSONObject live = printer.liveStatus();
+        JSONObject machine = live.optJSONObject("machine_status"), print = live.optJSONObject("print_status");
+        if (machine == null || machine.optInt("status", -1) != 2 || print == null) return Double.NaN;
+        int current = print.optInt("current_layer", 0);
+        return current >= 1 && current <= path.layerCount ? path.layerZ(current - 1) : Double.NaN;
     }
     private boolean heightReady() { return bed.state(System.currentTimeMillis()) == BedHeight.State.KNOWN; }
     /** A pose for the page from camera parameters that already hold for the bed's current height. */
@@ -866,7 +879,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     private final class Bridge {
-        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); if (alignOnly) startAligning(); }); }
+        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
         @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
@@ -995,6 +1008,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if (on) {
                 names.add("Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt("cameraSpot", 0)))] + "…"); actions.add(this::cameraSpotDialog);
                 names.add("Look from the camera"); actions.add(() -> { if (web != null) web.evaluateJavascript("viewer.setView('printer')", null); });
+                names.add("Camera overlay: grid and strength…"); actions.add(this::overlayDialog);
                 names.add("Line up the camera by hand…"); actions.add(this::startAligning);
             }
         }
@@ -1009,6 +1023,26 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             b.setEnabled(path != null);
         }
         dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(body).setNegativeButton("Close", null).show();
+    }
+
+    /** The bed grid drawn over the camera picture (seen from the camera): all lines, edges only or hidden, and how strong. */
+    private void overlayDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        TextView note = new TextView(this); note.setTextSize(13); note.setTextColor(ink);
+        note.setText("The bed outline drawn over the camera picture when you look from the camera. The same settings are used while lining up.");
+        body.addView(note);
+        Button[] grid = new Button[1];
+        Runnable label = () -> { String g = viewerPrefs().getString("alignGrid", "all"); grid[0].setText("all".equals(g) ? "Grid: all lines" : "edges".equals(g) ? "Grid: bed edges only" : "Grid: hidden"); };
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); body.addView(row);
+        grid[0] = rowButton(row, "", () -> {
+            String now = viewerPrefs().getString("alignGrid", "all");
+            viewerPrefs().edit().putString("alignGrid", "all".equals(now) ? "edges" : "edges".equals(now) ? "none" : "all").apply();
+            label.run(); sendAlignStyle();
+        });
+        label.run();
+        styleSlider(body, "Outline strength", "alignAlpha", 15, 100, 90, "%");
+        new AlertDialog.Builder(this).setTitle("Camera overlay").setView(body).setPositiveButton("Done", null).show();
+        if (web != null && pageReady) web.evaluateJavascript("viewer.setView('printer')", null);   // so the change shows at once
     }
 
     /** Wraps its children onto as many lines as the width needs. */
