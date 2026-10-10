@@ -353,6 +353,32 @@ public class A11yRenderTest {
     }
 
     /** The camera line-up panel (Camera tab > Line up the camera in 3D), as it opens and with every section expanded. */
+    /** Live toolpath's option dialogs: Layers, transparency and nozzle dot, and Printhead size (fan block on). */
+    @Test public void viewerOptions() throws Exception {
+        out();
+        File gcode = new File(context().getCacheDir(), "Benchy_PLA_0.2mm.gcode");
+        try (java.io.InputStream in = getClass().getResourceAsStream("/gcode/tolerance-cc2.gcode")) { java.nio.file.Files.copy(in, gcode.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING); }
+        for (float scale : SCALES) {
+            RuntimeEnvironment.setFontScale(scale);
+            theme(false);
+            context().getSharedPreferences("viewer-hints", 0).edit().putBoolean("fanOn", true).commit();
+            PrinterService service = Robolectric.setupService(PrinterService.class);
+            ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context())).setComponentNameAndServiceForBindService(
+                new android.content.ComponentName(context(), PrinterService.class), service.onBind(null));
+            android.content.Intent intent = new android.content.Intent(context(), GcodeViewerActivity.class)
+                .putExtra(GcodeViewerActivity.EXTRA_FILE, gcode.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, "Options.gcode").putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true);
+            GcodeViewerActivity activity = Robolectric.buildActivity(GcodeViewerActivity.class, intent).setup().get();
+            long deadline = System.currentTimeMillis() + 30_000;
+            while (field(activity, "path") == null && System.currentTimeMillis() < deadline) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
+            invoke(activity, "nozzleDialog"); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            dialogShot("viewer-options", scale, 4200);
+            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().dismiss();
+            invoke(activity, "headSizeDialog"); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            dialogShot("viewer-headsize", scale, 4200);
+            activity.finish();
+        }
+    }
+
     @Test public void viewerLineUp() throws Exception {
         out();
         File gcode = new File(context().getCacheDir(), "Benchy_PLA_0.2mm.gcode");

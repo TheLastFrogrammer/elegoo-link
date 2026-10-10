@@ -152,14 +152,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
         status = A11y.polite(label(titles, "Reading G-code…", 12, muted, false)); status.setPadding(0, 0, 0, 0);
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
-        TextView legendTip = new TextView(this); legendTip.setText("Tap a line type to hide it; hold it to show only that type."); legendTip.setTextSize(12); legendTip.setTextColor(muted);
-        panel.addView(legendTip, new LinearLayout.LayoutParams(-1, -2));
+        // One hint line under the chips: how to hide a type, and how the view works (live view always; gestures the first few times).
         int shown = hintsShown();
-        if (shown < 3 || followMode) {
-            liveCaption = label(panel, followMode ? "Live view of the file, up to the nozzle. Grey = still to print on this layer."
-                : "Drag to turn the view · two fingers to move and zoom · double-tap to reset", 11, muted, false);
-        }
-        // The caption describes a drawn toolpath; it hides while there is no file to draw.
+        String tip = "Tap a line type to hide it; hold it to show only that type.";
+        String how = followMode ? " Live: the file up to the nozzle. Grey = still to print on this layer."
+            : shown < 3 ? " Drag to turn · two fingers to move and zoom · double-tap to reset." : "";
+        hint = label(panel, tip + how, 12, muted, false);
+        // The hint describes a drawn toolpath; it hides while there is no file to draw.
         missingCard = new LinearLayout(this); missingCard.setOrientation(LinearLayout.VERTICAL); missingCard.setVisibility(View.GONE); panel.addView(missingCard);
         layerLabel = label(panel, "Layer", 13, ink, false);
         layerBar = seekBar(panel); A11y.labelFor(layerLabel, layerBar);
@@ -902,7 +901,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void load(File file, String name) {
         if (name.equals(loadingName)) return;
         loadingName = name; title.setText(StatusPresentation.clean(name.replaceFirst("(?i)\\.gcode$", "")));
-        status.setText("Reading toolpath…"); missingCard.setVisibility(View.GONE); if (liveCaption != null) liveCaption.setVisibility(View.VISIBLE); setControlsEnabled(false);
+        status.setText("Reading toolpath…"); missingCard.setVisibility(View.GONE); if (hint != null) hint.setVisibility(View.VISIBLE); setControlsEnabled(false);
         worker.execute(() -> {
             try {
                 GcodeToolpath read = GcodeToolpath.read(file);
@@ -970,9 +969,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 .put("travelStart", only ? path.layerTravelStart[layer] : 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount)
                 .put("nozzleSize", viewerPrefs().getInt("nozzleSize", 16)).put("nozzleAlpha", viewerPrefs().getInt("nozzleAlpha", 100) / 100.0)
                 .put("nozzleFlat", viewerPrefs().getBoolean("nozzleFlat", false))
-                .put("head", followMode && (viewerPrefs().getBoolean("headMask", false) || headPreview)).put("headShow", headPreview)
+                .put("head", followMode && (!"off".equals(headLook()) || headPreview)).put("headShow", headPreview).put("headLook", headLook())
                 .put("headSize", new JSONObject().put("w", viewerPrefs().getInt("headW", 70)).put("d", viewerPrefs().getInt("headD", 80))
-                    .put("h", viewerPrefs().getInt("headH", 80)).put("block", viewerPrefs().getInt("headBlock", 24)).put("offset", viewerPrefs().getInt("headOffset", 0)))
+                    .put("h", viewerPrefs().getInt("headH", 80)).put("block", viewerPrefs().getInt("headBlock", 24)).put("offset", viewerPrefs().getInt("headOffset", 0))
+                    .put("fan", new JSONObject().put("on", viewerPrefs().getBoolean("fanOn", false)).put("x", viewerPrefs().getInt("fanX", -45)).put("y", viewerPrefs().getInt("fanY", 0))
+                        .put("z", viewerPrefs().getInt("fanZ", 10)).put("w", viewerPrefs().getInt("fanW", 20)).put("d", viewerPrefs().getInt("fanD", 50)).put("h", viewerPrefs().getInt("fanH", 50))))
                 .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0);
             if (smoothNext > 0 && viewerPrefs().getBoolean("smoothLive", true)) state.put("smoothMs", smoothNext);
             smoothNext = 0;
@@ -1015,38 +1016,50 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     /** The less used controls, kept out of the panel so the 3D view stays large. */
+    /** The More… list in three groups (what to show, the camera, view and help), most used first; headings are text, not buttons. */
     private void moreDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(4), dp(20), dp(8));
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog[] dialog = new AlertDialog[1];
-        java.util.List<String> names = new java.util.ArrayList<>(java.util.Arrays.asList("Filter by line type (walls, infill, support…)…", showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)",
-            moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…"));
-        java.util.List<Runnable> actions = new java.util.ArrayList<>(java.util.Arrays.asList(this::featureDialog, () -> { showTravel = !showTravel; pushView(); },
-            () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); }));
+        groupHeading(body, "What to show");
+        moreButton(body, dialog, "Filter by line type (walls, infill, support…)…", this::featureDialog);
+        moreButton(body, dialog, showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)", () -> { showTravel = !showTravel; pushView(); });
+        moreButton(body, dialog, moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…",
+            () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); });
+        moreButton(body, dialog, "Layers, transparency and nozzle dot…", this::nozzleDialog);
         if (followMode) {
             boolean on = cameraWanted();
-            names.add(on ? "Hide the printer's camera" : "Show the printer's camera in the view"); actions.add(this::toggleCamera);
+            groupHeading(body, "Camera");
+            moreButton(body, dialog, on ? "Hide the printer's camera" : "Show the printer's camera in the view", this::toggleCamera);
             if (on) {
-                names.add("Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt("cameraSpot", 0)))] + "…"); actions.add(this::cameraSpotDialog);
-                names.add("Look from the camera"); actions.add(() -> { if (web != null) web.evaluateJavascript("viewer.setView('printer')", null); });
-                names.add("Camera overlay: grid and strength…"); actions.add(this::overlayDialog);
-                names.add("Line up the camera by hand…"); actions.add(this::startAligning);
+                moreButton(body, dialog, "Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt("cameraSpot", 0)))] + "…", this::cameraSpotDialog);
+                moreButton(body, dialog, "Look from the camera", () -> { if (web != null) web.evaluateJavascript("viewer.setView('printer')", null); });
+                moreButton(body, dialog, "Camera overlay: grid and strength…", this::overlayDialog);
+                moreButton(body, dialog, "Line up the camera by hand…", this::startAligning);
             }
         }
-        names.add("Layers, transparency and nozzle dot…"); actions.add(this::nozzleDialog);
+        groupHeading(body, "View and help");
         boolean locked = viewerPrefs().getBoolean("viewLock", false);
-        names.add(locked ? "Unlock rotation (drag turns the view)" : "Lock rotation (drag moves the view)");
-        actions.add(() -> { viewerPrefs().edit().putBoolean("viewLock", !locked).apply(); sendLock(); });
-        names.add("What am I seeing?"); actions.add(this::helpDialog);
-        for (int i = 0; i < names.size(); i++) {
-            Runnable action = actions.get(i);
-            Button b = rowButton(body, names.get(i), () -> { dialog[0].dismiss(); action.run(); });
-            ((LinearLayout.LayoutParams) b.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) b.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) b.getLayoutParams()).leftMargin = 0;
-            b.setEnabled(path != null);
-        }
-        dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(body).setNegativeButton("Close", null).show();
+        moreButton(body, dialog, locked ? "Unlock rotation (drag turns the view)" : "Lock rotation (drag moves the view)",
+            () -> { viewerPrefs().edit().putBoolean("viewLock", !locked).apply(); sendLock(); });
+        moreButton(body, dialog, "What am I seeing?", this::helpDialog);
+        dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(scroll).setNegativeButton("Close", null).show();
+    }
+    /** A small heading that groups the buttons after it. */
+    private void groupHeading(LinearLayout parent, String text) {
+        TextView view = A11y.heading(label(parent, text, 12, muted, true));
+        ((LinearLayout.LayoutParams) view.getLayoutParams()).topMargin = dp(10);
+    }
+    /** A full-width button in a dialog's list: closes the dialog, then runs the action; off until a file is loaded. */
+    private void moreButton(LinearLayout body, AlertDialog[] dialog, String text, Runnable action) {
+        Button b = rowButton(body, text, () -> { dialog[0].dismiss(); action.run(); });
+        ((LinearLayout.LayoutParams) b.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) b.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) b.getLayoutParams()).leftMargin = 0;
+        b.setEnabled(path != null);
     }
 
     private final AlertDialog[] dialogs = new AlertDialog[1];
+    /** How the printhead shows: off, mask, outline or tint (earlier versions saved only whether the mask was on). */
+    private String headLook() { return viewerPrefs().getString("headLook", viewerPrefs().getBoolean("headMask", false) ? "mask" : "off"); }
     /**
      * Sizing the printhead mask against the camera picture: while this is open the mask is drawn tinted over the picture (from
      * the camera), so its width, depth, height and offset can be matched to the real head, best with the head parked.
@@ -1061,8 +1074,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         styleSlider(body, "Height", "headH", 20, 160, 80, " mm", this::pushView);
         styleSlider(body, "Heater block", "headBlock", 6, 60, 24, " mm", this::pushView);
         styleSlider(body, "Forward of the nozzle", "headOffset", -60, 60, 0, " mm", this::pushView);
+        // The part-cooling fan on the head's side: its own block, placed by its centre and bottom.
+        android.widget.CheckBox fan = new android.widget.CheckBox(this); fan.setTextColor(ink); fan.setMinHeight(dp(48));
+        fan.setText("Part-cooling fan (a block on the head's side)"); fan.setChecked(viewerPrefs().getBoolean("fanOn", false));
+        LinearLayout fanBody = new LinearLayout(this); fanBody.setOrientation(LinearLayout.VERTICAL); fanBody.setVisibility(fan.isChecked() ? View.VISIBLE : View.GONE);
+        fan.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("fanOn", on).apply(); fanBody.setVisibility(on ? View.VISIBLE : View.GONE); pushView(); });
+        body.addView(fan); body.addView(fanBody);
+        styleSlider(fanBody, "Fan: left – right", "fanX", -120, 120, -45, " mm", this::pushView);
+        styleSlider(fanBody, "Fan: front – back", "fanY", -120, 120, 0, " mm", this::pushView);
+        styleSlider(fanBody, "Fan: bottom above the nozzle", "fanZ", 0, 120, 10, " mm", this::pushView);
+        styleSlider(fanBody, "Fan: thickness", "fanW", 5, 80, 20, " mm", this::pushView);
+        styleSlider(fanBody, "Fan: depth", "fanD", 10, 120, 50, " mm", this::pushView);
+        styleSlider(fanBody, "Fan: height", "fanH", 10, 120, 50, " mm", this::pushView);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        headPreview = true; viewerPrefs().edit().putBoolean("headMask", true).apply();
+        headPreview = true; if ("off".equals(headLook())) viewerPrefs().edit().putString("headLook", "mask").apply();
         // Between prints there is no live nozzle on the toolpath: use where the printer reports the head (parked).
         previewNozzle = null;
         JSONObject position = printer == null ? null : Cc2Codec.position(printer.liveStatus());
@@ -1076,7 +1101,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         // Kept low on the screen, so the camera picture above stays visible while adjusting.
         if (dialog.getWindow() != null) { dialog.getWindow().setGravity(android.view.Gravity.BOTTOM); dialog.getWindow().setDimAmount(0f); }
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
-            viewerPrefs().edit().remove("headW").remove("headD").remove("headH").remove("headBlock").remove("headOffset").apply();
+            viewerPrefs().edit().remove("headW").remove("headD").remove("headH").remove("headBlock").remove("headOffset")
+                .remove("fanX").remove("fanY").remove("fanZ").remove("fanW").remove("fanD").remove("fanH").apply();
             dialog.dismiss(); headSizeDialog();
         }));
         dialog.show();
@@ -1084,54 +1110,74 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** How the nozzle dot looks (size, transparency, flat on the bed or a fixed screen dot), and whether only this layer shows. */
     private void nozzleDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        groupHeading(body, "Layers");
         styleSlider(body, "This layer's opacity", "layerOpacity", 5, 100, 100, "%", this::pushView);
-        styleSlider(body, "Layers below: opacity", "belowOpacity", 5, 100, 100, "%", this::pushView);
-        styleSlider(body, "Nozzle dot size", "nozzleSize", 4, 48, 16, " px", this::pushView);
+        styleSlider(body, "Layers below", "belowOpacity", 5, 100, 100, "%", this::pushView);
+        android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
+        only.setText("Show only the current layer");
+        only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
+        only.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("layerOnly", on).apply(); pushView(); });
+        body.addView(only);
+        label(body, "Hides the layers below the one you are looking at.", 12, muted, false);
+        groupHeading(body, "Nozzle dot");
+        styleSlider(body, "Dot size", "nozzleSize", 4, 48, 16, " px", this::pushView);
         styleSlider(body, "Dot opacity", "nozzleAlpha", 10, 100, 100, "%", this::pushView);
         android.widget.CheckBox flat = new android.widget.CheckBox(this); flat.setTextColor(ink); flat.setMinHeight(dp(48));
-        flat.setText("Lie flat on the bed (follows the grid's perspective and the lens curve)");
+        flat.setText("Lie flat on the bed");
         flat.setChecked(viewerPrefs().getBoolean("nozzleFlat", false));
         flat.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("nozzleFlat", on).apply(); pushView(); });
         body.addView(flat);
+        label(body, "Follows the grid's perspective and the lens curve.", 12, muted, false);
+        groupHeading(body, "Printhead");
+        android.widget.RadioGroup looks = new android.widget.RadioGroup(this); looks.setOrientation(android.widget.RadioGroup.VERTICAL);
+        String[][] choices = {{"off", "Off"}, {"mask", "Mask: hides the lines behind the head (not drawn)"}, {"outline", "Outline: the head's edges"}, {"tint", "Tinted: the head shaded"}};
+        for (String[] choice : choices) {
+            android.widget.RadioButton option = new android.widget.RadioButton(this); option.setText(choice[1]); option.setTextColor(ink); option.setMinHeight(dp(48));
+            option.setButtonTintList(ColorStateList.valueOf(teal)); option.setId(View.generateViewId()); looks.addView(option);
+            if (choice[0].equals(headLook())) option.setChecked(true);
+            option.setOnCheckedChangeListener((v, on) -> { if (on) { viewerPrefs().edit().putString("headLook", choice[0]).apply(); pushView(); } });
+        }
+        body.addView(looks);
+        label(body, "A simple printhead rides on the nozzle and hides the lines behind it, as the real one does in the camera picture.", 12, muted, false);
+        if (followMode) {
+            Button size = rowButton(body, "Printhead size…", () -> { if (dialogs[0] != null) dialogs[0].dismiss(); headSizeDialog(); });
+            ((LinearLayout.LayoutParams) size.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) size.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) size.getLayoutParams()).leftMargin = 0;
+        }
+        groupHeading(body, "Live timing");
         android.widget.CheckBox smooth = new android.widget.CheckBox(this); smooth.setTextColor(ink); smooth.setMinHeight(dp(48));
-        smooth.setText("Smooth live movement (glide between the printer's updates, about one update behind)");
+        smooth.setText("Smooth live movement");
         smooth.setChecked(viewerPrefs().getBoolean("smoothLive", true));
         smooth.setOnCheckedChangeListener((v, on) -> viewerPrefs().edit().putBoolean("smoothLive", on).apply());
         body.addView(smooth);
+        label(body, "Glides between the printer's updates, about one update behind.", 12, muted, false);
         if (followMode) {
             // Delay in tenths of a second, 0–10 s.
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink); row.addView(label, new LinearLayout.LayoutParams(dp(112), -2));
+            TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink); body.addView(label);   // above: − slider + below
             SeekBar bar = new SeekBar(this); bar.setMax(100); bar.setProgress(viewerPrefs().getInt("liveDelay", 0));
             bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
             row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1)); A11y.labelFor(label, bar);
-            Runnable showValue = () -> { String v = String.format(Locale.getDefault(), "%.1f s", bar.getProgress() / 10.0); label.setText("Delay to match the camera\n" + v); A11y.state(bar, v); };
+            Runnable showValue = () -> { String v = String.format(Locale.getDefault(), "%.1f s", bar.getProgress() / 10.0); label.setText("Delay to match the camera: " + v); A11y.state(bar, v); };
             showValue.run();
+            // − and + step a tenth of a second, for fine tuning against the picture.
+            for (int step : new int[] {-1, 1}) {
+                Button nudge = new Button(this); nudge.setText(step < 0 ? "−" : "+"); nudge.setTextSize(18); nudge.setTextColor(teal); nudge.setMinWidth(dp(48)); nudge.setMinimumWidth(dp(48));
+                GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12)); nudge.setBackground(shape);
+                nudge.setContentDescription(step < 0 ? "Less delay, a tenth of a second" : "More delay, a tenth of a second");
+                nudge.setOnClickListener(v -> { int value = Math.max(0, Math.min(100, bar.getProgress() + step)); bar.setProgress(value); viewerPrefs().edit().putInt("liveDelay", value).apply(); showValue.run(); });
+                LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(56), -2); nudge.setMinHeight(dp(48)); nudge.setMinimumHeight(dp(48)); nudge.setPadding(0, 0, 0, 0);
+                if (step < 0) row.addView(nudge, 0, size); else row.addView(nudge, size);
+            }
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (fromUser) { viewerPrefs().edit().putInt("liveDelay", value).apply(); showValue.run(); } }
                 @Override public void onStartTrackingTouch(SeekBar b) { }
                 @Override public void onStopTrackingTouch(SeekBar b) { }
             });
             body.addView(row);
-            TextView hint = new TextView(this); hint.setTextSize(12); hint.setTextColor(muted);
-            hint.setText("If the real printhead in the picture trails the drawing, raise this until they move together (often 2–5 s through the cloud).");
-            body.addView(hint);
+            label(body, "If the real printhead in the picture trails the drawing, raise this until they move together (often 2–5 s through the cloud).", 12, muted, false);
         }
-        android.widget.CheckBox head = new android.widget.CheckBox(this); head.setTextColor(ink); head.setMinHeight(dp(48));
-        head.setText("Printhead mask: a simple printhead rides on the nozzle and hides the lines behind it, as the real one does in the camera picture");
-        head.setChecked(viewerPrefs().getBoolean("headMask", false));
-        head.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("headMask", on).apply(); pushView(); });
-        body.addView(head);
-        if (followMode) {
-            Button size = rowButton(body, "Printhead size…", () -> { if (dialogs[0] != null) dialogs[0].dismiss(); headSizeDialog(); });
-            ((LinearLayout.LayoutParams) size.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) size.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) size.getLayoutParams()).leftMargin = 0;
-        }
-        android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
-        only.setText("Show only the current layer (hide the layers below)");
-        only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
-        only.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("layerOnly", on).apply(); pushView(); });
-        body.addView(only);
-        dialogs[0] = new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(body).setPositiveButton("Done", null).show();
+        dialogs[0] = new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(scroll).setPositiveButton("Done", null).show();
     }
 
     /** The bed grid drawn over the camera picture (seen from the camera): all lines, edges only or hidden, and how strong. */
@@ -1288,7 +1334,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         status.setText(fetching ? StatusPresentation.clean(printer.feedback) : StatusPresentation.runningLine(machine, print));
         if (missingCard.getVisibility() != View.VISIBLE) {
             missingCard.removeAllViews(); missingCard.setVisibility(View.VISIBLE);
-            if (liveCaption != null) liveCaption.setVisibility(View.GONE);
+            if (hint != null) hint.setVisibility(View.GONE);
             missingPreview = new ImageView(this); missingPreview.setAdjustViewBounds(true); missingPreview.setScaleType(ImageView.ScaleType.FIT_CENTER); missingPreview.setVisibility(View.GONE);
             missingPreview.setContentDescription("Preview image of the print that is running, from the printer");
             missingCard.addView(missingPreview, new LinearLayout.LayoutParams(-1, dp(160)));
@@ -1305,7 +1351,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         missingDetail.setVisibility(failed ? View.VISIBLE : View.GONE);
     }
 
-    private TextView missingDetail, liveCaption;
+    private TextView missingDetail, hint;
     private void buildMissingActions(String filename) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(row);
         Button download = rowButton(row, "Download from printer", () -> {
