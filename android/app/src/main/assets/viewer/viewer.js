@@ -305,10 +305,15 @@
     printerCam.has = true; redraw();
   }
   function showPrinterCamera(pose) {
+    const already = !!printerCam.pose;
     printerCam.pose = pose || null;
-    if (!pose) { cameraStop(); printerCam.has = false; }
-    else buildPrinterCamera();
-    fit();
+    if (!pose) { cameraStop(); printerCam.has = false; fit(); return; }
+    buildPrinterCamera();
+    // Turning the camera on frames the scene with it; the same camera coming back (the app returning to the screen, the
+    // stream restarting) keeps the view as the user left it, from the camera too.
+    if (!already) { fit(); return; }
+    if (printerCam.looking) { const keep = { ...zoom2d }; lookFromCamera(); Object.assign(zoom2d, keep); drawMarks(); }
+    redraw();
   }
   // A JPEG the app serves (local camera): fetched only when the previous one is on screen, so frames never queue up.
   async function cameraFrame(url) {
