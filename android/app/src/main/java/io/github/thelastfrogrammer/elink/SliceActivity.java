@@ -384,7 +384,7 @@ public final class SliceActivity extends Activity {
 
     private void build() {
         LinearLayout modelCard = card("1 · Models");
-        modelsLabel = label(modelCard, "STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. Several files share one layout.", 14, muted, false);
+        modelsLabel = label(modelCard, "STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. All models share one layout.", 14, muted, false);
         chooseModels = button(modelCard, "Choose model files", () -> {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
@@ -418,7 +418,7 @@ public final class SliceActivity extends Activity {
         slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
         LinearLayout slotButtons = buttonRow(); filamentCard.addView(slotButtons);
         addSlot = rowButton(slotButtons, "Add filament", () -> { addSlot(null); showModels(); updateButtons(); }, false);
-        removeSlot = rowButton(slotButtons, "Remove last", () -> { removeLastSlot(); showModels(); updateButtons(); }, false);
+        removeSlot = rowButton(slotButtons, "Remove last filament", () -> { removeLastSlot(); showModels(); updateButtons(); }, false);
         modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(modelAssign);
         addSlot(null);
 
@@ -426,7 +426,7 @@ public final class SliceActivity extends Activity {
         label(settingsCard, "Leave a setting on “Preset” to use the print profile's value.", 13, muted, false);
         TextView infillLabel = label(settingsCard, "Infill density (%)", 12, muted, false);
         infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
-        infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); settingsCard.addView(infill, new LinearLayout.LayoutParams(-1, dp(52)));
+        infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setMinHeight(dp(52)); settingsCard.addView(infill, new LinearLayout.LayoutParams(-1, -2));
         label(settingsCard, "Supports", 12, muted, false);
         supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList("Preset", "Off", "Normal (auto)", "Tree (auto)"), "Preset");
         label(settingsCard, "Brim", 12, muted, false);
@@ -439,7 +439,7 @@ public final class SliceActivity extends Activity {
         showSettingsSummary();
 
         LinearLayout sliceCard = actionBar; actionBar.setVisibility(View.VISIBLE);
-        status = A11y.polite(label(sliceCard, "Loading Elegoo presets…", 14, ink, false)); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(3);
+        status = A11y.polite(label(sliceCard, "Loading presets…", 14, ink, false)); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(5); // the Slice bar stays on screen whatever the message
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgressTintList(ColorStateList.valueOf(teal));
         progress.setVisibility(View.GONE); sliceCard.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
         sliceHint = label(sliceCard, "", 12, muted, false); sliceHint.setVisibility(View.GONE);
@@ -447,7 +447,7 @@ public final class SliceActivity extends Activity {
         slice = rowButton(row, "Slice", this::startSlice, true);
         cancel = rowButton(row, "Cancel", () -> { cancelRequested.set(true); status.setText("Cancelling…"); }, false);
 
-        resultCard = card("Result"); resultCard.setVisibility(View.GONE);
+        resultCard = card("4 · Result"); resultCard.setVisibility(View.GONE);
         preview = new ImageView(this); preview.setContentDescription("Preview image embedded in the G-code"); preview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         preview.setVisibility(View.GONE); // added below the actions, so Upload and print stays near the summary
         resultText = label(resultCard, "", 14, ink, false); resultText.setTextIsSelectable(true);
@@ -459,7 +459,7 @@ public final class SliceActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
         uploadPrint = button(resultCard, "Upload and print…", this::uploadAndPrint, true);
-        printerHint = label(resultCard, "", 12, muted, false); printerHint.setMaxLines(2); printerHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        printerHint = label(resultCard, "", 12, muted, false);
         printerFix = button(resultCard, "Open Settings (the file waits in Files)", this::openSettingsTab, false);
         resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
         LinearLayout pair = buttonRow(); resultCard.addView(pair);
@@ -1076,7 +1076,7 @@ public final class SliceActivity extends Activity {
         while (modelSlots.size() > models.size()) modelSlots.remove(modelSlots.size() - 1);
         // New models: 3MF files keep their own assignment; others take the next slot in turn.
         while (modelSlots.size() < models.size()) { int i = modelSlots.size(); modelSlots.add(is3mf(models.get(i)) ? 0 : i % Math.max(1, slots.size()) + 1); }
-        if (models.isEmpty()) { modelsLabel.setText("STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. Several files share one layout."); modelsLabel.setTextColor(muted); return; }
+        if (models.isEmpty()) { modelsLabel.setText("STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. All models share one layout."); modelsLabel.setTextColor(muted); return; }
         StringBuilder names = new StringBuilder();
         for (File file : models) names.append(names.length() > 0 ? "\n" : "").append(file.getName()).append(" (").append(size(file.length())).append(")");
         modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
@@ -1168,7 +1168,8 @@ public final class SliceActivity extends Activity {
         }
         for (int i = 0; i < modelSlots.size(); i++) if (is3mf(models.get(i))) modelSlots.set(i, 0);
         showModels(); updateButtons();
-        status.setText(missing.isEmpty() ? "Set up " + slots.size() + " filament(s) from the project." : "Set up " + slots.size() + " filament(s); this printer has no filament profile named " + String.join(", ", missing) + ", so those filaments keep their profile.");
+        String filaments = slots.size() + " filament" + (slots.size() == 1 ? "" : "s");
+        status.setText(missing.isEmpty() ? "Set up " + filaments + " from the project." : "Set up " + filaments + "; this printer has no filament preset named " + String.join(", ", missing) + ", so those filaments keep their preset.");
         status.setTextColor(missing.isEmpty() ? ink : error);
     }
 
@@ -1507,7 +1508,7 @@ public final class SliceActivity extends Activity {
         boolean loaded = processSpinner.getAdapter() != null && processSpinner.getAdapter().getCount() > 0; // presets have arrived, not still loading
         String reason = null;
         if (!busy && models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
-        else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a print profile and a filament profile for each filament to slice.";
+        else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a print preset and a filament preset for each filament to slice.";
         sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
         restoreLast.setVisibility(!busy && models.isEmpty() && calibration == null && hasSavedSelection ? View.VISIBLE : View.GONE);
         keepAwake(SliceActivity.slicing);
@@ -1579,7 +1580,7 @@ public final class SliceActivity extends Activity {
     private LinearLayout card(String title) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(14), dp(16), dp(14));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20)); card.setBackground(shape);
-        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); content.addView(card, layout);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(16); content.addView(card, layout);
         if (title != null) A11y.heading(label(card, title, 17, ink, true));
         return card;
     }
