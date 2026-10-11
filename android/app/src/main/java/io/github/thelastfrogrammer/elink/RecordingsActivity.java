@@ -100,13 +100,13 @@ public final class RecordingsActivity extends Activity {
         List<PrintRecorder.Recording> recordings = new PrintRecorder(directory(this)).list();
         if (recordings.isEmpty()) {
             label("No recordings yet.", 16, ink, true);
-            label("Each print is recorded while the app watches the printer, newest first. Connect to the printer, then start a print.", 14, muted, false);
+            label("Prints are recorded automatically while the app is connected to the printer. Connect first, then start a print and it will appear here.", 14, muted, false);
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); content.addView(row);
             action(row, "Open Settings to connect", () -> startActivity(new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_PAGE, FeatureIndex.SETTINGS)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
             return;
         }
-        label("Each print the app watches is recorded automatically, newest first. Unfinished means the app stopped watching before the print ended.", 13, muted, false);
+        label("Each print is recorded automatically, newest first. Unfinished means the app stopped watching before the print ended.", 13, muted, false);
         for (PrintRecorder.Recording recording : recordings) {
             LinearLayout card = card();
             TextView name = label(card, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")), 16, ink, true);
@@ -122,7 +122,7 @@ public final class RecordingsActivity extends Activity {
         try { recording = PrintRecorder.Recording.read(meta); rows = PrintRecorder.samples(recording); }
         catch (Exception error) { heading("Recording"); label("This recording could not be opened. It may have been deleted or damaged. Go back and choose another one.", 15, ink, false); return; }
         shown = recording;
-        // Opened from Monitor during a print: the other recordings are one tap away.
+        // Opened from the Print tab during a print: the other recordings are one tap away.
         LinearLayout back = new LinearLayout(this); back.setOrientation(LinearLayout.HORIZONTAL); content.addView(back);
         action(back, "All recordings", () -> startActivity(new Intent(this, RecordingsActivity.class)));
         heading(StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")));
@@ -138,9 +138,7 @@ public final class RecordingsActivity extends Activity {
         String last = lastReading(rows);
         if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, last, 13, muted, false); }
         double[] t = column(rows, "elapsed_s");
-        pictures(recording);
-        trays(rows, t);
-        material(recording, rows, t);
+        pictures(recording);   // the quickest look at how the print went, before the charts
         chart("Progress", " %", t, Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)), 0, 100);
         chart("Layer number", "", t, Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)), Double.NaN, Double.NaN);
         chart("Temperatures", " °C", t, Arrays.asList(
@@ -151,8 +149,10 @@ public final class RecordingsActivity extends Activity {
             new ChartView.Series("Part fan", blue, column(rows, "part_fan_pct"), false), new ChartView.Series("Aux fan", orange, column(rows, "aux_fan_pct"), false),
             new ChartView.Series("Chamber fan", aqua, column(rows, "chamber_fan_pct"), false)), 0, 100);
         label("Touch and drag on a chart to read values. Times along the bottom are clock times on this phone. Dashed lines are targets.", 12, muted, false);
+        trays(rows, t);
+        material(recording, rows, t);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
-        action(actions, "All readings", () -> table(recording, rows));
+        action(actions, "All readings…", () -> table(recording, rows));
         action(actions, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
             .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
@@ -166,7 +166,7 @@ public final class RecordingsActivity extends Activity {
         List<File> files = PrintRecorder.pictures(recording);
         if (files.isEmpty() && recording.pictureMinutes == 0) return;
         LinearLayout card = card(); label(card, "Camera pictures", 15, ink, true);
-        if (files.isEmpty()) { label(card, "None yet. Pictures are taken every " + recording.pictureMinutes + " min from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath.", 13, muted, false); return; }
+        if (files.isEmpty()) { label(card, "No pictures yet. One is taken every " + recording.pictureMinutes + " min from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath.", 13, muted, false); return; }
         label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 ? " · every " + recording.pictureMinutes + " min" : "") + ". Tap one to see it larger.", 13, muted, false);
         if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files)); }
         LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
@@ -189,7 +189,7 @@ public final class RecordingsActivity extends Activity {
     private void makeVideo(PrintRecorder.Recording recording, List<File> files) {
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
         TextView state = new TextView(this); state.setTextSize(15); state.setTextColor(ink); state.setPadding(dp(24), dp(16), dp(24), 0);
-        state.setText("Making the video… 0 of " + files.size() + " pictures"); A11y.polite(state);
+        state.setText("Making the video: 0 of " + files.size() + " pictures"); A11y.polite(state);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Timelapse video").setView(state).setCancelable(false)
             .setNegativeButton("Cancel", (d, w) -> cancelled.set(true)).show();
         File folder = new File(getCacheDir(), "timelapse"); folder.mkdirs();
@@ -197,7 +197,7 @@ public final class RecordingsActivity extends Activity {
         File out = new File(folder, recording.csv.getName().replaceFirst("\\.csv$", "") + "-timelapse.mp4");
         new Thread(() -> {
             String failure = null;
-            try { TimelapseEncoder.encode(files, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video… " + done + " of " + total + " pictures"))); }
+            try { TimelapseEncoder.encode(files, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video: " + done + " of " + total + " pictures"))); }
             catch (Exception error) { failure = cancelled.get() ? "" : "The video could not be made on this phone (" + error.getClass().getSimpleName() + ")."; out.delete(); }
             String problem = failure;
             runOnUiThread(() -> {
@@ -223,6 +223,7 @@ public final class RecordingsActivity extends Activity {
         List<String> changes = trayChanges(tray, rgb, t);
         if (changes.isEmpty()) return;
         LinearLayout card = card(); label(card, "Filament over time", 15, ink, true);
+        label(card, "Which CANVAS tray fed the print, and when it switched.", 13, muted, false);
         View band = new View(this) {
             @Override protected void onDraw(android.graphics.Canvas canvas) {
                 android.graphics.Paint paint = new android.graphics.Paint(); double end = t.length == 0 ? 1 : Math.max(1, t[t.length - 1]);
@@ -255,12 +256,12 @@ public final class RecordingsActivity extends Activity {
      * use with its colour. Read in the background.
      */
     private void material(PrintRecorder.Recording recording, List<double[]> rows, double[] t) {
-        LinearLayout card = card(); label(card, "Material", 15, ink, true);
+        LinearLayout card = card(); label(card, "Material used", 15, ink, true);
         TextView note = label(card, "Reading the print's file…", 13, muted, false);
         LinearLayout chartBox = new LinearLayout(this); chartBox.setOrientation(LinearLayout.VERTICAL); card.addView(chartBox);
         LinearLayout byColour = new LinearLayout(this); byColour.setOrientation(LinearLayout.VERTICAL); card.addView(byColour);
         File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
-        if (file == null) { note.setText("The print's file is not on this phone. Download it from the Files tab (or slice it here) to see material per layer and per colour."); return; }
+        if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download it from the Files tab, or slice it here, to see material per layer and per colour."); return; }
         new Thread(() -> {
             double[] volumes = null; SlicedMaterials materials = null;
             try { volumes = GcodeToolpath.read(file).layerVolumes(); } catch (Exception ignored) { }

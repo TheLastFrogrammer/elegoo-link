@@ -1013,7 +1013,18 @@ public final class PrinterService extends Service {
         manager.notify(id, builder.build());
         // Then, on the local connection, the same alert again with a picture from the printer's camera (it alerts only once).
         if (getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alertPictures", true))
-            grabFrame(image -> manager.notify(id, builder.setLargeIcon(image).setStyle(new Notification.BigPictureStyle().bigPicture(image).setSummaryText(text)).build()));
+            grabFrame(image -> {
+                // Small copies only: a notification travels between processes, and a full camera frame (megabytes) can be refused.
+                android.graphics.Bitmap picture = scaled(image, 640), icon = scaled(image, 128);
+                manager.notify(id, builder.setLargeIcon(icon).setStyle(new Notification.BigPictureStyle().bigPicture(picture).setSummaryText(text)).build());
+            });
+    }
+    /** A copy at most `width` pixels wide, in 16-bit colour (a quarter of a full-size ARGB frame or less). */
+    static android.graphics.Bitmap scaled(android.graphics.Bitmap image, int width) {
+        int w = Math.min(width, image.getWidth()), h = Math.max(1, Math.round(image.getHeight() * (w / (float) image.getWidth())));
+        android.graphics.Bitmap small = android.graphics.Bitmap.createScaledBitmap(image, w, h, true);
+        android.graphics.Bitmap compact = small.copy(android.graphics.Bitmap.Config.RGB_565, false);
+        return compact != null ? compact : small;
     }
     private interface Frame { void take(android.graphics.Bitmap image); }
     /** One frame from the printer's own camera stream on this network (or the home VPN); the stream closes at once, or after 15 s. */
