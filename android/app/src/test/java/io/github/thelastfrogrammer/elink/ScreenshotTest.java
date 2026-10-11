@@ -100,11 +100,11 @@ public class ScreenshotTest {
                 + "{\"tray_id\":3,\"filament_type\":\"\",\"filament_color\":\"\"}]}]}");
             Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
             Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
-            String[] names = {"monitor", "files", "camera", "settings"};
-            for (int i = 0; i < 4; i++) {
+            String[] names = {"print", "printer", "files", "history", "settings"};
+            for (int i = 0; i < names.length; i++) {
                 page.invoke(activity, i); render.invoke(activity);
                 View root = activity.getWindow().getDecorView();
-                int width = 1080, height = i == 3 ? 5200 : 2340;
+                int width = 1080, height = i == 4 ? 5200 : 2340;
                 root.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
                 root.layout(0, 0, width, height);
                 Bitmap bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
@@ -126,13 +126,13 @@ public class ScreenshotTest {
         String out = System.getProperty("screenshots", "");
         Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
         String[] states = {"offline", "cloud-agree", "cloud-printing", "cloud-idle", "local-printing", "local-idle"};
-        String[] tabs = {"monitor", "files", "camera", "settings"};
+        String[] tabs = {"print", "printer", "files", "history", "settings"};
         for (String theme : new String[] {"light", "dark"}) for (String state : states) {
             MainActivity activity = prepare(state, theme);
             Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
             Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
             Field pagesField = MainActivity.class.getDeclaredField("pages"); pagesField.setAccessible(true);
-            for (int i = 0; i < 4; i++) {
+            for (int i = 0; i < tabs.length; i++) {
                 page.invoke(activity, i); render.invoke(activity);
                 View root = activity.getWindow().getDecorView();
                 int width = 1080, height = 7000;

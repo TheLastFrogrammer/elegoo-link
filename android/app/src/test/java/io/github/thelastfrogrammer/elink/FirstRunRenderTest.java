@@ -20,14 +20,14 @@ import java.lang.reflect.Method;
 
 /**
  * Opt-in: renders a brand-new install (no saved printer, account, files, recordings or sliced models) on every tab,
- * Recordings and Slice, in light and dark, plus the Monitor and Files tabs at font scale 2.0.
+ * Recordings and Slice, in light and dark, plus the Print and Files tabs at font scale 2.0.
  * Run with -Dscreenshots=DIR; writes DIR/fresh-<screen>-<theme>[-fs200].png. Slice needs -DslicerLib=....
  */
 @RunWith(RobolectricTestRunner.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = 34, qualifiers = "w411dp-h891dp-xxhdpi")
 public class FirstRunRenderTest {
-    private static final String[] TABS = {"monitor", "files", "camera", "settings"};
+    private static final String[] TABS = {"print", "printer", "files", "history", "settings"};
 
     private static File out() {
         String dir = System.getProperty("screenshots", "");
@@ -78,7 +78,7 @@ public class FirstRunRenderTest {
         Field pagesField = MainActivity.class.getDeclaredField("pages"); pagesField.setAccessible(true);
         LinearLayout[] pages = (LinearLayout[]) pagesField.get(activity);
         String suffix = "-" + theme + (scale == 1.0f ? "" : "-fs" + Math.round(scale * 100));
-        for (int i = 0; i < 4; i++) {
+        for (int i = 0; i < TABS.length; i++) {
             if (!java.util.Arrays.asList(which).contains(TABS[i])) continue;
             page.invoke(activity, i); render.invoke(activity);
             View root = activity.getWindow().getDecorView();
@@ -87,12 +87,12 @@ public class FirstRunRenderTest {
         activity.finish();
     }
 
-    @Test public void freshTabsLight() throws Exception { tabs("light", 1.0f, new String[] {"monitor", "files", "camera", "settings"}); }
-    @Test public void freshTabsDark() throws Exception { tabs("dark", 1.0f, new String[] {"monitor", "files", "camera", "settings"}); }
+    @Test public void freshTabsLight() throws Exception { tabs("light", 1.0f, TABS); }
+    @Test public void freshTabsDark() throws Exception { tabs("dark", 1.0f, TABS); }
 
     /** The two tabs a newcomer reads first, at the largest font scale the app is tested at. */
-    @Test public void freshTabsLargeFontLight() throws Exception { tabs("light", 2.0f, new String[] {"monitor", "files"}); }
-    @Test public void freshTabsLargeFontDark() throws Exception { tabs("dark", 2.0f, new String[] {"monitor", "files"}); }
+    @Test public void freshTabsLargeFontLight() throws Exception { tabs("light", 2.0f, new String[] {"print", "files"}); }
+    @Test public void freshTabsLargeFontDark() throws Exception { tabs("dark", 2.0f, new String[] {"print", "files"}); }
 
     private static void recordings(String theme) throws Exception {
         freshPreferences(theme);

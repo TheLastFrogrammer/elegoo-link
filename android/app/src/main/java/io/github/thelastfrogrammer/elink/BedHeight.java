@@ -71,7 +71,7 @@ final class BedHeight {
             case UNKNOWN: return Double.isNaN(z) ? "Bed height unknown: Z is not homed. Press Home Z (Other bed heights) before tapping or saving."
                 : String.format(java.util.Locale.getDefault(), "Z is not homed, so the bed's height (last seen Z %.1f mm) is not confirmed. Press Home Z before tapping or saving.", z);
             case MOVING: return "Bed moving… waiting for the printer to report where it stopped.";
-            case UNCONFIRMED: return "The bed's new height has not been confirmed by the printer. Refresh status (Monitor) and wait, or move it again.";
+            case UNCONFIRMED: return "The bed's new height has not been confirmed by the printer. Refresh status (Print tab) and wait, or move it again.";
             default: return String.format(java.util.Locale.getDefault(), "The bed is at Z %.1f mm (homed).", z);
         }
     }

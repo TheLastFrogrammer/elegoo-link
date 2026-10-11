@@ -9,10 +9,17 @@ import java.util.*;
  * Independent of Android.
  */
 final class FeatureIndex {
-    static final int MONITOR = 0, FILES = 1, CAMERA = 2, SETTINGS = 3;
-    static final String[] TABS = {"Monitor", "Files", "Camera", "Settings"};
-    /** What has to happen before the target is visible. */
-    enum Prepare { NONE, HISTORY_OPEN, MAINTENANCE_OPEN, SETTINGS_LOCAL, SETTINGS_CLOUD, ADVANCED_CONNECTION }
+    /**
+     * The main screen's tabs, named for what you came to do: Print (the print in progress, with its camera), Printer (controls and
+     * upkeep), Files (what to print), History (what was printed) and Settings.
+     */
+    static final int PRINT = 0, PRINTER = 1, FILES = 2, HISTORY = 3, SETTINGS = 4;
+    static final String[] TABS = {"Print", "Printer", "Files", "History", "Settings"};
+    /**
+     * What has to happen before the target is visible, beyond opening the section of the tab that holds it (found by the
+     * target's text, so features never name sections).
+     */
+    enum Prepare { NONE, SETTINGS_LOCAL, SETTINGS_CLOUD, ADVANCED_CONNECTION }
 
     static final class Feature {
         final String id, title, words; final int tab; final String target; final Prepare prepare; final boolean press;
@@ -27,37 +34,41 @@ final class FeatureIndex {
 
     /** press = true only where the button opens a screen or a dialog that asks again before changing anything. */
     static final List<Feature> ALL = Collections.unmodifiableList(Arrays.asList(
-        // Monitor
-        new Feature("toolpath", "Live toolpath", "toolpath gcode viewer layers 3d preview live follow print", MONITOR, "Live toolpath", Prepare.NONE, true),
-        new Feature("temperature", "Set heater temperatures", "temperature heat preheat nozzle bed hotend", MONITOR, "Set heater temperatures", Prepare.NONE, true).or("Printer controls"),
-        new Feature("fan", "Fan setting", "fan cooling part fan aux chamber", MONITOR, "Fan setting", Prepare.NONE, true).or("Printer controls"),
-        new Feature("speed", "Print speed mode", "speed silent sport ludicrous balanced", MONITOR, "Print speed mode", Prepare.NONE, true).or("Printer controls"),
-        new Feature("load", "Load or unload filament", "filament load unload change spool feed retract", MONITOR, "Load filament", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
-        new Feature("tray", "CANVAS tray filament", "canvas tray multicolour multi colour ams refill", MONITOR, "Load or unload a CANVAS tray", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
-        new Feature("move", "Move axes or home", "move jog axis axes home x y z bed", MONITOR, "Move axes", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
-        new Feature("level", "Auto-level bed", "level leveling levelling mesh bed calibration probe", MONITOR, "Auto-level bed", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
-        new Feature("vibration", "Vibration test", "vibration input shaping resonance shaper calibration", MONITOR, "Vibration test", Prepare.MAINTENANCE_OPEN, false).or("Maintenance"),
+        // Print
+        new Feature("toolpath", "Live toolpath", "toolpath gcode viewer layers 3d preview live follow print", PRINT, "Live toolpath", Prepare.NONE, true),
+        new Feature("camera", "Watch the camera", "camera video watch stream live view webcam", PRINT, "Camera", Prepare.NONE, false),
+        new Feature("camera-3d", "Line up the camera in 3D", "camera line up align overlay 3d position lens", PRINT, "Line up the camera in 3D", Prepare.NONE, true),
+        new Feature("snapshot", "Camera snapshot", "snapshot photo picture save image", PRINT, "Save snapshot", Prepare.NONE, false),
+        new Feature("light", "Printer light", "light lamp led illumination", PRINT, "Light on", Prepare.NONE, false).or("Controls"),
+        // Printer
+        new Feature("temperature", "Set heater temperatures", "temperature heat preheat nozzle bed hotend", PRINTER, "Set heater temperatures", Prepare.NONE, true).or("Temperatures, fans & speed"),
+        new Feature("fan", "Fan setting", "fan cooling part fan aux chamber", PRINTER, "Fan setting", Prepare.NONE, true).or("Temperatures, fans & speed"),
+        new Feature("speed", "Print speed mode", "speed silent sport ludicrous balanced", PRINTER, "Print speed mode", Prepare.NONE, true).or("Temperatures, fans & speed"),
+        new Feature("load", "Load or unload filament", "filament load unload change spool feed retract", PRINTER, "Load filament", Prepare.NONE, false).or("Filament"),
+        new Feature("tray", "CANVAS tray filament", "canvas tray multicolour multi colour ams refill", PRINTER, "Load or unload a CANVAS tray", Prepare.NONE, false).or("Filament"),
+        new Feature("move", "Move axes or home", "move jog axis axes home x y z bed", PRINTER, "Move axes", Prepare.NONE, false).or("Move & calibrate"),
+        new Feature("level", "Auto-level bed", "level leveling levelling mesh bed calibration probe", PRINTER, "Auto-level bed", Prepare.NONE, false).or("Move & calibrate"),
+        new Feature("vibration", "Vibration test", "vibration input shaping resonance shaper calibration", PRINTER, "Vibration test", Prepare.NONE, false).or("Move & calibrate"),
+        new Feature("emergency", "Emergency stop", "emergency stop halt kill abort urgent", PRINTER, "Emergency stop", Prepare.NONE, false).or("Printer status"),
         // Files
         new Feature("printer-files", "Files on the printer", "files gcode printer storage usb print start delete download", FILES, "Printer files", Prepare.NONE, false),
-        new Feature("history", "Print history and Print again", "history past prints reprint print again details", FILES, "Refresh history", Prepare.HISTORY_OPEN, false),
-        new Feature("timelapse", "Timelapse videos", "timelapse video recording movie", FILES, "Refresh history", Prepare.HISTORY_OPEN, false),
-        new Feature("recordings", "Print recordings and charts", "recordings charts graphs log temperature progress csv", FILES, "Print recordings", Prepare.HISTORY_OPEN, true),
-        new Feature("storage", "Printer storage space", "storage space disk capacity free full", FILES, "Refresh storage", Prepare.HISTORY_OPEN, false),
         new Feature("slice", "Slice a model", "slice slicer stl 3mf obj step model prepare", FILES, "Slice a model", Prepare.NONE, true),
         new Feature("find-models", "Find models online", "find download thingiverse printables makerworld cults myminifactory search models online browse browser firefox ad blocker ublock adblock", FILES, "Find models online", Prepare.NONE, true),
         new Feature("calibration", "Calibration prints", "calibration pressure advance pa flow temperature tower retraction input shaping test print", FILES, "Slice a model", Prepare.NONE, true),
         new Feature("recent", "Recent slices", "recent sliced previous last gcode", FILES, "Recent slices", Prepare.NONE, true),
         new Feature("upload", "Send a G-code file from the phone", "upload send gcode phone choose file", FILES, "Choose G-code", Prepare.NONE, true),
-        // Camera
-        new Feature("camera", "Watch the camera", "camera video watch stream live view webcam", CAMERA, "Camera", Prepare.NONE, false),
-        new Feature("camera-3d", "Line up the camera in 3D", "camera line up align overlay 3d position lens", CAMERA, "Line up the camera in 3D", Prepare.NONE, true),
-        new Feature("snapshot", "Camera snapshot", "snapshot photo picture save image", CAMERA, "Save snapshot", Prepare.NONE, false),
+        // History
+        new Feature("history", "Print history and Print again", "history past prints reprint print again details", HISTORY, "Print history", Prepare.NONE, false),
+        new Feature("timelapse", "Timelapse videos", "timelapse video recording movie", HISTORY, "Print history", Prepare.NONE, false),
+        new Feature("recordings", "Print recordings and charts", "recordings charts graphs log temperature progress csv pictures snapshots", HISTORY, "Print recordings", Prepare.NONE, true),
+        new Feature("storage", "Printer storage space", "storage space disk capacity free full", HISTORY, "Refresh storage", Prepare.NONE, false),
         // Settings
         new Feature("connect", "Connect on Wi-Fi", "connect local lan wifi ip access code printer address", SETTINGS, "Printer connection", Prepare.SETTINGS_LOCAL, false),
         new Feature("cloud", "Elegoo cloud sign-in", "cloud elegoo account sign in login remote away", SETTINGS, "Elegoo cloud", Prepare.SETTINGS_CLOUD, false),
         new Feature("vpn", "Remote access through a VPN", "vpn remote tailscale away route", SETTINGS, "Remote access setup", Prepare.ADVANCED_CONNECTION, true),
         new Feature("printers", "Saved printers", "saved printers profiles switch printer", SETTINGS, "Saved printers", Prepare.SETTINGS_LOCAL, true),
         new Feature("appearance", "Appearance (dark mode)", "appearance theme dark light night", SETTINGS, "Appearance", Prepare.NONE, true),
+        new Feature("pictures", "Camera pictures during prints", "pictures snapshots interval photos timelapse recording camera", SETTINGS, "Recording pictures", Prepare.NONE, true),
         new Feature("alerts", "Notifications", "notifications alerts done finished fault", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),
         new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),

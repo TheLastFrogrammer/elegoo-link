@@ -29,7 +29,7 @@ public final class MainActivity extends Activity {
     private TextView previewInfo;
     private LinearLayout timelapseList;
     private String saveAfterDownload, pendingPrintSetup;
-    /** Intent extra: the tab to open (0 Monitor, 1 Files, 2 Camera, 3 Settings), from another screen's hint. */
+    /** Intent extra: the tab to open (FeatureIndex.PRINT … SETTINGS), from another screen's hint. Settings opens on its connection section. */
     static final String EXTRA_PAGE = "openPage";
     private long printSetupUntil;
     private long saveGiveUpAt;
@@ -39,9 +39,12 @@ public final class MainActivity extends Activity {
     private LinearLayout printRow, lightRow, tilesRow, controlsCard, canvasCard, tuningCard, upkeepCard, upkeepButtons, moreOptions, cameraCloudCard, cameraLocalCard, localCameraBody;
     private Button controlFix, filesFix, moreToggle, localToggle;
     private TextView tuningHint, upkeepHint, cloudCameraHint, timelapseHint, fileHelp;
-    private boolean moreOpen, localCameraOpen, cameraLocalFirst, historyOpen;
-    private LinearLayout historyButtons, historyList, historyBody;
-    private Button historyToggle;
+    private boolean moreOpen, localCameraOpen, cameraLocalFirst;
+    private LinearLayout historyButtons, historyList, filamentButtons;
+    private TextView filamentHint, printerStatus;
+    private Button printerFix;
+    /** Emergency stop sits on the Printer tab's front page and in each section that moves the printer. */
+    private final List<Button> emergencyStops = new ArrayList<>();
     private JSONObject renderedHistoryList;
     private ControlState.Block block = ControlState.Block.DISCONNECTED;
     private String dismissedFeedback = "", renderedCanvas;
@@ -81,9 +84,11 @@ public final class MainActivity extends Activity {
         button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
         A11y.tab(button, selected);
     }
-    private final LinearLayout[] pages = new LinearLayout[4];
-    private final LinearLayout[] tabs = new LinearLayout[4];
-    private int page = 3;
+    private static final int PRINT = FeatureIndex.PRINT, PRINTER = FeatureIndex.PRINTER, FILES = FeatureIndex.FILES, HISTORY = FeatureIndex.HISTORY,
+        SETTINGS = FeatureIndex.SETTINGS, TAB_COUNT = FeatureIndex.TABS.length;
+    private final LinearLayout[] pages = new LinearLayout[TAB_COUNT];
+    private final LinearLayout[] tabs = new LinearLayout[TAB_COUNT];
+    private int page = SETTINGS;
     private SharedPreferences settings;
     private ProfileStore profiles;
     private EditText profileName, cameraAddress, pairingPin;
@@ -91,20 +96,17 @@ public final class MainActivity extends Activity {
     private Button cloudSignOut, cloudPrinters, probeButton;
     private TextView probeResult;
     private CheckBox cloudBackground;
-    private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck, urgentStop;
+    private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck;
     private ImageView fileThumbnail;
     private Button graphs;
     private String fileThumbnailKey = "";
     private Button cloudCamera, cameraFix;
     /** First run only: the three ways in. Hidden for good once the phone has connected or a model has been sliced. */
     private LinearLayout getStarted, heroCard;
-    /** Monitor quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Print again and Print recordings. */
+    /** Print tab quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Print again and Print recordings. */
     private LinearLayout quickRow, recordingsRow;
     private Button quickSlice, quickCamera, quickAgain, picturesNow;
     /** Maintenance starts collapsed; the Emergency stop button stays outside the collapsed part. */
-    private Button maintenanceToggle;
-    private LinearLayout maintenanceBody;
-    private boolean maintenanceOpen;
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
     private Spinner storagePicker, routePicker, authPicker;
@@ -125,7 +127,7 @@ public final class MainActivity extends Activity {
     private CheckBox remember;
     private TextView connection, state, job, feedback, selected, faults, trays, identity, diagnostics;
     private Button connect, pause, stop, refresh, upload, pick, refill, check, forget, recentSlices;
-    /** Monitor while printing: the live camera on top (local stream, only while this tab is on screen), then the job with its thumbnail. */
+    /** The Print tab while printing: the live camera on top (local stream, only while this tab is on screen), then the job with its thumbnail. */
     private LinearLayout monitorCamera, trayStrip;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
@@ -207,9 +209,9 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams bannerLayout = new LinearLayout.LayoutParams(-1, -2); bannerLayout.topMargin = dp(8); content.addView(feedback, bannerLayout);
         // Bottom navigation.
         LinearLayout navigation = new LinearLayout(this); navigation.setOrientation(LinearLayout.HORIZONTAL); navigation.setBackgroundColor(NAV); navigation.setElevation(dp(8));
-        String[] titles = {"Monitor", "Files", "Camera", "Settings"};
-        int[] icons = {R.drawable.ic_nav_monitor, R.drawable.ic_nav_files, R.drawable.ic_nav_camera, R.drawable.ic_nav_settings};
-        for (int i = 0; i < 4; i++) {
+        String[] titles = FeatureIndex.TABS;
+        int[] icons = {R.drawable.ic_nav_monitor, R.drawable.ic_nav_printer, R.drawable.ic_nav_files, R.drawable.ic_nav_history, R.drawable.ic_nav_settings};
+        for (int i = 0; i < TAB_COUNT; i++) {
             final int target = i; LinearLayout item = new LinearLayout(this); item.setOrientation(LinearLayout.VERTICAL); item.setGravity(Gravity.CENTER); item.setPadding(0, dp(8), 0, dp(8));
             ImageView icon = new ImageView(this); icon.setImageResource(icons[i]); item.addView(icon, new LinearLayout.LayoutParams(dp(24), dp(24)));
             TextView name = new TextView(this); name.setText(titles[i]); name.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, 12 * getResources().getDisplayMetrics().density * Math.min(1.3f, getResources().getConfiguration().fontScale)); name.setGravity(Gravity.CENTER); name.setMaxLines(2); item.addView(name);
@@ -219,10 +221,15 @@ public final class MainActivity extends Activity {
         }
         root.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
         setContentView(root);
-        for (int i = 0; i < 4; i++) { pages[i] = new LinearLayout(this); pages[i].setOrientation(LinearLayout.VERTICAL); content.addView(pages[i]); }
-        currentSection = pages[3];
+        for (int i = 0; i < TAB_COUNT; i++) buildHub(i);
+        // Settings: a short front page of sections, the connection first.
+        connectionSection = section(SETTINGS, "Printer connection", "");
+        preferencesSection = section(SETTINGS, "App preferences", "Appearance, print recordings, camera pictures and notifications");
+        helpSection = section(SETTINGS, "Help & diagnostics", "Connection help, Field check, printer probe and diagnostics");
+        aboutSection = section(SETTINGS, "About", "Version " + appVersion() + ", licences and what is planned");
+        currentSection = connectionSection.body;
         // Local or cloud: one connection card at a time, so the page stays short.
-        LinearLayout modeRow = row(pages[3]); ((LinearLayout.LayoutParams) modeRow.getLayoutParams()).topMargin = dp(12);
+        LinearLayout modeRow = row(currentSection); ((LinearLayout.LayoutParams) modeRow.getLayoutParams()).topMargin = dp(12);
         modeLocal = segment(modeRow, "Local (Wi-Fi)", () -> setSettingsMode(false));
         modeCloud = segment(modeRow, "Elegoo cloud", () -> setSettingsMode(true));
         LinearLayout connectionCard = card("Printer connection");
@@ -277,13 +284,13 @@ public final class MainActivity extends Activity {
         removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
         forget = button(more, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
         setMore(settings.getBoolean("remoteVPN", false) || settings.getBoolean("pinProbe", false));
-        currentSection = pages[0];
+        currentSection = fronts[PRINT];
         // Get started: one line on what the app does, then the three ways in, each with one button.
         getStarted = card("Get started");
         label(getStarted, "Watch and control your Centauri Carbon 2, or slice models on this phone. Pick one way to start.", 14, INK, false);
         label(getStarted, "1. At home, on Wi-Fi", 14, INK, true);
         label(getStarted, "Turn the printer on and join this phone's Wi-Fi, then look for it.", 13, MUTED, false);
-        rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { setSettingsMode(false); selectPage(3); scanPrinters(); }, true);
+        rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { openSettings(false); scanPrinters(); }, true);
         label(getStarted, "2. Away from home", 14, INK, true);
         label(getStarted, "Use your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
         rowButton(row(getStarted), "Sign in with Elegoo…", this::cloudSignIn, false);
@@ -328,11 +335,11 @@ public final class MainActivity extends Activity {
         quickRow = row(hero); ((LinearLayout.LayoutParams) quickRow.getLayoutParams()).topMargin = dp(12); // apart from Pause, Resume and Stop
         liveToolpath = rowButton(quickRow, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), true);
         quickSlice = rowButton(quickRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
-        quickCamera = rowButton(quickRow, "Camera", () -> selectPage(2), false);
+        quickCamera = rowButton(quickRow, "Camera", () -> openSection(cameraSection), false);
         recordingsRow = row(hero);
         picturesNow = rowButton(recordingsRow, "Pictures…", () -> pictureDialog(false), false);
-        quickAgain = rowButton(recordingsRow, "Print again…", () -> { setHistoryOpen(true); selectPage(1); }, false);
-        quickAgain.setContentDescription("Print again: opens print history on the Files tab, where the latest print can be printed again");
+        quickAgain = rowButton(recordingsRow, "Print again…", () -> selectPage(HISTORY), false);
+        quickAgain.setContentDescription("Print again: opens the History tab, where the latest print can be printed again");
         graphs = rowButton(recordingsRow, "Print recordings", () -> {
             PrintRecorder.Recording current = printer == null || printer.recorder == null ? null : printer.recorder.current();
             Intent intent = new Intent(this, RecordingsActivity.class);
@@ -356,21 +363,35 @@ public final class MainActivity extends Activity {
         trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList); trayList.setVisibility(View.GONE);
         trays = label(canvas, "Connect to see reported trays, materials, colours and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
-        LinearLayout tuning = card("Printer controls"); tuningCard = tuning;
+        // Printer: what can be done now and Emergency stop on its front page, then one section per kind of control.
+        currentSection = fronts[PRINTER];
+        LinearLayout status = card("Printer status");
+        printerStatus = label(status, "", 13, MUTED, false);
+        printerFix = rowButton(row(status), "", this::fixControl, true); ((View) printerFix.getParent()).setVisibility(View.GONE);
+        emergencyButton(status);
+        tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and the print speed mode");
+        filamentSection = section(PRINTER, "Filament", "Load or unload filament and CANVAS trays");
+        motionSection = section(PRINTER, "Move & calibrate", "Home, move the axes, level the bed, vibration test and self-check");
+        currentSection = tuningSection.body;
+        LinearLayout tuning = card(null); tuningCard = tuning;
         tuningHint = label(tuning, "", 13, MUTED, false);
         heater = button(tuning, "Set heater temperatures now…", this::temperatureDialog);
         for (TextView t : new TextView[] {tileNozzle, tileBed}) { View tile = (View) t.getParent(); tile.setOnClickListener(v -> temperatureDialog()); tile.setClickable(false); A11y.clickLabel(tile, "Change heater targets"); }
         fan = button(tuning, "Fan setting…", this::fanDialog);
         speed = button(tuning, "Print speed mode…", this::speedDialog);
-        LinearLayout upkeep = card(null); upkeepCard = upkeep;
-        maintenanceToggle = cardHeader(upkeep, "Maintenance", "More ›", this::toggleMaintenance);
-        upkeepHint = label(upkeep, "", 13, MUTED, false);
-        LinearLayout collapsible = new LinearLayout(this); collapsible.setOrientation(LinearLayout.VERTICAL); upkeep.addView(collapsible); maintenanceBody = collapsible;
-        LinearLayout group = new LinearLayout(this); group.setOrientation(LinearLayout.VERTICAL); collapsible.addView(group); upkeepButtons = group;
-        LinearLayout filamentRow = row(group);
+        currentSection = filamentSection.body;
+        LinearLayout filament = card(null);
+        filamentHint = label(filament, "", 13, MUTED, false);
+        LinearLayout filamentGroup = new LinearLayout(this); filamentGroup.setOrientation(LinearLayout.VERTICAL); filament.addView(filamentGroup); filamentButtons = filamentGroup;
+        LinearLayout filamentRow = row(filamentGroup);
         loadFilament = rowButton(filamentRow, "Load filament", () -> maintenanceConfirm("Load filament?", "The printer heats the nozzle and feeds filament. This can take a few minutes.", Cc2Codec.FEED), false);
         unloadFilament = rowButton(filamentRow, "Unload filament", () -> maintenanceConfirm("Unload filament?", "The printer heats the nozzle and retracts the filament. This can take a few minutes.", Cc2Codec.RETREAT), false);
-        trayFilament = button(group, "Load or unload a CANVAS tray…", this::trayDialog);
+        trayFilament = button(filamentGroup, "Load or unload a CANVAS tray…", this::trayDialog);
+        emergencyButton(filament);
+        currentSection = motionSection.body;
+        LinearLayout upkeep = card(null); upkeepCard = upkeep;
+        upkeepHint = label(upkeep, "", 13, MUTED, false);
+        LinearLayout group = new LinearLayout(this); group.setOrientation(LinearLayout.VERTICAL); upkeep.addView(group); upkeepButtons = group;
         LinearLayout motionRow = row(group);
         homeAll = rowButton(motionRow, "Home all axes", () -> confirmRequest("Home all axes?", "The print head and bed move to their home positions. Keep the printer clear.", () -> Cc2Codec.homeRequest(0, "xyz")), false);
         jog = rowButton(motionRow, "Move axes…", this::jogDialog, false);
@@ -378,11 +399,9 @@ public final class MainActivity extends Activity {
         autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Run auto bed leveling?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration optimization?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
-        urgentStop = button(upkeep, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
-        urgentStop.setTextColor(ERROR);
-        setMaintenanceOpen(false);
-        currentSection = pages[1];
-        // Order on the Files tab: what is on the printer, then sending a new file, then the rarely needed storage and history.
+        emergencyButton(upkeep);
+        currentSection = fronts[FILES];
+        // Order on the Files tab: what is on the printer, then sending a new file. What was printed is on History.
         buildFileBrowser();
         LinearLayout files = card("Send a file to the printer");
         selected = label(files, "Slice a model or pick a .gcode file on this phone. Slicing works without the printer; uploading needs a connection to it.", 14, MUTED, false);
@@ -435,8 +454,10 @@ public final class MainActivity extends Activity {
         cancelUpload = rowButton(transferRow, "Cancel upload", () -> { if (printer != null) printer.cancelUpload(); }, false);
         cancelDownload = rowButton(transferRow, "Cancel download", () -> { if (printer != null) printer.cancelDownload(); }, false);
         label(fileDetails, "Uploads and downloads need the local connection (the printer's HTTP port 80). Downloads are kept in this app; Save to phone… exports a copy. The report reads slicer comments only; it does not simulate a print.", 12, MUTED, false);
-        currentSection = pages[2]; buildCamera();
-        currentSection = pages[3];
+        currentSection = fronts[HISTORY]; buildHistory();
+        cameraSection = section(PRINT, "Camera", "The printer's camera, snapshots and lining it up in the 3D view");
+        currentSection = cameraSection.body; buildCamera();
+        currentSection = connectionSection.body;
         cloudAccounts = new CloudAccountStore(this);
         LinearLayout account = card("Elegoo cloud (experimental)");
         cloudSettings = account;
@@ -453,20 +474,22 @@ public final class MainActivity extends Activity {
             if (enabled) { requestNotifications(); try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { } }
             if (printer != null) printer.cloudSettingsChanged();
         });
-        label(account, "Your password is sent only to Elegoo's own sign-in page. Without a local connection, Monitor shows the cloud's last update.", 13, MUTED, false);
+        label(account, "Your password is sent only to Elegoo's own sign-in page. Without a local connection, the Print tab shows the cloud's last update.", 13, MUTED, false);
         renderCloudAccount();
         setSettingsMode(settingsModeAtStart());
-        LinearLayout preferences = card("App preferences");
+        currentSection = preferencesSection.body;
+        LinearLayout preferences = card(null);
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "Follow system" : dark ? "Dark" : "Light"), this::appearanceDialog);
         CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         Button pictures = button(preferences, "", () -> pictureDialog(true));
         pictureDefault = pictures; showPictureDefault();
-        label(preferences, "Camera pictures are kept with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can have its own interval (Monitor › Pictures while it prints).", 12, MUTED, false);
+        label(preferences, "Camera pictures are kept with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can have its own interval (Pictures… on the Print tab while it prints).", 12, MUTED, false);
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts need notification permission and an active monitoring session. They stop when you disconnect, or when Android stops the app.", 13, MUTED, false);
-        LinearLayout help = card("Help & diagnostics");
+        currentSection = helpSection.body;
+        LinearLayout help = card(null);
         button(help, "Connection help…", this::connectionHelp);
         probeButton = button(help, "Probe printer (read-only)…", this::probeDialog);
         // The probe result scrolls inside a fixed-height area, so a long answer does not push the rest of the page down.
@@ -475,7 +498,8 @@ public final class MainActivity extends Activity {
         help.addView(probeArea, new LinearLayout.LayoutParams(-1, dp(200))); probeArea.setVisibility(View.GONE);
         button(help, "Field check…", () -> startActivity(new Intent(this, FieldCheckActivity.class)));
         button(help, "Share diagnostics…", this::shareDiagnostics);
-        LinearLayout about = card("About Link Workshop " + appVersion());
+        currentSection = aboutSection.body;
+        LinearLayout about = card("Link Workshop " + appVersion());
         label(about, "Development build: printer behaviour still needs hardware testing (Field check… above walks through it). Planned next: painting tools in the slicer and other printer models.", 13, MUTED, false);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
@@ -484,7 +508,7 @@ public final class MainActivity extends Activity {
         catch (Exception error) { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); }
         TransientInputs transientInputs = (TransientInputs) getLastNonConfigurationInstance();
         if (transientInputs != null && host.getText().toString().equals(transientInputs.host)) { access.setText(transientInputs.code); pendingSnapshot = transientInputs.snapshot; }
-        selectPage(saved == null ? settings.getInt("page", 0) : saved.getInt("page", 0));
+        selectPage(saved == null ? savedTab() : saved.getInt("tab", PRINT));
         if (saved == null) receiveSliced(getIntent());
         openRequestedPage(getIntent());
         bound = bindService(new Intent(this, PrinterService.class), binding, BIND_AUTO_CREATE);
@@ -492,6 +516,12 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); receiveSliced(intent); openRequestedPage(intent); }
 
+    /** The tab open last time; from before the History and Printer tabs, the old tab's new place (Camera is on Print now). */
+    private int savedTab() {
+        if (settings.contains("tab")) return settings.getInt("tab", PRINT);
+        int[] moved = {PRINT, FILES, PRINT, SETTINGS};
+        int old = settings.getInt("page", 0); return old >= 0 && old < moved.length ? moved[old] : PRINT;
+    }
     /** G-code from a Slice screen that another app opened ("Open with"), handed over like a slice started from Files. */
     private void receiveSliced(Intent intent) {
         if (intent == null) return;
@@ -504,13 +534,13 @@ public final class MainActivity extends Activity {
         try { if (!file.getCanonicalFile().getParentFile().equals(sliced.getCanonicalFile()) || !file.isFile()) return; } catch (IOException error) { return; }
         pendingSlicedFile = path; pendingSlicedName = name; intent.removeExtra(SliceActivity.RESULT_FILE);
         settings.edit().putBoolean("everSliced", true).apply();
-        selectPage(1); takeSliced();
+        selectPage(FILES); takeSliced();
     }
     /** After "Upload and print" on the Slice screen: open Print setup once the upload is in the printer's file list. */
     private static final long PRINT_SETUP_WAIT_MS = 5 * 60_000L;
     private long printSetupStarted;
     private void awaitPrintSetup(String name) {
-        pendingPrintSetup = name; printSetupStarted = System.currentTimeMillis(); printSetupUntil = printSetupStarted + PRINT_SETUP_WAIT_MS; selectPage(1);
+        pendingPrintSetup = name; printSetupStarted = System.currentTimeMillis(); printSetupUntil = printSetupStarted + PRINT_SETUP_WAIT_MS; selectPage(FILES);
     }
     private void continuePrintSetup() {
         if (pendingPrintSetup == null || printer == null) return;
@@ -766,7 +796,10 @@ public final class MainActivity extends Activity {
     }
     /** Opens the tab another screen asked for (EXTRA_PAGE), once. */
     private void openRequestedPage(Intent intent) {
-        if (intent != null && intent.hasExtra(EXTRA_PAGE)) { selectPage(intent.getIntExtra(EXTRA_PAGE, 0)); intent.removeExtra(EXTRA_PAGE); }
+        if (intent != null && intent.hasExtra(EXTRA_PAGE)) {
+            int tab = intent.getIntExtra(EXTRA_PAGE, PRINT); intent.removeExtra(EXTRA_PAGE);
+            if (tab == SETTINGS) openSettings(null); else selectPage(tab);
+        }
         // Launcher shortcuts name a feature; go there as "Find a feature" does, once the screen is laid out.
         String feature = intent == null ? null : intent.getStringExtra(EXTRA_FEATURE);
         if (feature != null) { intent.removeExtra(EXTRA_FEATURE); FeatureIndex.Feature f = FeatureIndex.byId(feature); if (f != null) main.post(() -> goToFeature(f)); }
@@ -819,32 +852,51 @@ public final class MainActivity extends Activity {
             case "calibration": startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "calibration"), SLICE); return;
             default: break;
         }
+        selectPage(f.tab);
+        prepareFeature(f);
+        render();
+        main.post(() -> {
+            View target = reveal(f.tab, f.target);
+            if (target == null || !target.isShown()) {
+                // Hidden in this state (printer controls while it prints, or not connected): show the card that explains when.
+                View card = f.fallback.isEmpty() ? null : reveal(f.tab, f.fallback);
+                if (card != null && card.isShown()) {
+                    main.post(() -> { scrollTo(card); highlight(card); });
+                    message(f.title + " appears here when the printer is connected and idle.");
+                } else message("toolpath".equals(f.id) ? "Live toolpath appears on the Print tab while a print is running."
+                    : f.title + " needs a connected printer" + (f.tab == PRINTER ? " that is idle" : "") + ". Connect in Settings first.");
+                return;
+            }
+            // Opening a section changes the layout: scroll once it is laid out.
+            main.post(() -> {
+                scrollTo(target); highlight(target);
+                if (f.press && target.isEnabled() && target instanceof Button) target.performClick();
+                else if (!f.press && target instanceof Button && !target.isEnabled()) message(f.title + " is here, but not available right now (it needs a connected, idle printer).");
+            });
+        });
+    }
+    /** The Settings mode or option a feature lives behind; its section is opened by reveal(). */
+    private void prepareFeature(FeatureIndex.Feature f) {
         switch (f.prepare) {
-            case HISTORY_OPEN: setHistoryOpen(true); break;
-            case MAINTENANCE_OPEN: setMaintenanceOpen(true); break;
             case SETTINGS_LOCAL: setSettingsMode(false); break;
             case SETTINGS_CLOUD: setSettingsMode(true); break;
             case ADVANCED_CONNECTION: setSettingsMode(false); setMore(true); break;
             default: break;
         }
-        selectPage(f.tab);
-        render();
-        main.post(() -> {
-            View target = findByText(pages[f.tab], f.target);
-            if (target == null || !target.isShown()) {
-                // Hidden in this state (printer controls while it prints, or not connected): show the card that explains when.
-                View card = f.fallback.isEmpty() ? null : findByText(pages[f.tab], f.fallback);
-                if (card != null && card.isShown()) {
-                    scrollTo(card); highlight(card);
-                    message(f.title + " appears here when the printer is connected and idle.");
-                } else message("toolpath".equals(f.id) ? "Live toolpath appears on Monitor while a print is running."
-                    : f.title + " needs a connected printer" + (f.tab == FeatureIndex.MONITOR ? " that is idle" : "") + ". Connect in Settings first.");
-                return;
-            }
-            scrollTo(target); highlight(target);
-            if (f.press && target.isEnabled() && target instanceof Button) target.performClick();
-            else if (!f.press && target instanceof Button && !target.isEnabled()) message(f.title + " is here, but not available right now (it needs a connected, idle printer).");
-        });
+    }
+    /**
+     * The visible view on a tab whose text starts with `text`, opening the section that holds it first (sections before the
+     * front page, so a section's own heading wins over the tile that leads to it). Null when nothing visible matches.
+     */
+    private View reveal(int tab, String text) {
+        for (Section section : sections) {
+            if (section.tab != tab) continue;
+            View found = null;
+            for (int i = 0; i < section.body.getChildCount() && found == null; i++) found = findByText(section.body.getChildAt(i), text);
+            if (found != null) { openSection(section); return found; }
+        }
+        closeSection(tab);
+        return findByText(pages[tab], text);
     }
     /** The first visible button, check box or heading in `root` whose text starts with `text`. */
     static View findByText(View root, String text) {
@@ -864,21 +916,98 @@ public final class MainActivity extends Activity {
         target.postDelayed(() -> target.setForeground(null), 2500);
         target.sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED);
     }
+    // ------------------------------------------------------------------ Tabs, their front pages and sections
+    /**
+     * A part of a tab that opens in place of the tab's front page, from a row on it: the tab stays short and says where things
+     * are, and Back (the bar on top, the system back, or the tab again) returns to the front page.
+     */
+    private static final class Section {
+        final int tab; final String title; final LinearLayout body; TextView detail;
+        Section(int tab, String title, LinearLayout body) { this.tab = tab; this.title = title; this.body = body; }
+    }
+    private final List<Section> sections = new ArrayList<>();
+    private final Section[] opened = new Section[TAB_COUNT];
+    private final LinearLayout[] fronts = new LinearLayout[TAB_COUNT], sectionRows = new LinearLayout[TAB_COUNT];
+    private final Button[] backBars = new Button[TAB_COUNT];
+    private Section connectionSection, preferencesSection, helpSection, aboutSection, cameraSection, tuningSection, filamentSection, motionSection;
+    private Object backCallback;
+    /** A tab: the back bar (shown in a section), then the front page; sections are added after it. */
+    private void buildHub(int tab) {
+        LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); content.addView(page); pages[tab] = page;
+        Button back = new Button(this); back.setText("‹ " + FeatureIndex.TABS[tab]); back.setAllCaps(false); back.setTextSize(15); back.setTextColor(TEAL); back.setBackground(null);
+        back.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); back.setMinHeight(dp(48)); back.setMinimumHeight(dp(48)); back.setPadding(dp(4), 0, dp(12), 0);
+        back.setContentDescription("Back to " + FeatureIndex.TABS[tab]); back.setOnClickListener(v -> closeSection(tab)); back.setVisibility(View.GONE);
+        LinearLayout.LayoutParams backLayout = new LinearLayout.LayoutParams(-2, -2); backLayout.topMargin = dp(8); page.addView(back, backLayout); backBars[tab] = back;
+        LinearLayout front = new LinearLayout(this); front.setOrientation(LinearLayout.VERTICAL); page.addView(front); fronts[tab] = front;
+    }
+    /**
+     * A section of `tab` with its heading, and its row on the front page (in a list started where the first section is added,
+     * so a tab can put cards above it). Build its content with currentSection = the section's body.
+     */
+    private Section section(int tab, String title, String detail) {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setVisibility(View.GONE); pages[tab].addView(body);
+        TextView heading = label(body, title, 22, INK, true); A11y.heading(heading); heading.setPadding(dp(4), 0, 0, 0);
+        Section section = new Section(tab, title, body); sections.add(section);
+        if (sectionRows[tab] == null) {
+            LinearLayout list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); list.setPadding(dp(16), dp(4), dp(16), dp(4));
+            GradientDrawable shape = new GradientDrawable(); shape.setColor(SURFACE); shape.setCornerRadius(dp(20)); list.setBackground(shape);
+            LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); fronts[tab].addView(list, layout); sectionRows[tab] = list;
+        }
+        LinearLayout list = sectionRows[tab];
+        listRow(list, title, detail, list.getChildCount() > 0, () -> openSection(section));
+        LinearLayout row = (LinearLayout) list.getChildAt(list.getChildCount() - 1);
+        section.detail = (TextView) ((LinearLayout) row.getChildAt(0)).getChildAt(1);
+        A11y.heading(((LinearLayout) row.getChildAt(0)).getChildAt(0));
+        return section;
+    }
+    private void openSection(Section section) {
+        if (section == null) return;
+        int tab = section.tab; opened[tab] = section;
+        fronts[tab].setVisibility(View.GONE); backBars[tab].setVisibility(View.VISIBLE);
+        for (Section other : sections) if (other.tab == tab) other.body.setVisibility(other == section ? View.VISIBLE : View.GONE);
+        if (tab == page) { mainScroll.scrollTo(0, 0); main.post(() -> section.body.getChildAt(0).sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED)); }
+        watchBack(); render();
+    }
+    private void closeSection(int tab) {
+        Section was = opened[tab]; if (was == null) return;
+        opened[tab] = null; was.body.setVisibility(View.GONE); backBars[tab].setVisibility(View.GONE); fronts[tab].setVisibility(View.VISIBLE);
+        if (tab == page) mainScroll.scrollTo(0, 0);
+        watchBack(); render();
+    }
+    /** Settings, on its connection section (local or cloud when given): where every "connect first" hint leads. */
+    private void openSettings(Boolean cloud) { selectPage(SETTINGS); if (cloud != null) setSettingsMode(cloud); openSection(connectionSection); }
+    /** System back closes an open section first (Android 13+ asks for this up front; older versions call onBackPressed). */
+    private void watchBack() {
+        if (Build.VERSION.SDK_INT < 33) return;
+        boolean wanted = opened[page] != null;
+        android.window.OnBackInvokedDispatcher dispatcher = getOnBackInvokedDispatcher();
+        if (wanted && backCallback == null) {
+            android.window.OnBackInvokedCallback callback = () -> closeSection(page);
+            dispatcher.registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback); backCallback = callback;
+        } else if (!wanted && backCallback != null) { dispatcher.unregisterOnBackInvokedCallback((android.window.OnBackInvokedCallback) backCallback); backCallback = null; }
+    }
+    /** Android 8–12 only: from 13 on, back (gestures included) goes to the callback watchBack() registers. */
+    @SuppressWarnings("deprecation") @android.annotation.SuppressLint("GestureBackNavigation")
+    @Override public void onBackPressed() { if (opened[page] != null) closeSection(page); else super.onBackPressed(); }
     private void selectPage(int selected) {
-        int before = page; page = Math.max(0, Math.min(3, selected));
-        // Monitor and Camera share one stream: it stops whenever the tab changes, and on any other tab.
-        if (page != before || page != 2 && page != 0) stopCamera();
-        if (page == 0 && before != 0) monitorCameraTried = false;
-        if (page == 1) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
-        if (page == 0) { traysAskedAt = 0; main.post(this::autoLoadTrays); }
-        for (int i = 0; i < 4; i++) {
+        int before = page; page = Math.max(0, Math.min(TAB_COUNT - 1, selected));
+        // Leaving a tab returns it to its front page; tapping the tab you are on does the same.
+        if (before != page && pages[before] != null) closeSection(before); else if (before == page) closeSection(page);
+        // The Print tab's camera (on top, and in its Camera section) stops whenever the tab changes, and on any other tab.
+        if (page != before || page != PRINT) stopCamera();
+        if (page == PRINT && before != PRINT) monitorCameraTried = false;
+        if (page == FILES) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
+        if (page == PRINT) { traysAskedAt = 0; main.post(this::autoLoadTrays); }
+        if (page == HISTORY) { historyAutoAt = 0; main.post(this::autoLoadHistory); }
+        for (int i = 0; i < TAB_COUNT; i++) {
             pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE);
             int color = i == page ? TEAL : MUTED;
             ((ImageView) tabs[i].getChildAt(0)).setImageTintList(ColorStateList.valueOf(color));
             TextView name = (TextView) tabs[i].getChildAt(1); name.setTextColor(color); name.setTypeface(Typeface.DEFAULT, i == page ? Typeface.BOLD : Typeface.NORMAL);
             A11y.tab(tabs[i], i == page);
         }
-        settings.edit().putInt("page", page).apply();
+        watchBack();
+        settings.edit().putInt("tab", page).apply();
         // A tab shown blank on a phone (even its fixed cards) means its views were never laid out: force a fresh layout now and
         // once more after this frame, and note what was stuck (sizes and flags only).
         View shown = pages[page]; int tab = page;
@@ -906,7 +1035,7 @@ public final class MainActivity extends Activity {
         return view.getWidth() + "x" + view.getHeight() + ", " + sized + " of " + count + " cards sized" + (waiting.length() > 0 ? ", waiting: " + waiting : "");
     }
     private void fixControl() {
-        if (block == ControlState.Block.CLOUD_AGREEMENT) cloudGate(true, this::render); else if (block == ControlState.Block.DISCONNECTED) selectPage(3);
+        if (block == ControlState.Block.CLOUD_AGREEMENT) cloudGate(true, this::render); else if (block == ControlState.Block.DISCONNECTED) openSettings(null);
     }
     /** One compact tappable row for a printer file: name, size and layers beneath, a chevron, and a hairline above all but the first. */
     private void fileRow(String name, String detail, boolean divider, Runnable action) { listRow(fileRows, name, detail, divider, action); }
@@ -1044,36 +1173,33 @@ public final class MainActivity extends Activity {
         previousFiles = rowButton(pageRow, "Previous 50", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); }, false);
         nextFiles = rowButton(pageRow, "Next 50", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); }, false);
         fileHelp = label(browser, "Tap a file to print it, save it to the phone or delete it. Printing and deleting need an idle printer.", 13, MUTED, false);
-        // Storage, print history, timelapses and recordings are rarely needed, so they sit behind one toggle that starts collapsed.
-        LinearLayout storage = card("History, storage and recordings");
-        historyToggle = button(storage, "", () -> setHistoryOpen(!historyOpen));
-        historyBody = new LinearLayout(this); historyBody.setOrientation(LinearLayout.VERTICAL); storage.addView(historyBody);
-        setHistoryOpen(false);
-        diskInfo = label(historyBody, "Storage usage not loaded.", 14, MUTED, false);
-        LinearLayout refreshRow = row(historyBody); historyButtons = refreshRow;
-        loadDisk = rowButton(refreshRow, "Refresh storage", () -> { if (printer != null) printer.loadDisk(); }, false);
+    }
+    /** History: what was printed (with Print again and timelapses), the app's own recordings, then the printer's storage. */
+    private void buildHistory() {
+        LinearLayout recordings = card("Print recordings");
+        label(recordings, "Graphs of progress, layers, temperatures and fans for each print this app has watched, with its camera pictures.", 13, MUTED, false);
+        button(recordings, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
+        LinearLayout history = card("Print history");
+        LinearLayout refreshRow = row(history); historyButtons = refreshRow;
         loadHistory = rowButton(refreshRow, "Refresh history", () -> { if (printer != null) printer.loadHistory(); }, false);
-        historyInfo = label(historyBody, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
-        historyList = new LinearLayout(this); historyList.setOrientation(LinearLayout.VERTICAL); historyBody.addView(historyList);
+        historyInfo = label(history, "History not loaded.", 14, INK, false); historyInfo.setTextIsSelectable(true);
+        historyList = new LinearLayout(this); historyList.setOrientation(LinearLayout.VERTICAL); history.addView(historyList);
         // Timelapse videos the printer made for recent prints: download over LAN, then save.
-        timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); historyBody.addView(timelapseList);
-        timelapseHint = label(historyBody, "", 12, MUTED, false);
-        saveTimelapse = button(historyBody, "Save timelapse to phone…", () -> {
+        timelapseList = new LinearLayout(this); timelapseList.setOrientation(LinearLayout.VERTICAL); history.addView(timelapseList);
+        timelapseHint = label(history, "", 12, MUTED, false);
+        saveTimelapse = button(history, "Save timelapse to phone…", () -> {
             if (printer == null || printer.timelapseFile == null) return;
             startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, printer.timelapseName), SAVE_TIMELAPSE);
         });
         saveTimelapse.setVisibility(View.GONE);
-        label(historyBody, "Graphs of progress, layers, temperatures and fans for each print this app has watched.", 13, MUTED, false);
-        button(historyBody, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
+        LinearLayout storage = card("Printer storage");
+        diskInfo = label(storage, "Storage usage not loaded.", 14, MUTED, false);
+        loadDisk = button(storage, "Refresh storage", () -> { if (printer != null) printer.loadDisk(); });
     }
-    /** Maintenance is collapsed by default; its header says what a tap does and speaks its state. Emergency stop is never inside the body. */
-    private void toggleMaintenance() { setMaintenanceOpen(!maintenanceOpen); }
-    public void setMaintenanceOpen(boolean open) {
-        maintenanceOpen = open;
-        maintenanceBody.setVisibility(open && maintenanceToggle.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
-        maintenanceToggle.setText(open ? "Less ▴" : "More ›");
-        maintenanceToggle.setContentDescription(open ? "Hide maintenance options" : "Show maintenance options");
-        A11y.expandable(maintenanceToggle, open);
+    /** Emergency stop: asks first, and is sent once per confirmation like every other printer command. */
+    private void emergencyButton(LinearLayout parent) {
+        Button stop = button(parent, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
+        stop.setTextColor(ERROR); emergencyStops.add(stop);
     }
     /** Spaces the visible buttons of a quick-action row: a gap only between buttons that sit side by side. */
     private void spaceActions(LinearLayout row) {
@@ -1084,15 +1210,6 @@ public final class MainActivity extends Activity {
             first = false;
         }
     }
-    /** Expands or collapses the storage, history and recordings section; the header says what a tap does and speaks its state. */
-    private void setHistoryOpen(boolean open) {
-        historyOpen = open; historyBody.setVisibility(open ? View.VISIBLE : View.GONE);
-        // The card's title already names what is inside; the state is spoken by A11y.expandable.
-        historyToggle.setText(open ? "Hide ▴" : "Show history, storage and recordings ▾");
-        historyToggle.setContentDescription("Print history, storage and recordings");
-        A11y.expandable(historyToggle, open);
-    }
-
     /** Saves the phone copy of the selected G-code where the user picks. */
     private void saveSelected() {
         if (printer == null || printer.selectedReport == null || printer.fileBusy()) return;
@@ -1366,7 +1483,7 @@ public final class MainActivity extends Activity {
         // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
         cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
-        cameraFix = button(cloudCard, "Open Settings to sign in", () -> { setSettingsMode(true); selectPage(3); }); cameraFix.setVisibility(View.GONE);
+        cameraFix = button(cloudCard, "Open Settings to sign in", () -> openSettings(true)); cameraFix.setVisibility(View.GONE);
         // Opening it asks for the one-time cloud-control agreement first, like every other cloud action.
         cloudCamera = button(cloudCard, "Watch through the Elegoo cloud", () -> {
             if (printer == null || printer.cloudSerial.isEmpty()) return;
@@ -1426,7 +1543,7 @@ public final class MainActivity extends Activity {
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN, then use the camera address for the home printer. The VPN route must allow the camera port." : "Enter the camera address for the selected printer, and connect the phone to the same Wi-Fi network as the printer."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab, then Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
     }
     private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
-    /** Recording pictures: the default interval (Settings) or the running print's own (Monitor). 0 = none. */
+    /** Recording pictures: the default interval (Settings) or the running print's own (Print tab). 0 = none. */
     private Button pictureDefault;
     private static final int[] PICTURE_MINUTES = {0, 1, 2, 5, 10, 15, 30, 60};
     private static String pictureText(int minutes) { return minutes == 0 ? "No pictures" : minutes == 1 ? "Every minute" : "Every " + minutes + " minutes"; }
@@ -1444,17 +1561,26 @@ public final class MainActivity extends Activity {
                 d.dismiss(); render();
             }).setNegativeButton("Cancel", null).show();
     }
-    /** On Monitor, ask for the CANVAS trays when they are missing or out of date: a read, at most every 30 seconds. */
+    /** On the Print tab, ask for the CANVAS trays when they are missing or out of date: a read, at most every 30 seconds. */
     private long traysAskedAt;
     private void autoLoadTrays() {
-        if (page != 0 || printer == null || printer.canvasFresh() || !(printer.ready() || printer.usingCloud() && settings.getBoolean("cloudControlUnderstood", false))) return;
+        if (page != PRINT || printer == null || printer.canvasFresh() || !(printer.ready() || printer.usingCloud() && settings.getBoolean("cloudControlUnderstood", false))) return;
         long now = System.currentTimeMillis(); if (now - traysAskedAt < 30_000) return;
         traysAskedAt = now; printer.refreshTrays();
+    }
+    /** On the History tab, ask for the print history and storage once when there are none: reads, at most once a minute. */
+    private long historyAutoAt;
+    private void autoLoadHistory() {
+        if (page != HISTORY || printer == null || !printer.canQuery() || !(printer.ready() || settings.getBoolean("cloudControlUnderstood", false))) return;
+        long now = System.currentTimeMillis(); if (now - historyAutoAt < 60_000) return;
+        historyAutoAt = now;
+        if (printer.history.length() == 0) printer.loadHistory();
+        if (printer.disk.length() == 0) printer.loadDisk();
     }
     /** On the Files tab, ask for the printer's file list when there is none (or it is out of date): a read, at most once a minute. */
     private long filesAutoAt;
     private void autoLoadFiles() {
-        if (page != 1 || printer == null || !printer.canQuery() || printer.busy(Cc2Codec.FILES) || printer.filesFresh()) return;
+        if (page != FILES || printer == null || !printer.canQuery() || printer.busy(Cc2Codec.FILES) || printer.filesFresh()) return;
         long now = System.currentTimeMillis(); if (now - filesAutoAt < 60_000) return;
         filesAutoAt = now; printer.browse(storagePicker.getSelectedItemPosition() == 0 ? "local" : "u-disk", 0);
     }
@@ -1470,7 +1596,7 @@ public final class MainActivity extends Activity {
         pageRow.setVisibility(paged ? View.VISIBLE : View.GONE); // only when there is another page
         String filesWhy = query ? null : printer == null ? "Starting…" : block == ControlState.Block.CLOUD_AGREEMENT ? "Browsing printer files through the Elegoo cloud needs cloud control turned on."
             : block == ControlState.Block.DISCONNECTED ? "Not connected. Connect on your network, or sign in with Elegoo, to browse the printer's files."
-            : block == ControlState.Block.CONNECTING ? "Connecting on your local network…" : "Files are unavailable until the printer is reachable (see Controls on the Monitor tab).";
+            : block == ControlState.Block.CONNECTING ? "Connecting on your local network…" : "Files are unavailable until the printer is reachable (see Printer status on the Printer tab).";
         fileInfo.setText(filesWhy != null ? filesWhy : FeatureData.fileSummary(printer.fileMessage, printer.storage, rows != null, count, offset, printer.filesFresh(), printer.busy(Cc2Codec.FILES)));
         boolean filesFix1 = !query && (block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED);
         filesFix.setText(block == ControlState.Block.CLOUD_AGREEMENT ? "Turn on cloud control…" : "Open Settings"); ((View) filesFix.getParent()).setVisibility(filesFix1 ? View.VISIBLE : View.GONE);
@@ -1511,7 +1637,7 @@ public final class MainActivity extends Activity {
         updateAgain(query);
         boolean noStorage = !query && (printer == null || printer.disk.length() == 0), noHistory = !query && (printer == null || printer.history.length() == 0);
         if (noStorage) diskInfo.setText("Storage and print history load once the printer is reachable.");
-        historyButtons.setVisibility(query ? View.VISIBLE : View.GONE); if (noHistory) historyInfo.setVisibility(View.GONE);
+        historyButtons.setVisibility(query ? View.VISIBLE : View.GONE); loadDisk.setVisibility(historyButtons.getVisibility()); if (noHistory) historyInfo.setVisibility(View.GONE);
         renderTimelapses();
         continueSaveAfterDownload();
         continuePrintSetup();
@@ -1548,7 +1674,7 @@ public final class MainActivity extends Activity {
         localToggle.setVisibility(local ? View.GONE : View.VISIBLE);
         localToggle.setText(localCameraOpen ? "Hide local camera" : "Use the printer's own camera on this network…");
         cameraFix.setVisibility(!ready && !signedIn ? View.VISIBLE : View.GONE);
-        if (ready != cameraLocalFirst) { cameraLocalFirst = ready; pages[2].removeView(cameraLocalCard); pages[2].addView(cameraLocalCard, ready ? 0 : 1); }
+        if (ready != cameraLocalFirst) { cameraLocalFirst = ready; cameraSection.body.removeView(cameraLocalCard); cameraSection.body.addView(cameraLocalCard, ready ? 1 : 2); }
     }
     private void render() {
         if (connect == null || isDestroyed()) return;
@@ -1602,13 +1728,10 @@ public final class MainActivity extends Activity {
         String upkeepReason = ControlState.upkeepReason(snapshot);
         boolean upkeepOk = canControl && upkeepReason.isEmpty();
         for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
-        trayFilament.setEnabled(upkeepOk && printer.canvas != null); urgentStop.setEnabled(canControl);
-        upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE);
-        // The toggle and its body appear only when maintenance can run; the reason and Emergency stop stay visible otherwise.
-        maintenanceToggle.setVisibility(upkeepOk ? View.VISIBLE : View.GONE);
-        maintenanceBody.setVisibility(upkeepOk && maintenanceOpen ? View.VISIBLE : View.GONE);
+        trayFilament.setEnabled(upkeepOk && printer.canvas != null);
+        for (Button stop : emergencyStops) { stop.setEnabled(canControl); stop.setVisibility(canControl ? View.VISIBLE : View.GONE); }
+        upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE); filamentButtons.setVisibility(upkeepButtons.getVisibility());
         upkeepHint.setText(upkeepOk ? "Follows Elegoo's own printer page. Never repeated automatically." : upkeepReason + " Emergency stop stays available.");
-        tuningCard.setVisibility(canControl ? View.VISIBLE : View.GONE); upkeepCard.setVisibility(canControl ? View.VISIBLE : View.GONE);
         // On a new install the Get started card already offers Find, Sign in and Slice, so the empty Controls card waits.
         controlsCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
         // On first run the Get started card already says how to connect; the "Not connected" summary would repeat it.
@@ -1689,8 +1812,9 @@ public final class MainActivity extends Activity {
         boolean cloudCameraOk = !ready && printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1;
         boolean showCamera = inJobNow && (ready || cloudCameraOk);
         monitorCamera.setVisibility(showCamera ? View.VISIBLE : View.GONE);
-        if (page == 0 && cameraPlayer != null && !showCamera) stopCamera();
-        if (page == 0 && active && showCamera && ready && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
+        boolean cameraSectionOpen = opened[PRINT] == cameraSection;   // its own Start camera keeps the stream when nothing prints
+        if (page == PRINT && cameraPlayer != null && !showCamera && !cameraSectionOpen) stopCamera();
+        if (page == PRINT && active && showCamera && ready && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
         monitorImage.setVisibility(showCamera && ready && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
         if (!ready) monitorCameraStart.setText("Watch through the Elegoo cloud");
         else if (cameraPlayer == null && monitorCameraStart.getText().toString().startsWith("Watch through")) monitorCameraStart.setText("Watch camera");
@@ -1707,7 +1831,8 @@ public final class MainActivity extends Activity {
         boolean idleOnline = live && !inJobNow, hasHistory = printer != null && !FeatureData.historyRows(printer.history).isEmpty();
         liveToolpath.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
         quickSlice.setVisibility(idleOnline ? View.VISIBLE : View.GONE);
-        quickCamera.setVisibility(inJobNow && !showCamera || idleOnline ? View.VISIBLE : View.GONE); // while printing the camera is already on top
+        // While printing with the camera on top, this leads to the Camera section's other tools (snapshot, line-up, cloud camera).
+        quickCamera.setVisibility(inJobNow || idleOnline ? View.VISIBLE : View.GONE); quickCamera.setText(showCamera ? "Camera tools…" : "Camera");
         quickRow.setVisibility(liveToolpath.getVisibility() == View.VISIBLE || quickSlice.getVisibility() == View.VISIBLE || quickCamera.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         quickAgain.setVisibility(idleOnline && hasHistory ? View.VISIBLE : View.GONE);
         spaceActions(quickRow); spaceActions(recordingsRow);
@@ -1730,6 +1855,11 @@ public final class MainActivity extends Activity {
         }
         boolean fix = block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED;
         controlFix.setText(block == ControlState.Block.CLOUD_AGREEMENT ? "Turn on cloud control…" : "Open Settings"); ((View) controlFix.getParent()).setVisibility(fix ? View.VISIBLE : View.GONE);
+        // The Printer tab says the same, and its sections say why their buttons are off.
+        printerStatus.setText(controlSource.getText()); printerFix.setText(controlFix.getText()); ((View) printerFix.getParent()).setVisibility(fix ? View.VISIBLE : View.GONE);
+        if (!canControl) { tuningHint.setText(controlSource.getText()); upkeepHint.setText(controlSource.getText()); }
+        filamentHint.setText(upkeepHint.getText());
+        connectionSection.detail.setText(summary.getText());
         main.post(this::autoLoadTrays);
         JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
         renderTrays(canvasNow);
@@ -1856,7 +1986,7 @@ public final class MainActivity extends Activity {
             if (path != null && name != null) printer.selectSliced(new File(path), name);
             openRequestedPage(data);
         }
-        if (request == CLOUD_LOGIN) { renderCloudAccount(); if (result == RESULT_OK) { message("Signed in with Elegoo. Monitor now shows your printer through the cloud when there is no local connection."); selectPage(0); } }
+        if (request == CLOUD_LOGIN) { renderCloudAccount(); if (result == RESULT_OK) { message("Signed in with Elegoo. The Print tab now shows your printer through the cloud when there is no local connection."); selectPage(0); } }
         if (request == PICK_SNAPSHOT && result != RESULT_OK) pendingSnapshot = null;
         if (request == PICK_SNAPSHOT && result == RESULT_OK && data != null && data.getData() != null && pendingSnapshot != null) {
             Bitmap image = pendingSnapshot; pendingSnapshot = null; android.net.Uri uri = data.getData();
@@ -1875,7 +2005,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onStop() { active = false; stopCamera(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
     @Override protected void onDestroy() { if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
-    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("page", page); }
+    @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     private void showLicenses() {
@@ -1926,7 +2056,7 @@ public final class MainActivity extends Activity {
         button.setOnClickListener(view -> action.run()); row.addView(button, new LinearLayout.LayoutParams(-2, -2));
         return button;
     }
-    /** The Monitor camera button: the local stream here (remembered for next time), or the cloud camera screen when only the cloud reaches the printer. */
+    /** The Print tab camera button: the local stream here (remembered for next time), or the cloud camera screen when only the cloud reaches the printer. */
     private void monitorCameraTap() {
         if (printer != null && printer.ready()) {
             boolean on = cameraPlayer == null;
@@ -1948,7 +2078,7 @@ public final class MainActivity extends Activity {
         }
         names.add("Connection settings…");
         new AlertDialog.Builder(this).setTitle(picks.isEmpty() ? "No saved printers yet" : "Switch printer").setItems(names.toArray(new String[0]), (dialog, which) -> {
-            if (which >= picks.size()) { setSettingsMode(false); selectPage(3); return; }
+            if (which >= picks.size()) { openSettings(false); return; }
             JSONObject row = picks.get(which); String address = row.optString("host");
             String name = StatusPresentation.clean(row.optString("name")).trim(); String shown = name.isEmpty() ? address : name;
             if (connected && address.equals(current)) return;
@@ -1957,7 +2087,7 @@ public final class MainActivity extends Activity {
                 selectPrinter(address, row.optString("serial"), row.optString("name"));
                 routePicker.setSelection(row.optBoolean("remote_vpn", false) ? 1 : 0); authPicker.setSelection(row.optBoolean("pin_probe", false) ? 1 : 0);
                 if (!row.optBoolean("pin_probe", false) && !access.getText().toString().isEmpty()) toggleConnection();
-                else { setSettingsMode(false); selectPage(3); message("Enter the " + (row.optBoolean("pin_probe", false) ? "pairing PIN" : "access code") + " for " + shown + ", then Connect."); }
+                else { openSettings(false); message("Enter the " + (row.optBoolean("pin_probe", false) ? "pairing PIN" : "access code") + " for " + shown + ", then Connect."); }
             };
             if (connected) new AlertDialog.Builder(this).setTitle("Switch to " + shown + "?").setMessage("This disconnects from the current printer. Nothing is sent to either printer; a running print carries on.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Switch", (d, w) -> go.run()).show();

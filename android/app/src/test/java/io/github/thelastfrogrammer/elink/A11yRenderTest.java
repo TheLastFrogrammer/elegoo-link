@@ -209,10 +209,18 @@ public class A11yRenderTest {
             MainActivity activity = local(true);
             Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
             Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
-            String[] names = {"monitor", "files", "camera", "settings"};
-            for (int i : new int[] {0, 1, 2, 3}) {
+            String[] names = {"print", "printer", "files", "history", "settings"};
+            for (int i = 0; i < names.length; i++) {
                 page.invoke(activity, i); render.invoke(activity);
-                shot(activity.getWindow().getDecorView(), i == 3 ? 6500 : 4200, "main-" + names[i], scale);
+                shot(activity.getWindow().getDecorView(), 4200, "main-" + names[i], scale);
+            }
+            // Every section of every tab, opened as from its row.
+            Method open = null; for (Method m : MainActivity.class.getDeclaredMethods()) if (m.getName().equals("openSection")) open = m; open.setAccessible(true);
+            for (Object section : (List<?>) field(activity, "sections")) {
+                Field tab = section.getClass().getDeclaredField("tab"), title = section.getClass().getDeclaredField("title"); tab.setAccessible(true); title.setAccessible(true);
+                page.invoke(activity, tab.getInt(section)); open.invoke(activity, section); render.invoke(activity);
+                String slug = ((String) title.get(section)).toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]+", "-");
+                shot(activity.getWindow().getDecorView(), 6500, "main-" + names[tab.getInt(section)] + "-" + slug, scale);
             }
             activity.finish();
         }
@@ -310,26 +318,17 @@ public class A11yRenderTest {
         MainActivity activity = local(false);   // idle: printer controls are shown
         Method render = MainActivity.class.getDeclaredMethod("render"); render.setAccessible(true);
         Method page = MainActivity.class.getDeclaredMethod("selectPage", int.class); page.setAccessible(true);
-        Method history = MainActivity.class.getDeclaredMethod("setHistoryOpen", boolean.class); history.setAccessible(true);
-        Method mode = MainActivity.class.getDeclaredMethod("setSettingsMode", boolean.class); mode.setAccessible(true);
-        Method more = MainActivity.class.getDeclaredMethod("setMore", boolean.class); more.setAccessible(true);
-        Method upkeep = MainActivity.class.getDeclaredMethod("setMaintenanceOpen", boolean.class); upkeep.setAccessible(true);
-        android.widget.LinearLayout[] pages = (android.widget.LinearLayout[]) field(activity, "pages");
+        Method prepare = MainActivity.class.getDeclaredMethod("prepareFeature", FeatureIndex.Feature.class); prepare.setAccessible(true);
+        Method reveal = MainActivity.class.getDeclaredMethod("reveal", int.class, String.class); reveal.setAccessible(true);
+        // Idle and connected, so these printer controls must be there themselves, not only the section that explains when.
+        List<String> mustShow = java.util.Arrays.asList("load", "tray", "move", "level", "vibration", "emergency", "light");
         List<String> missing = new java.util.ArrayList<>();
         for (FeatureIndex.Feature f : FeatureIndex.ALL) {
             if (f.id.equals("toolpath")) continue;   // shown only while printing
-            switch (f.prepare) {
-                case HISTORY_OPEN: history.invoke(activity, true); break;
-                case MAINTENANCE_OPEN: upkeep.invoke(activity, true); break;
-                case SETTINGS_LOCAL: mode.invoke(activity, false); break;
-                case SETTINGS_CLOUD: mode.invoke(activity, true); break;
-                case ADVANCED_CONNECTION: mode.invoke(activity, false); more.invoke(activity, true); break;
-                default: break;
-            }
-            page.invoke(activity, f.tab); render.invoke(activity);
-            android.view.View found = MainActivity.findByText(pages[f.tab], f.target);
-            // Idle, so the maintenance buttons themselves must be reachable once the section is opened.
-            if (found == null && !f.fallback.isEmpty() && f.prepare != FeatureIndex.Prepare.MAINTENANCE_OPEN) found = MainActivity.findByText(pages[f.tab], f.fallback);   // e.g. speed mode only while printing
+            page.invoke(activity, f.tab); prepare.invoke(activity, f); render.invoke(activity);
+            android.view.View found = (android.view.View) reveal.invoke(activity, f.tab, f.target);
+            if (found != null && !found.isShown()) found = null;
+            if (found == null && !f.fallback.isEmpty() && !mustShow.contains(f.id)) found = (android.view.View) reveal.invoke(activity, f.tab, f.fallback);   // e.g. speed mode only while printing
             if (found == null) missing.add(f.id + " (\"" + f.target + "\" on " + f.where() + ")");
         }
         assertTrue("Features whose button or heading was not found: " + missing, missing.isEmpty());

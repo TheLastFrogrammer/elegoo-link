@@ -765,7 +765,7 @@ public final class SliceActivity extends Activity {
      * goes to the Files tab first (as Send to Files tab does), so it is waiting there once the printer is connected.
      */
     private void openSettingsTab() {
-        Intent handOver = new Intent().putExtra(MainActivity.EXTRA_PAGE, 3);
+        Intent handOver = new Intent().putExtra(MainActivity.EXTRA_PAGE, FeatureIndex.SETTINGS);
         if (sliced != null && sliced.isFile()) handOver.putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName);
         if (getCallingActivity() != null) setResult(RESULT_OK, handOver);
         else startActivity(handOver.setClass(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP));
@@ -1465,8 +1465,8 @@ public final class SliceActivity extends Activity {
         List<TrayPlan.Tray> trays = reportedTrays();
         boolean fresh = printer != null && printer.canvasFresh();
         traysNote.setVisibility(View.VISIBLE);
-        traysNote.setText(trays.isEmpty() ? "No CANVAS trays reported. Connect to the printer (Monitor tab) to fill filaments from its trays."
-            : trays.size() + " loaded tray(s) reported" + (fresh ? "." : "; refresh status on the Monitor tab for the latest."));
+        traysNote.setText(trays.isEmpty() ? "No CANVAS trays reported. Connect to the printer (Print tab) to fill filaments from its trays."
+            : trays.size() + " loaded tray(s) reported" + (fresh ? "." : "; refresh status on the Print tab for the latest."));
         updateButtons();
     }
 

@@ -53,7 +53,7 @@ public final class FieldCheckActivity extends Activity {
         ui.label(card, check.title, 15, ui.ink, true);
         ui.label(card, check.how, 14, ui.muted, false).setPadding(0, 0, 0, ui.dp(4));
         if (check.open != FieldCheck.NOWHERE) {   // secondary: a text-style button, compact, above the results so the layout does not move
-            Button go = ui.styled("Go there", () -> open(check.open), false);
+            Button go = ui.styled("Go there", () -> open(check), false);
             go.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(ui.dark ? 0x4463d5c7 : 0x33006b65), null, null));
             go.setPadding(0, ui.dp(8), ui.dp(12), ui.dp(8)); go.setContentDescription("Go to " + check.title);
             card.addView(go, new LinearLayout.LayoutParams(-2, -2));
@@ -106,9 +106,11 @@ public final class FieldCheckActivity extends Activity {
     }
 
     /** Navigation only: a main tab, Live toolpath or the Slice screen. */
-    private void open(int where) {
+    private void open(FieldCheck.Check check) {
+        int where = check.open; String feature = FieldCheck.feature(check.id);
         Intent intent = where == FieldCheck.LIVE ? new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)
             : where == FieldCheck.SLICE ? new Intent(this, SliceActivity.class)
+            : feature != null ? new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_FEATURE, feature).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)
             : new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_PAGE, where).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
         startActivity(intent);
     }

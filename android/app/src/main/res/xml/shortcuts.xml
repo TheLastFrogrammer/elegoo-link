@@ -21,7 +21,7 @@
             <extra android:name="feature" android:value="find-models" />
         </intent>
     </shortcut>
-    <shortcut android:shortcutId="history" android:enabled="true" android:icon="@drawable/ic_nav_files" android:shortcutShortLabel="@string/shortcut_history">
+    <shortcut android:shortcutId="history" android:enabled="true" android:icon="@drawable/ic_nav_history" android:shortcutShortLabel="@string/shortcut_history">
         <intent android:action="android.intent.action.VIEW" android:targetPackage="io.github.thelastfrogrammer.elink" android:targetClass="io.github.thelastfrogrammer.elink.MainActivity">
             <extra android:name="feature" android:value="history" />
         </intent>

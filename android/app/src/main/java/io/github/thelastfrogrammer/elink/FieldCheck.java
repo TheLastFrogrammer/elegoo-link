@@ -10,8 +10,9 @@ import org.json.JSONObject;
  */
 final class FieldCheck {
     enum Result { NONE, WORKS, FAILS, SKIPPED }
-    /** Where a check's "Go there" leads: a main tab (0–3), Live toolpath, the Slice screen, or nowhere. */
-    static final int NOWHERE = -1, LIVE = 4, SLICE = 5;
+    /** Where a check's "Go there" leads: a main tab (FeatureIndex.PRINT … SETTINGS), Live toolpath, the Slice screen, or nowhere. */
+    static final int NOWHERE = -1, LIVE = 100, SLICE = 101;
+    private static final int PRINT = FeatureIndex.PRINT, PRINTER = FeatureIndex.PRINTER, FILES = FeatureIndex.FILES, HISTORY = FeatureIndex.HISTORY, SETTINGS = FeatureIndex.SETTINGS;
 
     static final class Check {
         final String id, area, title, how; final int open;
@@ -19,17 +20,17 @@ final class FieldCheck {
     }
 
     static final List<Check> CHECKS = Collections.unmodifiableList(Arrays.asList(
-        new Check("local", "Connection", "Local Wi-Fi connection", "Settings: enter the printer's IP address and access code, then tap Connect. Monitor should show Local and live temperatures.", 3),
-        new Check("cloud", "Connection", "Cloud monitoring", "Settings: sign in with Elegoo. Monitor should show Cloud and update within a minute.", 3),
-        new Check("status", "Monitor", "Status matches the printer", "During a print, compare Monitor with the printer's own screen. Temperatures, progress, layer and time left should match.", 0),
-        new Check("trays", "Monitor", "CANVAS trays match", "On Monitor, look at the colour strip. It should show each loaded tray, with the active one outlined.", 0),
-        new Check("monitorCamera", "Monitor", "Camera on Monitor while printing", "During a print, tap Watch camera on Monitor. The picture should stop when you switch to another tab.", 0),
-        new Check("files", "Files", "Files tab lists the printer's files", "Open Files. The list should show the printer's files. If it stays blank, mark Problem and say what you saw.", 1),
-        new Check("printSetup", "Files", "Print setup chooses trays", "Tap a file, then Print setup. It should show \"Trays are up to date\" and let you choose a tray for each filament.", 1),
-        new Check("start", "Files", "A print started from the app", "Start a small print from Print setup. It should use the trays you chose.", 1),
-        new Check("timelapse", "Files", "Timelapse download", "On the local connection, open History, storage and recordings on the Files tab. Download a finished print's timelapse.", 1),
-        new Check("localCamera", "Camera", "Local camera stream", "On the printer's Wi-Fi, open the Camera tab and start the printer's own camera. A live picture should appear.", 2),
-        new Check("cloudCamera", "Camera", "Cloud camera", "On the cloud connection, open the Camera tab and watch through the Elegoo cloud. A live picture should appear.", 2),
+        new Check("local", "Connection", "Local Wi-Fi connection", "Settings: enter the printer's IP address and access code, then tap Connect. The Print tab should show Local and live temperatures.", SETTINGS),
+        new Check("cloud", "Connection", "Cloud monitoring", "Settings: sign in with Elegoo. The Print tab should show Cloud and update within a minute.", SETTINGS),
+        new Check("status", "Print", "Status matches the printer", "During a print, compare the Print tab with the printer's own screen. Temperatures, progress, layer and time left should match.", PRINT),
+        new Check("trays", "Print", "CANVAS trays match", "On the Print tab, look at the colour strip. It should show each loaded tray, with the active one outlined.", PRINT),
+        new Check("monitorCamera", "Print", "Camera on the Print tab while printing", "During a print, tap Watch camera on the Print tab. The picture should stop when you switch to another tab.", PRINT),
+        new Check("files", "Files", "Files tab lists the printer's files", "Open Files. The list should show the printer's files. If it stays blank, mark Problem and say what you saw.", FILES),
+        new Check("printSetup", "Files", "Print setup chooses trays", "Tap a file, then Print setup. It should show \"Trays are up to date\" and let you choose a tray for each filament.", FILES),
+        new Check("start", "Files", "A print started from the app", "Start a small print from Print setup. It should use the trays you chose.", FILES),
+        new Check("timelapse", "Files", "Timelapse download", "On the local connection, open the History tab. Download a finished print's timelapse.", HISTORY),
+        new Check("localCamera", "Camera", "Local camera stream", "On the printer's Wi-Fi, open Camera on the Print tab and start the printer's own camera. A live picture should appear.", PRINT),
+        new Check("cloudCamera", "Camera", "Cloud camera", "On the cloud connection, open Camera on the Print tab and watch through the Elegoo cloud. A live picture should appear.", PRINT),
         new Check("follow", "Live toolpath", "Live toolpath follows the print", "During a print, open Live toolpath. The layer and the nozzle dot should keep up with the printer's own screen.", LIVE),
         new Check("lineUp", "Live toolpath", "Drawing sits on the real print", "Look at the print through the camera. The drawing should sit on the real print; if it is off to one side, set Plate edges in the line-up and note the margins.", LIVE),
         new Check("timing", "Live toolpath", "Drawing and picture move together", "Try the measured cloud delay and \"Move in step with the camera's pictures\". The drawing and the picture should move together; note the delay that works.", LIVE),
@@ -37,8 +38,20 @@ final class FieldCheck {
         new Check("mask", "Live toolpath", "Printhead mask covers the head", "Adjust Printhead size until the mask covers the real head. Note the sizes that work, so they can become the defaults.", LIVE),
         new Check("slice", "Slicer", "Slicing on the phone", "Slice a model on the phone. Note how long it took and whether the phone stayed responsive.", SLICE),
         new Check("upload", "Slicer", "Upload and print from the slice", "From the slice result, upload and print, locally or through the cloud. The print should start on the printer.", SLICE),
-        new Check("maintenance", "Printer", "Maintenance commands", "In Maintenance, home the printer, move an axis or level the bed, and watch the printer do it.", 0),
+        new Check("maintenance", "Printer", "Maintenance commands", "On the Printer tab, open Move & calibrate. Home the printer, move an axis or level the bed, and watch the printer do it.", PRINTER),
         new Check("alerts", "Printer", "Alerts in the background", "Leave the app in the background while connected (don't force-stop it). When a print finishes or a fault happens, a notification should appear.", NOWHERE)));
+
+    /** The "Find a feature" entry a check's Go there brings into view on its tab (shown, never pressed), or null for the tab itself. */
+    static String feature(String id) {
+        switch (id) {
+            case "local": return "connect";
+            case "cloud": return "cloud";
+            case "localCamera": case "cloudCamera": return "camera";
+            case "timelapse": return "timelapse";
+            case "maintenance": return "move";
+            default: return null;
+        }
+    }
 
     static final class Entry {
         final Result result; final String note; final long at;

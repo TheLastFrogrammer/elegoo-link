@@ -34,7 +34,7 @@ public class FeatureIndexTest {
     @Test public void idsAreUniqueAndPrinterChangingActionsAreNeverPressed() {
         Set<String> ids = new HashSet<>();
         for (FeatureIndex.Feature f : FeatureIndex.ALL) assertTrue(f.id, ids.add(f.id));
-        for (String changing : new String[] {"load", "tray", "move", "level", "vibration", "printer-files", "history", "connect", "cloud"})
+        for (String changing : new String[] {"load", "tray", "move", "level", "vibration", "emergency", "light", "printer-files", "history", "connect", "cloud"})
             assertFalse(changing + " must only be shown, not pressed", FeatureIndex.byId(changing).press);
     }
 }

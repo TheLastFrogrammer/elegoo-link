@@ -100,7 +100,7 @@ public final class RecordingsActivity extends Activity {
             label("No recordings yet.", 16, ink, true);
             label("Each print is recorded while the app watches the printer, newest first. Connect to the printer, then start a print.", 14, muted, false);
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); content.addView(row);
-            action(row, "Open Settings to connect", () -> startActivity(new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_PAGE, 3)
+            action(row, "Open Settings to connect", () -> startActivity(new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_PAGE, FeatureIndex.SETTINGS)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
             return;
         }

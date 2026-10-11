@@ -713,7 +713,7 @@ public class SlicerIntegrationTest {
         invoke(again, "openSettingsTab");
         android.content.Intent next = ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(again)).getNextStartedActivity();
         assertNotNull(next);
-        assertEquals(3, next.getIntExtra(MainActivity.EXTRA_PAGE, -1));
+        assertEquals(FeatureIndex.SETTINGS, next.getIntExtra(MainActivity.EXTRA_PAGE, -1));
         assertEquals("twoplate_project_plate2.gcode", next.getStringExtra(SliceActivity.RESULT_NAME));
         assertTrue(new File(next.getStringExtra(SliceActivity.RESULT_FILE)).isFile());
         assertTrue(again.isFinishing());

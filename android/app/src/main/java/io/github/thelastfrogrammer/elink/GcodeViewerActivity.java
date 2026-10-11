@@ -429,7 +429,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             cameraMessage("Camera: the printer's own stream on this network.");
         } else if (printer.usingCloud() && !printer.cloudSerial.isEmpty()) {
             if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false)) {
-                cameraMessage("The camera through Elegoo's cloud needs cloud control turned on: Monitor > Camera explains it. The camera model is shown without a picture."); return;
+                cameraMessage("The camera through Elegoo's cloud needs cloud control turned on: Print > Camera explains it. The camera model is shown without a picture."); return;
             }
             cameraStarted = true; cameraCloud = true;
             String serial = printer.cloudSerial;
@@ -699,7 +699,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private String bedMoveBlocked(double distance) {
         if (printer == null) return "Not connected to the printer.";
         if (!printer.ready() && !getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false))
-            return "Moving the printer through Elegoo's cloud needs cloud control turned on first (Monitor > Controls asks once).";
+            return "Moving the printer through Elegoo's cloud needs cloud control turned on first (Print > Controls asks once).";
         if (!printer.liveFresh()) return "Waiting for fresh printer status before moving.";
         JSONObject live = printer.liveStatus();
         if (!Cc2Codec.idle(live) || !StatusPresentation.faultCodes(live).isEmpty()) return "The printer must be idle, without faults, to move the bed.";

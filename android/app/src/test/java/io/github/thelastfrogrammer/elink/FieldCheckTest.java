@@ -61,7 +61,8 @@ public class FieldCheckTest {
         goThere.performClick();
         Intent next = ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(activity)).getNextStartedActivity();
         assertEquals(MainActivity.class.getName(), next.getComponent().getClassName());
-        assertEquals(3, next.getIntExtra(MainActivity.EXTRA_PAGE, -1));
+        assertEquals("Go there shows where the connection is set up, pressing nothing", "connect", next.getStringExtra(MainActivity.EXTRA_FEATURE));
+        assertFalse(FeatureIndex.byId("connect").press);
     }
 
     private static void collect(View view, List<Button> out) {
