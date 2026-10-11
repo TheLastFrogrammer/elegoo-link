@@ -243,6 +243,9 @@ public class A11yRenderTest {
             setup.invoke(activity, file, "local");
             dialogShot("dialog-printsetup", scale, 6500);
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().dismiss();
+            invoke(activity, "temperatureDialog");
+            dialogShot("dialog-temperature", scale, 3000);
+            org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().dismiss();
             // A file sliced on the phone for red PLA Matte and white PETG: the first is suggested, the second has no PETG tray.
             context().getSharedPreferences(SliceActivity.TRAY_PLANS, android.content.Context.MODE_PRIVATE).edit().putString(GcodeLibrary.safeName("Phone stand.gcode"),
                 new TrayPlan(2, new java.util.ArrayList<>()).withNeeds(java.util.Arrays.asList("Elegoo PLA Matte @ECC2", "Elegoo PETG @ECC2"), java.util.Arrays.asList("#D02828", "#FFFFFF")).toJson()).commit();

@@ -62,7 +62,12 @@ public final class PrinterService extends Service {
     private PrintAlerts cloudAlerts = new PrintAlerts();
     /** Records each print's progress for graphs (see PrintRecorder); on by default, Settings can turn it off. */
     public PrintRecorder recorder;
+    /** Spools and their filament left (see SpoolStore): follows fresh tray reports, and takes a finished print's use off. */
+    public SpoolStore spools() { return SpoolStore.at(new java.io.File(getFilesDir(), "spools.json")); }
     private void record(JSONObject value, String source, String name) {
+        SpoolStore spools = spools(); long now = System.currentTimeMillis();
+        if (canvasFresh() && canvas != null) spools.sync(canvas, now);
+        String used = spools.observe(value, now); if (used != null) feedback = used;
         android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         if (recorder == null || !settings.getBoolean("recordPrints", true)) return;
         recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5));
@@ -180,7 +185,7 @@ public final class PrinterService extends Service {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
             public void connection(String text, boolean registered) { deliver(() -> { connection = registered ? "Connected" + (remote ? " through VPN" : " locally") + (pinProbe ? " · read-only PIN probe" : "") + " · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
-            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } showAlert(alerts.update(value)); record(value, "local", attributes.optString("hostname", host)); }); }
+            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); record(value, "local", attributes.optString("hostname", host)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
@@ -823,7 +828,7 @@ public final class PrinterService extends Service {
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
                     // Local alerts take precedence while connected locally.
-                    if (!wanted && cloudOnline == 1 && cloudReportRecent()) { showAlert(cloudAlerts.update(reported.status), cloudName); record(reported.status, "cloud", cloudName); }
+                    if (!wanted && cloudOnline == 1 && cloudReportRecent()) { alertChoices(); showAlert(cloudAlerts.update(reported.status), cloudName); record(reported.status, "cloud", cloudName); }
                 } else if (found == null) { cloudSerial = ""; cloudStatus = new JSONObject(); }
                 changed(); updateNotification(false);
             });
@@ -847,7 +852,7 @@ public final class PrinterService extends Service {
                     cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis(); cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
                     // A live report from the printer itself shows it is online.
                     cloudOnline = 1;
-                    if (cloudOnline == 1) { showAlert(cloudAlerts.update(merged), cloudName); record(merged, "cloud", cloudName); }
+                    if (cloudOnline == 1) { alertChoices(); showAlert(cloudAlerts.update(merged), cloudName); record(merged, "cloud", cloudName); }
                     changed(); updateNotification(false);
                 } catch (Exception ignored) { }
             }); }
@@ -988,14 +993,40 @@ public final class PrinterService extends Service {
     private void cloudCommandSafe(RequestBuilder builder) { cloudSafe(builder); }
     private void cloudSafe(RequestBuilder builder) { try { cloudCommand(builder.build()); } catch (Exception error) { feedback = "Could not prepare the cloud command."; changed(); } }
     private void showAlert(String text) { showAlert(text, host); }
+    /** The layer alerts the user asked for (Settings, and a per-print layer from the Print tab), handed to both alert trackers. */
+    private void alertChoices() {
+        android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        for (PrintAlerts a : new PrintAlerts[] {alerts, cloudAlerts}) {
+            a.firstLayer = settings.getBoolean("alertFirstLayer", false); a.layer = settings.getInt("alertLayer", 0); a.layerKey = settings.getString("alertLayerKey", "");
+        }
+    }
     private void showAlert(String text, String title) {
         if (text.isEmpty() || !getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alerts", true)) return;
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("printer-alerts", "Print completion and faults", NotificationManager.IMPORTANCE_DEFAULT));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        manager.notify(text.startsWith("Print complete") ? 2 : 3, new Notification.Builder(this, "printer-alerts").setSmallIcon(R.drawable.ic_launcher)
-            .setContentTitle("Link Workshop · " + StatusPresentation.clean(title)).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
+        int id = text.startsWith("Print complete") ? 2 : text.startsWith("Printer fault") ? 3 : 4;
+        Notification.Builder builder = new Notification.Builder(this, "printer-alerts").setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("Link Workshop · " + StatusPresentation.clean(title)).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true)
+            .setOnlyAlertOnce(true);
+        manager.notify(id, builder.build());
+        // Then, on the local connection, the same alert again with a picture from the printer's camera (it alerts only once).
+        if (getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alertPictures", true))
+            grabFrame(image -> manager.notify(id, builder.setLargeIcon(image).setStyle(new Notification.BigPictureStyle().bigPicture(image).setSummaryText(text)).build()));
+    }
+    private interface Frame { void take(android.graphics.Bitmap image); }
+    /** One frame from the printer's own camera stream on this network (or the home VPN); the stream closes at once, or after 15 s. */
+    private void grabFrame(Frame done) {
+        if (!ready() || route == null) return;
+        String url;
+        try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); } catch (Exception invalid) { return; }
+        MjpegPlayer[] player = new MjpegPlayer[1];
+        player[0] = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
+            public void frame(android.graphics.Bitmap image) { MjpegPlayer p = player[0]; player[0] = null; if (p == null) return; p.close(); main.post(() -> { if (!destroyed) done.take(image); }); }
+            public void error(String message) { MjpegPlayer p = player[0]; player[0] = null; if (p != null) p.close(); }
+        });
+        main.postDelayed(() -> { MjpegPlayer p = player[0]; player[0] = null; if (p != null) p.close(); }, 15_000);
     }
     private Notification notification() {
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
@@ -1006,9 +1037,20 @@ public final class PrinterService extends Service {
         else if (!wanted && cloudBackground() && !cloudMessage.isEmpty()) text = "Cloud watching paused: " + cloudMessage.split("\n")[0];
         if (ready() && fresh() && !StatusPresentation.faultCodes(status).isEmpty()) text += " · Printer reports a fault";
         if (uploading()) text = feedback;
+        JSONObject running = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
+        JSONObject runningMachine = running == null ? null : running.optJSONObject("machine_status");
+        boolean printingNow = runningMachine != null && runningMachine.optInt("status", -1) == 2 && !uploading();
+        if (printingNow) {
+            // While printing: "41% · layer 87 of 212 · 1h 15m left · done ≈ 14:30", with a progress bar.
+            JSONObject print = running.optJSONObject("print_status");
+            long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+            text = StatusPresentation.runningLine(runningMachine, print) + (remaining > 0 ? " · done ≈ " + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, java.util.Locale.getDefault(), java.util.TimeZone.getDefault()) : "")
+                + (wanted ? "" : " · cloud") + (ready() && fresh() && !StatusPresentation.faultCodes(status).isEmpty() ? " · Printer reports a fault" : "");
+        }
         String title = wanted || cloudName.isEmpty() ? host : StatusPresentation.clean(cloudName);
         Notification.Builder builder = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("Link Workshop · " + title)
             .setContentText(text).setContentIntent(view).setOngoing(true).setOnlyAlertOnce(true);
+        if (printingNow && runningMachine.has("progress")) builder.setProgress(100, Math.max(0, Math.min(100, runningMachine.optInt("progress"))), false);
         // While printing: shortcuts that only open the app at a feature; nothing here sends the printer a command.
         JSONObject shown = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
         JSONObject machine = shown == null ? null : shown.optJSONObject("machine_status");

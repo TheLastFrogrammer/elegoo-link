@@ -40,10 +40,11 @@ final class TrayPlan {
         Tool(int t, int canvasId, int trayId) { this.t = t; this.canvasId = canvasId; this.trayId = trayId; }
     }
 
-    /** What a tool was sliced as: the filament preset and its colour (either may be empty). */
+    /** What a tool was sliced as: the filament preset and its colour (either may be empty), and the grams it uses (0 = not known). */
     static final class Need {
-        final int t; final String preset, colour;
-        Need(int t, String preset, String colour) { this.t = t; this.preset = preset == null ? "" : preset; this.colour = TrayPlan.colour(colour); }
+        final int t; final String preset, colour; final double grams;
+        Need(int t, String preset, String colour) { this(t, preset, colour, 0); }
+        Need(int t, String preset, String colour, double grams) { this.t = t; this.preset = preset == null ? "" : preset; this.colour = TrayPlan.colour(colour); this.grams = grams > 0 && Double.isFinite(grams) ? grams : 0; }
     }
 
     final int count;
@@ -60,6 +61,17 @@ final class TrayPlan {
         for (int t = 0; t < count && t < presets.size(); t++) list.add(new Need(t, presets.get(t), colours == null || t >= colours.size() ? null : colours.get(t)));
         return new TrayPlan(count, tools, list);
     }
+    /** This plan with the grams each tool uses (from the sliced file's notes); tools beyond `grams` keep what they had. */
+    TrayPlan withGrams(double[] grams) {
+        List<Need> list = new ArrayList<>();
+        for (int t = 0; t < count; t++) {
+            Need old = need(t); double g = grams != null && t < grams.length ? grams[t] : old == null ? 0 : old.grams;
+            if (old != null || g > 0) list.add(new Need(t, old == null ? "" : old.preset, old == null ? null : old.colour, g));
+        }
+        return new TrayPlan(count, tools, list);
+    }
+    /** Grams tool t uses, or 0 when not known. */
+    double grams(int t) { Need need = need(t); return need == null ? 0 : need.grams; }
     /** What tool t was sliced as, or null. */
     Need need(int t) { for (Need need : needs) if (need.t == t) return need; return null; }
 
@@ -81,7 +93,7 @@ final class TrayPlan {
             JSONObject root = new JSONObject().put("count", count).put("tools", list);
             if (!needs.isEmpty()) {
                 JSONArray sliced = new JSONArray();
-                for (Need need : needs) sliced.put(new JSONObject().put("t", need.t).put("preset", need.preset).put("colour", need.colour == null ? "" : need.colour));
+                for (Need need : needs) { JSONObject item = new JSONObject().put("t", need.t).put("preset", need.preset).put("colour", need.colour == null ? "" : need.colour); if (need.grams > 0) item.put("grams", need.grams); sliced.put(item); }
                 root.put("needs", sliced);
             }
             return root.toString();
@@ -108,7 +120,7 @@ final class TrayPlan {
             if (sliced != null) for (int i = 0; i < sliced.length(); i++) {
                 JSONObject item = sliced.optJSONObject(i); if (item == null) continue;
                 int t = item.optInt("t", -1);
-                if (t >= 0 && t < count) needs.add(new Need(t, StatusPresentation.clean(item.optString("preset")), item.optString("colour")));
+                if (t >= 0 && t < count) needs.add(new Need(t, StatusPresentation.clean(item.optString("preset")), item.optString("colour"), item.optDouble("grams", 0)));
             }
             return new TrayPlan(count, tools, needs);
         } catch (JSONException malformed) { return null; }

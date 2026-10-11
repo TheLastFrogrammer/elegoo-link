@@ -689,7 +689,9 @@ public final class SliceActivity extends Activity {
                     try { kept.add(SliceStore.keep(getApplicationContext(), results.get(i).gcode, names.get(i))); }
                     catch (IOException failure) { kept.add(results.get(i).gcode); }
                 }
-                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(results, kept, plates, names, elapsed, printer, process, filaments, colours, plan); });
+                // Grams per filament from each file's closing notes, for spool tracking in print setup.
+                List<double[]> toolGrams = new ArrayList<>(); for (File file : kept) toolGrams.add(SlicedMaterials.gramsFromTail(file));
+                main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(results, kept, plates, names, elapsed, printer, process, filaments, colours, plan, toolGrams); });
             } catch (IOException failure) {
                 long elapsed = System.currentTimeMillis() - started;
                 boolean cancelled = cancelRequested.get();
@@ -708,7 +710,7 @@ public final class SliceActivity extends Activity {
     }
 
     private void finished(List<NativeSlicer.Result> results, List<File> files, List<Integer> plates, List<String> names, long elapsedMs, String printer, String process,
-                          List<String> filaments, List<String> colours, TrayPlan plan) {
+                          List<String> filaments, List<String> colours, TrayPlan plan, List<double[]> grams) {
         busy = false; progress.setVisibility(View.GONE);
         slicedFiles.clear(); slicedNames.clear();
         for (int i = 0; i < results.size(); i++) { slicedFiles.add(files.get(i)); slicedNames.add(names.get(i)); }
@@ -716,7 +718,7 @@ public final class SliceActivity extends Activity {
         // The print setup dialog offers this plan for a printer file of the same name.
         SharedPreferences.Editor plans = getSharedPreferences(TRAY_PLANS, MODE_PRIVATE).edit();
         TrayPlan withNeeds = plan.withNeeds(filaments, colours);
-        for (String name : names) plans.putString(GcodeLibrary.safeName(name), withNeeds.toJson());
+        for (int i = 0; i < names.size(); i++) plans.putString(GcodeLibrary.safeName(names.get(i)), withNeeds.withGrams(i < grams.size() ? grams.get(i) : null).toJson());
         plans.apply();
         status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " project plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();

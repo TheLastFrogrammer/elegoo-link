@@ -22,4 +22,17 @@ public class PrintAlertsTest {
         s.getJSONObject("exception").getJSONObject("exception_code").put("1101",new JSONObject()); assertTrue(a.update(s).contains("1101"));
         s.getJSONObject("exception").put("exception_code",new JSONObject()); assertEquals("",a.update(s)); s.getJSONObject("exception").put("exception_code",new JSONObject("{\"803\":{}}")); assertEquals("Printer fault: 803",a.update(s));
     }
+    private static JSONObject layer(String job, int layer) throws Exception { JSONObject s = state(2, 2075, job); s.getJSONObject("print_status").put("current_layer", layer); return s; }
+    @Test public void firstLayerAndChosenLayerAlertOnceAndOnlyWhenSeenChanging() throws Exception {
+        PrintAlerts a = new PrintAlerts(); a.firstLayer = true; a.layer = 3; a.layerKey = "a";
+        assertEquals("", a.update(layer("a", 1)));
+        assertEquals("First layer done: a.gcode", a.update(layer("a", 2)));
+        assertEquals("", a.update(layer("a", 2)));
+        assertEquals("Layer 3 reached: a.gcode", a.update(layer("a", 4)));
+        assertEquals("", a.update(layer("a", 5)));
+        PrintAlerts late = new PrintAlerts(); late.firstLayer = true; late.layer = 3; late.layerKey = "b";
+        assertEquals("joined at layer 50: nothing to report", "", late.update(layer("b", 50))); assertEquals("", late.update(layer("b", 51)));
+        PrintAlerts other = new PrintAlerts(); other.layer = 3; other.layerKey = "a";
+        other.update(layer("b", 2)); assertEquals("the layer alert belongs to its own print", "", other.update(layer("b", 3)));
+    }
 }

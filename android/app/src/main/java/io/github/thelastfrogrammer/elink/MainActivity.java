@@ -306,10 +306,14 @@ public final class MainActivity extends Activity {
         monitorCameraInfo = label(monitorCamera, "", 12, MUTED, false);
         LinearLayout cameraButtons = row(monitorCamera);
         monitorCameraStart = rowButton(cameraButtons, "Watch camera", this::monitorCameraTap, false);
-        monitorCameraSize = rowButton(cameraButtons, "Larger view", () -> {
-            boolean big = monitorImage.getLayoutParams().height == dp(200); monitorImage.getLayoutParams().height = big ? dp(380) : dp(200); monitorImage.requestLayout();
-            monitorCameraSize.setText(big ? "Smaller view" : "Larger view");
-        }, false);
+        monitorCameraSize = rowButton(cameraButtons, "Full screen", this::cameraFullScreen, false);
+        monitorImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(monitorImage, "Show the camera full screen");
+        // A dark chamber: offer the printer's light (sent only on this tap, like Light on below).
+        darkRow = new LinearLayout(this); darkRow.setOrientation(LinearLayout.VERTICAL); monitorCamera.addView(darkRow); darkRow.setVisibility(View.GONE);
+        label(darkRow, "The picture is dark. The printer's light may be off; the phone brightens the picture meanwhile.", 12, MUTED, false);
+        LinearLayout darkButtons = row(darkRow);
+        rowButton(darkButtons, "Turn the light on", () -> { darkDismissed = true; darkRow.setVisibility(View.GONE); light(true); }, false);
+        rowButton(darkButtons, "Not now", () -> { darkDismissed = true; darkRow.setVisibility(View.GONE); }, false);
         View cameraGap = new View(this); monitorCamera.addView(cameraGap, new LinearLayout.LayoutParams(-1, dp(12)));
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
         // The file's own preview (from the printer), beside the job, as on the printer's screen.
@@ -338,6 +342,7 @@ public final class MainActivity extends Activity {
         quickCamera = rowButton(quickRow, "Camera", () -> openSection(cameraSection), false);
         recordingsRow = row(hero);
         picturesNow = rowButton(recordingsRow, "Pictures…", () -> pictureDialog(false), false);
+        layerAlert = button(hero, "Layer alert…", this::layerAlertDialog);
         quickAgain = rowButton(recordingsRow, "Print again…", () -> selectPage(HISTORY), false);
         quickAgain.setContentDescription("Print again: opens the History tab, where the latest print can be printed again");
         graphs = rowButton(recordingsRow, "Print recordings", () -> {
@@ -388,6 +393,10 @@ public final class MainActivity extends Activity {
         unloadFilament = rowButton(filamentRow, "Unload filament", () -> maintenanceConfirm("Unload filament?", "The printer heats the nozzle and retracts the filament. This can take a few minutes.", Cc2Codec.RETREAT), false);
         trayFilament = button(filamentGroup, "Load or unload a CANVAS tray…", this::trayDialog);
         emergencyButton(filament);
+        // Spools: filament left per tray, estimated on this phone.
+        LinearLayout spoolCard = card("Spools");
+        label(spoolCard, "About how much filament is left on each spool. Prints started from this app take their use off when they end. Tap a tray to set its spool.", 13, MUTED, false);
+        spoolList = new LinearLayout(this); spoolList.setOrientation(LinearLayout.VERTICAL); spoolCard.addView(spoolList);
         currentSection = motionSection.body;
         LinearLayout upkeep = card(null); upkeepCard = upkeep;
         upkeepHint = label(upkeep, "", 13, MUTED, false);
@@ -487,7 +496,12 @@ public final class MainActivity extends Activity {
         label(preferences, "Camera pictures are saved with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can set its own interval (Pictures… on the Print tab while it prints).", 12, MUTED, false);
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
-        label(preferences, "Alerts need notification permission and a monitoring session. They stop when you disconnect or when Android stops the app.", 13, MUTED, false);
+        CheckBox firstLayer = checkbox(preferences, "Also when the first layer is done", settings.getBoolean("alertFirstLayer", false));
+        firstLayer.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertFirstLayer", enabled).apply());
+        CheckBox alertPictures = checkbox(preferences, "Add a camera picture to alerts (local connection)", settings.getBoolean("alertPictures", true));
+        alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
+        label(preferences, "Alerts need notification permission and a monitoring session. They stop when you disconnect or when Android stops the app. "
+            + "While a print runs, Layer alert… on the Print tab adds one for a layer you choose. Tapping an alert only opens the app.", 13, MUTED, false);
         currentSection = helpSection.body;
         LinearLayout help = card(null);
         button(help, "Connection help…", this::connectionHelp);
@@ -1196,6 +1210,31 @@ public final class MainActivity extends Activity {
         diskInfo = label(storage, "Storage usage not loaded.", 14, MUTED, false);
         loadDisk = button(storage, "Refresh storage", () -> { if (printer != null) printer.loadDisk(); });
     }
+    private Button layerAlert;
+    /** The running print's key, as PrintAlerts uses it: its uuid, else its file name. */
+    private static String printKey(JSONObject status) {
+        JSONObject print = status == null ? null : status.optJSONObject("print_status"); if (print == null) return "";
+        String key = print.optString("uuid", ""); return key.isEmpty() ? print.optString("filename", "") : key;
+    }
+    private void layerAlertDialog() {
+        JSONObject print = snapshot.optJSONObject("print_status"); if (print == null) return;
+        int total = print.optInt("total_layer", 0), now = print.optInt("current_layer", 0); String key = printKey(snapshot);
+        LinearLayout body = dialogBody();
+        label(body, "A notification when this print reaches a layer, for example to check it or to swap filament by hand. Now at layer " + now + " of " + total + ".", 14, INK, false);
+        EditText at = input(body, "Layer (" + (now + 1) + "–" + total + ")", false); at.setInputType(InputType.TYPE_CLASS_NUMBER);
+        int saved = key.equals(settings.getString("alertLayerKey", "")) ? settings.getInt("alertLayer", 0) : 0; at.setText(String.valueOf(saved > 0 ? saved : Math.min(total, now + 10)));
+        AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle("Layer alert").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set alert", (d, w) -> {
+            try {
+                int layer = Integer.parseInt(at.getText().toString());
+                if (layer <= now || layer > total) { message("Choose a layer after " + now + ", up to " + total + "."); return; }
+                settings.edit().putInt("alertLayer", layer).putString("alertLayerKey", key).apply(); requestNotifications(); render();
+                message("You'll get a notification at layer " + layer + ", while the app keeps watching the printer.");
+            } catch (NumberFormatException invalid) { message("Enter the layer as a number."); }
+        });
+        if (saved > 0) builder.setNeutralButton("Remove", (d, w) -> { settings.edit().remove("alertLayer").remove("alertLayerKey").apply(); render(); });
+        builder.show();
+    }
+    private SpoolStore spools() { return SpoolStore.at(new File(getFilesDir(), "spools.json")); }
     /** Emergency stop: asks first, and is sent once per confirmation like every other printer command. */
     private void emergencyButton(LinearLayout parent) {
         Button stop = button(parent, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
@@ -1302,6 +1341,13 @@ public final class MainActivity extends Activity {
         boolean sameFile = printer.selectedReport != null && GcodeLibrary.safeName(printer.selectedName) != null && GcodeLibrary.safeName(printer.selectedName).equals(GcodeLibrary.safeName(name));
         FilamentMatch.Need[] needs = FilamentMatch.merge(TrayPlan.MAX_TOOLS, FilamentMatch.fromPlan(plan), FilamentMatch.fromColorMap(file.opt("color_map")),
             sameFile ? FilamentMatch.fromComments(printer.selectedReport.materials, TrayPlan.MAX_TOOLS) : new ArrayList<>());
+        // Grams per filament (from slicing on this phone, or the slicer notes of the same file inspected here) for the spool check.
+        double[] toolGrams = new double[8];
+        for (int t = 0; t < 8; t++) {
+            toolGrams[t] = plan == null ? 0 : plan.grams(t);
+            if (toolGrams[t] <= 0 && sameFile) for (SlicedMaterials.Entry entry : printer.selectedReport.materials.entries) if (entry.index == t && entry.massG != null) toolGrams[t] = entry.massG;
+        }
+        SpoolStore spoolStore = spools();
         if (file.has("color_map")) Diagnostics.note(Diagnostics.TRAYS, "file details carry color_map (" + (file.opt("color_map") instanceof JSONArray ? "list" : file.opt("color_map") == null ? "null" : file.opt("color_map").getClass().getSimpleName()) + ")");
         Spinner[] maps = new Spinner[8]; LinearLayout[] rows = new LinearLayout[8]; TextView[] verdicts = new TextView[8];
         for (int t = 0; t < 8; t++) {
@@ -1333,6 +1379,9 @@ public final class MainActivity extends Activity {
                 FilamentMatch.Verdict verdict = tray == null ? FilamentMatch.unset(needs[t], trays) : FilamentMatch.check(needs[t], tray, shared);
                 verdicts[t].setText((verdict.level == FilamentMatch.Level.OK ? "✓ " : verdict.level == FilamentMatch.Level.WRONG ? "✕ " : "! ") + verdict.text);
                 verdicts[t].setTextColor(verdict.level == FilamentMatch.Level.OK ? TEAL : verdict.level == FilamentMatch.Level.WRONG ? ERROR : AMBER);
+                // Not enough left on the spool in that tray (when this phone knows the spool and the grams).
+                String low = tray == null ? null : spoolStore.shortfall(SpoolStore.slot(tray), toolGrams[t]);
+                if (low != null) { verdicts[t].append("\n! " + low); if (verdict.level == FilamentMatch.Level.OK) verdicts[t].setTextColor(AMBER); }
             }
         };
         AdapterView.OnItemSelectedListener rejudge = new AdapterView.OnItemSelectedListener() {
@@ -1425,8 +1474,10 @@ public final class MainActivity extends Activity {
                     FilamentMatch.Verdict verdict = FilamentMatch.check(needs[t], tray, shared);
                     if (verdict.level == FilamentMatch.Level.WRONG) wrong++; else if (verdict.level == FilamentMatch.Level.CHECK) check++;
                     String wants = needs[t] == null ? "" : needs[t].describe();
+                    String low = spoolStore.shortfall(SpoolStore.slot(tray), toolGrams[t]);
                     lines.append("\nFilament ").append(t + 1).append(wants.isEmpty() ? "" : " (" + wants + ")").append(" → ").append(choices.get(selected).replace("\n", ", "))
-                        .append(verdict.level == FilamentMatch.Level.OK ? "" : (verdict.level == FilamentMatch.Level.WRONG ? "\n   ✕ " : "\n   ! ") + verdict.text);
+                        .append(verdict.level == FilamentMatch.Level.OK ? "" : (verdict.level == FilamentMatch.Level.WRONG ? "\n   ✕ " : "\n   ! ") + verdict.text)
+                        .append(low == null ? "" : "\n   ! " + low);
                 }
             } catch (Exception error) { message("Could not read the tray choices. Refresh trays and try again."); return; }
             setup.dismiss();
@@ -1441,6 +1492,10 @@ public final class MainActivity extends Activity {
                     if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
                         + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
                     if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
+                    // Remember the grams per tray, so they come off the spools when the print ends (only with chosen trays: the printer's own mapping is not known).
+                    Map<String, Double> uses = new HashMap<>();
+                    for (int t = 0; t < count && mapping.length() > 0; t++) { int at = maps[t].getSelectedItemPosition(); if (at > 0 && toolGrams[t] > 0) uses.merge(SpoolStore.slot(trays.get(at - 1)), toolGrams[t], Double::sum); }
+                    spoolStore.started(name, uses, System.currentTimeMillis());
                 }).show();
         })); setup.show();
     }
@@ -1467,6 +1522,19 @@ public final class MainActivity extends Activity {
             + "The chamber has a temperature sensor only, so there is no chamber target to set; the chamber fan is under Fan setting….", 14, INK, false);
         EditText nozzle = input(body, "Nozzle target °C", false), bed = input(body, "Bed target °C", false); nozzle.setInputType(InputType.TYPE_CLASS_NUMBER); bed.setInputType(InputType.TYPE_CLASS_NUMBER);
         JSONObject n = snapshot.optJSONObject("extruder"), b = snapshot.optJSONObject("heater_bed"); nozzle.setText(String.valueOf(n == null ? 0 : n.optInt("target"))); bed.setText(String.valueOf(b == null ? 0 : b.optInt("target")));
+        // Presets from the loaded CANVAS materials (and common ones): a tap fills both fields; nothing is sent until Set heaters.
+        int presetsAt = body.indexOfChild(nozzle) - 1;   // above the nozzle field's caption
+        TextView presetsLabel = label(body, "Presets fill in both fields:", 13, MUTED, false); body.removeView(presetsLabel); body.addView(presetsLabel, presetsAt);
+        HorizontalScrollView presetScroll = new HorizontalScrollView(this); presetScroll.setHorizontalScrollBarEnabled(false);
+        LinearLayout presets = new LinearLayout(this); presets.setOrientation(LinearLayout.HORIZONTAL); presetScroll.addView(presets);
+        for (TemperaturePresets.Preset preset : TemperaturePresets.from(printer == null ? null : printer.canvas)) {
+            Button chip = new Button(this); chip.setText(preset.text()); chip.setAllCaps(false); chip.setTextSize(13); styleButton(chip);
+            chip.setMinHeight(dp(48)); chip.setMinimumHeight(dp(48)); chip.setPadding(dp(14), 0, dp(14), 0);
+            chip.setContentDescription("Fill in " + preset.text() + (preset.fromTray ? ", from the loaded tray" : ""));
+            chip.setOnClickListener(v -> { nozzle.setText(String.valueOf(preset.nozzle)); bed.setText(String.valueOf(preset.bed)); });
+            LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-2, -2); gap.rightMargin = dp(8); presets.addView(chip, gap);
+        }
+        body.addView(presetScroll, presetsAt + 1);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle(during ? "Change heaters during the print?" : "Heater temperatures now").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set heaters", null).create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { int nt = Integer.parseInt(nozzle.getText().toString()), bt = Integer.parseInt(bed.getText().toString()); Cc2Codec.temperatureRequest(0, nt, bt); if (printer != null) printer.temperatures(nt, bt); dialog.dismiss(); } catch (Exception error) { nozzle.setError("Nozzle 0–300°C; bed 0–100°C"); } })); dialog.show();
     }
@@ -1498,11 +1566,8 @@ public final class MainActivity extends Activity {
         cameraStart = button(card, "Start camera", this::toggleCamera);
         cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
         // The picture's size toggles between the normal and the large height; the button names the size it switches to.
-        Button larger = button(card, "Make picture larger", () -> { });
-        larger.setOnClickListener(view -> {
-            boolean grow = cameraImage.getLayoutParams().height == dp(240);
-            cameraImage.getLayoutParams().height = grow ? dp(400) : dp(240); cameraImage.requestLayout(); larger.setText(grow ? "Make picture smaller" : "Make picture larger");
-        });
+        button(card, "Full screen (zoom and brighten)", this::cameraFullScreen);
+        cameraImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(cameraImage, "Show the camera full screen");
         cameraSnapshot = button(card, "Save snapshot to phone…", () -> {
             if (lastFrame == null) return; pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
@@ -1537,12 +1602,61 @@ public final class MainActivity extends Activity {
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
                 public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
-                    monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE); }
+                    monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE);
+                    if (fullView != null) fullView.setImageBitmap(image);
+                    tone(image); }
                 public void error(String text) { stopCamera(); cameraInfo.setText(text); monitorCameraInfo.setText(text); monitorCameraInfo.setVisibility(View.VISIBLE); }
             }); cameraStart.setText("Stop camera"); monitorCameraStart.setText("Stop camera");
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN, then use the camera address for the home printer. The VPN route must allow the camera port." : "Enter the camera address for the selected printer, and connect the phone to the same Wi-Fi network as the printer."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab, then Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
     }
-    private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
+    // ------------------------------------------------------------------ Camera: tone, full screen
+    private LinearLayout darkRow;
+    private boolean darkDismissed;
+    private ZoomImageView fullView;
+    private android.app.Dialog fullDialog;
+    private float lastGain = 1;
+    /** Brightens a dark picture on this phone (when chosen), and offers the light when the chamber is dark. */
+    private void tone(Bitmap image) {
+        double luminance;
+        try { Bitmap small = Bitmap.createScaledBitmap(image, 32, 24, true); int[] pixels = new int[32 * 24]; small.getPixels(pixels, 0, 32, 0, 0, 32, 24); luminance = CameraTone.luminance(pixels); }
+        catch (RuntimeException unreadable) { return; }
+        float gain = settings.getBoolean("cameraBrighten", true) ? CameraTone.gain(luminance) : 1;
+        if (Math.abs(gain - lastGain) > 0.05f) {
+            lastGain = gain;
+            android.graphics.ColorFilter filter = gain <= 1.01f ? null : new android.graphics.ColorMatrixColorFilter(CameraTone.matrix(gain));
+            for (ImageView view : new ImageView[] {monitorImage, cameraImage, fullView}) if (view != null) view.setColorFilter(filter);
+        }
+        boolean dark = luminance < CameraTone.DARK && !darkDismissed && lightOn.isEnabled();
+        if (darkRow != null) darkRow.setVisibility(dark ? View.VISIBLE : View.GONE);
+    }
+    /** The camera full screen: pinch or double tap to zoom, drag to move, and buttons for the same and for brightening. */
+    private void cameraFullScreen() {
+        if (lastFrame == null) return;
+        android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
+        android.widget.FrameLayout stage = new android.widget.FrameLayout(this); stage.setBackgroundColor(Color.BLACK);
+        ZoomImageView view = new ZoomImageView(this); view.setContentDescription("Live printer camera, full screen"); view.setImageBitmap(lastFrame);
+        stage.addView(view, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        LinearLayout bar = new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL); bar.setPadding(dp(8), dp(8), dp(8), dp(8)); bar.setBackgroundColor(0x99000000);
+        Button out = fullButton(bar, "−", () -> view.zoomBy(1 / 1.5f)); out.setContentDescription("Zoom out");
+        Button in = fullButton(bar, "+", () -> view.zoomBy(1.5f)); in.setContentDescription("Zoom in");
+        Button brighten = fullButton(bar, "", () -> { });
+        Runnable showBrighten = () -> { boolean on = settings.getBoolean("cameraBrighten", true); brighten.setText(on ? "Brighten: on" : "Brighten: off"); A11y.state(brighten, on ? "On" : "Off"); };
+        brighten.setOnClickListener(v -> { settings.edit().putBoolean("cameraBrighten", !settings.getBoolean("cameraBrighten", true)).apply(); lastGain = -1; showBrighten.run(); if (lastFrame != null) tone(lastFrame); });
+        showBrighten.run();
+        fullButton(bar, "Close", dialog::dismiss);
+        stage.addView(bar, new android.widget.FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM));
+        dialog.setContentView(stage);
+        dialog.setOnDismissListener(d -> { if (fullDialog == dialog) { fullDialog = null; fullView = null; } });
+        fullView = view; fullDialog = dialog; lastGain = -1; tone(lastFrame);
+        dialog.show();
+    }
+    private Button fullButton(LinearLayout bar, String text, Runnable action) {
+        Button b = new Button(this); b.setText(text); b.setAllCaps(false); b.setTextColor(Color.WHITE); b.setTextSize(15); b.setBackground(null);
+        b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48)); b.setMinWidth(dp(56)); b.setMinimumWidth(dp(56)); b.setOnClickListener(v -> action.run());
+        bar.addView(b, new LinearLayout.LayoutParams(0, -2, 1)); return b;
+    }
+    private void stopCamera() {
+        android.app.Dialog full = fullDialog; fullDialog = null; fullView = null; if (full != null && full.isShowing()) full.dismiss(); AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
     /** Recording pictures: the default interval (Settings) or the running print's own (Print tab). 0 = none. */
     private Button pictureDefault;
     private static final int[] PICTURE_MINUTES = {0, 1, 2, 5, 10, 15, 30, 60};
@@ -1824,6 +1938,11 @@ public final class MainActivity extends Activity {
         graphs.setText("Print recordings");
         PrintRecorder.Recording recordingNow = printer == null || printer.recorder == null ? null : printer.recorder.current();
         picturesNow.setVisibility(inJobNow && recordingNow != null ? View.VISIBLE : View.GONE);
+        // One alert at a chosen layer of this print (navigation-only notification; the printer is never told anything).
+        int total = snapshot.optJSONObject("print_status") == null ? 0 : snapshot.optJSONObject("print_status").optInt("total_layer", 0);
+        layerAlert.setVisibility(inJobNow && total > 1 ? View.VISIBLE : View.GONE);
+        int alertAt = settings.getInt("alertLayer", 0); boolean thisPrint = alertAt > 0 && printKey(snapshot).equals(settings.getString("alertLayerKey", ""));
+        layerAlert.setText(thisPrint ? "Layer alert at " + alertAt + "…" : "Layer alert…");
         if (recordingNow != null) { picturesNow.setText(recordingNow.pictureMinutes == 0 ? "Pictures: off" : "Pictures: " + recordingNow.pictureMinutes + " min");
             picturesNow.setContentDescription("Camera pictures for this print: " + pictureText(recordingNow.pictureMinutes) + ". Change"); }
         // Quick actions by state. Printing: Live toolpath and Camera. Connected and idle: Slice a model, Camera and, with history, Print again.
@@ -1866,6 +1985,7 @@ public final class MainActivity extends Activity {
         main.post(this::autoLoadTrays);
         JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
         renderTrays(canvasNow);
+        renderSpools(canvasNow);
         if (canvasNow != null) {
             String refillText = "Automatic refill: " + (canvasNow.has("auto_refill") ? (canvasNow.optBoolean("auto_refill") ? "On" : "Off") : "Not reported");
             trays.setText(trayList.getChildCount() == 0 ? StatusPresentation.canvas(canvasNow) : refillText + (!printer.canvasFresh() ? "\nTray status is stale; refresh before changing refill." : ""));
@@ -1875,6 +1995,74 @@ public final class MainActivity extends Activity {
         showThumbnail();
     }
     /** One row per reported tray: colour swatch, material and the active-tray marker. Rebuilt only when the trays change. */
+    // ------------------------------------------------------------------ Spools
+    private LinearLayout spoolList;
+    private String renderedSpools;
+    /** One row per loaded tray with its spool's filament left, then the shelf; rebuilt only when something shown changed. */
+    private void renderSpools(JSONObject canvas) {
+        if (spoolList == null) return;
+        List<TrayPlan.Tray> loaded = canvas == null ? new ArrayList<>() : TrayPlan.trays(canvas);
+        SpoolStore store = spools(); List<SpoolStore.Spool> all = store.all();
+        StringBuilder key = new StringBuilder(); for (TrayPlan.Tray t : loaded) key.append(t.label()).append(';');
+        for (SpoolStore.Spool s : all) key.append(s.id).append(s.slot).append(Math.round(s.left)).append(';');
+        if (key.toString().equals(renderedSpools)) return;
+        renderedSpools = key.toString(); spoolList.removeAllViews();
+        if (loaded.isEmpty()) label(spoolList, "No loaded CANVAS trays reported. Refresh status on the Print tab to see them.", 13, MUTED, false);
+        boolean first = true;
+        for (TrayPlan.Tray tray : loaded) {
+            SpoolStore.Spool spool = store.inSlot(SpoolStore.slot(tray));
+            String detail = spool == null ? "Spool not set: tap to say how much is on it" : String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size)
+                + (spool.left < 100 ? " · running low" : "");
+            listRow(spoolList, "Tray " + tray.trayId + (tray.canvasId > 0 ? " (CANVAS " + tray.canvasId + ")" : "") + " · " + tray.material(), detail, !first, () -> spoolDialog(tray));
+            first = false;
+        }
+        List<SpoolStore.Spool> shelf = store.shelf();
+        if (!shelf.isEmpty()) {
+            TextView heading = label(spoolList, "On the shelf", 14, INK, true); heading.setPadding(0, dp(10), 0, 0); A11y.heading(heading);
+            first = true;
+            for (SpoolStore.Spool spool : shelf) {
+                listRow(spoolList, spool.material(), String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size), !first, () -> shelfDialog(spool));
+                first = false;
+            }
+        }
+    }
+    /** What to do with a tray's spool. Nothing here talks to the printer. */
+    private void spoolDialog(TrayPlan.Tray tray) {
+        SpoolStore store = spools(); SpoolStore.Spool spool = store.inSlot(SpoolStore.slot(tray));
+        List<String> names = new ArrayList<>(); List<Runnable> actions = new ArrayList<>();
+        if (spool != null) { names.add("Set filament left…"); actions.add(() -> amountDialog("Filament left on this spool", spool.size, spool.left, false, (size, left) -> { store.setLeft(spool.id, left, System.currentTimeMillis()); render(); })); }
+        names.add("New full spool (" + Math.round(SpoolStore.DEFAULT_SIZE) + " g)"); actions.add(() -> { store.put(tray, SpoolStore.DEFAULT_SIZE, SpoolStore.DEFAULT_SIZE, System.currentTimeMillis()); render(); });
+        names.add("New spool of another size, or part used…"); actions.add(() -> amountDialog("Spool in tray " + tray.trayId, SpoolStore.DEFAULT_SIZE, SpoolStore.DEFAULT_SIZE, true, (size, left) -> { store.put(tray, size, left, System.currentTimeMillis()); render(); }));
+        for (SpoolStore.Spool back : store.candidates(tray)) {
+            names.add(String.format(Locale.getDefault(), "Put back the %s spool from the shelf (%.0f g left)", back.material(), back.left));
+            actions.add(() -> { store.fromShelf(back.id, tray, System.currentTimeMillis()); render(); });
+        }
+        new AlertDialog.Builder(this).setTitle("Tray " + tray.trayId + " · " + tray.material()).setItems(names.toArray(new String[0]), (d, which) -> actions.get(which).run())
+            .setNegativeButton("Cancel", null).show();
+    }
+    private void shelfDialog(SpoolStore.Spool spool) {
+        SpoolStore store = spools();
+        new AlertDialog.Builder(this).setTitle(spool.material()).setItems(new String[] {"Set filament left…", "Remove (spool used up or given away)"}, (d, which) -> {
+            if (which == 0) amountDialog("Filament left on this spool", spool.size, spool.left, false, (size, left) -> { store.setLeft(spool.id, left, System.currentTimeMillis()); render(); });
+            else { store.remove(spool.id); render(); }
+        }).setNegativeButton("Cancel", null).show();
+    }
+    private interface Amount { void set(double size, double left); }
+    /** Grams on a spool (and its full size, for a new one). Weighing the spool and taking off the empty spool's weight is the most accurate. */
+    private void amountDialog(String title, double size, double left, boolean askSize, Amount done) {
+        LinearLayout body = dialogBody();
+        label(body, "Estimates are fine. To be exact, weigh the spool and take off the empty spool's weight (often about 200 g for plastic, 140 g for cardboard).", 13, MUTED, false);
+        EditText total = askSize ? input(body, "Full spool, grams of filament", false) : null;
+        EditText now = input(body, "Filament left, grams", false);
+        if (total != null) { total.setInputType(InputType.TYPE_CLASS_NUMBER); total.setText(String.valueOf(Math.round(size))); }
+        now.setInputType(InputType.TYPE_CLASS_NUMBER); now.setText(String.valueOf(Math.round(left)));
+        new AlertDialog.Builder(this).setTitle(title).setView(body).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            try {
+                double full = total == null ? size : Double.parseDouble(total.getText().toString()), remaining = Double.parseDouble(now.getText().toString());
+                done.set(full, Math.min(remaining, full));
+            } catch (NumberFormatException invalid) { message("Enter the grams as a number."); }
+        }).show();
+    }
     private void renderTrays(JSONObject canvas) {
         String key = canvas == null ? null : canvas.toString();
         if (java.util.Objects.equals(key, renderedCanvas)) return;

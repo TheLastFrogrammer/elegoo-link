@@ -36,6 +36,24 @@ public final class SlicedMaterials {
         for (String warning : warnings) text.append("\n").append(warning);
         return text.append("\n\nComment indices are source-array positions, not confirmed tool or tray IDs. Values are slicer estimates/configuration; no CANVAS mapping is applied.").toString();
     }
+    /**
+     * Grams per filament from a sliced file's closing notes ("; filament used [g] = 3.45, 1.20"), read from its last 256 KiB only,
+     * so it is cheap on a large file. Empty when the file does not say.
+     */
+    public static double[] gramsFromTail(java.io.File file) {
+        try (java.io.RandomAccessFile in = new java.io.RandomAccessFile(file, "r")) {
+            long size = in.length(), from = Math.max(0, size - 256 * 1024);
+            byte[] tail = new byte[(int) (size - from)]; in.seek(from); in.readFully(tail);
+            String text = new String(tail, java.nio.charset.StandardCharsets.UTF_8);
+            int at = text.lastIndexOf("\n; " + MASSES + " =");
+            if (at < 0) return new double[0];
+            int end = text.indexOf('\n', at + 1); String values = text.substring(text.indexOf('=', at) + 1, end < 0 ? text.length() : end).trim();
+            String[] parts = values.split(","); if (parts.length > 32) return new double[0];
+            double[] grams = new double[parts.length];
+            for (int i = 0; i < parts.length; i++) { double g = Double.parseDouble(parts[i].trim()); if (!Double.isFinite(g) || g < 0 || g > 1e6) return new double[0]; grams[i] = g; }
+            return grams;
+        } catch (Exception unreadable) { return new double[0]; }
+    }
     private static void add(List<String> warnings,String text) { if (!warnings.contains(text)) warnings.add(text); }
     private static String[] vector(String raw,String separator,List<String> warnings) {
         if (raw == null) return new String[0];

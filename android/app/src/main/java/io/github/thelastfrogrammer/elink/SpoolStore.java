@@ -1,0 +1,190 @@
+package io.github.thelastfrogrammer.elink;
+
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.*;
+
+/**
+ * Spools and how much filament is left on each, kept on this phone. A spool sits in a CANVAS tray (or on the shelf); when a
+ * tray reports a different material or colour, the spool that was there goes to the shelf. A print started from this app with
+ * known grams per filament is remembered, and when it ends its use is taken off the spools it printed from (in part for a
+ * stopped print). Only estimates: the printer does not weigh spools. Independent of Android; one instance per file.
+ */
+final class SpoolStore {
+    static final double DEFAULT_SIZE = 1000;
+    /** A started print is forgotten if it is not seen printing within this time. */
+    static final long PENDING_MS = 6 * 3600_000L;
+
+    static final class Spool {
+        String id = "", type = "", name = "", colour = null, slot = "";
+        double size = DEFAULT_SIZE, left = DEFAULT_SIZE;
+        long updated;
+        /** "PLA Matte · red". */
+        String material() {
+            String material = name.isEmpty() || name.equalsIgnoreCase(type) ? type : name.toUpperCase(Locale.ROOT).contains(type.toUpperCase(Locale.ROOT)) ? name : type + " " + name;
+            String word = WorkshopUi.colourName(colour);
+            return word == null ? material : material + " · " + word;
+        }
+        boolean matches(TrayPlan.Tray tray) { return type.equalsIgnoreCase(tray.type) && Objects.equals(colour, tray.colour); }
+        JSONObject json() throws Exception {
+            return new JSONObject().put("id", id).put("type", type).put("name", name).put("colour", colour == null ? "" : colour).put("slot", slot)
+                .put("size", size).put("left", left).put("updated", updated);
+        }
+        static Spool from(JSONObject o) {
+            Spool s = new Spool(); s.id = o.optString("id"); s.type = o.optString("type"); s.name = o.optString("name"); s.colour = TrayPlan.colour(o.optString("colour"));
+            s.slot = o.optString("slot"); s.size = o.optDouble("size", DEFAULT_SIZE); s.left = o.optDouble("left", s.size); s.updated = o.optLong("updated"); return s;
+        }
+    }
+    /** The slot key for a tray: "canvas:tray". */
+    static String slot(int canvasId, int trayId) { return canvasId + ":" + trayId; }
+    static String slot(TrayPlan.Tray tray) { return slot(tray.canvasId, tray.trayId); }
+
+    private static final Map<String, SpoolStore> OPEN = new HashMap<>();
+    /** The one store for this file, shared by the screen and the background service. */
+    static synchronized SpoolStore at(File file) { return OPEN.computeIfAbsent(file.getAbsolutePath(), path -> new SpoolStore(file)); }
+
+    private final File file;
+    private final List<Spool> spools = new ArrayList<>();
+    /** The print started from this app whose use is still to be taken off: file, uses (slot, grams), last progress, seen printing. */
+    private JSONObject pending;
+    SpoolStore(File file) { this.file = file; load(); }
+
+    synchronized List<Spool> all() { List<Spool> copy = new ArrayList<>(); for (Spool s : spools) copy.add(copy(s)); return copy; }
+    synchronized Spool inSlot(String slot) { for (Spool s : spools) if (slot.equals(s.slot)) return copy(s); return null; }
+    synchronized List<Spool> shelf() { List<Spool> out = new ArrayList<>(); for (Spool s : spools) if (s.slot.isEmpty()) out.add(copy(s)); return out; }
+
+    /**
+     * Follows a fresh tray report: a spool whose tray now reports another material or colour, or an empty tray, goes to the shelf.
+     * A tray the report leaves out (a unit not answering) keeps its spool. Returns true when something changed.
+     */
+    synchronized boolean sync(JSONObject canvas, long now) {
+        Map<String, String[]> reported = new HashMap<>();
+        JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
+        for (int u = 0; units != null && u < units.length(); u++) {
+            JSONObject unit = units.optJSONObject(u); JSONArray list = unit == null ? null : unit.optJSONArray("tray_list");
+            for (int i = 0; list != null && i < list.length(); i++) {
+                JSONObject tray = list.optJSONObject(i); if (tray == null || tray.optInt("tray_id", -1) < 0) continue;
+                reported.put(slot(unit.optInt("canvas_id"), tray.optInt("tray_id")), new String[] {StatusPresentation.clean(tray.optString("filament_type")).trim(), TrayPlan.colour(tray.optString("filament_color"))});
+            }
+        }
+        boolean changed = false;
+        for (Spool s : spools) {
+            if (s.slot.isEmpty() || !reported.containsKey(s.slot)) continue;
+            String[] there = reported.get(s.slot);
+            if (there[0].isEmpty() || !s.type.equalsIgnoreCase(there[0]) || !Objects.equals(s.colour, there[1])) { s.slot = ""; s.updated = now; changed = true; }
+        }
+        if (changed) save();
+        return changed;
+    }
+
+    /** Sets the spool in a tray: a new spool of `size` grams with `left` on it (the old one, if different, goes to the shelf). */
+    synchronized Spool put(TrayPlan.Tray tray, double size, double left, long now) {
+        String key = slot(tray);
+        for (Spool s : spools) if (key.equals(s.slot)) s.slot = "";
+        Spool s = new Spool(); s.id = UUID.randomUUID().toString(); s.type = tray.type; s.name = tray.name; s.colour = tray.colour; s.slot = key;
+        s.size = clamp(size, 1, 10_000); s.left = clamp(left, 0, s.size); s.updated = now; spools.add(s); save(); return copy(s);
+    }
+    /** Puts a shelf spool back into a tray. */
+    synchronized void fromShelf(String id, TrayPlan.Tray tray, long now) {
+        String key = slot(tray);
+        for (Spool s : spools) if (key.equals(s.slot)) s.slot = "";
+        for (Spool s : spools) if (s.id.equals(id)) { s.slot = key; s.updated = now; }
+        save();
+    }
+    synchronized void setLeft(String id, double left, long now) { for (Spool s : spools) if (s.id.equals(id)) { s.left = clamp(left, 0, s.size); s.updated = now; } save(); }
+    synchronized void remove(String id) { spools.removeIf(s -> s.id.equals(id)); save(); }
+
+    /** Shelf spools of the same material and colour as a tray, most filament first: the likely ones to put back. */
+    synchronized List<Spool> candidates(TrayPlan.Tray tray) {
+        List<Spool> out = new ArrayList<>(); for (Spool s : spools) if (s.slot.isEmpty() && s.matches(tray)) out.add(copy(s));
+        out.sort((a, b) -> Double.compare(b.left, a.left)); return out;
+    }
+
+    /**
+     * "Only about 40 g left on this spool; this filament needs about 55 g.", or null when the spool in `slot` has enough (or is
+     * not known). A 5 % margin covers purge and estimate error.
+     */
+    synchronized String shortfall(String slot, double grams) {
+        Spool s = null; for (Spool one : spools) if (slot.equals(one.slot)) s = one;
+        if (s == null || grams <= 0) return null;
+        if (s.left >= grams * 1.05) return null;
+        return String.format(Locale.getDefault(), "Only about %.0f g left on this spool; this filament needs about %.0f g.", s.left, grams);
+    }
+
+    /** Remembers a print just started from this app: grams per tray. Uses without a known tray or grams are left out. */
+    synchronized void started(String filename, Map<String, Double> gramsBySlot, long now) {
+        try {
+            JSONArray uses = new JSONArray();
+            for (Map.Entry<String, Double> use : gramsBySlot.entrySet()) if (use.getValue() != null && use.getValue() > 0) uses.put(new JSONObject().put("slot", use.getKey()).put("grams", use.getValue()));
+            pending = uses.length() == 0 ? null : new JSONObject().put("file", filename).put("uses", uses).put("at", now).put("progress", 0).put("seen", false);
+            save();
+        } catch (Exception ignored) { }
+    }
+
+    /**
+     * Follows the printer's status for the remembered print. When it ends, its use comes off the spools: all of it when complete,
+     * the printed share when stopped. Returns a line saying what was taken off, or null.
+     */
+    synchronized String observe(JSONObject status, long now) {
+        if (pending == null || status == null) return null;
+        JSONObject machine = status.optJSONObject("machine_status"), print = status.optJSONObject("print_status");
+        if (machine == null) return null;
+        int state = machine.optInt("status", -1), sub = machine.optInt("sub_status", -1);
+        String file = print == null ? "" : print.optString("filename", "");
+        boolean ours = file.equals(pending.optString("file")) || file.endsWith("/" + pending.optString("file"));
+        boolean seen = pending.optBoolean("seen");
+        if (state == 2 && ours) {
+            int progress = machine.optInt("progress", pending.optInt("progress"));
+            try { pending.put("seen", true).put("progress", Math.max(pending.optInt("progress"), progress)); } catch (Exception ignored) { }
+            if (sub == 2077) return settle(1.0, now);
+            if (sub == 2504) return settle(pending.optInt("progress") / 100.0, now);
+            return null;
+        }
+        if (seen && (state == 1 || state == 2 && !file.isEmpty() && !ours)) {
+            int progress = pending.optInt("progress");
+            return settle(progress >= 99 ? 1.0 : progress / 100.0, now);
+        }
+        if (!seen && (now - pending.optLong("at") > PENDING_MS || state == 2 && !file.isEmpty() && !ours)) { pending = null; save(); }
+        return null;
+    }
+    private String settle(double share, long now) {
+        double used = 0; JSONArray uses = pending.optJSONArray("uses");
+        for (int i = 0; uses != null && i < uses.length(); i++) {
+            JSONObject use = uses.optJSONObject(i); if (use == null) continue;
+            double grams = use.optDouble("grams", 0) * Math.max(0, Math.min(1, share));
+            for (Spool s : spools) if (s.slot.equals(use.optString("slot"))) { s.left = Math.max(0, s.left - grams); s.updated = now; used += grams; }
+        }
+        pending = null; save();
+        return used <= 0 ? null : String.format(Locale.getDefault(), "About %.0f g of filament taken off the spools.", used);
+    }
+    synchronized boolean hasPending() { return pending != null; }
+
+    private static double clamp(double v, double lo, double hi) { return Double.isFinite(v) ? Math.max(lo, Math.min(hi, v)) : lo; }
+    private static Spool copy(Spool s) { return Spool.from(safe(s)); }
+    private static JSONObject safe(Spool s) { try { return s.json(); } catch (Exception impossible) { return new JSONObject(); } }
+
+    private void load() {
+        spools.clear(); pending = null;
+        try {
+            if (!file.isFile()) return;
+            JSONObject root = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
+            JSONArray list = root.optJSONArray("spools");
+            for (int i = 0; list != null && i < list.length(); i++) { JSONObject o = list.optJSONObject(i); if (o != null) spools.add(Spool.from(o)); }
+            pending = root.optJSONObject("pending");
+        } catch (Exception unreadable) { spools.clear(); pending = null; }
+    }
+    private void save() {
+        try {
+            JSONArray list = new JSONArray(); for (Spool s : spools) list.put(s.json());
+            JSONObject root = new JSONObject().put("spools", list); if (pending != null) root.put("pending", pending);
+            File parent = file.getParentFile(); if (parent != null) parent.mkdirs();
+            File temp = new File(file.getPath() + ".tmp");
+            try (FileOutputStream out = new FileOutputStream(temp)) { out.write(root.toString().getBytes(StandardCharsets.UTF_8)); }
+            if (!temp.renameTo(file)) { file.delete(); temp.renameTo(file); }
+        } catch (Exception ignored) { }
+    }
+}
