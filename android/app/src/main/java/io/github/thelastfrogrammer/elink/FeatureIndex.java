@@ -72,7 +72,7 @@ final class FeatureIndex {
         new Feature("printers", "Saved printers", "saved printers profiles switch printer", SETTINGS, "Saved printers", Prepare.SETTINGS_LOCAL, true),
         new Feature("appearance", "Appearance (dark mode)", "appearance theme dark light night", SETTINGS, "Appearance", Prepare.NONE, true),
         new Feature("pictures", "Camera pictures during prints", "pictures snapshots interval photos timelapse recording camera", SETTINGS, "Recording pictures", Prepare.NONE, true),
-        new Feature("alerts", "Notifications", "notifications alerts done finished fault first layer picture", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
+        new Feature("alerts", "Notifications", "notifications alerts done finished fault first layer picture watch stuck stall failure temperature", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),
         new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),
         new Feature("diagnostics", "Share diagnostics", "diagnostics logs report bug share", SETTINGS, "Share diagnostics", Prepare.NONE, true),

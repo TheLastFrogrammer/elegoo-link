@@ -41,6 +41,12 @@ public final class PrinterService extends Service {
     public long filesAt;
     private final Set<Integer> queryBusy = new HashSet<>();
     private PrintAlerts alerts = new PrintAlerts();
+    /** Print watch (stalls, heaters off target), one per route like the alerts; Settings can turn it off. */
+    private final PrintWatch watch = new PrintWatch(), cloudWatch = new PrintWatch();
+    private String watched(PrintWatch which, JSONObject value) {
+        String text = which.update(value, SystemClock.elapsedRealtime());
+        return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("printWatch", true) ? text : "";
+    }
     public File selectedFile;
     /** Copies of uploaded, sliced and downloaded G-code, for the toolpath viewer to follow prints. */
     GcodeLibrary library;
@@ -185,7 +191,7 @@ public final class PrinterService extends Service {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
             public void connection(String text, boolean registered) { deliver(() -> { connection = registered ? "Connected" + (remote ? " through VPN" : " locally") + (pinProbe ? " · read-only PIN probe" : "") + " · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
-            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); record(value, "local", attributes.optString("hostname", host)); }); }
+            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); showAlert(watched(watch, value)); record(value, "local", attributes.optString("hostname", host)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
@@ -828,7 +834,7 @@ public final class PrinterService extends Service {
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
                     // Local alerts take precedence while connected locally.
-                    if (!wanted && cloudOnline == 1 && cloudReportRecent()) { alertChoices(); showAlert(cloudAlerts.update(reported.status), cloudName); record(reported.status, "cloud", cloudName); }
+                    if (!wanted && cloudOnline == 1 && cloudReportRecent()) { alertChoices(); showAlert(cloudAlerts.update(reported.status), cloudName); showAlert(watched(cloudWatch, reported.status), cloudName); record(reported.status, "cloud", cloudName); }
                 } else if (found == null) { cloudSerial = ""; cloudStatus = new JSONObject(); }
                 changed(); updateNotification(false);
             });
@@ -852,7 +858,7 @@ public final class PrinterService extends Service {
                     cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis(); cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
                     // A live report from the printer itself shows it is online.
                     cloudOnline = 1;
-                    if (cloudOnline == 1) { alertChoices(); showAlert(cloudAlerts.update(merged), cloudName); record(merged, "cloud", cloudName); }
+                    if (cloudOnline == 1) { alertChoices(); showAlert(cloudAlerts.update(merged), cloudName); showAlert(watched(cloudWatch, merged), cloudName); record(merged, "cloud", cloudName); }
                     changed(); updateNotification(false);
                 } catch (Exception ignored) { }
             }); }
@@ -1006,7 +1012,7 @@ public final class PrinterService extends Service {
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("printer-alerts", "Print completion and faults", NotificationManager.IMPORTANCE_DEFAULT));
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        int id = text.startsWith("Print complete") ? 2 : text.startsWith("Printer fault") ? 3 : 4;
+        int id = text.startsWith("Print complete") ? 2 : text.startsWith("Printer fault") ? 3 : text.startsWith("First layer") || text.startsWith("Layer ") ? 4 : 5;
         Notification.Builder builder = new Notification.Builder(this, "printer-alerts").setSmallIcon(R.drawable.ic_launcher)
             .setContentTitle("Link Workshop · " + StatusPresentation.clean(title)).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true)
             .setOnlyAlertOnce(true);
