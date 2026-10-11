@@ -399,6 +399,13 @@
     };
     poll();
   }
+  // A still of the cloud video for the print's recording: a JPEG data URL, or "" when no video is playing.
+  function snapshot() {
+    const video = printerCam.video;
+    if (!printerCam.playing || !video || video.readyState < 2 || !video.videoWidth) return "";
+    const c = document.createElement("canvas"); c.width = video.videoWidth; c.height = video.videoHeight;
+    try { c.getContext("2d").drawImage(video, 0, 0); return c.toDataURL("image/jpeg", 0.85); } catch (e) { return ""; }
+  }
   function noteDelay(ms) { if (!(ms > 0 && ms < 30000)) return; printerCam.delay = printerCam.delay > 0 ? printerCam.delay * 0.8 + ms * 0.2 : ms; }
   function pump() {
     if (!printerCam.playing || !printerCam.pose) return;
@@ -927,6 +934,6 @@
   }
   // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
   function probe() { return { end: view.end, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
-  window.viewer = { probe, load, update, setLockstep, getViewState, setViewState, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { probe, load, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

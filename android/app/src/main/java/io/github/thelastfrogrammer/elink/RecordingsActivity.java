@@ -120,6 +120,9 @@ public final class RecordingsActivity extends Activity {
         try { recording = PrintRecorder.Recording.read(meta); rows = PrintRecorder.samples(recording); }
         catch (Exception error) { heading("Recording"); label("This recording could not be opened. It may have been deleted or damaged. Go back and choose another one.", 15, ink, false); return; }
         shown = recording;
+        // Opened from Monitor during a print: the other recordings are one tap away.
+        LinearLayout back = new LinearLayout(this); back.setOrientation(LinearLayout.HORIZONTAL); content.addView(back);
+        action(back, "All recordings", () -> startActivity(new Intent(this, RecordingsActivity.class)));
         heading(StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")));
         String details = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + " · " + StatusPresentation.clean(recording.printer);
         if (recording.layers > 0) details += " · " + recording.layers + " layers";
@@ -133,6 +136,9 @@ public final class RecordingsActivity extends Activity {
         String last = lastReading(rows);
         if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, last, 13, muted, false); }
         double[] t = column(rows, "elapsed_s");
+        pictures(recording);
+        trays(rows, t);
+        material(recording, rows, t);
         chart("Progress", " %", t, Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)), 0, 100);
         chart("Layer number", "", t, Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)), Double.NaN, Double.NaN);
         chart("Temperatures", " °C", t, Arrays.asList(
@@ -149,6 +155,114 @@ public final class RecordingsActivity extends Activity {
             .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
+    }
+
+    // ---- Pictures, trays and material ----
+
+    /** The print's camera pictures in a strip, each with its time into the print; tap for the full picture. */
+    private void pictures(PrintRecorder.Recording recording) {
+        List<File> files = PrintRecorder.pictures(recording);
+        if (files.isEmpty() && recording.pictureMinutes == 0) return;
+        LinearLayout card = card(); label(card, "Camera pictures", 15, ink, true);
+        if (files.isEmpty()) { label(card, "None yet. Pictures are taken every " + recording.pictureMinutes + " min from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath.", 13, muted, false); return; }
+        label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 ? " · every " + recording.pictureMinutes + " min" : "") + ". Tap one to see it larger.", 13, muted, false);
+        LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
+        HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.addView(strip); card.addView(scroll);
+        for (File file : files) {
+            String at = ChartView.elapsed(Double.parseDouble(file.getName().replace(".jpg", "")));
+            LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setPadding(0, 0, dp(8), 0);
+            ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); image.setContentDescription("Picture at " + at + " into the print");
+            image.setImageBitmap(decode(file, dp(160)));
+            cell.addView(image, new LinearLayout.LayoutParams(dp(160), dp(120)));
+            label(cell, at, 12, muted, false);
+            image.setOnClickListener(v -> {
+                ImageView big = new ImageView(this); big.setAdjustViewBounds(true); big.setImageBitmap(decode(file, getResources().getDisplayMetrics().widthPixels));
+                new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
+            });
+            strip.addView(cell);
+        }
+    }
+    private static android.graphics.Bitmap decode(File file, int width) {
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+        android.graphics.BitmapFactory.decodeFile(file.getPath(), bounds);
+        android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inSampleSize = 1;
+        while (bounds.outWidth / (options.inSampleSize * 2) >= width) options.inSampleSize *= 2;
+        return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
+    }
+
+    /** Which CANVAS tray fed the print over time: a colour band, and the changes in words. */
+    private void trays(List<double[]> rows, double[] t) {
+        double[] tray = column(rows, "tray"), rgb = column(rows, "tray_rgb");
+        List<String> changes = trayChanges(tray, rgb, t);
+        if (changes.isEmpty()) return;
+        LinearLayout card = card(); label(card, "Filament over time", 15, ink, true);
+        View band = new View(this) {
+            @Override protected void onDraw(android.graphics.Canvas canvas) {
+                android.graphics.Paint paint = new android.graphics.Paint(); double end = t.length == 0 ? 1 : Math.max(1, t[t.length - 1]);
+                for (int i = 0; i < t.length; i++) {
+                    if (Double.isNaN(tray[i])) continue;
+                    double next = i + 1 < t.length ? t[i + 1] : end;
+                    paint.setColor(Double.isNaN(rgb[i]) ? muted : 0xff000000 | (int) rgb[i]);
+                    canvas.drawRect((float) (t[i] / end * getWidth()), 0, (float) (next / end * getWidth()), getHeight(), paint);
+                }
+            }
+        };
+        band.setContentDescription("Filament over time: " + String.join("; ", changes));
+        LinearLayout.LayoutParams bandLayout = new LinearLayout.LayoutParams(-1, dp(28)); bandLayout.topMargin = dp(4); card.addView(band, bandLayout);
+        label(card, String.join("\n", changes), 13, muted, false);
+    }
+    /** "From 0:00: tray 1 (red)" each time the active tray changes; empty when no tray was reported. */
+    static List<String> trayChanges(double[] tray, double[] rgb, double[] t) {
+        List<String> out = new ArrayList<>(); double last = Double.NaN;
+        for (int i = 0; i < tray.length; i++) {
+            if (Double.isNaN(tray[i]) || tray[i] == last) continue;
+            last = tray[i];
+            String colour = Double.isNaN(rgb[i]) ? null : WorkshopUi.colourName(String.format(Locale.ROOT, "#%06X", (int) rgb[i] & 0xffffff));
+            out.add("From " + ChartView.elapsed(t[i]) + ": tray " + (int) tray[i] + (colour == null ? "" : " (" + colour + ")"));
+        }
+        return out;
+    }
+
+    /**
+     * From the print's own G-code, when it is on this phone: material per layer over the print's time, and each filament's
+     * use with its colour. Read in the background.
+     */
+    private void material(PrintRecorder.Recording recording, List<double[]> rows, double[] t) {
+        LinearLayout card = card(); label(card, "Material", 15, ink, true);
+        TextView note = label(card, "Reading the print's file…", 13, muted, false);
+        LinearLayout chartBox = new LinearLayout(this); chartBox.setOrientation(LinearLayout.VERTICAL); card.addView(chartBox);
+        LinearLayout byColour = new LinearLayout(this); byColour.setOrientation(LinearLayout.VERTICAL); card.addView(byColour);
+        File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
+        if (file == null) { note.setText("The print's file is not on this phone. Download it from the Files tab (or slice it here) to see material per layer and per colour."); return; }
+        new Thread(() -> {
+            double[] volumes = null; SlicedMaterials materials = null;
+            try { volumes = GcodeToolpath.read(file).layerVolumes(); } catch (Exception ignored) { }
+            try { materials = GcodeInspector.inspect(file).materials; } catch (Exception ignored) { }
+            double[] perLayer = volumes; SlicedMaterials used = materials;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                note.setText(perLayer == null ? "The print's file could not be read." : "Material laid down in the layer being printed at each moment (mm³), from the sliced file.");
+                if (perLayer != null) {
+                    double[] layer = column(rows, "layer"), values = new double[layer.length];
+                    for (int i = 0; i < layer.length; i++) { int l = (int) layer[i] - 1; values[i] = Double.isNaN(layer[i]) || l < 0 || l >= perLayer.length ? Double.NaN : perLayer[l]; }
+                    ChartView view = new ChartView(this, ink, muted, grid, surface);
+                    view.set("Material per layer", " mm³", t, Collections.singletonList(new ChartView.Series("Per layer", blue, values, false)), 0, Double.NaN);
+                    if (shown != null && shown.start > 0) view.clock(shown.start);
+                    chartBox.addView(view, new LinearLayout.LayoutParams(-1, dp(220)));
+                }
+                if (used != null) for (SlicedMaterials.Entry entry : used.entries) {
+                    if (entry.lengthMm == null && entry.massG == null) continue;
+                    LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL); byColour.addView(row);
+                    String hex = TrayPlan.colour(entry.color);
+                    if (hex != null) { View dot = new View(this); GradientDrawable shape = new GradientDrawable(); shape.setShape(GradientDrawable.OVAL); shape.setColor(Color.parseColor(hex)); shape.setStroke(dp(1), muted); dot.setBackground(shape);
+                        LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(18), dp(18)); size.rightMargin = dp(10); row.addView(dot, size); }
+                    String colour = hex == null ? null : WorkshopUi.colourName(hex);
+                    label(row, "Filament " + (entry.index + 1) + (entry.type == null ? "" : " · " + entry.type) + (colour == null ? "" : " · " + colour)
+                        + (entry.massG == null ? "" : String.format(Locale.getDefault(), " · %.1f g", entry.massG))
+                        + (entry.lengthMm == null ? "" : String.format(Locale.getDefault(), " · %.2f m", entry.lengthMm / 1000)), 13, ink, false);
+                }
+            });
+        }, "recording-material").start();
     }
 
     /** Every reading of the print: exact numbers, and the non-visual alternative to the charts. */

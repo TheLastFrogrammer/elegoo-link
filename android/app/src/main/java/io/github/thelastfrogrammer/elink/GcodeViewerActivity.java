@@ -1045,6 +1045,23 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         String saved = viewerPrefs().getString("liveView", null);
         try { if (saved != null) js("viewer.setViewState(" + new JSONObject(saved) + ")"); } catch (org.json.JSONException ignored) { }
     }
+    /** Through the cloud, the print's recording takes its camera pictures from the cloud video shown here (locally the service takes them). */
+    private boolean picturing;
+    private void takeCloudPicture() {
+        if (picturing || printer == null || printer.recorder == null || printer.ready() || web == null || !pageReady) return;
+        long mono = android.os.SystemClock.elapsedRealtime();
+        if (!printer.recorder.pictureDue(mono)) return;
+        picturing = true;
+        web.evaluateJavascript("viewer.snapshot()", value -> {
+            picturing = false;
+            try {
+                Object text = new org.json.JSONTokener(value).nextValue();
+                String url = text instanceof String ? (String) text : "";
+                if (url.startsWith("data:image/jpeg;base64,") && printer != null && printer.recorder != null)
+                    printer.recorder.savePicture(android.util.Base64.decode(url.substring(23), android.util.Base64.DEFAULT), mono);
+            } catch (Exception ignored) { }
+        });
+    }
     private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
     private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }
     /** Groups the delayed live updates, so leaving live view drops the ones still waiting. */
@@ -1380,6 +1397,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         };
         // The camera's picture arrives seconds late (the cloud's video most of all): the drawing can wait as long, so the two
         // show the same moment. Only a new position waits; the status line below is never delayed.
+        takeCloudPicture();
         long delay = effectiveDelay();
         if (lockstep()) { liveAt = System.currentTimeMillis(); show.run(); }   // the page draws each picture's moment itself
         else if (delay > 0 && moved) main.postAtTime(show, delayToken, android.os.SystemClock.uptimeMillis() + delay);

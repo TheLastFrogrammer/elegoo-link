@@ -85,4 +85,35 @@ public class PrintRecorderTest {
         assertEquals(20, ChartView.niceStep(17), 0); assertEquals(0.5, ChartView.niceStep(0.31), 1e-9); assertEquals(1, ChartView.niceStep(0), 0);
         assertEquals(1800, ChartView.niceTime(1500), 0); assertEquals("1:05", ChartView.elapsed(3900)); assertEquals("—", ChartView.format(Double.NaN));
     }
+
+    /** The active tray and its colour go into each sample; pictures come at the print's own interval and are kept with it. */
+    @Test public void traysAndPicturesAreRecordedWithThePrint() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        recorder.setDefaultPictureMinutes(5);
+        recorder.setCanvas(new JSONObject("{\"active_canvas_id\":0,\"active_tray_id\":1,\"canvas_list\":[{\"canvas_id\":0,\"tray_list\":[{\"tray_id\":1,\"filament_color\":\"#D02828\"}]}]}"));
+        assertTrue(recorder.update(1_000, 1_000, status(2075, "b.gcode", 1, 1), "cloud", "CC2"));
+        PrintRecorder.Recording now = recorder.current();
+        assertEquals(5, now.pictureMinutes);
+        assertTrue("the first picture is due at once", recorder.pictureDue(1_000));
+        byte[] jpeg = new byte[200]; jpeg[0] = (byte) 0xFF; jpeg[1] = (byte) 0xD8;
+        assertTrue(recorder.savePicture(jpeg, 61_000));
+        assertFalse("not again before five minutes", recorder.pictureDue(61_000 + 4 * 60_000));
+        assertTrue(recorder.pictureDue(61_000 + 5 * 60_000));
+        recorder.setPictureMinutes(0); assertFalse("this print's pictures turned off", recorder.pictureDue(10_000_000));
+        List<java.io.File> pictures = PrintRecorder.pictures(now);
+        assertEquals(1, pictures.size()); assertEquals("000060.jpg", pictures.get(0).getName());
+        double[] row = PrintRecorder.samples(now).get(0);
+        assertEquals(2, row[PrintRecorder.column("tray")], 0); assertEquals(0xD02828, row[PrintRecorder.column("tray_rgb")], 0);
+        List<String> changes = RecordingsActivity.trayChanges(new double[] {2, 2, 5}, new double[] {0xD02828, 0xD02828, 0xFFFFFF}, new double[] {0, 60, 125});
+        assertEquals(2, changes.size()); assertTrue(changes.get(0), changes.get(0).startsWith("From 0:00: tray 2 (")); assertTrue(changes.get(1), changes.get(1).contains("tray 5 (white)"));
+        recorder.delete(now); assertFalse("pictures go with the recording", now.pictureFolder().exists());
+    }
+
+    /** Material per layer from the sliced lines: length × width × height. */
+    @Test public void layerVolumesFollowTheLines() throws Exception {
+        String gcode = ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 X0 Y0 Z0.2 F600\n;TYPE:Outer wall\n;WIDTH:0.4\nG1 X10 Y0 E1\n;LAYER_CHANGE\n;Z:0.4\n;HEIGHT:0.2\nG1 Z0.4\nG1 X10 Y20 E2\n";
+        GcodeToolpath path = GcodeToolpath.read(new java.io.ByteArrayInputStream(gcode.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        double[] v = path.layerVolumes();
+        assertEquals(2, v.length); assertEquals(10 * 0.4 * 0.2, v[0], 1e-6); assertEquals(20 * 0.4 * 0.2, v[1], 1e-6);
+    }
 }

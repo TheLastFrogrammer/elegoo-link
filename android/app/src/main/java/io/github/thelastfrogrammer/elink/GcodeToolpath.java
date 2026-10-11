@@ -212,6 +212,14 @@ public final class GcodeToolpath {
         return Math.max(0, low);
     }
     /** Extruded length per feature, for the legend. */
+    /** Material laid down in each layer (mm³): each extrusion's length × line width × layer height, as sliced. */
+    public double[] layerVolumes() {
+        double[] volume = new double[layerCount];
+        for (int layer = 0; layer < layerCount; layer++)
+            for (int i = layerStart(layer); i < layerEnd(layer); i++)
+                volume[layer] += Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i];
+        return volume;
+    }
     public double[] featureLengths() {
         double[] lengths = new double[FEATURES.length];
         for (int i = 0; i < count; i++) lengths[type[i]] += Math.hypot(x1[i] - x0[i], y1[i] - y0[i]);

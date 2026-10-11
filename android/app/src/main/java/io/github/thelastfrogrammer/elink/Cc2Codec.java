@@ -234,5 +234,7 @@ public final class Cc2Codec {
         JSONObject machine = status.optJSONObject("machine_status");
         return machine != null && machine.optInt("status", -1) == 2 && (machine.optInt("sub_status", -1) == 2502 || machine.optInt("sub_status", -1) == 2505);
     }
+    /** Heater targets can be changed while idle, printing or paused (as on the printer's own screen); not while it homes, levels or loads. */
+    public static boolean heatersAdjustable(JSONObject status) { return idle(status) || canPause(status) || canResume(status); }
     public static boolean idle(JSONObject status) { JSONObject machine = status.optJSONObject("machine_status"); return machine != null && machine.optInt("status", -1) == 1; }
 }

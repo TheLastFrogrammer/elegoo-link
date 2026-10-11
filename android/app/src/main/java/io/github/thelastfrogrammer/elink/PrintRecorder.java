@@ -16,7 +16,8 @@ public final class PrintRecorder {
     static final long RESUME_WINDOW_MS = 2 * 60 * 60 * 1000L;
     static final int KEEP = 100;
     public static final String[] COLUMNS = {"time_ms", "elapsed_s", "progress", "layer", "total_layers", "remaining_s", "z_mm",
-        "nozzle_c", "nozzle_target_c", "bed_c", "bed_target_c", "chamber_c", "part_fan_pct", "aux_fan_pct", "chamber_fan_pct", "speed_mode", "sub_status", "source"};
+        "nozzle_c", "nozzle_target_c", "bed_c", "bed_target_c", "chamber_c", "part_fan_pct", "aux_fan_pct", "chamber_fan_pct", "speed_mode", "sub_status", "source",
+        "tray", "tray_rgb"};   // the active CANVAS tray (1 = unit 0 tray 0) and its filament colour as 0xRRGGBB, when reported
 
     public static final class Recording {
         public final File csv, meta;
@@ -26,10 +27,13 @@ public final class PrintRecorder {
         public long elapsed;
         long monoStart;
         public int samples, layers;
+        /** Camera pictures every this many minutes for this print (0 = none), and how many were taken. */
+        public int pictureMinutes, pictures;
         Recording(File csv, File meta) { this.csv = csv; this.meta = meta; }
         JSONObject toJson() throws Exception {
             return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("outcome", outcome).put("source", source)
-                .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers);
+                .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
+                .put("picture_minutes", pictureMinutes).put("pictures", pictures);
         }
         static Recording read(File meta) throws Exception {
             String base = meta.getName().replaceFirst("\\.json$", "");
@@ -39,18 +43,46 @@ public final class PrintRecorder {
             recording.outcome = json.optString("outcome", "unknown"); recording.source = json.optString("source");
             recording.start = json.optLong("start"); recording.end = json.optLong("end"); recording.lastSample = json.optLong("last_sample"); recording.elapsed = json.optLong("elapsed");
             recording.samples = json.optInt("samples"); recording.layers = json.optInt("layers");
+            recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictures = json.optInt("pictures");
             return recording;
         }
+        /** The folder of this recording's camera pictures, named by elapsed seconds (e.g. 0600.jpg). */
+        public File pictureFolder() { return new File(csv.getParentFile(), csv.getName().replaceFirst("\\.csv$", "") + "-pictures"); }
         public long duration() { return elapsed > 0 ? elapsed : Math.max(0, (end > 0 ? end : lastSample) - start); }
     }
 
     private final File directory;
     private Recording current;
     private int lastLayer = -1;
-    private long sampledMono = Long.MIN_VALUE / 2;
+    private long sampledMono = Long.MIN_VALUE / 2, picturedMono = Long.MIN_VALUE / 2;
+    private JSONObject canvas;
+    /** Minutes between pictures for prints that start from now (0 = none); a print's own setting can differ. */
+    private int defaultPictureMinutes;
 
     public PrintRecorder(File directory) { this.directory = directory; }
     public synchronized Recording current() { return current; }
+    /** The latest CANVAS report, for the active tray and its colour in each sample. */
+    public synchronized void setCanvas(JSONObject value) { canvas = value; }
+    public synchronized void setDefaultPictureMinutes(int minutes) { defaultPictureMinutes = Math.max(0, Math.min(120, minutes)); }
+    /** Changes the running print's picture interval (0 stops them). */
+    public synchronized void setPictureMinutes(int minutes) { if (current != null) { current.pictureMinutes = Math.max(0, Math.min(120, minutes)); save(current); } }
+    /** Whether a camera picture is due for the running print (`mono`: the monotonic clock). */
+    public synchronized boolean pictureDue(long mono) { return current != null && current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L; }
+    /** Keeps a JPEG camera picture with the running print, named by its elapsed time; false when there is no print to keep it with. */
+    public synchronized boolean savePicture(byte[] jpeg, long mono) {
+        if (current == null || jpeg == null || jpeg.length < 100) return false;
+        File folder = current.pictureFolder(); folder.mkdirs();
+        long elapsed = Math.max(0, mono - current.monoStart) / 1000;
+        try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
+        catch (IOException failed) { return false; }
+        picturedMono = mono; current.pictures++; save(current); return true;
+    }
+    /** A recording's pictures, oldest first, each with its elapsed seconds. */
+    public static List<File> pictures(Recording recording) {
+        File[] files = recording.pictureFolder().listFiles((dir, name) -> name.matches("\\d+\\.jpg"));
+        List<File> list = files == null ? new ArrayList<>() : new ArrayList<>(Arrays.asList(files));
+        list.sort(Comparator.comparing(File::getName)); return list;
+    }
 
     /** Wall time only: for callers (and tests) without a separate monotonic clock. */
     public synchronized boolean update(long now, JSONObject status, String source, String printer) { return update(now, now, status, source, printer); }
@@ -77,7 +109,7 @@ public final class PrintRecorder {
             // Elapsed time counts on from what was recorded before (a resumed print), measured with the monotonic clock from here.
             current.monoStart = mono - current.elapsed;
             if (current.elapsed == 0 && current.lastSample > current.start) current.monoStart = mono - (current.lastSample - current.start);
-            lastLayer = -1; sampledMono = Long.MIN_VALUE / 2;
+            lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2;
         }
         int layer = print.optInt("current_layer", -1);
         boolean last = sub == 2077 || sub == 2504;
@@ -99,7 +131,11 @@ public final class PrintRecorder {
 
     public synchronized void delete(Recording recording) {
         if (current != null && current.meta.equals(recording.meta)) current = null;
-        recording.csv.delete(); recording.meta.delete();
+        deletePictures(recording); recording.csv.delete(); recording.meta.delete();
+    }
+    private static void deletePictures(Recording recording) {
+        File[] files = recording.pictureFolder().listFiles(); if (files != null) for (File f : files) f.delete();
+        recording.pictureFolder().delete();
     }
 
     /** Reads a recording's samples as rows of numbers keyed by column (NaN where missing). */
@@ -132,7 +168,7 @@ public final class PrintRecorder {
         String base = now + "-" + file.replaceAll("[^A-Za-z0-9._-]", "_").replaceFirst("(?i)\\.gcode$", "");
         if (base.length() > 80) base = base.substring(0, 80);
         Recording recording = new Recording(new File(directory, base + ".csv"), new File(directory, base + ".json"));
-        recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now;
+        recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now; recording.pictureMinutes = defaultPictureMinutes;
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(recording.csv), StandardCharsets.UTF_8)) { writer.write(String.join(",", COLUMNS) + "\n"); }
         catch (IOException ignored) { }
         save(recording); prune();
@@ -149,12 +185,32 @@ public final class PrintRecorder {
             number(status.optJSONObject("heater_bed"), "temperature"), number(status.optJSONObject("heater_bed"), "target"),
             number(status.optJSONObject("ztemperature_sensor"), "temperature"),
             fan(status, "fan"), fan(status, "aux_fan"), fan(status, "box_fan"),
-            number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local" };
+            number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1] };
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(current.csv, true), StandardCharsets.UTF_8)) { writer.write(String.join(",", cells) + "\n"); }
         catch (IOException ignored) { return; }
         current.samples++; current.lastSample = now; current.elapsed = Math.max(0, mono - current.monoStart);
         if (print != null) current.layers = Math.max(current.layers, print.optInt("total_layer", 0));
         save(current);
+    }
+
+    /** The active tray's number (1 = unit 0 tray 0, 5 = unit 1 tray 0) and colour (0xRRGGBB, decimal), or blanks. */
+    private String[] activeTray() {
+        JSONObject c = canvas;
+        if (c == null || !c.has("active_canvas_id") || !c.has("active_tray_id")) return new String[] {"", ""};
+        int unit = c.optInt("active_canvas_id", -1), tray = c.optInt("active_tray_id", -1);
+        if (unit < 0 || tray < 0) return new String[] {"", ""};
+        String colour = "";
+        org.json.JSONArray units = c.optJSONArray("canvas_list");
+        for (int u = 0; units != null && u < units.length(); u++) {
+            JSONObject one = units.optJSONObject(u); if (one == null || one.optInt("canvas_id", -1) != unit) continue;
+            org.json.JSONArray trays = one.optJSONArray("tray_list");
+            for (int t = 0; trays != null && t < trays.length(); t++) {
+                JSONObject item = trays.optJSONObject(t);
+                String hex = item == null || item.optInt("tray_id", -1) != tray ? null : TrayPlan.colour(item.optString("filament_color"));
+                if (hex != null) colour = String.valueOf(Integer.parseInt(hex.substring(1), 16));
+            }
+        }
+        return new String[] {String.valueOf(unit * 4 + tray + 1), colour};
     }
 
     private void finish(long now, long mono, String outcome) {
@@ -174,7 +230,7 @@ public final class PrintRecorder {
 
     private void prune() {
         List<Recording> all = list();
-        for (int i = KEEP; i < all.size(); i++) { all.get(i).csv.delete(); all.get(i).meta.delete(); }
+        for (int i = KEEP; i < all.size(); i++) { deletePictures(all.get(i)); all.get(i).csv.delete(); all.get(i).meta.delete(); }
     }
 
     private static String number(JSONObject object, String key) {

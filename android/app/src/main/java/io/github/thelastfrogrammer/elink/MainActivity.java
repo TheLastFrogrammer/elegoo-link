@@ -100,7 +100,7 @@ public final class MainActivity extends Activity {
     private LinearLayout getStarted, heroCard;
     /** Monitor quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Print again and Print recordings. */
     private LinearLayout quickRow, recordingsRow;
-    private Button quickSlice, quickCamera, quickAgain;
+    private Button quickSlice, quickCamera, quickAgain, picturesNow;
     /** Maintenance starts collapsed; the Emergency stop button stays outside the collapsed part. */
     private Button maintenanceToggle;
     private LinearLayout maintenanceBody;
@@ -330,6 +330,7 @@ public final class MainActivity extends Activity {
         quickSlice = rowButton(quickRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
         quickCamera = rowButton(quickRow, "Camera", () -> selectPage(2), false);
         recordingsRow = row(hero);
+        picturesNow = rowButton(recordingsRow, "Pictures…", () -> pictureDialog(false), false);
         quickAgain = rowButton(recordingsRow, "Print again…", () -> { setHistoryOpen(true); selectPage(1); }, false);
         quickAgain.setContentDescription("Print again: opens print history on the Files tab, where the latest print can be printed again");
         graphs = rowButton(recordingsRow, "Print recordings", () -> {
@@ -358,6 +359,7 @@ public final class MainActivity extends Activity {
         LinearLayout tuning = card("Printer controls"); tuningCard = tuning;
         tuningHint = label(tuning, "", 13, MUTED, false);
         heater = button(tuning, "Set heater temperatures now…", this::temperatureDialog);
+        for (TextView t : new TextView[] {tileNozzle, tileBed}) { View tile = (View) t.getParent(); tile.setOnClickListener(v -> temperatureDialog()); tile.setClickable(false); A11y.clickLabel(tile, "Change heater targets"); }
         fan = button(tuning, "Fan setting…", this::fanDialog);
         speed = button(tuning, "Print speed mode…", this::speedDialog);
         LinearLayout upkeep = card(null); upkeepCard = upkeep;
@@ -458,6 +460,9 @@ public final class MainActivity extends Activity {
         button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "Follow system" : dark ? "Dark" : "Light"), this::appearanceDialog);
         CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
+        Button pictures = button(preferences, "", () -> pictureDialog(true));
+        pictureDefault = pictures; showPictureDefault();
+        label(preferences, "Camera pictures are kept with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can have its own interval (Monitor › Pictures while it prints).", 12, MUTED, false);
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         label(preferences, "Alerts need notification permission and an active monitoring session. They stop when you disconnect, or when Android stops the app.", 13, MUTED, false);
@@ -658,7 +663,7 @@ public final class MainActivity extends Activity {
     /** "Last report 3 min ago" from the printer's own report time (the poll time only when the cloud gave none). */
     private String lastReport() {
         long at = printer.cloudReportedAt > 0 ? printer.cloudReportedAt : printer.cloudCheckedAt;
-        return "Last report " + CloudStatusActivity.age(System.currentTimeMillis() - at) + " ago" + (printer.cloudLiveOn ? " · live" : "") + ".";
+        return "Last report " + CloudStatusActivity.age(System.currentTimeMillis() - at) + " ago";
     }
     private boolean viaCloud() { return printer != null && !printer.ready() && printer.usingCloud(); }
     private void confirmCommand(String title, int method) {
@@ -865,6 +870,7 @@ public final class MainActivity extends Activity {
         if (page != before || page != 2 && page != 0) stopCamera();
         if (page == 0 && before != 0) monitorCameraTried = false;
         if (page == 1) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
+        if (page == 0) { traysAskedAt = 0; main.post(this::autoLoadTrays); }
         for (int i = 0; i < 4; i++) {
             pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE);
             int color = i == page ? TEAL : MUTED;
@@ -1337,10 +1343,14 @@ public final class MainActivity extends Activity {
         } catch (IllegalArgumentException ignored) { }
     }
     private void temperatureDialog() {
-        LinearLayout body = dialogBody(); label(body, "While idle: nozzle 0–300°C, bed 0–100°C. Zero turns that heater off. Use the correct targets for your filament and build plate. This changes the heaters now. It does not change sliced files: set those in the filament's Settings… on the Slice screen.", 14, INK, false);
+        if (!Cc2Codec.heatersAdjustable(snapshot) || block != ControlState.Block.NONE) return;
+        boolean during = !Cc2Codec.idle(snapshot);
+        LinearLayout body = dialogBody(); label(body, (during ? "This changes the running print's heaters straight away. A wrong temperature can spoil the print or the build plate's grip. " : "")
+            + "Nozzle 0–300°C, bed 0–100°C. Zero turns that heater off. It does not change the sliced file: set that in the filament's Settings… on the Slice screen. "
+            + "The chamber has a temperature sensor only, so there is no chamber target to set; the chamber fan is under Fan setting….", 14, INK, false);
         EditText nozzle = input(body, "Nozzle target °C", false), bed = input(body, "Bed target °C", false); nozzle.setInputType(InputType.TYPE_CLASS_NUMBER); bed.setInputType(InputType.TYPE_CLASS_NUMBER);
         JSONObject n = snapshot.optJSONObject("extruder"), b = snapshot.optJSONObject("heater_bed"); nozzle.setText(String.valueOf(n == null ? 0 : n.optInt("target"))); bed.setText(String.valueOf(b == null ? 0 : b.optInt("target")));
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Heater temperatures now").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set heaters", null).create();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(during ? "Change heaters during the print?" : "Heater temperatures now").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set heaters", null).create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> { try { int nt = Integer.parseInt(nozzle.getText().toString()), bt = Integer.parseInt(bed.getText().toString()); Cc2Codec.temperatureRequest(0, nt, bt); if (printer != null) printer.temperatures(nt, bt); dialog.dismiss(); } catch (Exception error) { nozzle.setError("Nozzle 0–300°C; bed 0–100°C"); } })); dialog.show();
     }
     private void fanDialog() {
@@ -1416,6 +1426,31 @@ public final class MainActivity extends Activity {
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN, then use the camera address for the home printer. The VPN route must allow the camera port." : "Enter the camera address for the selected printer, and connect the phone to the same Wi-Fi network as the printer."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab, then Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
     }
     private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
+    /** Recording pictures: the default interval (Settings) or the running print's own (Monitor). 0 = none. */
+    private Button pictureDefault;
+    private static final int[] PICTURE_MINUTES = {0, 1, 2, 5, 10, 15, 30, 60};
+    private static String pictureText(int minutes) { return minutes == 0 ? "No pictures" : minutes == 1 ? "Every minute" : "Every " + minutes + " minutes"; }
+    private void showPictureDefault() { if (pictureDefault != null) pictureDefault.setText("Recording pictures: " + pictureText(settings.getInt("pictureMinutes", 5)).toLowerCase(Locale.ROOT) + "…"); }
+    private void pictureDialog(boolean forDefault) {
+        PrintRecorder.Recording now = printer == null || printer.recorder == null ? null : printer.recorder.current();
+        if (!forDefault && now == null) return;
+        int current = forDefault ? settings.getInt("pictureMinutes", 5) : now.pictureMinutes, chosen = 0;
+        String[] names = new String[PICTURE_MINUTES.length];
+        for (int i = 0; i < names.length; i++) { names[i] = pictureText(PICTURE_MINUTES[i]); if (PICTURE_MINUTES[i] == current) chosen = i; }
+        new AlertDialog.Builder(this).setTitle(forDefault ? "Pictures for new prints" : "Pictures for this print")
+            .setSingleChoiceItems(names, chosen, (d, which) -> {
+                if (forDefault) { settings.edit().putInt("pictureMinutes", PICTURE_MINUTES[which]).apply(); showPictureDefault(); }
+                else if (printer != null && printer.recorder != null) printer.recorder.setPictureMinutes(PICTURE_MINUTES[which]);
+                d.dismiss(); render();
+            }).setNegativeButton("Cancel", null).show();
+    }
+    /** On Monitor, ask for the CANVAS trays when they are missing or out of date: a read, at most every 30 seconds. */
+    private long traysAskedAt;
+    private void autoLoadTrays() {
+        if (page != 0 || printer == null || printer.canvasFresh() || !(printer.ready() || printer.usingCloud() && settings.getBoolean("cloudControlUnderstood", false))) return;
+        long now = System.currentTimeMillis(); if (now - traysAskedAt < 30_000) return;
+        traysAskedAt = now; printer.refreshTrays();
+    }
     /** On the Files tab, ask for the printer's file list when there is none (or it is out of date): a read, at most once a minute. */
     private long filesAutoAt;
     private void autoLoadFiles() {
@@ -1558,8 +1593,11 @@ public final class MainActivity extends Activity {
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
         // Only what can work right now is shown; the line above each group says what is missing. Nothing here is enabled in a state PrinterService refuses.
         boolean idleNow = Cc2Codec.idle(snapshot), pausable = Cc2Codec.canPause(snapshot);
-        heater.setEnabled(canControl && idleNow); fan.setEnabled(canControl); speed.setEnabled(canControl && pausable);
-        heater.setVisibility(idleNow ? View.VISIBLE : View.GONE); speed.setVisibility(pausable ? View.VISIBLE : View.GONE);
+        boolean heatersOk = Cc2Codec.heatersAdjustable(snapshot);
+        heater.setEnabled(canControl && heatersOk); fan.setEnabled(canControl); speed.setEnabled(canControl && pausable);
+        heater.setVisibility(heatersOk ? View.VISIBLE : View.GONE);
+        // The temperature tiles open the same dialog when the heaters can be changed (as on the printer's own screen).
+        for (TextView t : new TextView[] {tileNozzle, tileBed}) ((View) t.getParent()).setClickable(canControl && heatersOk); speed.setVisibility(pausable ? View.VISIBLE : View.GONE);
         tuningHint.setText(ControlState.tuningNote(snapshot));
         String upkeepReason = ControlState.upkeepReason(snapshot);
         boolean upkeepOk = canControl && upkeepReason.isEmpty();
@@ -1660,6 +1698,10 @@ public final class MainActivity extends Activity {
         if (monitorCameraInfo.getText().length() == 0) monitorCameraInfo.setVisibility(View.GONE);
         spaceActions((LinearLayout) monitorCameraStart.getParent());
         graphs.setText("Print recordings");
+        PrintRecorder.Recording recordingNow = printer == null || printer.recorder == null ? null : printer.recorder.current();
+        picturesNow.setVisibility(inJobNow && recordingNow != null ? View.VISIBLE : View.GONE);
+        if (recordingNow != null) { picturesNow.setText(recordingNow.pictureMinutes == 0 ? "Pictures: off" : "Pictures: " + recordingNow.pictureMinutes + " min");
+            picturesNow.setContentDescription("Camera pictures for this print: " + pictureText(recordingNow.pictureMinutes) + ". Change"); }
         // Quick actions by state. Printing: Live toolpath and Camera. Connected and idle: Slice a model, Camera and, with history, Print again.
         // Not connected: only Print recordings, as before (Get started and the fix guidance cover the rest). None of these sends a printer command.
         boolean idleOnline = live && !inJobNow, hasHistory = printer != null && !FeatureData.historyRows(printer.history).isEmpty();
@@ -1683,11 +1725,12 @@ public final class MainActivity extends Activity {
             case CLOUD_AGREEMENT: controlSource.setText("You are watching through the Elegoo cloud. Controls stay off until you agree to cloud control."); break;
             case CLOUD_BUSY: controlSource.setText("Sending through the Elegoo cloud…"); break;
             case CLOUD_OFFLINE: controlSource.setText("Printer offline. The Elegoo cloud reports it offline."); break;
-            case CLOUD_WAITING: controlSource.setText(!printer.cloudMessage.isEmpty() ? printer.cloudMessage : printer.cloudReportedAt > 0 && !printer.cloudReportRecent() ? "The printer has not reported for a while. " + lastReport() + " Controls stay off until it reports again." : "Waiting for printer through the Elegoo cloud…"); break;
+            case CLOUD_WAITING: controlSource.setText(!printer.cloudMessage.isEmpty() ? printer.cloudMessage : printer.cloudReportedAt > 0 && !printer.cloudReportRecent() ? "The printer has not reported for a while. " + lastReport() + ". Controls stay off until it reports again." : "Waiting for printer through the Elegoo cloud…"); break;
             default: controlSource.setText("Not connected. Connect on your network, or sign in with Elegoo to control through the cloud."); break;
         }
         boolean fix = block == ControlState.Block.CLOUD_AGREEMENT || block == ControlState.Block.DISCONNECTED;
         controlFix.setText(block == ControlState.Block.CLOUD_AGREEMENT ? "Turn on cloud control…" : "Open Settings"); ((View) controlFix.getParent()).setVisibility(fix ? View.VISIBLE : View.GONE);
+        main.post(this::autoLoadTrays);
         JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
         renderTrays(canvasNow);
         if (canvasNow != null) {
@@ -1970,7 +2013,7 @@ public final class MainActivity extends Activity {
         TextView value = new TextView(this); value.setText("—"); value.setTextSize(20); value.setTextColor(INK); value.setTypeface(Typeface.DEFAULT, Typeface.BOLD); tile.addView(value);
         tile.setFocusable(true); name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); value.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         boolean stacked = row.getOrientation() == LinearLayout.VERTICAL; // at large font sizes the tiles stack instead of breaking words
-        LinearLayout.LayoutParams layout = stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
+        LinearLayout.LayoutParams layout = stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -1, 1);   // side by side: all as tall as the tallest
         if (stacked) layout.topMargin = gap == 0 ? 0 : dp(8); else layout.leftMargin = gap;
         row.addView(tile, layout);
         return value;

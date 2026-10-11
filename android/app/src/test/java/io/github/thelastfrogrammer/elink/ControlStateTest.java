@@ -47,7 +47,11 @@ public class ControlStateTest {
     }
     @Test public void tuningNoteFollowsTheState() throws Exception {
         assertTrue(ControlState.tuningNote(status(1, 0)).startsWith("Speed"));
-        assertTrue(ControlState.tuningNote(status(2, 2075)).startsWith("Heater temperatures can be set only"));
+        // Heater targets can now change during a print (and while paused), as on the printer's own screen; other busy states wait.
+        assertTrue(ControlState.tuningNote(status(2, 2075)).startsWith("Heater targets change the running print"));
         assertTrue(ControlState.tuningNote(status(2, 2502)).contains("running print"));
+        assertTrue(ControlState.tuningNote(status(3, 0)).contains("wait"));
+        assertTrue(Cc2Codec.heatersAdjustable(status(1, 0))); assertTrue(Cc2Codec.heatersAdjustable(status(2, 2075))); assertTrue(Cc2Codec.heatersAdjustable(status(2, 2505)));
+        assertFalse(Cc2Codec.heatersAdjustable(status(3, 0))); assertFalse(Cc2Codec.heatersAdjustable(status(2, 1405)));
     }
 }

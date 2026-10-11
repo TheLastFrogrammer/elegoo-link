@@ -63,8 +63,35 @@ public final class PrinterService extends Service {
     /** Records each print's progress for graphs (see PrintRecorder); on by default, Settings can turn it off. */
     public PrintRecorder recorder;
     private void record(JSONObject value, String source, String name) {
-        if (recorder != null && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("recordPrints", true))
-            recorder.update(System.currentTimeMillis(), SystemClock.elapsedRealtime(), value, source, name);
+        android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        if (recorder == null || !settings.getBoolean("recordPrints", true)) return;
+        recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5));
+        long mono = SystemClock.elapsedRealtime();
+        recorder.update(System.currentTimeMillis(), mono, value, source, name);
+        if (recorder.pictureDue(mono)) takePicture(mono);
+    }
+    /**
+     * A camera picture for the running print's recording, from the printer's own stream on this network (or the home VPN):
+     * one frame, then the stream closes. Through the cloud, pictures are taken while the cloud camera is open in the app.
+     */
+    private volatile boolean picturing;
+    private void takePicture(long mono) {
+        if (picturing || !ready() || route == null) return;
+        String url;
+        try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); } catch (Exception invalid) { return; }
+        picturing = true;
+        MjpegPlayer[] player = new MjpegPlayer[1];
+        player[0] = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
+            public void frame(android.graphics.Bitmap image) {
+                if (player[0] == null) return;
+                java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg);
+                if (recorder != null) recorder.savePicture(jpeg.toByteArray(), mono);
+                done();
+            }
+            public void error(String message) { done(); }
+            private void done() { MjpegPlayer p = player[0]; player[0] = null; picturing = false; if (p != null) p.close(); }
+        });
+        main.postDelayed(() -> { MjpegPlayer p = player[0]; player[0] = null; picturing = false; if (p != null) p.close(); }, 15_000);   // never left open
     }
     private boolean cloudVisible, cloudPolling;
     public JSONObject cloudStatus = new JSONObject();
@@ -591,8 +618,13 @@ public final class PrinterService extends Service {
         } catch (Exception error) { queryBusy.remove(Cc2Codec.THUMBNAIL); }
     }
     public void temperatures(int nozzle, int bed) {
-        if (!Cc2Codec.idle(liveStatus())) return;
+        if (!Cc2Codec.heatersAdjustable(liveStatus())) return;
         if (fresh()) session.temperatures(nozzle, bed); else if (viaCloud()) cloudSafe(() -> Cc2Codec.temperatureRequest(0, nozzle, bed));
+    }
+    /** Asks for the CANVAS trays again (a read): with the status locally, on its own through the cloud. */
+    public void refreshTrays() {
+        if (ready()) session.refresh();
+        else if (viaCloud()) cloudSafe(() -> Cc2Codec.request(0, Cc2Codec.CANVAS));
     }
     public void fan(String name, int percent) { if (fresh()) session.fan(name, percent); else if (viaCloud()) cloudSafe(() -> Cc2Codec.fanRequest(0, name, percent)); }
     public void speed(int mode) {
