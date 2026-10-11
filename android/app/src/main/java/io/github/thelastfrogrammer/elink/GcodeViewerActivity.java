@@ -142,7 +142,15 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void build() {
         root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(background); root.setFitsSystemWindows(true);
         web = new WebView(this);
-        root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
+        // The 3D view with a column of quick buttons over its right edge; they fold away into one chip.
+        stage = new android.widget.FrameLayout(this);
+        stage.addView(web, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        overlay = new LinearLayout(this); overlay.setOrientation(LinearLayout.VERTICAL); overlay.setPadding(dp(8), dp(8), dp(8), dp(8));
+        // Scrolls when a short view or large text can't fit the whole column, so no button is ever cut off.
+        ScrollView column = new ScrollView(this); column.setVerticalScrollBarEnabled(false); column.addView(overlay);
+        stage.addView(column, new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.END));
+        buildOverlay();
+        root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12)); mainPanel = panel;
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadii(new float[] {dp(20), dp(20), dp(20), dp(20), 0, 0, 0, 0}); panel.setBackground(shape);
         root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
@@ -185,7 +193,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); panel.addView(row);
         play = rowButton(row, "Play", () -> { stopFollowing(); setPlaying(!playing); });
         firstLayer = rowButton(row, "First layer", this::showFirstLayer);
-        if (followMode) follow = rowButton(row, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); sendLockstep(); changed(); });
+        if (followMode) follow = rowButton(row, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); sendLockstep(); syncOverlay(); changed(); });
         more = rowButton(row, "More…", this::moreDialog);
         setContentView(root);
         setControlsEnabled(false);
@@ -229,6 +237,56 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     // ------------------------------------------------------------------ the printer's camera in the scene
     private android.content.SharedPreferences viewerPrefs() { return getSharedPreferences("viewer-hints", MODE_PRIVATE); }
+    // ------------------------------------------------------------------ quick buttons over the 3D view
+    private LinearLayout overlay;
+    private android.widget.FrameLayout stage;
+    private Button viewButton, liveButton, headButton;
+    private final java.util.List<Button> overlayButtons = new java.util.ArrayList<>();
+    private Button overlayToggle;
+    private void buildOverlay() {
+        overlayToggle = chipButton("", () -> { viewerPrefs().edit().putBoolean("quickButtons", !viewerPrefs().getBoolean("quickButtons", true)).apply(); syncOverlay(); });
+        overlayButtons.remove(overlayToggle);
+        viewButton = chipButton("3D view", () -> { if (web != null && pageReady) web.evaluateJavascript("viewer.getViewState().looking", looking -> {
+            if ("true".equals(looking)) js("viewer.resetCamera()"); else js("viewer.setView('printer')");
+            main.postDelayed(this::syncOverlay, 100); }); });
+        liveButton = chipButton("Back to live", () -> { if (follow != null) follow.performClick(); });
+        chipButton("Line types", this::featureDialog).setContentDescription("Filter by line type");
+        headButton = chipButton("Head", () -> {
+            String next = "off".equals(headLook()) ? "mask" : "mask".equals(headLook()) ? "outline" : "off";
+            viewerPrefs().edit().putString("headLook", next).apply(); pushView(); syncOverlay();
+        });
+        chipButton("Reset view", () -> js("viewer.resetCamera()"));
+        syncOverlay();
+    }
+    /** A compact translucent button for the 3D view: readable over the picture, 48 dp tall. */
+    private Button chipButton(String text, Runnable action) {
+        Button b = new Button(this); b.setText(text); b.setAllCaps(false); b.setTextSize(13); b.setTextColor(ink); b.setMinHeight(dp(48)); b.setMinimumHeight(dp(48));
+        b.setMinWidth(dp(48)); b.setMinimumWidth(dp(48)); b.setPadding(dp(12), 0, dp(12), 0);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor((surface & 0x00ffffff) | 0xd9000000); shape.setCornerRadius(dp(24)); shape.setStroke(Math.max(1, dp(1)), (muted & 0x00ffffff) | 0x55000000);
+        b.setBackground(shape); b.setOnClickListener(v -> action.run());
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-2, -2); layout.gravity = android.view.Gravity.END; layout.bottomMargin = dp(6);
+        overlay.addView(b, layout); overlayButtons.add(b); return b;
+    }
+    /** Shows the buttons that fit now, with labels that say what a tap does. */
+    private void syncOverlay() {
+        if (overlay == null) return;
+        boolean shown = viewerPrefs().getBoolean("quickButtons", true);
+        for (Button b : overlayButtons) b.setVisibility(shown ? View.VISIBLE : View.GONE);
+        if (shown) {
+            viewButton.setVisibility(cameraWanted() ? View.VISIBLE : View.GONE);
+            liveButton.setVisibility(followMode && !following ? View.VISIBLE : View.GONE);
+            headButton.setVisibility(followMode ? View.VISIBLE : View.GONE);
+            headButton.setText("Head: " + ("mask".equals(headLook()) ? "mask" : "outline".equals(headLook()) ? "outline" : "off"));
+            headButton.setContentDescription("Printhead: " + headLook() + ". Tap to change");
+            if (web != null && pageReady) web.evaluateJavascript("viewer.getViewState().looking", looking -> {
+                boolean fromCamera = "true".equals(looking);
+                viewButton.setText(fromCamera ? "3D view" : "Camera view"); viewButton.setContentDescription(fromCamera ? "Leave the camera view" : "Look from the printer's camera");
+            });
+        }
+        overlayToggle.setText(shown ? "Hide ›" : "‹ Buttons");
+        overlayToggle.setContentDescription(shown ? "Hide the quick buttons" : "Show the quick buttons");
+        A11y.expandable(overlayToggle, shown);
+    }
     private boolean cameraWanted() { return followMode && (alignOnly || viewerPrefs().getBoolean("camera", false)); }
     /** Opened only to line the camera up (Camera tab): the bed and camera show without a print or toolpath. */
     private boolean alignOnly;
@@ -451,11 +509,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
      * a tall screen shows only its middle, and the edges are where a lens curve shows). Otherwise the panel is below.
      */
     private void arrange() {
-        if (root == null || web == null) return;
+        if (root == null || stage == null) return;
         boolean beside = aligning != null && alignSheet != null
             && getResources().getConfiguration().orientation == Configuration.ORIENTATION_LANDSCAPE;
         root.setOrientation(beside ? LinearLayout.HORIZONTAL : LinearLayout.VERTICAL);
-        web.setLayoutParams(beside ? new LinearLayout.LayoutParams(0, -1, 1) : new LinearLayout.LayoutParams(-1, 0, 1));
+        stage.setLayoutParams(beside ? new LinearLayout.LayoutParams(0, -1, 1) : new LinearLayout.LayoutParams(-1, 0, 1));
         if (alignSheet != null) {
             alignSheet.setLayoutParams(beside ? new LinearLayout.LayoutParams(dp(340), -1) : new LinearLayout.LayoutParams(-1, -2));
             alignScroll.setLayoutParams(beside ? new LinearLayout.LayoutParams(-1, 0, 1) : new LinearLayout.LayoutParams(-1, -2));
@@ -905,7 +963,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
-        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
+        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); syncOverlay(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
             // Taps are tied to the bed's height: none while it is unknown or moving.
@@ -1069,7 +1127,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void stopFollowing() {
         main.removeCallbacksAndMessages(delayToken);
         if (following) {
-            following = false; if (follow != null) follow.setEnabled(true); sendLockstep();
+            following = false; if (follow != null) follow.setEnabled(true); sendLockstep(); syncOverlay();
             status.setText("Not live any more: you are looking at the file. Tap “Back to live” to jump to the printer's position.");
         }
     }
