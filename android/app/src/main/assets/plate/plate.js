@@ -602,12 +602,13 @@
       if (x === 1 && y === 1 && z === 1) delete p.stretch; else p.stretch = [x, y, z];
       changed();
     },
-    /** Scales the selected copy evenly so it fits the bed (2 mm clear of the edges) and the printer's height; returns the new scale. */
+    /** Shrinks the selected copy evenly, if needed, so it fits the bed (2 mm clear of the edges) and the printer's height, and centres it; returns the new scale. */
     fitToBed() {
       const p = current(); if (!p) return 0;
       const bed = boxOf(scene.bed) || [0, 0, 256, 256], r = rect(p);
       const w = r[2] - r[0], d = r[3] - r[1], h = r[4];
-      const k = Math.min((bed[2] - bed[0] - 4) / Math.max(w, 1e-6), (bed[3] - bed[1] - 4) / Math.max(d, 1e-6), scene.height / Math.max(h, 1e-6));
+      // Only ever shrinks: a model that already fits keeps its size and is just centred.
+      const k = Math.min(1, (bed[2] - bed[0] - 4) / Math.max(w, 1e-6), (bed[3] - bed[1] - 4) / Math.max(d, 1e-6), scene.height / Math.max(h, 1e-6));
       if (!(k > 0) || !isFinite(k)) return p.scale;
       p.scale = Math.floor(p.scale * k * 1000) / 1000;
       p.x = (bed[0] + bed[2]) / 2; p.y = (bed[1] + bed[3]) / 2;

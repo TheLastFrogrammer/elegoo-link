@@ -176,7 +176,7 @@
   let gridLineCount = 0;
   // plate: how far the plate reaches past the print area (left, right, front, back, mm); its edges are what the taps mark.
   const alignStyle = { grid: "all", alpha: 0.9, dot: 12, plate: [0, 0, 0, 0] };
-  let bedBounds = [0, 0, 256, 256], plateEdgeVao = null, plateEdgeCount = 0;
+  let bedBounds = [0, 0, 256, 256], plateEdgeVao = null, plateEdgeBuffer = null, plateEdgeCount = 0;
   let beadVao, beadVertices, instanceBuffer, travelVao, travelBuffer, bedVao, bedLineCount = 0, plateVao, markerVao, markerBuffer;
   const colors = new Float32Array(PALETTE.length * 3);
 
@@ -403,9 +403,9 @@
     const x0 = bedBounds[0] - l, x1 = bedBounds[2] + r, y0 = bedBounds[1] - f, y1 = bedBounds[3] + b, v = [];
     const line = (ax, ay, bx, by) => { const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / 8)); for (let k = 0; k < n; k++) v.push(ax + (bx - ax) * k / n, ay + (by - ay) * k / n, 0, ax + (bx - ax) * (k + 1) / n, ay + (by - ay) * (k + 1) / n, 0); };
     line(x0, y0, x1, y0); line(x1, y0, x1, y1); line(x1, y1, x0, y1); line(x0, y1, x0, y0);
-    if (!plateEdgeVao) plateEdgeVao = gl.createVertexArray();
+    if (!plateEdgeVao) { plateEdgeVao = gl.createVertexArray(); plateEdgeBuffer = gl.createBuffer(); }   // reused as the margins change
     gl.bindVertexArray(plateEdgeVao);
-    const buffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, plateEdgeBuffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.DYNAMIC_DRAW);
     gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0); gl.bindVertexArray(null);
     plateEdgeCount = v.length / 3;
   }

@@ -225,7 +225,7 @@ public final class MainActivity extends Activity {
         modeCloud = segment(modeRow, "Elegoo cloud", () -> setSettingsMode(true));
         LinearLayout connectionCard = card("Printer connection");
         localSettings = connectionCard;
-        label(connectionCard, "At home, on the printer's Wi-Fi: its IP address and access code (LAN Only). Away from home, use Elegoo cloud above.", 13, MUTED, false);
+        label(connectionCard, "At home, on the printer's Wi-Fi, enter its IP address and access code (LAN Only). Away from home, use Elegoo cloud above.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
         connection.setTextIsSelectable(true);
         LinearLayout findRow = row(connectionCard);
@@ -234,7 +234,7 @@ public final class MainActivity extends Activity {
         host = input(connectionCard, "Printer IP address", false); host.setInputType(InputType.TYPE_CLASS_PHONE);
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "Access code (LAN Only)", true); access.setTypeface(Typeface.DEFAULT); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        lanHint = label(connectionCard, "Printer IP: Settings → Network. Access code: shown once LAN Only is on.", 13, MUTED, false);
+        lanHint = label(connectionCard, "Find the IP in printer Settings → Network. The access code appears after you turn on LAN Only.", 13, MUTED, false);
         remember = new CheckBox(this); remember.setMinHeight(dp(48)); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
         remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
         LinearLayout connectRow = row(connectionCard);
@@ -245,7 +245,7 @@ public final class MainActivity extends Activity {
         // Advanced options (serial, route VPN, authentication, saved printers) are rarely changed, so they sit behind one toggle (open already when the route or PIN probe is in use).
         moreToggle = button(connectionCard, "", this::toggleMore);
         LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.VERTICAL); connectionCard.addView(more); moreOptions = more;
-        label(more, "Serial number: leave blank to find it automatically. If that fails, enter it from printer Settings → Device.", 13, MUTED, false);
+        label(more, "Leave the serial number blank to find it automatically. If that fails, enter it from printer Settings → Device.", 13, MUTED, false);
         serial = input(more, "Serial number (optional)", false);
         serial.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         subheading(more, "Connection route");
@@ -263,15 +263,15 @@ public final class MainActivity extends Activity {
             public void onNothingSelected(AdapterView<?> parent) { }
             public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { settings.edit().putBoolean("pinProbe", position == 1).apply(); if (connect != null) { diagnostics.setText("Authentication mode changed. Run Check connection; PIN probe preserves the printer's cloud setting."); render(); } }
         });
-        pairingPin = input(more, "Current printer pairing PIN (probe only)", true); pairingPin.setTypeface(Typeface.DEFAULT); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
-        pinProbeHelp = label(more, "Experimental and read-only: use the pairing PIN the printer currently shows, not the access code. The PIN is never saved.", 13, MUTED, false);
+        pairingPin = input(more, "Pairing PIN shown on the printer (probe only)", true); pairingPin.setTypeface(Typeface.DEFAULT); pairingPin.setSaveEnabled(false); pairingPin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        pinProbeHelp = label(more, "Experimental and read-only. Use the pairing PIN the printer shows now, not the access code. The PIN is never saved.", 13, MUTED, false);
         button(more, "Matrix coexistence test…", this::coexistenceHelp);
         subheading(more, "Saved printer");
         profileName = input(more, "Printer profile name", false);
         serial.setText(profiles.find(host.getText().toString()).optString("serial"));
         profileName.setText(profiles.find(host.getText().toString()).optString("name"));
         LinearLayout profileRow = row(more);
-        saveProfile = rowButton(profileRow, "Save", this::savePrinter, false);
+        saveProfile = rowButton(profileRow, "Save profile", this::savePrinter, false);
         removeProfile = rowButton(profileRow, "Remove…", this::removePrinter, false);
         forget = button(more, "Forget saved access code", () -> { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); access.setText(""); pairingPin.setText(""); message("Saved access code removed; entered PIN cleared. An existing connection keeps its in-memory code until disconnected."); });
         setMore(settings.getBoolean("remoteVPN", false) || settings.getBoolean("pinProbe", false));
@@ -449,16 +449,16 @@ public final class MainActivity extends Activity {
             if (enabled) { requestNotifications(); try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { } }
             if (printer != null) printer.cloudSettingsChanged();
         });
-        label(account, "Your password goes only to Elegoo's own sign-in page. Without a local connection, Monitor shows the cloud's last update.", 13, MUTED, false);
+        label(account, "Your password is sent only to Elegoo's own sign-in page. Without a local connection, Monitor shows the cloud's last update.", 13, MUTED, false);
         renderCloudAccount();
         setSettingsMode(settingsModeAtStart());
         LinearLayout preferences = card("App preferences");
-        button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "System" : dark ? "Dark" : "Light"), this::appearanceDialog);
+        button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "Follow system" : dark ? "Dark" : "Light"), this::appearanceDialog);
         CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
-        label(preferences, "Alerts need notification permission and an active monitoring session. They stop after you disconnect or Android stops the process.", 13, MUTED, false);
+        label(preferences, "Alerts need notification permission and an active monitoring session. They stop when you disconnect, or when Android stops the app.", 13, MUTED, false);
         LinearLayout help = card("Help & diagnostics");
         button(help, "Connection help…", this::connectionHelp);
         probeButton = button(help, "Probe printer (read-only)…", this::probeDialog);
@@ -925,21 +925,21 @@ public final class MainActivity extends Activity {
     private boolean remoteMode() { return routePicker != null && routePicker.getSelectedItemPosition() == 1; }
     private void connectionHelp() {
         new AlertDialog.Builder(this).setTitle("Connecting locally")
-            .setMessage("Printer IP: printer Settings → Network.\n\nAccess code: turn on LAN Only on the printer and use the code it shows (blank if code protection is off).\n\nSerial number: leave blank so the app finds it automatically; if that fails, enter it from printer Settings → Device.\n\nConnection route: Local Wi-Fi at home, or Remote through home VPN with your Pi gateway (see Remote access setup).\n\nCheck connection tests reachability (MQTT 1883, HTTP 80, camera 8080, UDP 52700). Uploads need HTTP port 80.\n\nWithout LAN Only, sign in with Elegoo below to monitor and control through the cloud instead.")
+            .setMessage("Printer IP: printer Settings → Network.\n\nAccess code: turn on LAN Only on the printer and use the code it shows (blank if code protection is off).\n\nSerial number: leave blank so the app finds it automatically; if that fails, enter it from printer Settings → Device.\n\nConnection route: Local Wi-Fi at home, or Remote through home VPN with your Pi gateway (see Remote access setup).\n\nCheck connection tests whether the printer can be reached (MQTT 1883, HTTP 80, camera 8080, UDP 52700). Uploads need HTTP port 80.\n\nWithout LAN Only, use Elegoo cloud above and sign in to monitor and control through the cloud instead.")
             .setPositiveButton("Close", null).show();
     }
     private void coexistenceHelp() {
         new AlertDialog.Builder(this).setTitle("Read-only Matrix coexistence test")
-            .setMessage("1. Leave the printer in normal cloud mode (LAN Only off). Confirm Matrix shows live status/camera. Do not unbind or re-pair the printer.\n\n2. Use home Wi-Fi first. Select Cloud-mode PIN probe and enter the current printer-displayed pairing PIN if available. Supply the exact serial if UDP discovery cannot identify it.\n\n3. Check connection, then Connect. This tries the SDK's local MQTT PIN path once. It does not sign into your Elegoo account, bind devices, copy cloud client identities, guess credentials or use a PIN in HTTP.\n\n4. Compare live status here and in Matrix, switch between apps, and confirm Matrix remains connected. Registration alone does not prove coexistence. If refused or disconnected, the probe stops; firmware may require the official cloud transport.\n\nPrinter-changing controls and uploads stay disabled in this probe. Camera/read queries depend on firmware. PINs are not saved, included in diagnostics or logged. If no monitoring session remains, reopening the app requires the PIN again.")
+            .setMessage("1. Leave the printer in normal cloud mode (LAN Only off). Confirm Matrix shows live status and camera. Do not unbind or re-pair the printer.\n\n2. Use home Wi-Fi first. Select Cloud-mode PIN probe and enter the pairing PIN the printer shows, if it shows one. If UDP discovery cannot identify the printer, enter its exact serial.\n\n3. Tap Check connection, then Connect. This tries the SDK's local MQTT PIN path once. It does not sign in to your Elegoo account, bind devices, copy cloud client identities, guess credentials or use a PIN in HTTP requests.\n\n4. Compare live status here and in Matrix, switch between the apps, and check that Matrix stays connected. Registration alone does not prove coexistence. If the printer refuses or disconnects, the probe stops. Firmware may require the official cloud transport.\n\nPrinter-changing controls and uploads stay disabled in this probe. Camera and read queries depend on firmware. PINs are not saved, included in diagnostics or logged. If no monitoring session remains, reopening the app requires the PIN again.")
             .setPositiveButton("Close", null).show();
     }
     private void remoteHelp() {
         LinearLayout body = dialogBody();
         label(body, "Use your always-on Pi as a Tailscale subnet router. Install Tailscale on the Pi and phone, then sign in to your own tailnet. The Pi needs access to the printer on your home network.", 14, INK, false);
-        label(body, "On the Pi: enable IPv4 forwarding and advertise only the printer's IP as a /32 route. Approve that route in the Tailscale admin console. Restrict the phone's access to printer TCP 1883 (monitor/control), 80 (uploads if available), 8080 (camera) and optionally UDP 52700 (identity). Broader existing access rules must also be reviewed.", 14, INK, false);
-        label(body, "Choose Remote through home VPN and keep the printer's home IP (not the Pi's Tailscale IP). Authentication is separate: the access code uses LAN Only; the experimental read-only PIN probe keeps cloud mode enabled to test Matrix coexistence. Establish the selected authentication locally first. A manual serial provides fallback if UDP identity does not reply.", 14, INK, false);
-        label(body, "The internet hop from phone to Pi is encrypted by the VPN. The Pi-to-printer hop retains the printer's LAN protocol. Do not publicly forward printer ports. Secure your account with MFA and keep the Pi updated. Android's always-on VPN/block-without-VPN setting provides stronger enforcement against connection-loss races. VPN presence alone does not prove the gateway/route or encryption configuration.", 14, MUTED, false);
-        label(body, "The app does not install or configure Tailscale, and it does not bypass printer authentication. HTTP unavailable at home stays unavailable remotely. Monitoring/control/upload/camera requests use the selected route; VPN loss closes the session and requires a fresh connection without command replay.", 14, MUTED, false);
+        label(body, "On the Pi: turn on IPv4 forwarding and advertise only the printer's IP as a /32 route. Approve that route in the Tailscale admin console. Limit the phone's access to printer TCP 1883 (monitor and control), 80 (uploads, if available), 8080 (camera) and, optionally, UDP 52700 (identity). Review any broader existing access rules too.", 14, INK, false);
+        label(body, "Choose Remote through home VPN, and keep the printer's home IP (not the Pi's Tailscale IP). Authentication is separate: the access code uses LAN Only, and the experimental read-only PIN probe keeps cloud mode on to test Matrix coexistence. Set up the chosen authentication on the home network first. A manual serial is the fallback if UDP identity does not reply.", 14, INK, false);
+        label(body, "The internet hop from phone to Pi is encrypted by the VPN. The Pi-to-printer hop keeps the printer's LAN protocol. Do not publicly forward printer ports. Turn on multi-factor sign-in (MFA) and keep the Pi updated. Android's always-on VPN and block-without-VPN settings enforce this more strictly against connection-loss races. A connected VPN alone does not prove the gateway, route or encryption setup.", 14, MUTED, false);
+        label(body, "The app does not install or configure Tailscale, and it does not bypass printer authentication. HTTP unavailable at home stays unavailable remotely. Monitoring, control, upload and camera requests use the selected route. If the VPN drops, the session closes and needs a fresh connection. Commands are never replayed.", 14, MUTED, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         new AlertDialog.Builder(this).setTitle("Away-from-home access").setView(scroll).setPositiveButton("Close", null).show();
     }
@@ -1010,7 +1010,7 @@ public final class MainActivity extends Activity {
             main.post(() -> {
                 if (isDestroyed()) return; scanningNow = false; render();
                 if (!error.isEmpty()) { message(error); return; }
-                if (result.isEmpty()) { message("No CC2 discovery replies received. You can still enter the printer IP and serial manually; some networks block broadcasts."); return; }
+                if (result.isEmpty()) { message("No printers replied to the Wi-Fi search. You can still enter the printer IP and serial by hand; some networks block broadcasts."); return; }
                 String[] names = new String[result.size()];
                 for (int i = 0; i < names.length; i++) { Cc2Discovery.Found entry = result.get(i); names[i] = StatusPresentation.clean(entry.info.name.isEmpty() ? entry.info.model : entry.info.name) + " · " + entry.host + "\n" + entry.info.summary(); }
                 new AlertDialog.Builder(this).setTitle("Printers found").setItems(names, (dialog, which) -> {
@@ -1622,7 +1622,7 @@ public final class MainActivity extends Activity {
         percentText.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
         jobBar.setProgress(percent); jobBar.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
         // The preview is a read, asked once per file; the printer keeps it under the file's name on its own storage.
-        if (inJobNow && !printFile.isEmpty() && !printFile.equals(jobThumbAsked) && printer.canQuery()) { jobThumbAsked = printFile; printer.thumbnail("local", printFile); }
+        if (inJobNow && !printFile.isEmpty() && !printFile.equals(jobThumbAsked) && printer.canQuery() && !printer.busy(Cc2Codec.THUMBNAIL)) { jobThumbAsked = printFile; printer.thumbnail("local", printFile); }
         String thumbData = inJobNow && printer != null ? printer.thumbnails.get("local/" + printFile) : null;
         String thumbKey = thumbData == null ? "" : printFile + "#" + thumbData.length();
         if (!thumbKey.equals(jobThumbKey)) { jobThumbKey = thumbKey; Bitmap picture = thumbData == null ? null : decodeThumbnail(thumbData); jobThumb.setImageBitmap(picture); jobThumb.setTag(picture == null ? null : "shown"); }

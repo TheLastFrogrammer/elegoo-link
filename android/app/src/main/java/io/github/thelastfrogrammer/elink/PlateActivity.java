@@ -222,7 +222,7 @@ public final class PlateActivity extends Activity {
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         ui.label(body, "Too big for the bed? One tap shrinks it to fit.", 13, ui.muted, false);
         ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
-            status.setText("Scaled to fit the bed and the printer height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
+            status.setText("Fitted to the bed and the printer height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
         ui.label(body, "Then each axis, on top of the even scale. 100 = unchanged. Z is height.", 13, ui.muted, false);
         EditText[] axes = new EditText[3]; String[] names = {"X (width)", "Y (depth)", "Z (height)"};
         for (int i = 0; i < 3; i++) axes[i] = percentField(body, names[i], k == null ? 100 : k.optDouble(i, 1) * 100);
@@ -320,7 +320,12 @@ public final class PlateActivity extends Activity {
                 if (n < 1 || n > 50) { status.setText("Add between 1 and 50 copies at a time."); status.setTextColor(ui.error); return; }
                 int from = selected; StringBuilder script = new StringBuilder();
                 for (int i = 0; i < n; i++) script.append(selectScript(from)).append(";plate.duplicate();");
-                web.evaluateJavascript(script.toString(), value -> main.postDelayed(this::arrangeAll, 300));
+                // The page answers with its copies, so the arrange starts from them rather than from a change report still on its way.
+                script.append("plate.scene.placements");
+                web.evaluateJavascript(script.toString(), value -> {
+                    try { placements = new JSONArray(value); } catch (JSONException | NullPointerException ignored) { }
+                    arrangeAll();
+                });
             }).show();
     }
 

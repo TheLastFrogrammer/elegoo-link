@@ -934,6 +934,8 @@ public final class SliceActivity extends Activity {
         if (!largeImportConfirmed) {
             long stl = 0, other = 0;
             for (Uri uri : uris) { String name = displayName(uri); long size = sizeOf(uri); if ("stl".equals(modelExtension(name, null))) stl += size; else other += size; }
+            // The models already chosen are read again together with the new ones.
+            for (File kept : models) { if ("stl".equals(modelExtension(kept.getName(), null))) stl += kept.length(); else other += kept.length(); }
             SliceEstimate guess = importEstimate(stl, other);
             android.app.ActivityManager.MemoryInfo memory = new android.app.ActivityManager.MemoryInfo();
             ((android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE)).getMemoryInfo(memory);
