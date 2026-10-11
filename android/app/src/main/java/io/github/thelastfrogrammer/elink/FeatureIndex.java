@@ -39,7 +39,7 @@ final class FeatureIndex {
         new Feature("camera", "Watch the camera", "camera video watch stream live view webcam", PRINT, "Camera", Prepare.NONE, false),
         new Feature("camera-3d", "Line up the camera in 3D", "camera line up align overlay 3d position lens", PRINT, "Line up the camera in 3D", Prepare.NONE, true),
         new Feature("snapshot", "Camera snapshot", "snapshot photo picture save image", PRINT, "Save snapshot", Prepare.NONE, false),
-        new Feature("light", "Printer light", "light lamp led illumination", PRINT, "Light on", Prepare.NONE, false).or("Controls"),
+        new Feature("light", "Printer light", "light lamp led illumination", PRINT, "Light o", Prepare.NONE, false).or("Controls"),
         // Printer
         new Feature("temperature", "Set heater temperatures", "temperature heat preheat nozzle bed hotend", PRINTER, "Set heater temperatures", Prepare.NONE, true).or("Temperatures, fans & speed"),
         new Feature("fan", "Fan setting", "fan cooling part fan aux chamber", PRINTER, "Fan setting", Prepare.NONE, true).or("Temperatures, fans & speed"),
@@ -50,6 +50,7 @@ final class FeatureIndex {
         new Feature("move", "Move axes or home", "move jog axis axes home x y z bed", PRINTER, "Move axes", Prepare.NONE, false).or("Move & calibrate"),
         new Feature("level", "Auto-level bed", "level leveling levelling mesh bed calibration probe", PRINTER, "Auto-level bed", Prepare.NONE, false).or("Move & calibrate"),
         new Feature("vibration", "Vibration test", "vibration input shaping resonance shaper calibration", PRINTER, "Vibration test", Prepare.NONE, false).or("Move & calibrate"),
+        new Feature("ai", "Printer's own spaghetti detection", "ai detection spaghetti foreign object camera check printer", PRINTER, "The printer's own camera checks", Prepare.NONE, false).or("Printer status"),
         new Feature("emergency", "Emergency stop", "emergency stop halt kill abort urgent", PRINTER, "Emergency stop", Prepare.NONE, false).or("Printer status"),
         // Files
         new Feature("printer-files", "Files on the printer", "files gcode printer storage usb print start delete download", FILES, "Printer files", Prepare.NONE, false),

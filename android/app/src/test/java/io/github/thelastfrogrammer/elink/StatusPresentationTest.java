@@ -36,4 +36,23 @@ public class StatusPresentationTest {
         JSONObject status = new JSONObject("{\"machine_status\":{\"status\":2,\"sub_status\":123456}}");
         assertTrue(StatusPresentation.state(status).contains("123456")); assertFalse(Cc2Codec.canPause(status));
     }
+
+    private static org.json.JSONObject machine(int state, int sub) throws Exception {
+        return new org.json.JSONObject().put("machine_status", new org.json.JSONObject().put("status", state).put("sub_status", sub));
+    }
+    @Test public void statesAreNamedAsThePrintersOwnAppNamesThem() throws Exception {
+        assertEquals("Preparing: heating the bed", StatusPresentation.state(machine(2, 1405)));
+        assertEquals("Preparing: levelling the bed", StatusPresentation.state(machine(2, 2901)));
+        assertEquals("Resuming", StatusPresentation.state(machine(2, 2401)));
+        assertEquals("Loading filament", StatusPresentation.state(machine(4, 1134)));
+        assertEquals("Self-check: vibration test failed", StatusPresentation.state(machine(8, 5936)));
+        assertEquals("Homing failed", StatusPresentation.state(machine(10, 2803)));
+        assertEquals("Power-loss recovery", StatusPresentation.state(machine(15, 0)));
+        assertEquals("unknown states keep their number", "Machine state 42", StatusPresentation.state(machine(42, 0)));
+    }
+    @Test public void thePrintersOwnDetectionIsDescribedAsReported() throws Exception {
+        org.json.JSONObject ai = new org.json.JSONObject("{\"error_code\":0,\"foreign_object_detection\":{\"status\":0},\"spaghetti_detection\":{\"frequency\":\"high\",\"handing\":\"pause\",\"status\":1}}");
+        assertEquals("The printer's own camera checks: spaghetti detection on (how often: high, when found: pause); objects left on the bed off. Change them on the printer's screen.", MainActivity.aiText(ai));
+        assertEquals("", MainActivity.aiText(null)); assertEquals("", MainActivity.aiText(new org.json.JSONObject()));
+    }
 }

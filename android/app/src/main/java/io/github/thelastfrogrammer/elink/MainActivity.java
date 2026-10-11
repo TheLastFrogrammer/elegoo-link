@@ -373,6 +373,7 @@ public final class MainActivity extends Activity {
         LinearLayout status = card("Printer status");
         printerStatus = label(status, "", 13, MUTED, false);
         printerFix = rowButton(row(status), "", this::fixControl, true); ((View) printerFix.getParent()).setVisibility(View.GONE);
+        printerAi = label(status, "", 13, MUTED, false); printerAi.setVisibility(View.GONE);
         emergencyButton(status);
         tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and print speed");
         filamentSection = section(PRINTER, "Filament", "Load or unload filament and CANVAS trays");
@@ -1013,6 +1014,7 @@ public final class MainActivity extends Activity {
         if (page != before || page != PRINT) stopCamera();
         if (page == PRINT && before != PRINT) monitorCameraTried = false;
         if (page == FILES) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
+        if (page == PRINTER && printer != null) printer.readAiDetection();
         if (page == PRINT) { traysAskedAt = 0; main.post(this::autoLoadTrays); }
         if (page == HISTORY) { historyAutoAt = 0; main.post(this::autoLoadHistory); refreshStats(); }
         for (int i = 0; i < TAB_COUNT; i++) {
@@ -1263,6 +1265,26 @@ public final class MainActivity extends Activity {
             try { double value = text.isEmpty() ? 0 : Double.parseDouble(text); if (value < 0 || value > 10_000) throw new NumberFormatException(); settings.edit().putString("filamentPricePerKg", String.valueOf(value)).apply(); refreshStats(); }
             catch (NumberFormatException invalid) { message("Enter the price as a number, for example 22.50."); }
         }).show();
+    }
+    private TextView printerAi;
+    private boolean lightIsOn;
+    /**
+     * The printer's own AI camera checks as it reports them (read only: the app does not change them). Values the printer
+     * gives as text are shown as they are.
+     */
+    static String aiText(JSONObject ai) {
+        if (ai == null) return "";
+        JSONObject spaghetti = ai.optJSONObject("spaghetti_detection"), foreign = ai.optJSONObject("foreign_object_detection");
+        if (spaghetti == null && foreign == null) return "";
+        StringBuilder text = new StringBuilder("The printer's own camera checks: ");
+        if (spaghetti != null) {
+            text.append("spaghetti detection ").append(spaghetti.optInt("status") != 0 ? "on" : "off");
+            String often = StatusPresentation.clean(spaghetti.optString("frequency")).trim(), then = StatusPresentation.clean(spaghetti.optString("handing")).trim();
+            if (spaghetti.optInt("status") != 0 && (!often.isEmpty() || !then.isEmpty()))
+                text.append(" (").append(often.isEmpty() ? "" : "how often: " + often).append(!often.isEmpty() && !then.isEmpty() ? ", " : "").append(then.isEmpty() ? "" : "when found: " + then).append(")");
+        }
+        if (foreign != null) text.append(spaghetti != null ? "; " : "").append("objects left on the bed ").append(foreign.optInt("status") != 0 ? "on" : "off");
+        return text.append(". Change them on the printer's screen.").toString();
     }
     private SpoolStore spools() { return SpoolStore.at(new File(getFilesDir(), "spools.json")); }
     /** Emergency stop: asks first, and is sent once per confirmation like every other printer command. */
@@ -1656,7 +1678,7 @@ public final class MainActivity extends Activity {
             android.graphics.ColorFilter filter = gain <= 1.01f ? null : new android.graphics.ColorMatrixColorFilter(CameraTone.matrix(gain));
             for (ImageView view : new ImageView[] {monitorImage, cameraImage, fullView}) if (view != null) view.setColorFilter(filter);
         }
-        boolean dark = luminance < CameraTone.DARK && !darkDismissed && lightOn.isEnabled();
+        boolean dark = luminance < CameraTone.DARK && !darkDismissed && lightOn.isEnabled() && !lightIsOn;
         if (darkRow != null) darkRow.setVisibility(dark ? View.VISIBLE : View.GONE);
     }
     /** The camera full screen: pinch or double tap to zoom, drag to move, and buttons for the same and for brightening. */
@@ -1859,6 +1881,12 @@ public final class MainActivity extends Activity {
         pause.setEnabled(canControl && Cc2Codec.canPause(snapshot)); resume.setEnabled(canControl && resumable); stop.setEnabled(canControl && Cc2Codec.canStop(snapshot));
         pause.setVisibility(resumable ? View.GONE : View.VISIBLE); resume.setVisibility(resumable ? View.VISIBLE : View.GONE);
         lightOn.setEnabled(canControl); lightOff.setEnabled(canControl);
+        // When the printer reports its light (led.status), only the button that changes it shows.
+        JSONObject led = snapshot.optJSONObject("led"); boolean lightKnown = led != null && led.has("status"); lightIsOn = lightKnown && led.optInt("status") != 0;
+        lightOn.setVisibility(!lightKnown || !lightIsOn ? View.VISIBLE : View.GONE); lightOff.setVisibility(!lightKnown || lightIsOn ? View.VISIBLE : View.GONE);
+        lightOn.setContentDescription(lightKnown ? "Light on. The light is off now" : null); lightOff.setContentDescription(lightKnown ? "Light off. The light is on now" : null);
+        spaceActions(lightRow);
+        printerAi.setText(aiText(ready && printer != null ? printer.aiDetection : null)); printerAi.setVisibility(printerAi.getText().length() == 0 ? View.GONE : View.VISIBLE);
         discover.setEnabled(!remoteMode() && !connecting && !scanningNow); discover.setText(scanningNow ? "Scanning…" : "Find on Wi-Fi");
         saveProfile.setEnabled(!connecting); chooseProfile.setEnabled(!connecting); removeProfile.setEnabled(!connecting); profileName.setEnabled(!connecting);
         // Only what can work right now is shown; the line above each group says what is missing. Nothing here is enabled in a state PrinterService refuses.

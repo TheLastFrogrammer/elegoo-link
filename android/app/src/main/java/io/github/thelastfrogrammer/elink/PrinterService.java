@@ -560,6 +560,17 @@ public final class PrinterService extends Service {
         if (ready()) session.disk(); else cloudSafe(() -> Cc2Codec.request(0, Cc2Codec.DISK));
         changed();
     }
+    /** The printer's own AI detection settings (method 1062), read once in a while over the local connection; null until answered. */
+    public volatile JSONObject aiDetection;
+    private long aiAskedAt;
+    public void readAiDetection() {
+        long now = SystemClock.elapsedRealtime();
+        if (!ready() || session == null || now - aiAskedAt < 60_000 && aiAskedAt > 0) return;
+        aiAskedAt = now;
+        try {
+            session.probe(new JSONObject().put("method", 1062).put("params", new JSONObject()), (result, error) -> main.post(() -> { if (result != null && result.optInt("error_code", 0) == 0) { aiDetection = result; changed(); } }));
+        } catch (org.json.JSONException impossible) { }
+    }
     public void camera() { if (ready() && !busy(Cc2Codec.CAMERA)) { queryBusy.add(Cc2Codec.CAMERA); session.camera(); changed(); } }
     private boolean knownFile(String storage, String filename) {
         return filesFresh() && listed(storage, filename);
@@ -643,7 +654,7 @@ public final class PrinterService extends Service {
         if (fresh()) session.speed(mode); else if (viaCloud()) cloudSafe(() -> Cc2Codec.speedRequest(0, mode));
     }
     private void resetData() {
-        status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0;
+        status = new JSONObject(); attributes = new JSONObject(); canvas = null; canvasAt = 0; aiDetection = null; aiAskedAt = 0;
         filePage = new JSONObject(); disk = new JSONObject(); history = new JSONObject(); filesAt = 0; fileOffset = 0; cameraUrl = "";
         historyDetails.clear(); historyDetailMessages.clear(); queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
     }

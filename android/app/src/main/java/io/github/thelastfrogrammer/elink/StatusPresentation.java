@@ -20,15 +20,51 @@ public final class StatusPresentation {
         int state = machine.optInt("status", -1), sub = machine.optInt("sub_status", -1);
         if (state == 1) return "Idle";
         if (state == 0) return "Initializing";
-        if (state != 2) return "Machine state " + state;
+        if (state != 2) return other(state, sub);
         switch (sub) {
             case 2075: return "Printing";
             case 2501: return "Pausing";
             case 2502: case 2505: return "Paused";
+            case 2401: return "Resuming";
+            case 2402: return "Resumed";
             case 2503: return "Stopping";
             case 2504: return "Stopped";
             case 2077: return "Print complete";
-            default: return "Print preparation · " + sub;
+            case 1081: case 1082: case 1086: return "Preparing: getting the file";
+            case 1045: case 1096: return "Preparing: heating the nozzle";
+            case 1405: case 1906: return "Preparing: heating the bed";
+            case 2801: case 2802: return "Preparing: homing";
+            case 2901: case 2902: return "Preparing: levelling the bed";
+            default: return "Preparing to print (" + sub + ")";
+        }
+    }
+    /**
+     * The other machine states and their steps, as the printer's own app names them (Elegoo Link's CC2 message adapter:
+     * filament, levelling, PID, resonance test, self-check, update, homing, file transfer, video, extruder, emergency stop,
+     * power-loss recovery). Unknown values keep their number, so nothing is guessed.
+     */
+    static String other(int state, int sub) {
+        String done = " done", failed = " failed";
+        switch (state) {
+            case 3: case 4:
+                return sub == 1133 || sub == 1134 || sub == 1135 ? "Loading filament" : sub == 1136 ? "Filament loaded"
+                    : sub == 1144 ? "Unloading filament" : sub == 1145 ? "Filament unloaded" : "Filament change";
+            case 5: return sub == 2902 ? "Bed levelling" + done : "Levelling the bed";
+            case 6: return sub == 1505 ? "Heater tuning (PID)" + done : sub == 1506 ? "Heater tuning (PID)" + failed : "Tuning the heaters (PID)";
+            case 7: return sub == 5935 ? "Vibration test" + done : sub == 5936 ? "Vibration test" + failed : "Vibration test";
+            case 8: {
+                String step = sub == 5934 || sub == 5935 || sub == 5936 ? "vibration test" : sub >= 1503 && sub <= 1506 ? "heater tuning" : sub == 2901 || sub == 2902 ? "bed levelling" : "";
+                boolean ok = sub == 5935 || sub == 1505 || sub == 2902, bad = sub == 5936 || sub == 1506;
+                return "Self-check" + (step.isEmpty() ? "" : ": " + step + (ok ? done : bad ? failed : ""));
+            }
+            case 9: return sub == 2074 ? "Update" + done : sub == 2075 ? "Update" + failed : "Updating the firmware";
+            case 10: return sub == 2802 ? "Homing" + done : sub == 2803 ? "Homing" + failed : "Homing";
+            case 11: return sub == 3001 ? "File received" : "Receiving a file";
+            case 12: return "Making the timelapse video";
+            case 13: return sub == 1061 ? "Loading the extruder" : sub == 1063 ? "Extruder loaded" : sub == 1062 ? "Unloading the extruder" : sub == 1064 ? "Extruder unloaded" : "Extruder operation";
+            case 14: return "Emergency stop";
+            case 15: return "Power-loss recovery";
+            default: return "Machine state " + state;
         }
     }
     public static String faultCodes(JSONObject status) {
