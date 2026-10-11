@@ -28,7 +28,13 @@ public final class GcodeToolpath {
     byte[] type = new byte[1024];
     /** The tool (filament, 0-based: T0, T1…) each segment was printed with. */
     byte[] tool = new byte[1024];
-    private int currentTool;
+    /** The file line (1-based) each segment came from, for showing the G-code being printed. */
+    int[] lineOf = new int[1024];
+    private int currentTool, lineNumber;
+    /** The slicer's time marks (M73 … R<minutes left>): the first segment after each, and the minutes left there. */
+    int[] timeAt = new int[64]; float[] timeLeft = new float[64]; int timeCount;
+    /** Per filament, from the file's settings comments: type, colour and preset name (empty when not stated). */
+    public final List<String> filamentTypes = new ArrayList<>(), filamentColours = new ArrayList<>(), filamentNames = new ArrayList<>();
     // Travel moves (for display only).
     public int travelCount;
     float[] travel = new float[6 * 1024];
@@ -54,8 +60,12 @@ public final class GcodeToolpath {
         int feature = OTHER;
         String line;
         while ((line = reader.readLine()) != null) {
+            path.lineNumber++;
             if (line.isEmpty()) continue;
             if (line.charAt(0) == ';') {
+                if (line.startsWith("; filament_type = ")) split(line.substring(18), path.filamentTypes);
+                else if (line.startsWith("; filament_colour = ")) split(line.substring(20), path.filamentColours);
+                else if (line.startsWith("; filament_settings_id = ")) split(line.substring(25), path.filamentNames);
                 if (line.startsWith(";TYPE:")) feature = featureOf(line.substring(6).trim());
                 else if (line.startsWith(";WIDTH:")) lineWidth = parse(line.substring(7), lineWidth);
                 else if (line.startsWith(";HEIGHT:")) layerHeight = parse(line.substring(8), layerHeight);
@@ -104,6 +114,10 @@ public final class GcodeToolpath {
                 x = nx; y = ny; z = nz; e = ne;
                 if (path.truncated) break;
             } else if (kind == 'T' && number >= 0 && number < 64) { path.currentTool = number; }
+            else if (kind == 'M' && number == 73) {
+                for (String word : code.split("\\s+"))
+                    if (word.length() > 1 && Character.toUpperCase(word.charAt(0)) == 'R') try { path.addTime(Float.parseFloat(word.substring(1))); } catch (NumberFormatException ignored) { }
+            }
             else if (kind == 'G' && number == 90) { absolute = true; absoluteE = true; }
             else if (kind == 'G' && number == 91) { absolute = false; absoluteE = false; }
             else if (kind == 'M' && number == 82) absoluteE = true;
@@ -138,7 +152,7 @@ public final class GcodeToolpath {
         if (count == x0.length) grow();
         x0[count] = (float) ax; y0[count] = (float) ay; z0[count] = (float) bz; // extrusions are drawn at the layer they end on
         x1[count] = (float) bx; y1[count] = (float) by; z1[count] = (float) bz;
-        width[count] = w; height[count] = h; type[count] = (byte) feature; tool[count] = (byte) currentTool; count++;
+        width[count] = w; height[count] = h; type[count] = (byte) feature; tool[count] = (byte) currentTool; lineOf[count] = lineNumber; count++;
         minX = Math.min(minX, (float) Math.min(ax, bx)); maxX = Math.max(maxX, (float) Math.max(ax, bx));
         minY = Math.min(minY, (float) Math.min(ay, by)); maxY = Math.max(maxY, (float) Math.max(ay, by));
         maxZ = Math.max(maxZ, (float) bz);
@@ -173,7 +187,7 @@ public final class GcodeToolpath {
         int size = x0.length * 2;
         x0 = Arrays.copyOf(x0, size); y0 = Arrays.copyOf(y0, size); z0 = Arrays.copyOf(z0, size);
         x1 = Arrays.copyOf(x1, size); y1 = Arrays.copyOf(y1, size); z1 = Arrays.copyOf(z1, size);
-        width = Arrays.copyOf(width, size); height = Arrays.copyOf(height, size); type = Arrays.copyOf(type, size); tool = Arrays.copyOf(tool, size);
+        width = Arrays.copyOf(width, size); height = Arrays.copyOf(height, size); type = Arrays.copyOf(type, size); tool = Arrays.copyOf(tool, size); lineOf = Arrays.copyOf(lineOf, size);
     }
 
     static int featureOf(String name) {
@@ -231,6 +245,54 @@ public final class GcodeToolpath {
             for (int i = layerStart(layer); i < layerEnd(layer); i++)
                 if (tool[i] < volume[layer].length) volume[layer][tool[i]] += Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i];
         return volume;
+    }
+    private void addTime(float minutesLeft) {
+        if (timeCount > 0 && timeAt[timeCount - 1] == count) { timeLeft[timeCount - 1] = minutesLeft; return; }
+        if (timeCount == timeAt.length) { timeAt = Arrays.copyOf(timeAt, timeCount * 2); timeLeft = Arrays.copyOf(timeLeft, timeCount * 2); }
+        timeAt[timeCount] = count; timeLeft[timeCount] = minutesLeft; timeCount++;
+    }
+    private static void split(String values, List<String> into) {
+        into.clear(); for (String v : values.split(";", -1)) { String t = v.trim(); if (t.startsWith("\"") && t.endsWith("\"") && t.length() >= 2) t = t.substring(1, t.length() - 1); into.add(t); }
+    }
+    /**
+     * Reads one line of a file by number, moving forward from the last line read (a live print only moves forward), and
+     * starting over only when asked for an earlier line. Close it when done.
+     */
+    static final class LineCursor implements Closeable {
+        private final File file; private BufferedReader reader; private int at; private String last = "";
+        LineCursor(File file) { this.file = file; }
+        synchronized String line(int number) {
+            if (number <= 0) return "";
+            try {
+                if (reader == null || number < at) { close(); reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8), 1 << 16); at = 0; last = ""; }
+                while (at < number) { String next = reader.readLine(); if (next == null) return ""; last = next; at++; }
+                return last;
+            } catch (IOException unreadable) { return ""; }
+        }
+        @Override public synchronized void close() { if (reader != null) try { reader.close(); } catch (IOException ignored) { } reader = null; at = 0; }
+    }
+    /** The file line a segment came from (1-based), or 0. */
+    public int lineOf(int segment) { return segment >= 0 && segment < count ? lineOf[segment] : 0; }
+    /** The filament (0-based tool) a segment printed with. */
+    public int toolOf(int segment) { return segment >= 0 && segment < count ? tool[segment] : 0; }
+    /**
+     * The slicer's estimate at a segment, as {minutes into the print, minutes in all}, from the file's M73 marks; null when
+     * the file has none.
+     */
+    public float[] timeAt(int segment) {
+        if (timeCount == 0) return null;
+        float total = timeLeft[0]; int k = -1;
+        for (int i = 0; i < timeCount && timeAt[i] <= segment; i++) k = i;
+        float left = k < 0 ? total : timeLeft[k];
+        return new float[] {Math.max(0, total - left), total};
+    }
+    /** "Filament 2 · PLA · green · Elegoo PLA @ECC2", from the file's own comments. */
+    public String filamentText(int tool) {
+        String type = tool < filamentTypes.size() ? filamentTypes.get(tool) : "", colour = tool < filamentColours.size() ? TrayPlan.colour(filamentColours.get(tool)) : null;
+        String name = tool < filamentNames.size() ? filamentNames.get(tool) : "", word = colour == null ? null : WorkshopUi.colourName(colour);
+        StringBuilder out = new StringBuilder("Filament ").append(tool + 1);
+        if (!type.isEmpty()) out.append(" · ").append(type); if (word != null) out.append(" · ").append(word); if (!name.isEmpty()) out.append(" · ").append(name);
+        return out.toString();
     }
     /** How many tools (filaments) the file prints with: the highest T number used, plus one. */
     public int toolCount() { int tools = 1; for (int i = 0; i < count; i++) tools = Math.max(tools, tool[i] + 1); return tools; }

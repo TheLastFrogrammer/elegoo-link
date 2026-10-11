@@ -324,6 +324,15 @@ public class A11yRenderTest {
             Method enable = GcodeViewerActivity.class.getDeclaredMethod("setControlsEnabled", boolean.class); enable.setAccessible(true); enable.invoke(activity, true);
             setField(activity, "layer", 19); invoke(activity, "syncBars");
             shot(activity.getWindow().getDecorView(), 2340, "viewer", scale);
+            // With Details on: the line, the file's time, the camera and the filament over the picture.
+            context().getSharedPreferences("viewer-hints", 0).edit().putBoolean("details", true).commit();
+            Method details = GcodeViewerActivity.class.getDeclaredMethod("showDetails", int.class, boolean.class); details.setAccessible(true); details.invoke(activity, 500, true);
+            long until = System.currentTimeMillis() + 5_000;
+            TextView panel = (TextView) field(activity, "details");
+            while (panel.getText().length() == 0 && System.currentTimeMillis() < until) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
+            assertTrue(panel.getText().toString(), panel.getText().toString().startsWith("Line "));
+            shot(activity.getWindow().getDecorView(), 2340, "viewer-details", scale);
+            context().getSharedPreferences("viewer-hints", 0).edit().remove("details").commit();
             invoke(activity, "moreDialog");
             dialogShot("viewer-more", scale, 3000);
             activity.finish();
