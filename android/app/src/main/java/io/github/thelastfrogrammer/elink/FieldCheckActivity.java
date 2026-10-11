@@ -51,7 +51,13 @@ public final class FieldCheckActivity extends Activity {
         LinearLayout.LayoutParams lineLayout = new LinearLayout.LayoutParams(-1, Math.max(1, ui.dp(1))); lineLayout.topMargin = ui.dp(10);
         if (card.getChildCount() > 1) card.addView(line, lineLayout);
         ui.label(card, check.title, 15, ui.ink, true);
-        ui.label(card, check.how, 13, ui.muted, false);
+        ui.label(card, check.how, 14, ui.muted, false).setPadding(0, 0, 0, ui.dp(4));
+        if (check.open != FieldCheck.NOWHERE) {   // secondary: a text-style button, compact, above the results so the layout does not move
+            Button go = ui.styled("Go there", () -> open(check.open), false);
+            go.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(ui.dark ? 0x4463d5c7 : 0x33006b65), null, null));
+            go.setPadding(0, ui.dp(8), ui.dp(12), ui.dp(8)); go.setContentDescription("Go to " + check.title);
+            card.addView(go, new LinearLayout.LayoutParams(-2, -2));
+        }
         LinearLayout choices = ui.row(card);
         FieldCheck.Result[] results = {FieldCheck.Result.WORKS, FieldCheck.Result.FAILS, FieldCheck.Result.SKIPPED};
         String[] names = {"Works", "Problem", "Skip"};
@@ -87,7 +93,6 @@ public final class FieldCheckActivity extends Activity {
                 entries.put(check.id, new FieldCheck.Entry(e == null ? FieldCheck.Result.NONE : e.result, s.toString(), e == null ? 0 : e.at)); save();
             }
         });
-        if (check.open != FieldCheck.NOWHERE) ui.button(card, "Go there", () -> open(check.open), false).setContentDescription("Go to " + check.title);
         restyle.run();
     }
 
