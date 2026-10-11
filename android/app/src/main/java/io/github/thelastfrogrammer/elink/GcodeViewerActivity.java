@@ -115,6 +115,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         followMode = getIntent().getBooleanExtra(EXTRA_FOLLOW, false);
         alignOnly = followMode && getIntent().getBooleanExtra(EXTRA_ALIGN, false);
         following = followMode;
+        // The live preview opens as it was left: line types shown, travel moves, and (once loaded) the view itself.
+        if (followMode) { hidden = viewerPrefs().getInt("liveHidden", hidden); showTravel = viewerPrefs().getBoolean("liveTravel", showTravel); }
         build();
         String file = getIntent().getStringExtra(EXTRA_FILE), name = getIntent().getStringExtra(EXTRA_NAME);
         if (file != null) load(new File(file), name != null ? name : new File(file).getName());
@@ -123,7 +125,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     @Override protected void onStart() { super.onStart(); lastStepAt = 0; if (printer != null && followMode) printer.watch(this); startCamera(); }
-    @Override protected void onStop() { setPlaying(false); stopCamera(); if (printer != null) printer.unwatch(this); super.onStop(); }
+    @Override protected void onStop() {
+        if (followMode && web != null && pageReady && path != null) web.evaluateJavascript("JSON.stringify(viewer.getViewState())", value -> {
+            try { Object text = new org.json.JSONTokener(value).nextValue(); if (text instanceof String) viewerPrefs().edit().putString("liveView", (String) text).apply(); } catch (Exception ignored) { }
+        }); setPlaying(false); stopCamera(); if (printer != null) printer.unwatch(this); super.onStop(); }
     @Override protected void onDestroy() {
         stopCamera();
         if (printer != null) printer.unwatch(this);
@@ -900,7 +905,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
-        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); sendLockstep(); pushView(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
+        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
             // Taps are tied to the bed's height: none while it is unknown or moving.
@@ -987,6 +992,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             int start = path.layerStart(layer), end = start + Math.min(move, layerSize(layer)), layerEnd = path.layerEnd(layer);
             boolean partial = following || end < layerEnd;
             boolean only = viewerPrefs().getBoolean("layerOnly", false);   // just this layer, nothing printed below it
+            if (followMode && (viewerPrefs().getInt("liveHidden", 0) != hidden || viewerPrefs().getBoolean("liveTravel", false) != showTravel))
+                viewerPrefs().edit().putInt("liveHidden", hidden).putBoolean("liveTravel", showTravel).apply();
             JSONObject state = new JSONObject().put("start", only ? start : 0).put("end", end).put("ghostEnd", layerEnd)
                 .put("dimBelow", partial && !only ? start : 0).put("hidden", hidden).put("showTravel", showTravel)
                 .put("travelStart", only ? path.layerTravelStart[layer] : 0).put("travelEnd", layer + 1 < path.layerCount ? path.layerTravelStart[layer + 1] : path.travelCount)
@@ -1030,6 +1037,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         boolean auto = viewerPrefs().getBoolean("autoDelay", true);
         return measuredDelay > 0 ? String.format(Locale.getDefault(), "Cloud camera delay measured now: %.1f s%s", measuredDelay / 1000.0, auto ? " (used instead of the slider)." : " (not used; the slider is).")
             : "Measured only for the cloud camera, once its video plays; until then the slider is used.";
+    }
+    /** The live preview's saved view, given back once per opening (later files keep whatever view is on screen). */
+    private boolean viewRestored;
+    private void restoreView() {
+        if (!followMode || viewRestored) return; viewRestored = true;
+        String saved = viewerPrefs().getString("liveView", null);
+        try { if (saved != null) js("viewer.setViewState(" + new JSONObject(saved) + ")"); } catch (org.json.JSONException ignored) { }
     }
     private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
     private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }

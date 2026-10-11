@@ -31,6 +31,10 @@ jobs:
         run: ./gradlew --no-daemon --no-build-cache --max-workers=2 testDebugUnitTest lintDebug assembleDebug
       - name: The APK carries the slicer engine and its presets
         run: python3 ../.github/workflows/check-engine.py app/build/outputs/apk/debug/app-debug.apk
+      - name: The toolpath viewer loads in a browser
+        run: |
+          npm install --no-save --no-package-lock --silent playwright@1.56.1
+          CHROME="$(command -v google-chrome || command -v chromium || true)" node tools/viewer-check.js
       - name: Report validation totals
         if: always()
         run: |

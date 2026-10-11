@@ -37,6 +37,10 @@ jobs:
         run: python3 ../.github/workflows/check-engine.py
       - name: Test and lint before signing
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug
+      - name: The toolpath viewer loads in a browser
+        run: |
+          npm install --no-save --no-package-lock --silent playwright@1.56.1
+          CHROME="$(command -v google-chrome || command -v chromium || true)" node tools/viewer-check.js
       - name: Build the signed release APK
         env:
           LINK_WORKSHOP_KEYSTORE: ${{ runner.temp }}/release.jks

@@ -307,6 +307,26 @@
     if (Math.abs(aspect - printerCam.aspect) > 0.01) { printerCam.aspect = aspect; buildPrinterCamera(); }
     printerCam.has = true; redraw();
   }
+  // The live preview's view, saved by the app when it leaves and given back when it opens again: from the camera (with the
+  // picture's zoom) or a free 3D view (turn, tilt, distance, the point looked at). A view from the camera waits for the camera.
+  let restoredView = null;
+  function getViewState() {
+    return printerCam.looking ? { looking: true, zoom: { s: zoom2d.s, x: zoom2d.x, y: zoom2d.y } }
+      : { looking: false, camera: { yaw: camera.yaw, pitch: camera.pitch, distance: camera.distance, target: camera.target.slice() } };
+  }
+  function setViewState(state) {
+    if (!state || typeof state !== "object") return;
+    restoredView = state;
+    if (state.looking) {
+      if (!printerCam.pose) return;
+      lookFromCamera(); if (state.zoom && state.zoom.s > 0) Object.assign(zoom2d, { s: +state.zoom.s, x: +state.zoom.x || 0, y: +state.zoom.y || 0 });
+      drawMarks(); redraw(); return;
+    }
+    const c = state.camera;
+    if (c && [c.yaw, c.pitch, c.distance].every(Number.isFinite) && Array.isArray(c.target) && c.target.length === 3 && c.target.every(Number.isFinite)) {
+      leaveCameraView(); Object.assign(camera, { yaw: c.yaw, pitch: Math.max(-89, Math.min(89, c.pitch)), distance: Math.max(1, c.distance), target: c.target.slice() }); redraw();
+    }
+  }
   function showPrinterCamera(pose) {
     const already = !!printerCam.pose;
     printerCam.pose = pose || null;
@@ -314,7 +334,7 @@
     buildPrinterCamera();
     // Turning the camera on frames the scene with it; the same camera coming back (the app returning to the screen, the
     // stream restarting) keeps the view as the user left it, from the camera too.
-    if (!already) { fit(); return; }
+    if (!already) { const view = restoredView; restoredView = null; if (view) setViewState(view); else fit(); restoredView = null; return; }
     if (printerCam.looking) { const keep = { ...zoom2d }; lookFromCamera(); Object.assign(zoom2d, keep); drawMarks(); }
     redraw();
   }
@@ -671,7 +691,8 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, travelBuffer); gl.bufferData(gl.ARRAY_BUFFER, travels, gl.STATIC_DRAW);
       // Model bounds for the camera. Layer 1 also holds the start G-code's purge line, so with more than one layer
       // the bounds come from layer 2 up, plus layer 1's Z.
-      const f = new Float32Array(segments); data.f = f; cum = null; glide.on = false; glide.lastTarget = -1; lock.samples = [];   // positions of the previous file mean nothing here let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      const f = new Float32Array(segments); data.f = f; cum = null; glide.on = false; glide.lastTarget = -1; lock.samples = [];   // the previous file's positions mean nothing here
+      let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
       const from = meta.starts && meta.starts.length > 1 ? meta.starts[1] * 9 : 0;
       if (from > 0) box[2] = 0;
       for (let i = from; i < f.length; i += 9) for (const o of [0, 3]) {
@@ -906,6 +927,6 @@
   }
   // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
   function probe() { return { end: view.end, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
-  window.viewer = { probe, load, update, setLockstep, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { probe, load, update, setLockstep, getViewState, setViewState, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();
