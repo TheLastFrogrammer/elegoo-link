@@ -227,7 +227,7 @@ public final class MainActivity extends Activity {
         localSettings = connectionCard;
         label(connectionCard, "At home, on the printer's Wi-Fi, enter its IP address and access code (LAN Only). Away from home, use Elegoo cloud above.", 13, MUTED, false);
         connection = label(connectionCard, "Preparing connection service…", 14, TEAL, true);
-        connection.setTextIsSelectable(true);
+        connection.setTextIsSelectable(true); connection.setMinHeight(dp(48)); // selectable text is a touch target too
         LinearLayout findRow = row(connectionCard);
         discover = rowButton(findRow, "Find on Wi-Fi", this::scanPrinters, false);
         chooseProfile = rowButton(findRow, "Saved printers…", this::choosePrinter, false);
@@ -241,7 +241,7 @@ public final class MainActivity extends Activity {
         connect = rowButton(connectRow, "Connect", this::toggleConnection, true);
         check = rowButton(connectRow, "Check connection", this::checkConnection, false);
         diagnostics = label(connectionCard, "Check connection tests whether the printer is reachable and how it is set up.", 13, MUTED, false);
-        diagnostics.setTextIsSelectable(true);
+        diagnostics.setTextIsSelectable(true); diagnostics.setMinHeight(dp(48));
         // Advanced options (serial, route VPN, authentication, saved printers) are rarely changed, so they sit behind one toggle (open already when the route or PIN probe is in use).
         moreToggle = button(connectionCard, "", this::toggleMore);
         LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.VERTICAL); connectionCard.addView(more); moreOptions = more;
@@ -1983,8 +1983,12 @@ public final class MainActivity extends Activity {
         TextView view = new TextView(this); view.setText(text); view.setTextSize(size); view.setTextColor(color); if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setPadding(0, dp(5), 0, dp(7)); parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); return view;
     }
+    /** A text field with a small caption above it that names it for screen readers too (a hint alone disappears once text is typed). */
     private EditText input(LinearLayout parent, String hint, boolean password) {
-        EditText input = new EditText(this); input.setHint(hint); input.setHintTextColor(MUTED); input.setBackgroundTintList(tint(TEAL)); input.setSingleLine(true); input.setTextColor(tint(INK)); if (password) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        TextView caption = label(parent, hint, 12, MUTED, false); caption.setPadding(0, dp(6), 0, 0);
+        // The caption shows and hides with its field.
+        EditText input = new EditText(this) { @Override public void setVisibility(int visibility) { super.setVisibility(visibility); caption.setVisibility(visibility); } };
+        input.setId(View.generateViewId()); caption.setLabelFor(input.getId()); input.setHintTextColor(MUTED); input.setBackgroundTintList(tint(TEAL)); input.setSingleLine(true); input.setTextColor(tint(INK)); if (password) input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         input.setMinHeight(dp(56)); parent.addView(input, new LinearLayout.LayoutParams(-1, -2)); return input;
     }
     private Button button(LinearLayout parent, String text, Runnable action) {
