@@ -39,7 +39,12 @@ final class FieldCheck {
         new Check("slice", "Slicer", "Slicing on the phone", "Slice a model on the phone. Note how long it took and whether the phone stayed responsive.", SLICE),
         new Check("upload", "Slicer", "Upload and print from the slice", "From the slice result, upload and print, locally or through the cloud. The print should start on the printer.", SLICE),
         new Check("maintenance", "Printer", "Maintenance commands", "On the Printer tab, open Move & calibrate. Home the printer, move an axis or level the bed, and watch the printer do it.", PRINTER),
-        new Check("alerts", "Printer", "Alerts in the background", "Leave the app in the background while connected (don't force-stop it). When a print finishes or a fault happens, a notification should appear.", NOWHERE)));
+        new Check("alerts", "Printer", "Alerts in the background", "Leave the app in the background while connected (don't force-stop it). When a print finishes or a fault happens, a notification should appear.", NOWHERE),
+        new Check("alertPicture", "Printer", "Alert pictures and progress", "On the local connection, with the app in the background: the ongoing notification should show progress and the finish time, and the completion alert should add a camera picture.", NOWHERE),
+        new Check("layerAlert", "Printer", "Layer alert", "While printing, tap Layer alert… on the Print tab and choose a layer a few layers ahead. A notification should arrive at that layer, once.", PRINT),
+        new Check("spools", "Printer", "Spools follow the trays", "On the Printer tab, open Filament and set the spools. Start a print sliced on this phone with chosen trays; when it ends, the grams left should drop by about the sliced amount.", PRINTER),
+        new Check("cameraFull", "Camera", "Full-screen camera", "Tap the camera picture on the Print tab. Pinch to zoom and drag; with the chamber light off, Brighten should make the picture readable.", PRINT),
+        new Check("timelapseVideo", "Recordings", "Timelapse video from pictures", "Open a recording with camera pictures and tap Make a timelapse video…. Save it and play it in another app; note if the phone could not make it.", HISTORY)));
 
     /** The "Find a feature" entry a check's Go there brings into view on its tab (shown, never pressed), or null for the tab itself. */
     static String feature(String id) {
@@ -49,6 +54,8 @@ final class FieldCheck {
             case "localCamera": case "cloudCamera": return "camera";
             case "timelapse": return "timelapse";
             case "maintenance": return "move";
+            case "spools": return "spools";
+            case "timelapseVideo": return "recordings";
             default: return null;
         }
     }
