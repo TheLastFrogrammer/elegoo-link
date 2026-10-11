@@ -60,6 +60,7 @@ final class FeatureIndex {
         new Feature("appearance", "Appearance (dark mode)", "appearance theme dark light night", SETTINGS, "Appearance", Prepare.NONE, true),
         new Feature("alerts", "Notifications", "notifications alerts done finished fault", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),
+        new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),
         new Feature("diagnostics", "Share diagnostics", "diagnostics logs report bug share", SETTINGS, "Share diagnostics", Prepare.NONE, true),
         new Feature("help", "Connection help", "help connection trouble lan only access code where", SETTINGS, "Connection help", Prepare.NONE, true),
         new Feature("about", "About and licences", "about licence license version open source", SETTINGS, "About & licenses", Prepare.NONE, true)));

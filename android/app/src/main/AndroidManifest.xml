@@ -30,6 +30,7 @@
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
+        <activity android:name=".FieldCheckActivity" android:exported="false" android:label="Field check" />
         <!-- "Open with" and "Share" for model files (and ZIPs of them, as model sites download) from other apps. -->
         <activity android:name=".SliceActivity" android:exported="true" android:label="Slice a model"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">

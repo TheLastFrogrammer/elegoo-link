@@ -325,7 +325,7 @@
     try {
       const blob = await (await fetch(url, { cache: "no-store" })).blob();
       const image = await createImageBitmap(blob);
-      upload(image, image.width, image.height); image.close();
+      upload(image, image.width, image.height); image.close(); cameraShown();
     } catch (e) { /* the next frame will try again */ } finally { printerCam.loading = false; }
   }
   // Elegoo's cloud video (Agora), joined as Elegoo's printer page does; the video element is drawn into the texture each frame.
@@ -347,7 +347,7 @@
       const play = async (user) => {
         await client.subscribe(user, "video"); printerCam.track = user.videoTrack;
         holder.innerHTML = ""; user.videoTrack.play(holder, { fit: "contain" });
-        printerCam.video = holder.querySelector("video"); printerCam.playing = true; cameraStatus("playing"); pump();
+        printerCam.video = holder.querySelector("video"); printerCam.playing = true; cameraStatus("playing"); pump(); measureDelay(client);
       };
       client.on("user-published", (user, type) => { if (type === "video") play(user); });
       client.on("user-unpublished", () => { printerCam.playing = false; cameraStatus("The printer stopped sending video."); });
@@ -357,10 +357,33 @@
       if (!printerCam.playing) cameraStatus("Connected. Waiting for the printer to send video…");
     } catch (e) { cameraStatus("The camera could not start (" + ((e && (e.code || e.message)) || e) + ")."); }
   }
+  // How late the cloud picture is: from the video's own capture times where the browser has them, otherwise Agora's
+  // end-to-end delay statistic; reported (smoothed, every two seconds) so the drawing can wait just as long.
+  function measureDelay(client) {
+    printerCam.delay = 0; printerCam.captured = false;
+    const video = printerCam.video;
+    if (video && video.requestVideoFrameCallback) {
+      const frame = (now, meta) => {
+        if (!printerCam.playing || printerCam.video !== video) return;
+        if (meta && meta.captureTime > 0 && meta.expectedDisplayTime > meta.captureTime) { printerCam.captured = true; noteDelay(meta.expectedDisplayTime - meta.captureTime); }
+        video.requestVideoFrameCallback(frame);
+      };
+      video.requestVideoFrameCallback(frame);
+    }
+    let reported = 0;
+    const poll = () => {
+      if (!printerCam.playing || printerCam.client !== client) return;
+      if (!printerCam.captured) try { const stats = client.getRemoteVideoStats(); for (const uid in stats) { const e = stats[uid] && stats[uid].end2EndDelay; if (e > 0 && e < 30000) noteDelay(e); break; } } catch (e) { }
+      if (printerCam.delay > 0 && android && android.onCameraDelay && performance.now() - reported > 1900) { reported = performance.now(); android.onCameraDelay(Math.round(printerCam.delay)); }
+      setTimeout(poll, 2000);
+    };
+    poll();
+  }
+  function noteDelay(ms) { printerCam.delay = printerCam.delay > 0 ? printerCam.delay * 0.8 + ms * 0.2 : ms; }
   function pump() {
     if (!printerCam.playing || !printerCam.pose) return;
     const video = printerCam.video;
-    if (video && video.readyState >= 2 && video.videoWidth) upload(video, video.videoWidth, video.videoHeight);
+    if (video && video.readyState >= 2 && video.videoWidth) { upload(video, video.videoWidth, video.videoHeight); cameraShown(); }
     setTimeout(() => requestAnimationFrame(pump), 100);   // about ten pictures a second is plenty for a print
   }
   async function cameraStop() {
@@ -677,6 +700,19 @@
   }
   const glide = { on: false, pos: 0, target: 0, end: 0, speed: 0, vel: 0, lastTarget: -1, lastTime: 0, frame: 0 };
   function update(state) {
+    // Lockstep with the camera: live positions are kept with their arrival time and drawn at the picture's moment (lockStep).
+    if (lock.on && data.f && (state.at || lock.samples.length)) {
+      if (!cum || cum.length !== data.count + 1) lengths();
+      if (state.at && state.end <= data.count) {
+        const s = lock.samples;
+        if (s.length && state.at - s[s.length - 1].t > 8000) s.length = 0;   // a gap (the app was away): start again here, no catch-up
+        s.push({ t: state.at, d: cum[state.end] });
+        while (s.length > 2 && s[1].t < Date.now() - lock.delay - 30000) s.shift();
+      }
+      delete state.at; delete state.smoothMs; delete state.end; delete state.nozzle; Object.assign(view, state);
+      glide.on = false; lockStep(); return;
+    }
+    delete state.at;
     const smooth = (state.smoothMs || 0) > 0; delete state.smoothMs;
     if (glide.on && !smooth && state.end === glide.end) {   // the same position again (other settings changed): keep moving
       delete state.end; delete state.nozzle; Object.assign(view, state); return;
@@ -684,7 +720,9 @@
     if (smooth && data.f && state.end <= data.count) {
       if (!cum || cum.length !== data.count + 1) lengths();
       const now = performance.now(), endIndex = state.end, target = cum[endIndex];
-      const shown = glide.on ? glide.pos : cum[Math.min(view.end, data.count)];
+      // After a gap (the app was away, or the printer quiet) the drawing jumps to the printer instead of catching up.
+      const gap = glide.lastTime > 0 && now - glide.lastTime > 6000;
+      const shown = gap ? target : glide.on ? glide.pos : cum[Math.min(view.end, data.count)];
       delete state.end; delete state.nozzle; Object.assign(view, state);
       if (glide.lastTarget >= 0 && target > glide.lastTarget) {
         const v = (target - glide.lastTarget) / Math.max(0.25, (now - glide.lastTime) / 1000);
@@ -699,6 +737,29 @@
     glide.on = false; glide.lastTarget = -1; glide.speed = 0; glide.vel = 0;
     Object.assign(view, state); redraw();
   }
+  // Lockstep: the drawing shows where the printer was when the camera picture on screen was taken (now − the delay), between the
+  // two live updates around that moment, and moves when a picture arrives (about ten times a second without one).
+  const lock = { on: false, delay: 0, samples: [], lastFrame: 0, ticking: false };
+  function setLockstep(options) {
+    lock.on = !!(options && options.on); lock.delay = Math.max(0, Math.min(30000, Number(options && options.delayMs) || 0));
+    if (!lock.on) { lock.samples = []; return; }
+    if (!lock.ticking) { lock.ticking = true; const loop = () => { if (!lock.on) { lock.ticking = false; return; } if (performance.now() - lock.lastFrame > 400) lockStep(); setTimeout(loop, 100); }; loop(); }
+  }
+  function lockStep() {
+    const s = lock.samples; if (!lock.on || !s.length || !data.f || !cum) return;
+    const t = Date.now() - lock.delay; let d;
+    if (t <= s[0].t) d = s[0].d; else if (t >= s[s.length - 1].t) d = s[s.length - 1].d;
+    else {
+      let i = s.length - 2; while (i > 0 && s[i].t > t) i--;
+      const a = s[i], b = s[i + 1];
+      d = b.d < a.d ? a.d : a.d + (b.d - a.d) * (t - a.t) / Math.max(1, b.t - a.t);   // a step back shows once its moment comes
+    }
+    const [k, frac] = indexAt(d), f = data.f, o = k * 9;
+    view.end = Math.max(view.start, k);
+    view.nozzle = [f[o] + (f[o + 3] - f[o]) * frac, f[o + 1] + (f[o + 4] - f[o + 1]) * frac, f[o + 2] + (f[o + 5] - f[o + 2]) * frac];
+    redraw();
+  }
+  function cameraShown() { lock.lastFrame = performance.now(); if (lock.on) lockStep(); }
   function indexAt(d) {   // [segment, fraction along it] at toolpath length d
     let lo = 0, hi = data.count;
     while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (cum[mid] <= d) lo = mid; else hi = mid - 1; }
@@ -728,11 +789,20 @@
   // Sized by the user against the camera picture (mm): body width (X) and depth (Y), its height above the heater block,
   // the heater block's width, and how far the body sits forward (+Y) of the nozzle.
   function headBoxes() {
-    const z = view.headSize || {}, w = z.w || 70, d = z.d || 80, h = z.h || 80, b = z.block || 24, off = z.offset || 0, top = 1.2 + b * 0.5;
-    const boxes = [[-b / 2, b / 2, -b / 2, b / 2, 1.2, top], [-w / 2, w / 2, -d / 2 + off, d / 2 + off, top, top + h]];
-    // The part-cooling fan on the head's side, placed by its centre (x, y from the nozzle) and its bottom (z above the tip).
+    const z = view.headSize || {}, w = z.w || 70, d = z.d || 80, h = z.h || 80, b = z.block || 24, bd = z.blockD || b, bh = z.blockH || b * 0.5;
+    const tip = z.tip != null ? z.tip : 1.2, off = z.offset || 0, side = z.side || 0, top = tip + bh;
+    // The heater block above the nozzle tip, then the body (which can sit forward of or beside the nozzle).
+    const boxes = [[-b / 2, b / 2, -bd / 2, bd / 2, tip, top], [side - w / 2, side + w / 2, -d / 2 + off, d / 2 + off, top, top + h]];
+    // A shroud or duct around the nozzle: from its bottom (above the tip) up to the body.
+    const shroud = z.shroud;
+    if (shroud && shroud.on) boxes.push([side - shroud.w / 2, side + shroud.w / 2, off - shroud.d / 2, off + shroud.d / 2, Math.min(shroud.z, top), top]);
+    // The part-cooling fan on the head's side, placed by its centre (x, y from the nozzle) and its bottom (z above the tip),
+    // and optionally its twin on the other side.
     const fan = z.fan;
-    if (fan && fan.on) boxes.push([fan.x - fan.w / 2, fan.x + fan.w / 2, fan.y - fan.d / 2, fan.y + fan.d / 2, fan.z, fan.z + fan.h]);
+    if (fan && fan.on) {
+      boxes.push([fan.x - fan.w / 2, fan.x + fan.w / 2, fan.y - fan.d / 2, fan.y + fan.d / 2, fan.z, fan.z + fan.h]);
+      if (fan.mirror) boxes.push([-fan.x - fan.w / 2, -fan.x + fan.w / 2, fan.y - fan.d / 2, fan.y + fan.d / 2, fan.z, fan.z + fan.h]);
+    }
     return boxes;
   }
   let headVao = null, headBuffer = null;
@@ -836,6 +906,6 @@
   }
   // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
   function probe() { return { end: view.end, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
-  window.viewer = { probe, load, update, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { probe, load, update, setLockstep, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

@@ -188,6 +188,19 @@ public class A11yRenderTest {
         return activity;
     }
 
+    /** The field checklist, with one check marked so its note box shows. */
+    @Test public void fieldCheck() throws Exception {
+        out();
+        for (float scale : SCALES) {
+            RuntimeEnvironment.setFontScale(scale);
+            theme(false);
+            context().getSharedPreferences(FieldCheckActivity.PREFS, 0).edit().putString(FieldCheckActivity.KEY, "{\"files\":{\"result\":\"FAILS\",\"note\":\"List stays blank\",\"at\":1}}").commit();
+            FieldCheckActivity activity = Robolectric.buildActivity(FieldCheckActivity.class).setup().get();
+            shot(activity.getWindow().getDecorView(), 9000, "fieldcheck", scale);
+            activity.finish();
+        }
+    }
+
     @Test public void mainTabs() throws Exception {
         out();
         for (float scale : SCALES) {

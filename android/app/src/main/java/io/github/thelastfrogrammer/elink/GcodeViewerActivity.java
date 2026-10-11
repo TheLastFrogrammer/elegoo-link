@@ -122,7 +122,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (followMode) bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
     }
 
-    @Override protected void onStart() { super.onStart(); if (printer != null && followMode) printer.watch(this); startCamera(); }
+    @Override protected void onStart() { super.onStart(); lastStepAt = 0; if (printer != null && followMode) printer.watch(this); startCamera(); }
     @Override protected void onStop() { setPlaying(false); stopCamera(); if (printer != null) printer.unwatch(this); super.onStop(); }
     @Override protected void onDestroy() {
         stopCamera();
@@ -180,7 +180,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); panel.addView(row);
         play = rowButton(row, "Play", () -> { stopFollowing(); setPlaying(!playing); });
         firstLayer = rowButton(row, "First layer", this::showFirstLayer);
-        if (followMode) follow = rowButton(row, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); changed(); });
+        if (followMode) follow = rowButton(row, "Back to live", () -> { following = true; lastLocated = -1; setPlaying(false); sendLockstep(); changed(); });
         more = rowButton(row, "More…", this::moreDialog);
         setContentView(root);
         setControlsEnabled(false);
@@ -900,7 +900,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
-        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); pushView(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
+        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); sendLockstep(); pushView(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
             // Taps are tied to the bed's height: none while it is unknown or moving.
@@ -911,6 +911,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         @JavascriptInterface public void onCamera(String message) { main.post(() -> {
             if ("playing".equals(message)) cameraMessage("Camera: live video through Elegoo's cloud.");
             else cameraMessage(CloudCameraActivity.explain(message));
+        }); }
+        @JavascriptInterface public void onCameraDelay(int ms) { main.post(() -> {
+            measuredDelay = Math.max(0, Math.min(30_000, ms));
+            if (delayNote != null) delayNote.setText(delayText());
+            sendLockstep();
         }); }
         @JavascriptInterface public void onError(String message) { main.post(() -> status.setText(message)); }
     }
@@ -990,10 +995,16 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 .put("head", followMode && (!"off".equals(headLook()) || headPreview)).put("headShow", headPreview).put("headLook", headLook())
                 .put("headSize", new JSONObject().put("w", viewerPrefs().getInt("headW", 70)).put("d", viewerPrefs().getInt("headD", 80))
                     .put("h", viewerPrefs().getInt("headH", 80)).put("block", viewerPrefs().getInt("headBlock", 24)).put("offset", viewerPrefs().getInt("headOffset", 0))
+                    .put("blockD", viewerPrefs().getInt("headBlockD", viewerPrefs().getInt("headBlock", 24))).put("blockH", viewerPrefs().getInt("headBlockH", 12))
+                    .put("tip", viewerPrefs().getInt("headTip", 1)).put("side", viewerPrefs().getInt("headSide", 0))
+                    .put("shroud", new JSONObject().put("on", viewerPrefs().getBoolean("shroudOn", false)).put("w", viewerPrefs().getInt("shroudW", 40))
+                        .put("d", viewerPrefs().getInt("shroudD", 40)).put("z", viewerPrefs().getInt("shroudZ", 3)))
                     .put("fan", new JSONObject().put("on", viewerPrefs().getBoolean("fanOn", false)).put("x", viewerPrefs().getInt("fanX", -45)).put("y", viewerPrefs().getInt("fanY", 0))
-                        .put("z", viewerPrefs().getInt("fanZ", 10)).put("w", viewerPrefs().getInt("fanW", 20)).put("d", viewerPrefs().getInt("fanD", 50)).put("h", viewerPrefs().getInt("fanH", 50))))
+                        .put("z", viewerPrefs().getInt("fanZ", 10)).put("w", viewerPrefs().getInt("fanW", 20)).put("d", viewerPrefs().getInt("fanD", 50)).put("h", viewerPrefs().getInt("fanH", 50))
+                        .put("mirror", viewerPrefs().getBoolean("fanMirror", false))))
                 .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0);
             if (smoothNext > 0 && viewerPrefs().getBoolean("smoothLive", true)) state.put("smoothMs", smoothNext);
+            if (liveAt > 0) { state.put("at", liveAt); liveAt = 0; }
             smoothNext = 0;
             if (nozzle == null && headPreview && previewNozzle != null) nozzle = previewNozzle;
             if (nozzle != null) state.put("nozzle", new JSONArray(nozzle));
@@ -1009,12 +1020,25 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (playing) { if (layer >= path.layerCount - 1 && move >= layerSize(layer)) { layer = 0; move = 0; } main.post(player); }
     }
 
+    /** The cloud camera's delay as the page measured it (ms, 0 = not measured), and when the next live update arrived (lockstep). */
+    private int measuredDelay; private long liveAt;
+    private TextView delayNote;
+    /** How long the drawing waits for the camera: the measured cloud delay when that is chosen and known, otherwise the slider. */
+    private long effectiveDelay() { return viewerPrefs().getBoolean("autoDelay", true) && measuredDelay > 0 ? measuredDelay : viewerPrefs().getInt("liveDelay", 0) * 100L; }
+    /** Lockstep: the page keeps the live positions with their times and draws each camera picture's moment itself. */
+    private String delayText() {
+        boolean auto = viewerPrefs().getBoolean("autoDelay", true);
+        return measuredDelay > 0 ? String.format(Locale.getDefault(), "Cloud camera delay measured now: %.1f s%s", measuredDelay / 1000.0, auto ? " (used instead of the slider)." : " (not used; the slider is).")
+            : "Measured only for the cloud camera, once its video plays; until then the slider is used.";
+    }
+    private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
+    private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }
     /** Groups the delayed live updates, so leaving live view drops the ones still waiting. */
     private final Object delayToken = new Object();
     private void stopFollowing() {
         main.removeCallbacksAndMessages(delayToken);
         if (following) {
-            following = false; if (follow != null) follow.setEnabled(true);
+            following = false; if (follow != null) follow.setEnabled(true); sendLockstep();
             status.setText("Not live any more: you are looking at the file. Tap “Back to live” to jump to the printer's position.");
         }
     }
@@ -1087,11 +1111,27 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         TextView note = new TextView(this); note.setTextSize(13); note.setTextColor(ink);
         note.setText("The mask shows tinted over the camera picture while this is open. Move the sliders until it covers the real printhead. Easiest with the head still (between prints).");
         body.addView(note);
+        groupHeading(body, "Body");
         styleSlider(body, "Width (left – right)", "headW", 20, 160, 70, " mm", this::pushView);
         styleSlider(body, "Depth (front – back)", "headD", 20, 160, 80, " mm", this::pushView);
         styleSlider(body, "Height", "headH", 20, 160, 80, " mm", this::pushView);
-        styleSlider(body, "Heater block", "headBlock", 6, 60, 24, " mm", this::pushView);
         styleSlider(body, "Forward of the nozzle", "headOffset", -60, 60, 0, " mm", this::pushView);
+        styleSlider(body, "Beside the nozzle (right +)", "headSide", -60, 60, 0, " mm", this::pushView);
+        groupHeading(body, "Heater block and nozzle");
+        styleSlider(body, "Heater block: width", "headBlock", 6, 60, 24, " mm", this::pushView);
+        styleSlider(body, "Heater block: depth", "headBlockD", 6, 60, viewerPrefs().getInt("headBlock", 24), " mm", this::pushView);
+        styleSlider(body, "Heater block: height", "headBlockH", 2, 60, 12, " mm", this::pushView);
+        styleSlider(body, "Nozzle tip below the block", "headTip", 0, 15, 1, " mm", this::pushView);
+        // A shroud or duct around the nozzle, from just above the tip up to the body.
+        android.widget.CheckBox shroud = new android.widget.CheckBox(this); shroud.setTextColor(ink); shroud.setMinHeight(dp(48));
+        shroud.setText("Shroud around the nozzle (up to the body)"); shroud.setChecked(viewerPrefs().getBoolean("shroudOn", false));
+        LinearLayout shroudBody = new LinearLayout(this); shroudBody.setOrientation(LinearLayout.VERTICAL); shroudBody.setVisibility(shroud.isChecked() ? View.VISIBLE : View.GONE);
+        shroud.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("shroudOn", on).apply(); shroudBody.setVisibility(on ? View.VISIBLE : View.GONE); pushView(); });
+        body.addView(shroud); body.addView(shroudBody);
+        styleSlider(shroudBody, "Shroud: width", "shroudW", 10, 120, 40, " mm", this::pushView);
+        styleSlider(shroudBody, "Shroud: depth", "shroudD", 10, 120, 40, " mm", this::pushView);
+        styleSlider(shroudBody, "Shroud: bottom above the tip", "shroudZ", 0, 40, 3, " mm", this::pushView);
+        groupHeading(body, "Fans");
         // The part-cooling fan on the head's side: its own block, placed by its centre and bottom.
         android.widget.CheckBox fan = new android.widget.CheckBox(this); fan.setTextColor(ink); fan.setMinHeight(dp(48));
         fan.setText("Part-cooling fan (a block on the head's side)"); fan.setChecked(viewerPrefs().getBoolean("fanOn", false));
@@ -1104,6 +1144,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         styleSlider(fanBody, "Fan: thickness", "fanW", 5, 80, 20, " mm", this::pushView);
         styleSlider(fanBody, "Fan: depth", "fanD", 10, 120, 50, " mm", this::pushView);
         styleSlider(fanBody, "Fan: height", "fanH", 10, 120, 50, " mm", this::pushView);
+        android.widget.CheckBox mirror = new android.widget.CheckBox(this); mirror.setTextColor(ink); mirror.setMinHeight(dp(48));
+        mirror.setText("A second fan on the other side (mirrored)"); mirror.setChecked(viewerPrefs().getBoolean("fanMirror", false));
+        mirror.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("fanMirror", on).apply(); pushView(); });
+        fanBody.addView(mirror);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         headPreview = true; if ("off".equals(headLook())) viewerPrefs().edit().putString("headLook", "mask").apply();
         // Between prints there is no live nozzle on the toolpath: use where the printer reports the head (parked).
@@ -1120,6 +1164,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (dialog.getWindow() != null) { dialog.getWindow().setGravity(android.view.Gravity.BOTTOM); dialog.getWindow().setDimAmount(0f); }
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
             viewerPrefs().edit().remove("headW").remove("headD").remove("headH").remove("headBlock").remove("headOffset")
+                .remove("headSide").remove("headBlockD").remove("headBlockH").remove("headTip").remove("shroudW").remove("shroudD").remove("shroudZ")
                 .remove("fanX").remove("fanY").remove("fanZ").remove("fanW").remove("fanD").remove("fanH").apply();
             dialog.dismiss(); headSizeDialog();
         }));
@@ -1194,8 +1239,19 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             });
             body.addView(row);
             label(body, "If the real printhead in the picture trails the drawing, raise this until they move together (often 2–5 s through the cloud).", 12, muted, false);
+            android.widget.CheckBox auto = new android.widget.CheckBox(this); auto.setTextColor(ink); auto.setMinHeight(dp(48));
+            auto.setText("Use the cloud camera's measured delay"); auto.setChecked(viewerPrefs().getBoolean("autoDelay", true));
+            auto.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("autoDelay", on).apply(); delayNote.setText(delayText()); sendLockstep(); });
+            body.addView(auto);
+            delayNote = A11y.polite(label(body, delayText(), 12, muted, false));
+            android.widget.CheckBox step = new android.widget.CheckBox(this); step.setTextColor(ink); step.setMinHeight(dp(48));
+            step.setText("Move in step with the camera's pictures"); step.setChecked(viewerPrefs().getBoolean("lockstep", false));
+            step.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("lockstep", on).apply(); main.removeCallbacksAndMessages(delayToken); sendLockstep(); });
+            body.addView(step);
+            label(body, "Each picture shows the toolpath where the printer was when that picture was taken, so the two keep together and recover at once after the app was away. Turn off if it looks jumpy.", 12, muted, false);
         }
         dialogs[0] = new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(scroll).setPositiveButton("Done", null).show();
+        dialogs[0].setOnDismissListener(d -> delayNote = null);
     }
 
     /** The bed grid drawn over the camera picture (seen from the camera): all lines, edges only or hidden, and how strong. */
@@ -1310,8 +1366,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         };
         // The camera's picture arrives seconds late (the cloud's video most of all): the drawing can wait as long, so the two
         // show the same moment. Only a new position waits; the status line below is never delayed.
-        long delay = Math.round(viewerPrefs().getInt("liveDelay", 0) * 100L);
-        if (delay > 0 && moved) main.postAtTime(show, delayToken, android.os.SystemClock.uptimeMillis() + delay);
+        long delay = effectiveDelay();
+        if (lockstep()) { liveAt = System.currentTimeMillis(); show.run(); }   // the page draws each picture's moment itself
+        else if (delay > 0 && moved) main.postAtTime(show, delayToken, android.os.SystemClock.uptimeMillis() + delay);
         else if (delay == 0) show.run();
         int progress = live.optJSONObject("machine_status").optInt("progress", -1);
         logFollow(print, position, hasPosition, currentLayer, located);

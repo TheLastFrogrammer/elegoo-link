@@ -468,9 +468,10 @@ public final class MainActivity extends Activity {
         probeResult = A11y.polite(new TextView(this)); probeResult.setTextSize(13); probeResult.setTextColor(MUTED); probeResult.setPadding(0, dp(5), 0, dp(7)); probeResult.setTextIsSelectable(true);
         ScrollView probeArea = new ScrollView(this); probeArea.addView(probeResult);
         help.addView(probeArea, new LinearLayout.LayoutParams(-1, dp(200))); probeArea.setVisibility(View.GONE);
+        button(help, "Field check…", () -> startActivity(new Intent(this, FieldCheckActivity.class)));
         button(help, "Share diagnostics…", this::shareDiagnostics);
         LinearLayout about = card("About Link Workshop " + appVersion());
-        label(about, "Development build: printer behavior still needs hardware testing. Planned next: painting tools in the slicer, slicing all plates of a project at once, and other printer models.", 13, MUTED, false);
+        label(about, "Development build: printer behaviour still needs hardware testing (Field check… above walks through it). Planned next: painting tools in the slicer and other printer models.", 13, MUTED, false);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
