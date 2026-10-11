@@ -151,7 +151,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout titles = new LinearLayout(this); titles.setOrientation(LinearLayout.VERTICAL); titles.addView(title);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
-        status = A11y.polite(label(titles, "Reading G-code…", 12, muted, false)); status.setPadding(0, 0, 0, 0);
+        status = A11y.polite(label(titles, "Reading toolpath…", 12, muted, false)); status.setPadding(0, 0, 0, 0);
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
         // One hint line under the chips: how to hide a type, and how the view works (live view always; gestures the first few times).
         int shown = hintsShown();
@@ -531,14 +531,14 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             A11y.labelFor(name, bar);
             for (int direction : new int[] {-1, 1}) {
                 Button nudge = new Button(this); nudge.setText(direction < 0 ? "−" : "+"); nudge.setTextSize(18); nudge.setTextColor(teal); nudge.setBackground(null);
-                nudge.setMinWidth(dp(44)); nudge.setMinimumWidth(dp(44)); nudge.setMinHeight(dp(48)); nudge.setMinimumHeight(dp(48)); nudge.setPadding(0, 0, 0, 0);
+                nudge.setMinWidth(dp(48)); nudge.setMinimumWidth(dp(48)); nudge.setMinHeight(dp(48)); nudge.setMinimumHeight(dp(48)); nudge.setPadding(0, 0, 0, 0);
                 nudge.setContentDescription((direction < 0 ? "Less " : "More ") + ALIGN_NAMES[i].toLowerCase(Locale.ROOT));
                 nudge.setOnClickListener(v -> {
                     if (aligning == null) return;
                     aligning[index] = Math.max(ALIGN_RANGE[index][0], Math.min(ALIGN_RANGE[index][1], aligning[index] + direction * ALIGN_STEP[index]));
                     syncAlignRow(index); pushAlign();
                 });
-                row.addView(nudge, new LinearLayout.LayoutParams(dp(44), dp(48)));
+                row.addView(nudge, new LinearLayout.LayoutParams(dp(48), dp(48)));
             }
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
                 @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) {
@@ -549,7 +549,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 @Override public void onStopTrackingTouch(SeekBar b) { }
             });
             alignLabels.add(name); alignBars.add(bar);
-            fine.addView(row, new LinearLayout.LayoutParams(-1, -2));
+            LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-1, -2); gap.topMargin = dp(4); fine.addView(row, gap);
         }
         alignScroll.addView(alignPanel);
         alignSheet.addView(alignScroll, new LinearLayout.LayoutParams(-1, -2));
@@ -559,7 +559,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         rowButton(buttons, "Cancel", () -> finishAligning(false));
         Button reset = rowButton(buttons, "Reset", () -> { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
         reset.setContentDescription("Reset to the default camera");
-        rowButton(buttons, "Save", this::saveLineUp);
+        primaryButton(buttons, "Save", this::saveLineUp);
         alignSheet.addView(buttons);
         root.addView(alignSheet, new LinearLayout.LayoutParams(-1, -2));
     }
@@ -602,7 +602,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private static final String[] EDGE_NAMES = {"Front", "Back", "Left", "Right"};
     private static final int[] EDGE_COLOURS = {0xffff5252, 0xff40c4ff, 0xff69f0ae, 0xffff4dd2};
     private void buildMarking() {
-        label(alignPanel, "1. Pick an edge.\n2. Tap 2–4 points along it, where the bed's top surface ends (drag to pan, pinch to zoom).\n3. Fit.\nDo three or four edges; the far edge and both sides help most.", 12, ink, false);
+        label(alignPanel, "1. Pick an edge.\n2. Tap 2–4 points along it, where the bed's top surface ends (drag to pan, pinch to zoom).\n3. Tap Fit.\nDo three or four edges; the far edge and both sides help most.", 12, ink, false);
         LinearLayout edges = new LinearLayout(this); edges.setOrientation(LinearLayout.HORIZONTAL); alignPanel.addView(edges);
         for (int i = 0; i < EDGE_NAMES.length; i++) {
             int edge = i;
@@ -702,7 +702,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             @Override public void onStartTrackingTouch(SeekBar b) { }
             @Override public void onStopTrackingTouch(SeekBar b) { }
         });
-        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout.LayoutParams gap = new LinearLayout.LayoutParams(-1, -2); gap.topMargin = dp(4); parent.addView(row, gap);
     }
     /** The plate's margins to the fit and the outline; while lining up with saved or current taps, fit again. */
     private void applyPlate() {
@@ -763,7 +763,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             StringBuilder text = new StringBuilder(marks.size() + (marks.size() == 1 ? " tap" : " taps"));
             for (int i = 0; i < 4; i++) if (count[i] > 0) text.append(" · ").append(EDGE_NAMES[i].toLowerCase(Locale.ROOT)).append(' ').append(count[i]);
             int free = CameraFit.free(marks).length;
-            text.append(free == 0 ? ". Tap at least 3 points to fit." : free < CameraFit.COUNT ? ". Fit now adjusts some values; 8 taps on 3 edges adjust all of them." : ". Ready to fit everything.");
+            text.append(free == 0 ? ". Tap at least 3 points to fit." : free < CameraFit.COUNT ? ". Fit will adjust some settings; 8 taps on 3 edges adjust them all." : ". Ready: Fit will adjust every setting.");
             markNote.setText(text);
         }
     }
@@ -848,7 +848,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (!taps.isEmpty()) {
             StringBuilder heights = new StringBuilder();
             for (CameraFit.TapSet set : taps) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.0f", set.z));
-            return now + "Taps saved at bed Z " + heights + " mm; Fit uses them all with any taps made now, as one camera fixed to the frame. "
+            return now + "Taps saved at bed Z " + heights + " mm. Fit uses them all, with any taps made now, as one camera. "
                 + "Tapping at heights far apart (Z 5, 100, 200) pins it down best.";
         }
         StringBuilder heights = new StringBuilder();
@@ -1042,7 +1042,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         groupHeading(body, "What to show");
         moreButton(body, dialog, "Filter by line type (walls, infill, support…)…", this::featureDialog);
         moreButton(body, dialog, showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)", () -> { showTravel = !showTravel; pushView(); });
-        moreButton(body, dialog, moveBar.getVisibility() == View.VISIBLE ? "Hide the within-layer slider" : "Step through this layer…",
+        moreButton(body, dialog, moveBar.getVisibility() == View.VISIBLE ? "Hide the step-through bar" : "Step through this layer…",
             () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); });
         moreButton(body, dialog, "Layers, transparency and nozzle dot…", this::nozzleDialog);
         if (followMode) {
@@ -1061,7 +1061,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         moreButton(body, dialog, locked ? "Unlock rotation (drag turns the view)" : "Lock rotation (drag moves the view)",
             () -> { viewerPrefs().edit().putBoolean("viewLock", !locked).apply(); sendLock(); });
         moreButton(body, dialog, "What am I seeing?", this::helpDialog);
-        dialog[0] = new AlertDialog.Builder(this).setTitle("Viewer").setView(scroll).setNegativeButton("Close", null).show();
+        dialog[0] = new AlertDialog.Builder(this).setTitle("More options").setView(scroll).setNegativeButton("Close", null).show();
     }
     /** A small heading that groups the buttons after it. */
     private void groupHeading(LinearLayout parent, String text) {
@@ -1130,8 +1130,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         groupHeading(body, "Layers");
-        styleSlider(body, "This layer's opacity", "layerOpacity", 5, 100, 100, "%", this::pushView);
-        styleSlider(body, "Layers below", "belowOpacity", 5, 100, 100, "%", this::pushView);
+        styleSlider(body, "This layer: opacity", "layerOpacity", 5, 100, 100, "%", this::pushView);
+        styleSlider(body, "Layers below: opacity", "belowOpacity", 5, 100, 100, "%", this::pushView);
         android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
         only.setText("Show only the current layer");
         only.setChecked(viewerPrefs().getBoolean("layerOnly", false));
@@ -1149,7 +1149,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         label(body, "Follows the grid's perspective and the lens curve.", 12, muted, false);
         groupHeading(body, "Printhead");
         android.widget.RadioGroup looks = new android.widget.RadioGroup(this); looks.setOrientation(android.widget.RadioGroup.VERTICAL);
-        String[][] choices = {{"off", "Off"}, {"mask", "Mask: hides the lines behind the head (not drawn)"}, {"outline", "Outline: the head's edges"}, {"tint", "Tinted: the head shaded"}};
+        String[][] choices = {{"off", "Off"}, {"mask", "Mask: hides the lines behind the head"}, {"outline", "Outline: draws the head's edges"}, {"tint", "Tinted: shades the head"}};
         for (String[] choice : choices) {
             android.widget.RadioButton option = new android.widget.RadioButton(this); option.setText(choice[1]); option.setTextColor(ink); option.setMinHeight(dp(48));
             option.setButtonTintList(ColorStateList.valueOf(teal)); option.setId(View.generateViewId()); looks.addView(option);
@@ -1168,7 +1168,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         smooth.setChecked(viewerPrefs().getBoolean("smoothLive", true));
         smooth.setOnCheckedChangeListener((v, on) -> viewerPrefs().edit().putBoolean("smoothLive", on).apply());
         body.addView(smooth);
-        label(body, "Glides between the printer's updates, about one update behind.", 12, muted, false);
+        label(body, "Moves smoothly between the printer's updates, about one update behind.", 12, muted, false);
         if (followMode) {
             // Delay in tenths of a second, 0–10 s.
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -1247,7 +1247,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             .append("Pale grey: layers below the one you are looking at, and, in the current layer, what is still to print.\n")
             .append("Blue lines (Travel moves): the nozzle moving without printing.\n")
             .append("Teal dot: the nozzle.\n\n")
-            .append("Gestures: drag to turn the view, two fingers to move and zoom, double-tap to reset.\n\nTap a colour chip to hide that type; hold it to see only that type (the quickest way to find supports or the prime tower). More… > Show / hide line types does the same from a list.");
+            .append("Gestures: drag to turn the view, two fingers to move and zoom, double-tap to reset.\n\nTap a colour chip to hide that type; hold it to see only that type (the quickest way to find supports or the prime tower). More… > Filter by line type does the same from a list.");
         if (followMode) text.append("\n\nCamera (More…): a dark camera shape with a faint cone shows where the printer's camera is and what it sees; the screen in front of it plays the camera's live picture. The position is an estimate: choose the spot that matches your printer under More… > Camera position.");
         if (followMode) text.append("\n\nLive: the 3D lines are this G-code file, not a camera. The printer reports its current layer and nozzle position, and the viewer shows the file printed up to there. Scrubbing the bars leaves live mode; “Back to live” returns.");
         new AlertDialog.Builder(this).setTitle("What am I seeing?").setMessage(text).setPositiveButton("Got it", null).show();
