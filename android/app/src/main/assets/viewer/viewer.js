@@ -379,7 +379,7 @@
     };
     poll();
   }
-  function noteDelay(ms) { printerCam.delay = printerCam.delay > 0 ? printerCam.delay * 0.8 + ms * 0.2 : ms; }
+  function noteDelay(ms) { if (!(ms > 0 && ms < 30000)) return; printerCam.delay = printerCam.delay > 0 ? printerCam.delay * 0.8 + ms * 0.2 : ms; }
   function pump() {
     if (!printerCam.playing || !printerCam.pose) return;
     const video = printerCam.video;
@@ -671,7 +671,7 @@
       gl.bindBuffer(gl.ARRAY_BUFFER, travelBuffer); gl.bufferData(gl.ARRAY_BUFFER, travels, gl.STATIC_DRAW);
       // Model bounds for the camera. Layer 1 also holds the start G-code's purge line, so with more than one layer
       // the bounds come from layer 2 up, plus layer 1's Z.
-      const f = new Float32Array(segments); data.f = f; cum = null; glide.on = false; glide.lastTarget = -1; let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
+      const f = new Float32Array(segments); data.f = f; cum = null; glide.on = false; glide.lastTarget = -1; lock.samples = [];   // positions of the previous file mean nothing here let box = [Infinity, Infinity, Infinity, -Infinity, -Infinity, -Infinity];
       const from = meta.starts && meta.starts.length > 1 ? meta.starts[1] * 9 : 0;
       if (from > 0) box[2] = 0;
       for (let i = from; i < f.length; i += 9) for (const o of [0, 3]) {
