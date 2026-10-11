@@ -380,8 +380,8 @@ public final class MainActivity extends Activity {
         currentSection = pages[1];
         // Order on the Files tab: what is on the printer, then sending a new file, then the rarely needed storage and history.
         buildFileBrowser();
-        LinearLayout files = card("Send a new file to the printer");
-        selected = label(files, "Slice a model or choose a .gcode file on this phone. Slicing needs no printer connection; upload does.", 14, MUTED, false);
+        LinearLayout files = card("Send a file to the printer");
+        selected = label(files, "Slice a model or pick a .gcode file on this phone. Slicing works without the printer; uploading needs a connection to it.", 14, MUTED, false);
         LinearLayout startRow = row(files);
         sliceModel = rowButton(startRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
         pick = rowButton(startRow, "Choose G-code…", () -> {
@@ -398,7 +398,7 @@ public final class MainActivity extends Activity {
         upload = rowButton(uploadRow, "Upload", () -> {
             if (printer == null || printer.selectedName == null) return;
             new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
-                .setMessage("This sends the file only. " + (printer.nameOnPrinter(printer.selectedName) ? "A file with this name is already on the printer: uploading will replace the file of the same name. " : "A file with the same name would be replaced. ") + "Refresh Files after upload and choose Print setup to start it.")
+                .setMessage("This only sends the file. " + (printer.nameOnPrinter(printer.selectedName) ? "A file with this name is already on the printer, so uploading replaces it. " : "Any file with the same name is replaced. ") + "Refresh the file list after uploading, then choose Print setup to start it.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         }, true);
         LinearLayout viewRow = row(fileDetails);
@@ -907,7 +907,10 @@ public final class MainActivity extends Activity {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0, dp(10), 0, dp(10)); row.setMinimumHeight(dp(56));
         if (action != null) row.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
         LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView first = new TextView(this); first.setText(name); first.setTextSize(15); first.setTextColor(INK); first.setSingleLine(true); first.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE); text.addView(first);
+        TextView first = new TextView(this); first.setText(name); first.setTextSize(15); first.setTextColor(INK); // One line cut in the middle (the extension stays); with large text, two lines so short names still show whole.
+        if (getResources().getConfiguration().fontScale >= 1.3f) { first.setMaxLines(2); first.setEllipsize(android.text.TextUtils.TruncateAt.END); }
+        else { first.setSingleLine(true); first.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE); }
+        text.addView(first);
         TextView second = new TextView(this); second.setText(detail); second.setTextSize(12); second.setTextColor(MUTED); text.addView(second);
         if (action != null) { TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextSize(24); chevron.setTextColor(MUTED); chevron.setPadding(dp(12), 0, 0, 0); row.addView(chevron); row.setOnClickListener(v -> action.run()); }
         row.setContentDescription(name + ", " + detail); list.addView(row, new LinearLayout.LayoutParams(-1, -2));
@@ -1031,9 +1034,9 @@ public final class MainActivity extends Activity {
         pageRow = row(browser);
         previousFiles = rowButton(pageRow, "Previous 50", () -> { if (printer != null) printer.browse(printer.storage, Math.max(0, printer.fileOffset - 50)); }, false);
         nextFiles = rowButton(pageRow, "Next 50", () -> { if (printer != null) printer.browse(printer.storage, printer.fileOffset + 50); }, false);
-        fileHelp = label(browser, "Tap a file to start a print, download it or delete it. Printing and deleting need an idle printer.", 13, MUTED, false);
+        fileHelp = label(browser, "Tap a file to print it, save it to the phone or delete it. Printing and deleting need an idle printer.", 13, MUTED, false);
         // Storage, print history, timelapses and recordings are rarely needed, so they sit behind one toggle that starts collapsed.
-        LinearLayout storage = card("Print history & storage");
+        LinearLayout storage = card("History, storage and recordings");
         historyToggle = button(storage, "", () -> setHistoryOpen(!historyOpen));
         historyBody = new LinearLayout(this); historyBody.setOrientation(LinearLayout.VERTICAL); storage.addView(historyBody);
         setHistoryOpen(false);
@@ -1130,33 +1133,33 @@ public final class MainActivity extends Activity {
         label(body, FeatureData.file(file), 14, INK, false);
         ScrollView detailScroll = new ScrollView(this); detailScroll.addView(body);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Printer file").setView(detailScroll).setNegativeButton("Close", null).create();
-        if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: print start and deletion are disabled.", 14, MUTED, false); dialog.show(); return; }
+        if (printer != null && printer.pinProbe()) { label(body, "Read-only PIN probe: printing and deleting are turned off.", 14, MUTED, false); dialog.show(); return; }
         // Starting a print comes first; it and Delete need what PrinterService checks (fresh status, an idle printer, a fresh file list), so say when they are not available.
         boolean usable = printer != null && printer.liveFresh() && Cc2Codec.idle(printer.liveStatus()) && printer.filesFresh();
         Button setup = rowButton(row(body), "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); }, true); setup.setEnabled(usable);
         if (!usable) label(body, printer == null || !printer.liveFresh() ? "Printing and deleting need a fresh printer status." : !Cc2Codec.idle(printer.liveStatus()) ? "The printer is busy. Printing and deleting are available when it is idle." : "The file list is out of date. Refresh files to print or delete.", 13, MUTED, false);
         Button save = button(body, "Save to phone…", () -> { dialog.dismiss(); if (printer != null) { saveAfterDownload = name; printer.download(storage, name); } });
-        Button download = button(body, "Keep in this app", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
+        Button download = button(body, "Keep a copy in this app", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
         save.setEnabled(printer != null && !printer.fileBusy()); download.setEnabled(printer != null && !printer.fileBusy());
-        Button delete = button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently removes the selected file from the printer. The printer must be idle.")
+        Button delete = button(body, "Delete file…", () -> { dialog.dismiss(); new AlertDialog.Builder(this).setTitle("Delete " + StatusPresentation.clean(name) + "?").setMessage("This permanently deletes this file from the printer. The printer must be idle.")
             .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, which) -> { if (printer != null) printer.delete(storage, name); }).show(); });
         delete.setEnabled(usable); delete.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, ERROR}));
         dialog.show();
     }
     private void startDialog(JSONObject file, String storage) {
-        if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: print start is disabled."); return; }
+        if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: printing is turned off."); return; }
         if (printer != null && printer.fileBusy()) { message("A file is being sent or received. Wait for it to finish before starting a print."); return; }
         if (printer == null || !printer.liveFresh() || !Cc2Codec.idle(printer.liveStatus()) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
         String name = file.optString("filename");
         LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name), 16, INK, true);
         label(body, "Check the build plate, material and sliced printer profile before starting.", 13, MUTED, false);
-        subheading(body, "1 · Checks");
+        subheading(body, "Checks");
         CheckBox leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record a timelapse on the printer", false);
         force.setOnCheckedChangeListener((view, checked) -> { if (checked) leveling.setChecked(true); });
         leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
-        subheading(body, "2 · Build plate");
+        subheading(body, "Build plate");
         Spinner plate = spinner(body, new String[] {"Build plate A", "Build plate B"});
-        subheading(body, "3 · Filament");
+        subheading(body, "Filament");
         label(body, "Filaments used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 filament", "2 filaments", "3 filaments", "4 filaments", "5 filaments", "6 filaments", "7 filaments", "8 filaments"});
         // Loaded trays of connected CANVAS units (what print start accepts), each with its material and colour in words. The last
@@ -1177,11 +1180,14 @@ public final class MainActivity extends Activity {
         Spinner[] maps = new Spinner[8]; LinearLayout[] rows = new LinearLayout[8]; TextView[] verdicts = new TextView[8];
         for (int t = 0; t < 8; t++) {
             rows[t] = new LinearLayout(this); rows[t].setOrientation(LinearLayout.VERTICAL); rows[t].setPadding(0, dp(10), 0, 0); body.addView(rows[t]);
+            // A hairline between filaments; it hides with its row.
+            if (t > 0) { View line = new View(this); line.setBackgroundColor(TRACK); rows[t].addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
             FilamentMatch.Need need = needs[t];
             TextView heading = label(rows[t], "Filament " + (t + 1) + " (T" + t + ")", 14, INK, true);
             String wants = need == null ? "" : need.describe();
             TextView wanted = label(rows[t], wants.isEmpty() ? "The file does not say which material." : "Sliced for " + wants + " (from " + need.source + ")", 13, MUTED, false);
             if (need != null && need.colour != null) { wanted.setCompoundDrawablesRelativeWithIntrinsicBounds(swatch(need.colour), null, null, null); wanted.setCompoundDrawablePadding(dp(8)); }
+            label(rows[t], "Tray", 13, MUTED, false);
             maps[t] = spinner(rows[t], new String[] {""});
             maps[t].setAdapter(new WorkshopUi.DottedAdapter(this, INK, MUTED, choices, dots));
             A11y.name(maps[t], "Tray for filament " + (t + 1));
@@ -1215,7 +1221,7 @@ public final class MainActivity extends Activity {
             int filled = 0;
             for (int t = 0; t < picks.length; t++) if (picks[t] >= 0) { maps[t].setSelection(picks[t] + 1); filled++; }
             source.setText(filled == 0 ? "No loaded tray matches the materials the file was sliced for. Choose the trays yourself."
-                : "Suggested " + filled + " tray(s) by material, then colour. Check each before starting.");
+                : "Suggested " + filled + (filled == 1 ? " tray" : " trays") + " by material, then colour. Check each before starting.");
             judge.run();
         };
         if (plan != null) {
@@ -1236,7 +1242,7 @@ public final class MainActivity extends Activity {
             int guess = TrayPlan.defaultToolCount(null, sameFile ? printer.selectedReport.tools : null);
             int known = 0; for (FilamentMatch.Need need : needs) if (need != null) known = Math.max(known, need.t + 1);
             if (known > 0) { toolCount.setSelection(Math.max(known, guess) - 1); }
-            else if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); source.setText("Filament count taken from the file's own T commands (" + guess + "). Check it against your slice."); }
+            else if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); source.setText("Filament count taken from the tool changes in the file (" + guess + "). Check it against your slice."); }
             if (known > 0 && trays.size() > 0) main.post(suggestTrays);
         }
         LinearLayout tools = row(body);
@@ -1264,14 +1270,14 @@ public final class MainActivity extends Activity {
             }
             fresh[0] = nowFresh;
             boolean waited = System.currentTimeMillis() - opened > 20_000;
-            trayState.setText(trays.isEmpty() && nowFresh ? "No loaded CANVAS trays reported: the printer's own G-code mapping is used."
+            trayState.setText(trays.isEmpty() && nowFresh ? "No loaded CANVAS trays reported, so the printer's own G-code mapping is used."
                 : nowFresh ? "Trays are up to date. Leave every filament at Printer / G-code default, or choose a loaded tray for every filament."
                 : waited ? "The printer has not reported its trays yet. You can choose from the last report, but starting with chosen trays needs a fresh one: tap Refresh trays."
                 : "Checking the trays… You can choose from the last report meanwhile.");
             trayState.setTextColor(nowFresh ? MUTED : AMBER);
             main.postDelayed(watch[0], 1000);
         };
-        label(body, "A timelapse is recorded on the printer; download it later from the Files tab (local connection).", 12, MUTED, false);
+        label(body, "The printer records a timelapse. Download it later from the Files tab, over the local connection.", 12, MUTED, false);
         main.post(judge);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog setup = new AlertDialog.Builder(this).setTitle("Print setup").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Next: review…", null).create();
@@ -1285,7 +1291,7 @@ public final class MainActivity extends Activity {
                     if (selected > 0) { TrayPlan.Tray tray = trays.get(selected - 1); mapping.put(new JSONObject().put("t", t).put("canvas_id", tray.canvasId).put("tray_id", tray.trayId)); explicit++; }
                 }
                 if (explicit != 0 && explicit != count) { new AlertDialog.Builder(this).setTitle("Choose every filament").setMessage("Choose a tray for every filament, or set them all to Printer / G-code default.").setPositiveButton("OK", null).show(); return; }
-                if (explicit > 0 && !printer.canvasFresh()) { printer.refresh(); new AlertDialog.Builder(this).setTitle("Trays not up to date").setMessage("The trays may have changed since the printer last reported them. Asked for a fresh report; try again once the dialog says the trays are up to date.").setPositiveButton("OK", null).show(); return; }
+                if (explicit > 0 && !printer.canvasFresh()) { printer.refresh(); new AlertDialog.Builder(this).setTitle("Trays not up to date").setMessage("The trays may have changed since the printer last reported them, so a fresh report was asked for. Try again once the setup says the trays are up to date.").setPositiveButton("OK", null).show(); return; }
                 for (int t = 0; t < count && explicit > 0; t++) {
                     int selected = maps[t].getSelectedItemPosition(); TrayPlan.Tray tray = trays.get(selected - 1);
                     List<Integer> shared = new ArrayList<>();
@@ -1296,12 +1302,12 @@ public final class MainActivity extends Activity {
                     lines.append("\nFilament ").append(t + 1).append(wants.isEmpty() ? "" : " (" + wants + ")").append(" → ").append(choices.get(selected).replace("\n", ", "))
                         .append(verdict.level == FilamentMatch.Level.OK ? "" : (verdict.level == FilamentMatch.Level.WRONG ? "\n   ✕ " : "\n   ! ") + verdict.text);
                 }
-            } catch (Exception error) { message("Could not prepare tool mappings. Refresh trays."); return; }
+            } catch (Exception error) { message("Could not read the tray choices. Refresh trays and try again."); return; }
             setup.dismiss();
             String text = StatusPresentation.clean(name) + "\nStorage: " + (storage.equals("local") ? "Internal" : "USB") + "\nBuild plate " + (plate.getSelectedItemPosition() == 0 ? "A" : "B")
                 + " · Run printer / bed check " + (leveling.isChecked() ? "on" : "off") + " · Force bed leveling " + (force.isChecked() ? "on" : "off") + "\nTimelapse " + (timelapse.isChecked() ? "on" : "off")
-                + "\n\n" + count + " filament(s): " + (mapping.length() == 0 ? "the printer's own mapping" : "from these trays:" + lines)
-                + (wrong > 0 ? "\n\n" + wrong + " filament(s) are a different material from what the file was sliced for. Printing with the wrong material can fail or clog the nozzle." : "")
+                + "\n\n" + count + (count == 1 ? " filament: " : " filaments: ") + (mapping.length() == 0 ? "the printer's own mapping" : "from these trays:" + lines)
+                + (wrong > 0 ? "\n\n" + wrong + (wrong == 1 ? " filament is" : " filaments are") + " a different material from what the file was sliced for. Printing with the wrong material can fail or clog the nozzle." : "")
                 + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
             int wrongCount = wrong, checkCount = check;
             new AlertDialog.Builder(this).setTitle(wrong > 0 ? "Materials don't match" : "Start this print?").setMessage(text).setNegativeButton(wrong > 0 ? "Go back" : "Cancel", (b2, w2) -> { if (wrongCount > 0) { setup.show(); main.post(watch[0]); } })
