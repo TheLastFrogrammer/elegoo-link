@@ -1,0 +1,109 @@
+package io.github.thelastfrogrammer.elink;
+
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Canvas;
+import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
+import android.media.MediaCodec;
+import android.media.MediaCodecInfo;
+import android.media.MediaFormat;
+import android.media.MediaMuxer;
+import android.view.Surface;
+import java.io.File;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+/**
+ * A timelapse video (H.264 in MP4) made on the phone from a recording's camera pictures: each picture is drawn onto the
+ * encoder's surface with its time into the print, and frames are stamped at a fixed rate so the whole print plays in about
+ * ten seconds. Runs on the caller's (background) thread.
+ */
+final class TimelapseEncoder {
+    interface Progress { void at(int done, int total); }
+
+    /** Pictures a second: about ten seconds of video, at least 2 and at most 15 a second. */
+    static int framesPerSecond(int pictures) { return Math.max(2, Math.min(15, Math.round(pictures / 10f))); }
+    /** Video size for pictures of this size: at most 1280 wide, both sides even multiples of 16 (what encoders accept everywhere). */
+    static int[] size(int width, int height) {
+        double scale = width > 1280 ? 1280.0 / width : 1;
+        int w = Math.max(160, (int) (width * scale) / 16 * 16), h = Math.max(128, (int) (height * scale) / 16 * 16);
+        return new int[] {w, h};
+    }
+
+    static void encode(List<File> pictures, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
+        if (pictures.isEmpty()) throw new IOException("No pictures");
+        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true; BitmapFactory.decodeFile(pictures.get(0).getPath(), bounds);
+        if (bounds.outWidth <= 0) throw new IOException("Unreadable picture");
+        int[] wh = size(bounds.outWidth, bounds.outHeight); int fps = framesPerSecond(pictures.size());
+        MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, wh[0], wh[1]);
+        format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
+        format.setInteger(MediaFormat.KEY_BIT_RATE, wh[0] * wh[1] * 4); format.setInteger(MediaFormat.KEY_FRAME_RATE, fps); format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
+        if (android.os.Build.VERSION.SDK_INT >= 29) format.setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0);   // output in input order, so stamps can follow it
+        MediaCodec codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC);
+        MediaMuxer muxer = null; Surface input = null;
+        try {
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE);
+            input = codec.createInputSurface(); codec.start();
+            muxer = new MediaMuxer(out.getPath(), MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4);
+            Drain drain = new Drain(codec, muxer, fps);
+            Paint picture = new Paint(Paint.FILTER_BITMAP_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint();
+            text.setColor(Color.WHITE); text.setTextSize(wh[1] / 22f); shade.setColor(0x88000000);
+            for (int i = 0; i < pictures.size(); i++) {
+                if (cancelled.get()) throw new IOException("Cancelled");
+                Bitmap image = BitmapFactory.decodeFile(pictures.get(i).getPath());
+                Canvas canvas = input.lockHardwareCanvas();
+                try {
+                    canvas.drawColor(Color.BLACK);
+                    if (image != null) {
+                        float s = Math.min((float) wh[0] / image.getWidth(), (float) wh[1] / image.getHeight()), dw = image.getWidth() * s, dh = image.getHeight() * s;
+                        canvas.drawBitmap(image, null, new RectF((wh[0] - dw) / 2, (wh[1] - dh) / 2, (wh[0] + dw) / 2, (wh[1] + dh) / 2), picture);
+                    }
+                    String at = ChartView.elapsed(seconds(pictures.get(i)));
+                    float pad = wh[1] / 40f, tw = text.measureText(at);
+                    canvas.drawRect(pad, wh[1] - pad * 2 - text.getTextSize(), pad * 3 + tw, wh[1] - pad, shade);
+                    canvas.drawText(at, pad * 2, wh[1] - pad * 1.6f, text);
+                } finally { input.unlockCanvasAndPost(canvas); }
+                if (image != null) image.recycle();
+                drain.until(i + 1, 1000);
+                progress.at(i + 1, pictures.size());
+            }
+            codec.signalEndOfInputStream();
+            drain.until(Integer.MAX_VALUE, 5000);
+            if (drain.written == 0) throw new IOException("The phone's video encoder made no frames");
+        } finally {
+            try { codec.stop(); } catch (RuntimeException ignored) { }
+            codec.release(); if (input != null) input.release();
+            if (muxer != null) try { muxer.stop(); } catch (RuntimeException ignored) { } finally { muxer.release(); }
+        }
+    }
+    /** Seconds into the print, from the picture's name ("000060.jpg"). */
+    private static double seconds(File picture) { try { return Double.parseDouble(picture.getName().replace(".jpg", "")); } catch (NumberFormatException e) { return 0; } }
+
+    /** Moves encoded frames into the file, stamping them one frame apart. */
+    private static final class Drain {
+        final MediaCodec codec; final MediaMuxer muxer; final long frameUs; int track = -1, written; boolean ended;
+        final MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
+        Drain(MediaCodec codec, MediaMuxer muxer, int fps) { this.codec = codec; this.muxer = muxer; this.frameUs = 1_000_000L / fps; }
+        /** Writes frames until `count` are out (or the stream ends), waiting at most `waitMs` for each. */
+        void until(int count, long waitMs) {
+            long deadline = System.currentTimeMillis() + waitMs;
+            while (written < count && !ended && System.currentTimeMillis() < deadline) {
+                int index = codec.dequeueOutputBuffer(info, 10_000);
+                if (index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED) { track = muxer.addTrack(codec.getOutputFormat()); muxer.start(); continue; }
+                if (index < 0) continue;
+                ByteBuffer data = codec.getOutputBuffer(index);
+                boolean config = (info.flags & MediaCodec.BUFFER_FLAG_CODEC_CONFIG) != 0;
+                if (!config && info.size > 0 && track >= 0 && data != null) {
+                    info.presentationTimeUs = written * frameUs; data.position(info.offset); data.limit(info.offset + info.size);
+                    muxer.writeSampleData(track, data, info); written++; deadline = System.currentTimeMillis() + waitMs;
+                }
+                if ((info.flags & MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) ended = true;
+                codec.releaseOutputBuffer(index, false);
+            }
+        }
+    }
+}

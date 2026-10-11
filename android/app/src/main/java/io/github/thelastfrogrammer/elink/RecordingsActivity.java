@@ -18,7 +18,9 @@ import java.util.*;
 /** Recorded prints: a list, and per print a summary, charts, a data table and CSV export. */
 public final class RecordingsActivity extends Activity {
     public static final String EXTRA_META = "meta";
-    private static final int EXPORT = 1;
+    private static final int EXPORT = 1, VIDEO = 2;
+    /** The timelapse just made, waiting for a place to save it. */
+    private File madeVideo;
     private boolean dark;
     private int ink, muted, background, surface, grid;
     /** Validated categorical slots 1-3 (blue, orange, aqua), stepped per mode; see the dataviz reference palette. */
@@ -166,6 +168,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout card = card(); label(card, "Camera pictures", 15, ink, true);
         if (files.isEmpty()) { label(card, "None yet. Pictures are taken every " + recording.pictureMinutes + " min from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath.", 13, muted, false); return; }
         label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 ? " · every " + recording.pictureMinutes + " min" : "") + ". Tap one to see it larger.", 13, muted, false);
+        if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files)); }
         LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
         HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.addView(strip); card.addView(scroll);
         for (File file : files) {
@@ -181,6 +184,30 @@ public final class RecordingsActivity extends Activity {
             });
             strip.addView(cell);
         }
+    }
+    /** Turns the pictures into a short MP4 on the phone (about ten seconds), then asks where to save it. */
+    private void makeVideo(PrintRecorder.Recording recording, List<File> files) {
+        java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
+        TextView state = new TextView(this); state.setTextSize(15); state.setTextColor(ink); state.setPadding(dp(24), dp(16), dp(24), 0);
+        state.setText("Making the video… 0 of " + files.size() + " pictures"); A11y.polite(state);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Timelapse video").setView(state).setCancelable(false)
+            .setNegativeButton("Cancel", (d, w) -> cancelled.set(true)).show();
+        File folder = new File(getCacheDir(), "timelapse"); folder.mkdirs();
+        File[] old = folder.listFiles(); if (old != null) for (File f : old) f.delete();
+        File out = new File(folder, recording.csv.getName().replaceFirst("\\.csv$", "") + "-timelapse.mp4");
+        new Thread(() -> {
+            String failure = null;
+            try { TimelapseEncoder.encode(files, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video… " + done + " of " + total + " pictures"))); }
+            catch (Exception error) { failure = cancelled.get() ? "" : "The video could not be made on this phone (" + error.getClass().getSimpleName() + ")."; out.delete(); }
+            String problem = failure;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                dialog.dismiss();
+                if (problem != null) { if (!problem.isEmpty()) Toast.makeText(this, problem, Toast.LENGTH_LONG).show(); return; }
+                madeVideo = out;
+                startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, out.getName()), VIDEO);
+            });
+        }, "timelapse").start();
     }
     private static android.graphics.Bitmap decode(File file, int width) {
         android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
@@ -288,6 +315,16 @@ public final class RecordingsActivity extends Activity {
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == VIDEO) {
+            File video = madeVideo; madeVideo = null;
+            if (video == null || result != RESULT_OK || data == null || data.getData() == null) { if (video != null) video.delete(); return; }
+            try (InputStream input = new FileInputStream(video); OutputStream output = getContentResolver().openOutputStream(data.getData())) {
+                if (output == null) throw new IOException();
+                byte[] buffer = new byte[65536]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                Toast.makeText(this, "Timelapse saved.", Toast.LENGTH_SHORT).show();
+            } catch (IOException error) { Toast.makeText(this, "Saving failed. Check that you chose a place you can write to.", Toast.LENGTH_SHORT).show(); }
+            video.delete(); return;
+        }
         if (request != EXPORT || result != RESULT_OK || data == null || data.getData() == null || shown == null) return;
         Uri uri = data.getData();
         try (InputStream input = new FileInputStream(shown.csv); OutputStream output = getContentResolver().openOutputStream(uri)) {

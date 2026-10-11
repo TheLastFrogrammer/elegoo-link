@@ -709,6 +709,8 @@ public final class SliceActivity extends Activity {
         });
     }
 
+    /** The filament price set on History (0 = none). */
+    private double pricePerKg() { try { return Double.parseDouble(getSharedPreferences("workshop-settings", MODE_PRIVATE).getString("filamentPricePerKg", "0")); } catch (NumberFormatException none) { return 0; } }
     private void finished(List<NativeSlicer.Result> results, List<File> files, List<Integer> plates, List<String> names, long elapsedMs, String printer, String process,
                           List<String> filaments, List<String> colours, TrayPlan plan, List<double[]> grams) {
         busy = false; progress.setVisibility(View.GONE);
@@ -727,7 +729,8 @@ public final class SliceActivity extends Activity {
             if (results.size() > 1) text.append("Project plate ").append(plates.get(i)).append(": ");
             text.append(names.get(i)).append("\n");
             text.append("Estimated print time: ").append(duration(result.printSeconds)).append("\n");
-            text.append(String.format(Locale.getDefault(), "Filament: %.1f g (%.2f m)\n", result.filamentGrams, result.filamentMm / 1000.0));
+            String cost = PrintStats.cost(result.filamentGrams, pricePerKg());
+            text.append(String.format(Locale.getDefault(), "Filament: %.1f g (%.2f m)%s\n", result.filamentGrams, result.filamentMm / 1000.0, cost.isEmpty() ? "" : " · about " + cost));
             for (String warning : result.warnings) text.append("Warning: ").append(warning).append("\n");
             if (results.size() > 1) text.append("\n");
         }

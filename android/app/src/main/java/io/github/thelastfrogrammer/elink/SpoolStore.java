@@ -51,6 +51,14 @@ final class SpoolStore {
     private final List<Spool> spools = new ArrayList<>();
     /** The print started from this app whose use is still to be taken off: file, uses (slot, grams), last progress, seen printing. */
     private JSONObject pending;
+    /** Filament taken off by finished prints, newest last (at most USAGE_KEEP), for History's statistics. */
+    private final List<Usage> usage = new ArrayList<>();
+    static final int USAGE_KEEP = 2000;
+    static final class Usage {
+        final long at; final String file, type; final double grams;
+        Usage(long at, String file, String type, double grams) { this.at = at; this.file = file; this.type = type; this.grams = grams; }
+    }
+    synchronized List<Usage> usage() { return new ArrayList<>(usage); }
     SpoolStore(File file) { this.file = file; load(); }
 
     synchronized List<Spool> all() { List<Spool> copy = new ArrayList<>(); for (Spool s : spools) copy.add(copy(s)); return copy; }
@@ -156,8 +164,12 @@ final class SpoolStore {
         for (int i = 0; uses != null && i < uses.length(); i++) {
             JSONObject use = uses.optJSONObject(i); if (use == null) continue;
             double grams = use.optDouble("grams", 0) * Math.max(0, Math.min(1, share));
-            for (Spool s : spools) if (s.slot.equals(use.optString("slot"))) { s.left = Math.max(0, s.left - grams); s.updated = now; used += grams; }
+            for (Spool s : spools) if (s.slot.equals(use.optString("slot"))) {
+                s.left = Math.max(0, s.left - grams); s.updated = now; used += grams;
+                if (grams > 0) usage.add(new Usage(now, pending.optString("file"), s.type, grams));
+            }
         }
+        while (usage.size() > USAGE_KEEP) usage.remove(0);
         pending = null; save();
         return used <= 0 ? null : String.format(Locale.getDefault(), "About %.0f g of filament taken off the spools.", used);
     }
@@ -168,19 +180,22 @@ final class SpoolStore {
     private static JSONObject safe(Spool s) { try { return s.json(); } catch (Exception impossible) { return new JSONObject(); } }
 
     private void load() {
-        spools.clear(); pending = null;
+        spools.clear(); pending = null; usage.clear();
         try {
             if (!file.isFile()) return;
             JSONObject root = new JSONObject(new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8));
             JSONArray list = root.optJSONArray("spools");
             for (int i = 0; list != null && i < list.length(); i++) { JSONObject o = list.optJSONObject(i); if (o != null) spools.add(Spool.from(o)); }
             pending = root.optJSONObject("pending");
+            JSONArray used = root.optJSONArray("usage");
+            for (int i = 0; used != null && i < used.length(); i++) { JSONObject o = used.optJSONObject(i); if (o != null) usage.add(new Usage(o.optLong("at"), o.optString("file"), o.optString("type"), o.optDouble("grams", 0))); }
         } catch (Exception unreadable) { spools.clear(); pending = null; }
     }
     private void save() {
         try {
             JSONArray list = new JSONArray(); for (Spool s : spools) list.put(s.json());
-            JSONObject root = new JSONObject().put("spools", list); if (pending != null) root.put("pending", pending);
+            JSONArray used = new JSONArray(); for (Usage u : usage) used.put(new JSONObject().put("at", u.at).put("file", u.file).put("type", u.type).put("grams", u.grams));
+            JSONObject root = new JSONObject().put("spools", list).put("usage", used); if (pending != null) root.put("pending", pending);
             File parent = file.getParentFile(); if (parent != null) parent.mkdirs();
             File temp = new File(file.getPath() + ".tmp");
             try (FileOutputStream out = new FileOutputStream(temp)) { out.write(root.toString().getBytes(StandardCharsets.UTF_8)); }

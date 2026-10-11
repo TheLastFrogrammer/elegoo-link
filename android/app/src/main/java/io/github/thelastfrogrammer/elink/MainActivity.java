@@ -1012,7 +1012,7 @@ public final class MainActivity extends Activity {
         if (page == PRINT && before != PRINT) monitorCameraTried = false;
         if (page == FILES) { filesAutoAt = 0; main.post(this::autoLoadFiles); }
         if (page == PRINT) { traysAskedAt = 0; main.post(this::autoLoadTrays); }
-        if (page == HISTORY) { historyAutoAt = 0; main.post(this::autoLoadHistory); }
+        if (page == HISTORY) { historyAutoAt = 0; main.post(this::autoLoadHistory); refreshStats(); }
         for (int i = 0; i < TAB_COUNT; i++) {
             pages[i].setVisibility(i == page ? View.VISIBLE : View.GONE);
             int color = i == page ? TEAL : MUTED;
@@ -1190,6 +1190,9 @@ public final class MainActivity extends Activity {
     }
     /** History: what was printed (with Print again and timelapses), the app's own recordings, then the printer's storage. */
     private void buildHistory() {
+        LinearLayout stats = card("Your printing");
+        statsText = label(stats, "Counting…", 14, INK, false);
+        button(stats, "Filament price…", this::priceDialog);
         LinearLayout recordings = card("Print recordings");
         label(recordings, "Progress, layer, temperature and fan graphs, plus camera pictures, for each print the app watched.", 13, MUTED, false);
         button(recordings, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
@@ -1233,6 +1236,31 @@ public final class MainActivity extends Activity {
         });
         if (saved > 0) builder.setNeutralButton("Remove", (d, w) -> { settings.edit().remove("alertLayer").remove("alertLayerKey").apply(); render(); });
         builder.show();
+    }
+    // ------------------------------------------------------------------ Statistics (History)
+    private TextView statsText;
+    private long statsAt;
+    /** Counts from the recordings and spool use, read off the main thread (up to a hundred small files). */
+    private void refreshStats() {
+        if (statsText == null) return;
+        statsAt = System.currentTimeMillis();
+        File folder = RecordingsActivity.directory(this); SpoolStore store = spools(); double price = pricePerKg();
+        checks.execute(() -> {
+            List<String> lines = PrintStats.of(new PrintRecorder(folder).list(), store.usage(), System.currentTimeMillis()).lines(price);
+            main.post(() -> { if (!isDestroyed()) statsText.setText(String.join("\n", lines)); });
+        });
+    }
+    private double pricePerKg() { try { return Double.parseDouble(settings.getString("filamentPricePerKg", "0")); } catch (NumberFormatException none) { return 0; } }
+    private void priceDialog() {
+        LinearLayout body = dialogBody();
+        label(body, "What a kilogram of filament costs you, in your currency. Used for the cost on History and after slicing. Leave empty for none.", 14, INK, false);
+        EditText price = input(body, "Price per kg", false); price.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        double now = pricePerKg(); if (now > 0) price.setText(String.valueOf(now));
+        new AlertDialog.Builder(this).setTitle("Filament price").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            String text = price.getText().toString().trim().replace(',', '.');
+            try { double value = text.isEmpty() ? 0 : Double.parseDouble(text); if (value < 0 || value > 10_000) throw new NumberFormatException(); settings.edit().putString("filamentPricePerKg", String.valueOf(value)).apply(); refreshStats(); }
+            catch (NumberFormatException invalid) { message("Enter the price as a number, for example 22.50."); }
+        }).show();
     }
     private SpoolStore spools() { return SpoolStore.at(new File(getFilesDir(), "spools.json")); }
     /** Emergency stop: asks first, and is sent once per confirmation like every other printer command. */

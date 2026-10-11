@@ -62,6 +62,8 @@ final class FeatureIndex {
         new Feature("history", "Print history and Print again", "history past prints reprint print again details", HISTORY, "Print history", Prepare.NONE, false),
         new Feature("timelapse", "Timelapse videos", "timelapse video recording movie", HISTORY, "Print history", Prepare.NONE, false),
         new Feature("recordings", "Print recordings and charts", "recordings charts graphs log temperature progress csv pictures snapshots", HISTORY, "Print recordings", Prepare.NONE, true),
+        new Feature("stats", "Printing statistics", "statistics stats hours success rate how much filament used total summary", HISTORY, "Your printing", Prepare.NONE, false),
+        new Feature("price", "Filament price and print cost", "cost price money spend filament per kg euro dollar", HISTORY, "Filament price", Prepare.NONE, true),
         new Feature("storage", "Printer storage space", "storage space disk capacity free full", HISTORY, "Refresh storage", Prepare.NONE, false),
         // Settings
         new Feature("connect", "Connect on Wi-Fi", "connect local lan wifi ip access code printer address", SETTINGS, "Printer connection", Prepare.SETTINGS_LOCAL, false),
