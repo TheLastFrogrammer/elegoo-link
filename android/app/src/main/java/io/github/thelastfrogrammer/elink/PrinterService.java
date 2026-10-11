@@ -84,6 +84,7 @@ public final class PrinterService extends Service {
         public void run() { if (destroyed) return; checkRoute(); if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
     };
     @Override public void onCreate() {
+        Crashes.install(this);   // the service can run without any screen open
         library = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
         super.onCreate();
         SliceStore.sweepCache(this);

@@ -149,7 +149,7 @@ public final class SliceActivity extends Activity {
         setContentView(root);
         label(content, "Slice a model", 22, ink, true);
         label(content, "Slices on this phone with ElegooSlicer and Elegoo presets.", 13, muted, false);
-        Diagnostics.init(getFilesDir());
+        Diagnostics.init(getFilesDir()); Crashes.install(this);
         current = this;
         if (!NativeSlicer.available(this)) {
             LinearLayout card = card("Slicer not included");

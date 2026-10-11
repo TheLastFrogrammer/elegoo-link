@@ -111,7 +111,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         ink = dark ? 0xffe6eef1 : 0xff17252c; muted = dark ? 0xff9fb3bb : 0xff5a6d76; teal = dark ? 0xff5fd4c4 : 0xff00796b;
         background = dark ? 0xff0e1417 : 0xfff2f5f6; surface = dark ? 0xff182227 : Color.WHITE; buttonColor = dark ? 0xff21343a : 0xffe2efed;
         library = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
-        Diagnostics.init(getFilesDir());
+        Diagnostics.init(getFilesDir()); Crashes.install(this);
         followMode = getIntent().getBooleanExtra(EXTRA_FOLLOW, false);
         alignOnly = followMode && getIntent().getBooleanExtra(EXTRA_ALIGN, false);
         following = followMode;

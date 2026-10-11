@@ -163,7 +163,9 @@ public final class MainActivity extends Activity {
         setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
         super.onCreate(saved);
         if (saved != null) { pendingExportHash = saved.getString("exportHash", ""); String uri = saved.getString("exportUri", ""); if (!uri.isEmpty()) pendingExportUri = android.net.Uri.parse(uri); }
-        Diagnostics.init(getFilesDir());
+        Diagnostics.init(getFilesDir()); Crashes.install(this);
+        // After a crash: say so once, and where the details are (the record holds no messages, addresses or codes).
+        if (settings.getLong(Crashes.SEEN_KEY, 0) > 0) { settings.edit().remove(Crashes.SEEN_KEY).apply(); pendingFeedback = "Link Workshop closed unexpectedly last time. Settings › Share diagnostics… has the details, if you want to send them."; }
         credentials = new CredentialStore(this);
         profiles = new ProfileStore(this);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND);

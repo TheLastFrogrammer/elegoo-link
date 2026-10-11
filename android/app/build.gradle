@@ -6,8 +6,8 @@ android {
         applicationId 'io.github.thelastfrogrammer.elink'
         minSdk 26
         targetSdk 36
-        versionCode 82
-        versionName '0.29.5'
+        versionCode 83
+        versionName '0.30.0'
         // Agora ships native code for four CPU types; keep only 64-bit ARM (modern phones) to limit APK size.
         ndk { abiFilters 'arm64-v8a' }
     }
@@ -43,6 +43,32 @@ android {
         if (!slicerLib.isEmpty()) jvmArgs "-Djava.library.path=${slicerLib}"
     } } }
 }
+// The slicer engine and its presets: built from slicer/ (slicer/scripts) and pinned in android/engine/ (pin-engine.sh), so every
+// build, CI and releases included, ships the same engine. An engine installed locally by install-into-app.sh takes precedence.
+def engineDir = rootProject.file('engine')
+def engineZip = new File(engineDir, 'engine-arm64-v8a.zip')
+def engineLib = file('src/main/jniLibs/arm64-v8a/liblinkslicer.so'), engineVersion = file('src/main/assets/slicer/VERSION')
+tasks.register('unpackEngine') {
+    onlyIf { engineZip.isFile() && !(engineLib.isFile() && engineVersion.isFile()) }
+    doLast {
+        def expected = new File(engineDir, 'engine-arm64-v8a.sha256').text.trim().split(/\s+/)[0]
+        def digest = java.security.MessageDigest.getInstance('SHA-256')
+        engineZip.withInputStream { stream -> byte[] buffer = new byte[1 << 16]; int n; while ((n = stream.read(buffer)) > 0) digest.update(buffer, 0, n) }
+        def actual = digest.digest().encodeHex().toString()
+        if (actual != expected) throw new GradleException("The pinned engine does not match its checksum (${actual}); run slicer/scripts/pin-engine.sh again")
+        def target = file('src/main').canonicalFile
+        new java.util.zip.ZipFile(engineZip).withCloseable { zip ->
+            zip.entries().each { entry ->
+                def out = new File(target, entry.name).canonicalFile
+                if (!out.path.startsWith(target.path + File.separator)) throw new GradleException("Unexpected path in the pinned engine: ${entry.name}")
+                if (entry.directory) { out.mkdirs(); return }
+                out.parentFile.mkdirs(); zip.getInputStream(entry).withCloseable { input -> out.withOutputStream { it << input } }
+            }
+        }
+        logger.lifecycle("Unpacked the pinned slicer engine ${expected.take(12)} into src/main")
+    }
+}
+tasks.named('preBuild') { dependsOn 'unpackEngine' }
 dependencies {
     implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
     implementation 'androidx.webkit:webkit:1.12.1'

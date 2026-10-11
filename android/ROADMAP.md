@@ -32,8 +32,10 @@ Plans, in order. Each round ends with tests, a build and a field check on the ph
    for part of a model); then support and seam painting. Measure slicing speed and memory on the phone.
 4. **Live toolpath.** Line up from a printed test shape (tap its corners) to set the plate margins without guessing; keep a line-up
    per saved printer.
-5. **Engineering.** Split MainActivity (over 2,000 lines) into one controller per tab, behind the existing tests; a CI build that
-   produces the APK on each push; signed release builds.
+5. **Engineering.** Split MainActivity (over 2,000 lines) into one controller per tab, behind the existing tests; move the UI text
+   into string resources (translations, and wording changes without touching code). Done: the slicer engine is pinned in
+   android/engine/ (slicer/scripts/pin-engine.sh), so CI and release builds ship it; CI runs on every branch push and fails when
+   the APK lacks the engine or the pin is older than the engine source; crashes leave a secret-free record in the diagnostics.
 6. Find out why the printer refused a cloud-mode download on port 80 (Elegoo's own cloud page uses the same request).
 7. Other printer models (the Centauri Carbon 1 uses a different protocol).
 
