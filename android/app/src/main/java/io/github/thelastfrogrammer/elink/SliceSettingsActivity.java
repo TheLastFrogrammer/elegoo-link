@@ -137,7 +137,7 @@ public final class SliceSettingsActivity extends Activity {
         if (objectName != null && !objectName.isEmpty()) objectLabel = objectName;
         content = object != null ? ui.page("Settings for " + objectLabel,
                 "Only " + objectLabel + " and its copies use these changes; the other models keep the print settings.")
-            : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament on top of its filament profile. \u201cPrinter's value\u201d means the printer preset decides.")
+            : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament on top of its filament profile. \u201cPrinter\u2019s value\u201d means the printer preset decides.")
             : ui.page("Print settings", "Changes apply to this slice on top of the print profile. The print profile's value is shown under each setting.");
         if (saved != null && saved.getStringArrayList(EXPANDED) != null) expanded = new HashSet<>(saved.getStringArrayList(EXPANDED));
         try {
@@ -153,7 +153,7 @@ public final class SliceSettingsActivity extends Activity {
 
         LinearLayout top = ui.card(content, null);
         summary = ui.label(top, "", 14, ui.ink, false);
-        search = ui.input(top, "Find a setting");
+        search = ui.input(top, "Find a setting"); search.setContentDescription("Find a setting");
         search.addTextChangedListener(new TextWatcher() {
             public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
             public void onTextChanged(CharSequence s, int a, int b, int c) { filter(); }
@@ -166,7 +166,7 @@ public final class SliceSettingsActivity extends Activity {
         changedOnly.setOnCheckedChangeListener((v, checked) -> filter());
         LinearLayout buttons = ui.row(top);
         ui.rowButton(buttons, "Saved sets…", this::chooseSaved, false);
-        ui.rowButton(buttons, "Save these…", this::saveSet, false);
+        ui.rowButton(buttons, "Save changes…", this::saveSet, false);
         ui.button(top, object != null ? "Reset all to the print settings" : slot >= 0 ? "Reset all to the filament profile" : "Reset all to the print profile", () -> { overrides.clear(); load(); }, false);
         list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); content.addView(list);
         LinearLayout done = ui.card(content, null);
@@ -325,7 +325,7 @@ public final class SliceSettingsActivity extends Activity {
         TextView reset = new TextView(this); reset.setText("Reset"); reset.setTextSize(13); reset.setTextColor(ui.teal);
         reset.setTypeface(Typeface.DEFAULT, Typeface.BOLD); reset.setMinHeight(ui.dp(48)); reset.setMinWidth(ui.dp(48)); A11y.button(reset); reset.setGravity(Gravity.CENTER_VERTICAL | Gravity.END);
         reset.setPadding(ui.dp(10), 0, 0, 0); reset.setVisibility(View.GONE);
-        reset.setContentDescription("Reset " + label + " to the " + (object != null ? "print settings'" : slot >= 0 ? "filament profile's" : "print profile's") + " value");
+        reset.setContentDescription("Reset " + label + " to the " + (object != null ? "print settings" : slot >= 0 ? "filament profile" : "print profile") + " value");
         reset.setOnClickListener(v -> { overrides.remove(key); build(); });
         header.addView(reset, new LinearLayout.LayoutParams(-2, -2));
         TextView note = ui.label(row, "", 12, ui.muted, false); note.setPadding(0, 0, 0, ui.dp(2));
@@ -358,7 +358,7 @@ public final class SliceSettingsActivity extends Activity {
                 break;
             }
             default: {
-                EditText input = ui.input(row, "nil".equals(preset) ? "Printer's value" : preset); input.setText("nil".equals(value) ? "" : value);
+                EditText input = ui.input(row, "nil".equals(preset) ? "Printer’s value" : preset); input.setText("nil".equals(value) ? "" : value);
                 row.removeView(input); row.addView(input, 1); A11y.labelFor(title, input);
                 if (type.equals("int")) input.setInputType(InputType.TYPE_CLASS_NUMBER);
                 else if (type.equals("float")) input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
@@ -383,7 +383,7 @@ public final class SliceSettingsActivity extends Activity {
 
     /** A readable preset value: enum labels, On/Off, units. */
     private static String display(JSONObject definition, String value) {
-        if ("nil".equals(value)) return "printer's value";
+        if ("nil".equals(value)) return "printer’s value";
         switch (definition.optString("type")) {
             case "bool": return "1".equals(value) ? "On" : "Off";
             case "enum": {
@@ -506,7 +506,7 @@ public final class SliceSettingsActivity extends Activity {
         if (overrides.isEmpty()) { Toast.makeText(this, "Change a setting first.", Toast.LENGTH_SHORT).show(); return; }
         EditText name = new EditText(this); name.setSingleLine(true); name.setHint("Name, e.g. Strong parts");
         LinearLayout body = new LinearLayout(this); body.setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0); body.addView(name, new LinearLayout.LayoutParams(-1, -2));
-        new AlertDialog.Builder(this).setTitle("Save these changes").setMessage("Saved on this phone. They can be used with any print profile.").setView(body)
+        new AlertDialog.Builder(this).setTitle("Save changes").setMessage("Saved on this phone. They can be used with any print profile.").setView(body)
             .setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
                 String title = name.getText().toString().trim();
                 if (title.isEmpty()) return;
@@ -518,12 +518,12 @@ public final class SliceSettingsActivity extends Activity {
     private void chooseSaved() {
         List<String> names = new ArrayList<>(store().getAll().keySet());
         Collections.sort(names, String.CASE_INSENSITIVE_ORDER);
-        if (names.isEmpty()) { Toast.makeText(this, "No saved sets yet. Change settings, then Save these.", Toast.LENGTH_LONG).show(); return; }
-        new AlertDialog.Builder(this).setTitle("Saved settings").setItems(names.toArray(new String[0]), (d, which) -> {
+        if (names.isEmpty()) { Toast.makeText(this, "No saved sets yet. Change settings, then tap Save changes.", Toast.LENGTH_LONG).show(); return; }
+        new AlertDialog.Builder(this).setTitle("Saved sets").setItems(names.toArray(new String[0]), (d, which) -> {
             String name = names.get(which);
             new AlertDialog.Builder(this).setTitle(name).setMessage(describeSet(store().getString(name, "{}")))
-                .setNegativeButton("Delete", (d2, w2) -> store().edit().remove(name).apply())
-                .setNeutralButton("Cancel", null)
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Delete", (d2, w2) -> store().edit().remove(name).apply())
                 .setPositiveButton("Use", (d2, w2) -> {
                     try {
                         JSONObject set = new JSONObject(store().getString(name, "{}"));
