@@ -14,7 +14,10 @@ import java.util.*;
 final class ChartView extends View {
     static final class Series {
         final String name; final int color; final double[] values; final boolean dashed;
+        /** Optional colour per point: the line from a point to the next takes that point's colour (for example the filament printing then). */
+        int[] colours;
         Series(String name, int color, double[] values, boolean dashed) { this.name = name; this.color = color; this.values = values; this.dashed = dashed; }
+        Series coloured(int[] perPoint) { colours = perPoint; return this; }
     }
 
     private final float density;
@@ -128,7 +131,18 @@ final class ChartView extends View {
                 float x = (float) (left + (seconds[i] - x0) / (x1 - x0) * (right - left)), y = (float) (bottom - (v - lo) / (hi - lo) * (bottom - top));
                 if (open) path.lineTo(x, y); else { path.moveTo(x, y); open = true; }
             }
-            canvas.drawPath(path, line);
+            if (s.colours == null) { canvas.drawPath(path, line); continue; }
+            // Coloured per point: a faint outline first, so a colour close to the background (black on dark) still shows.
+            line.setColor((muted & 0x00ffffff) | 0x99000000); line.setStrokeWidth(4.5f * density); canvas.drawPath(path, line);
+            line.setStrokeWidth(2.5f * density);
+            float px = 0, py = 0; boolean have = false;
+            for (int i = 0; i < seconds.length && i < s.values.length; i++) {
+                double v = s.values[i];
+                if (Double.isNaN(v)) { have = false; continue; }
+                float x = (float) (left + (seconds[i] - x0) / (x1 - x0) * (right - left)), y = (float) (bottom - (v - lo) / (hi - lo) * (bottom - top));
+                if (have) { line.setColor(i - 1 < s.colours.length ? s.colours[i - 1] : s.color); canvas.drawLine(px, py, x, y, line); }
+                px = x; py = y; have = true;
+            }
         }
         line.setPathEffect(null);
         // Direct end labels for measured series, nudged apart so they never overlap; text stays in ink.

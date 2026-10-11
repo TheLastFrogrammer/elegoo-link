@@ -26,6 +26,9 @@ public final class GcodeToolpath {
     float[] x0 = new float[1024], y0 = new float[1024], z0 = new float[1024], x1 = new float[1024], y1 = new float[1024], z1 = new float[1024];
     float[] width = new float[1024], height = new float[1024];
     byte[] type = new byte[1024];
+    /** The tool (filament, 0-based: T0, T1…) each segment was printed with. */
+    byte[] tool = new byte[1024];
+    private int currentTool;
     // Travel moves (for display only).
     public int travelCount;
     float[] travel = new float[6 * 1024];
@@ -100,7 +103,8 @@ public final class GcodeToolpath {
                 }
                 x = nx; y = ny; z = nz; e = ne;
                 if (path.truncated) break;
-            } else if (kind == 'G' && number == 90) { absolute = true; absoluteE = true; }
+            } else if (kind == 'T' && number >= 0 && number < 64) { path.currentTool = number; }
+            else if (kind == 'G' && number == 90) { absolute = true; absoluteE = true; }
             else if (kind == 'G' && number == 91) { absolute = false; absoluteE = false; }
             else if (kind == 'M' && number == 82) absoluteE = true;
             else if (kind == 'M' && number == 83) absoluteE = false;
@@ -134,7 +138,7 @@ public final class GcodeToolpath {
         if (count == x0.length) grow();
         x0[count] = (float) ax; y0[count] = (float) ay; z0[count] = (float) bz; // extrusions are drawn at the layer they end on
         x1[count] = (float) bx; y1[count] = (float) by; z1[count] = (float) bz;
-        width[count] = w; height[count] = h; type[count] = (byte) feature; count++;
+        width[count] = w; height[count] = h; type[count] = (byte) feature; tool[count] = (byte) currentTool; count++;
         minX = Math.min(minX, (float) Math.min(ax, bx)); maxX = Math.max(maxX, (float) Math.max(ax, bx));
         minY = Math.min(minY, (float) Math.min(ay, by)); maxY = Math.max(maxY, (float) Math.max(ay, by));
         maxZ = Math.max(maxZ, (float) bz);
@@ -169,7 +173,7 @@ public final class GcodeToolpath {
         int size = x0.length * 2;
         x0 = Arrays.copyOf(x0, size); y0 = Arrays.copyOf(y0, size); z0 = Arrays.copyOf(z0, size);
         x1 = Arrays.copyOf(x1, size); y1 = Arrays.copyOf(y1, size); z1 = Arrays.copyOf(z1, size);
-        width = Arrays.copyOf(width, size); height = Arrays.copyOf(height, size); type = Arrays.copyOf(type, size);
+        width = Arrays.copyOf(width, size); height = Arrays.copyOf(height, size); type = Arrays.copyOf(type, size); tool = Arrays.copyOf(tool, size);
     }
 
     static int featureOf(String name) {
@@ -219,6 +223,24 @@ public final class GcodeToolpath {
             for (int i = layerStart(layer); i < layerEnd(layer); i++)
                 volume[layer] += Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i];
         return volume;
+    }
+    /** Material per layer and tool: [layer][tool] in mm³, for tools 0…tools-1 (others are left out). */
+    public double[][] layerToolVolumes(int tools) {
+        double[][] volume = new double[layerCount][Math.max(1, tools)];
+        for (int layer = 0; layer < layerCount; layer++)
+            for (int i = layerStart(layer); i < layerEnd(layer); i++)
+                if (tool[i] < volume[layer].length) volume[layer][tool[i]] += Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i];
+        return volume;
+    }
+    /** The tool that laid down most material in each layer (-1 for a layer with none). */
+    public int[] layerMainTool() {
+        int tools = 1; for (int i = 0; i < count; i++) tools = Math.max(tools, tool[i] + 1);
+        double[][] volume = layerToolVolumes(tools); int[] main = new int[layerCount];
+        for (int layer = 0; layer < layerCount; layer++) {
+            main[layer] = -1; double most = 0;
+            for (int t = 0; t < tools; t++) if (volume[layer][t] > most) { most = volume[layer][t]; main[layer] = t; }
+        }
+        return main;
     }
     public double[] featureLengths() {
         double[] lengths = new double[FEATURES.length];

@@ -263,18 +263,51 @@ public final class RecordingsActivity extends Activity {
         File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
         if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download it from the Files tab, or slice it here, to see material per layer and per colour."); return; }
         new Thread(() -> {
-            double[] volumes = null; SlicedMaterials materials = null;
-            try { volumes = GcodeToolpath.read(file).layerVolumes(); } catch (Exception ignored) { }
+            double[] volumes = null; int[] mainTools = null; SlicedMaterials materials = null;
+            try { GcodeToolpath path = GcodeToolpath.read(file); volumes = path.layerVolumes(); mainTools = path.layerMainTool(); } catch (Exception ignored) { }
             try { materials = GcodeInspector.inspect(file).materials; } catch (Exception ignored) { }
-            double[] perLayer = volumes; SlicedMaterials used = materials;
+            double[] perLayer = volumes; int[] layerTool = mainTools; SlicedMaterials used = materials;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 note.setText(perLayer == null ? "The print's file could not be read." : "Material laid down in the layer being printed at each moment (mm³), from the sliced file.");
                 if (perLayer != null) {
                     double[] layer = column(rows, "layer"), values = new double[layer.length];
                     for (int i = 0; i < layer.length; i++) { int l = (int) layer[i] - 1; values[i] = Double.isNaN(layer[i]) || l < 0 || l >= perLayer.length ? Double.NaN : perLayer[l]; }
+                    // Each stretch of the line in the colour of the filament that laid down most of that layer (from the file's own colours).
+                    int[] filamentColour = new int[16]; Arrays.fill(filamentColour, blue);
+                    if (used != null) for (SlicedMaterials.Entry entry : used.entries) { String hex = TrayPlan.colour(entry.color); if (hex != null && entry.index < 16) filamentColour[entry.index] = Color.parseColor(hex); }
+                    int[] pointColours = new int[layer.length]; List<int[]> blocks = new ArrayList<>();   // {first sample, tool}
+                    for (int i = 0; i < layer.length; i++) {
+                        int l = (int) layer[i] - 1, tool = Double.isNaN(layer[i]) || layerTool == null || l < 0 || l >= layerTool.length ? -1 : layerTool[l];
+                        pointColours[i] = tool >= 0 && tool < 16 ? filamentColour[tool] : blue;
+                        if (tool >= 0 && (blocks.isEmpty() || blocks.get(blocks.size() - 1)[1] != tool)) blocks.add(new int[] {i, tool});
+                    }
+                    boolean several = false; for (int[] b : blocks) several |= b[1] != blocks.get(0)[1];
+                    if (several) {
+                        // A band of the filament printing at each moment, then the changes in words.
+                        View band = new View(this) {
+                            @Override protected void onDraw(android.graphics.Canvas canvas) {
+                                android.graphics.Paint paint = new android.graphics.Paint(); double end = t.length == 0 ? 1 : Math.max(1, t[t.length - 1]);
+                                for (int i = 0; i + 1 < t.length; i++) {
+                                    paint.setColor(pointColours[i]);
+                                    canvas.drawRect((float) (t[i] / end * getWidth()), 0, (float) (t[i + 1] / end * getWidth()) + 1, getHeight(), paint);
+                                }
+                                paint.setStyle(android.graphics.Paint.Style.STROKE); paint.setColor((muted & 0x00ffffff) | 0x99000000); paint.setStrokeWidth(dp(1));
+                                canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+                            }
+                        };
+                        List<String> words = new ArrayList<>();
+                        for (int[] b : blocks) {
+                            String hex = String.format(Locale.ROOT, "#%06X", filamentColour[Math.min(15, b[1])] & 0xffffff), name = WorkshopUi.colourName(hex);
+                            words.add("From " + ChartView.elapsed(t[b[0]]) + ": filament " + (b[1] + 1) + (name == null ? "" : " (" + name + ")"));
+                        }
+                        label(chartBox, "Filament printing at each moment (most of each layer), from the sliced file.", 13, muted, false);
+                        band.setContentDescription("Filament over time: " + String.join("; ", words));
+                        LinearLayout.LayoutParams bandLayout = new LinearLayout.LayoutParams(-1, dp(24)); bandLayout.bottomMargin = dp(4); chartBox.addView(band, bandLayout);
+                        label(chartBox, String.join("\n", words), 12, muted, false);
+                    }
                     ChartView view = new ChartView(this, ink, muted, grid, surface);
-                    view.set("Material per layer", " mm³", t, Collections.singletonList(new ChartView.Series("Per layer", blue, values, false)), 0, Double.NaN);
+                    view.set("Material per layer", " mm³", t, Collections.singletonList(new ChartView.Series("Per layer", blue, values, false).coloured(pointColours)), 0, Double.NaN);
                     if (shown != null && shown.start > 0) view.clock(shown.start);
                     chartBox.addView(view, new LinearLayout.LayoutParams(-1, dp(220)));
                 }

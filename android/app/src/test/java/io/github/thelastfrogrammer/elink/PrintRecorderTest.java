@@ -116,4 +116,13 @@ public class PrintRecorderTest {
         double[] v = path.layerVolumes();
         assertEquals(2, v.length); assertEquals(10 * 0.4 * 0.2, v[0], 1e-6); assertEquals(20 * 0.4 * 0.2, v[1], 1e-6);
     }
+
+    /** Which filament each layer mostly used, from the tool changes (T0, T1) in the file: the colours of the material chart. */
+    @Test public void eachLayersMainFilamentComesFromTheToolChanges() throws Exception {
+        String gcode = ";LAYER_CHANGE\n;Z:0.2\nG1 X0 Y0 Z0.2 F600\nT0\nG1 X10 Y0 E1\nT1\nG1 X12 Y0 E2\n;LAYER_CHANGE\n;Z:0.4\nG1 Z0.4\nG1 X12 Y20 E3\nT0\nG1 X13 Y20 E4\n";
+        GcodeToolpath path = GcodeToolpath.read(new java.io.ByteArrayInputStream(gcode.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertArrayEquals(new int[] {0, 1}, path.layerMainTool());
+        double[][] v = path.layerToolVolumes(2);
+        assertTrue(v[0][0] > v[0][1]); assertTrue(v[0][1] > 0); assertTrue(v[1][1] > v[1][0]);
+    }
 }
