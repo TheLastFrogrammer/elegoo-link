@@ -232,6 +232,33 @@ public final class GcodeToolpath {
                 if (tool[i] < volume[layer].length) volume[layer][tool[i]] += Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i];
         return volume;
     }
+    /** How many tools (filaments) the file prints with: the highest T number used, plus one. */
+    public int toolCount() { int tools = 1; for (int i = 0; i < count; i++) tools = Math.max(tools, tool[i] + 1); return tools; }
+    /**
+     * Material laid down per tool (mm³) once the print is `fractions[i]` of the way through its material (0–1), for each
+     * fraction: how far a print has come, by progress, mapped onto the file's own extrusions in order.
+     */
+    public double[][] toolVolumesAt(double[] fractions, int tools) {
+        double[] segment = new double[count]; double total = 0;
+        for (int i = 0; i < count; i++) { segment[i] = Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i]; total += segment[i]; }
+        Integer[] order = new Integer[fractions.length]; for (int i = 0; i < order.length; i++) order[i] = i;
+        Arrays.sort(order, (a, b) -> Double.compare(Double.isNaN(fractions[a]) ? -1 : fractions[a], Double.isNaN(fractions[b]) ? -1 : fractions[b]));
+        double[][] out = new double[fractions.length][Math.max(1, tools)];
+        double[] running = new double[Math.max(1, tools)]; double sum = 0; int at = 0;
+        for (int k : order) {
+            if (Double.isNaN(fractions[k])) { Arrays.fill(out[k], Double.NaN); continue; }
+            double goal = Math.max(0, Math.min(1, fractions[k])) * total;
+            while (at < count && sum + segment[at] <= goal) { sum += segment[at]; if (tool[at] < running.length) running[tool[at]] += segment[at]; at++; }
+            out[k] = running.clone();
+        }
+        return out;
+    }
+    /** Material per tool over the whole file (mm³). */
+    public double[] toolVolumes(int tools) {
+        double[] out = new double[Math.max(1, tools)];
+        for (int i = 0; i < count; i++) if (tool[i] < out.length) out[tool[i]] += Math.hypot(Math.hypot(x1[i] - x0[i], y1[i] - y0[i]), z1[i] - z0[i]) * width[i] * height[i];
+        return out;
+    }
     /** The tool that laid down most material in each layer (-1 for a layer with none). */
     public int[] layerMainTool() {
         int tools = 1; for (int i = 0; i < count; i++) tools = Math.max(tools, tool[i] + 1);

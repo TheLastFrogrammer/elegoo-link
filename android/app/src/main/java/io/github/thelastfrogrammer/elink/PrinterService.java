@@ -1043,6 +1043,30 @@ public final class PrinterService extends Service {
         android.graphics.Bitmap compact = small.copy(android.graphics.Bitmap.Config.RGB_565, false);
         return compact != null ? compact : small;
     }
+    /** The progress notification's picture: a fresh frame every 2 minutes on the local connection, else the print's newest recording picture. */
+    private volatile android.graphics.Bitmap progressPicture;
+    private String progressPictureKey = "";
+    private long progressGrabAt;
+    private android.graphics.Bitmap progressPicture() {
+        long now = SystemClock.elapsedRealtime();
+        if (ready() && (progressGrabAt == 0 || now - progressGrabAt > 120_000)) {
+            progressGrabAt = now;
+            grabFrame(image -> { progressPicture = scaled(image, 640); progressPictureKey = "live"; updateNotification(true); });
+        }
+        if (!"live".equals(progressPictureKey) && recorder != null) {
+            PrintRecorder.Recording current = recorder.current();
+            List<java.io.File> pictures = current == null ? null : PrintRecorder.pictures(current);
+            if (pictures != null && !pictures.isEmpty()) {
+                java.io.File newest = pictures.get(pictures.size() - 1);
+                if (!newest.getPath().equals(progressPictureKey)) {
+                    android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inSampleSize = 2;
+                    android.graphics.Bitmap read = android.graphics.BitmapFactory.decodeFile(newest.getPath(), options);
+                    if (read != null) { progressPicture = scaled(read, 640); progressPictureKey = newest.getPath(); }
+                }
+            }
+        }
+        return progressPicture;
+    }
     private interface Frame { void take(android.graphics.Bitmap image); }
     /** One frame from the printer's own camera stream on this network (or the home VPN); the stream closes at once, or after 15 s. */
     private void grabFrame(Frame done) {
@@ -1079,6 +1103,10 @@ public final class PrinterService extends Service {
         Notification.Builder builder = new Notification.Builder(this, CHANNEL).setSmallIcon(R.drawable.ic_launcher).setContentTitle("Link Workshop · " + title)
             .setContentText(text).setContentIntent(view).setOngoing(true).setOnlyAlertOnce(true);
         if (printingNow && runningMachine.has("progress")) builder.setProgress(100, Math.max(0, Math.min(100, runningMachine.optInt("progress"))), false);
+        // A look at the print: a camera picture (expand the notification to see it larger).
+        android.graphics.Bitmap look = printingNow && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alertPictures", true) ? progressPicture() : null;
+        if (!printingNow) { progressPicture = null; progressPictureKey = ""; }
+        if (look != null) builder.setLargeIcon(scaled(look, 128)).setStyle(new Notification.BigPictureStyle().bigPicture(look).setSummaryText(text));
         // While printing: shortcuts that only open the app at a feature; nothing here sends the printer a command.
         JSONObject shown = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
         JSONObject machine = shown == null ? null : shown.optJSONObject("machine_status");

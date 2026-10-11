@@ -263,33 +263,53 @@ public final class RecordingsActivity extends Activity {
         File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
         if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download it from the Files tab, or slice it here, to see material per layer and per colour."); return; }
         new Thread(() -> {
-            double[] volumes = null; int[] mainTools = null; SlicedMaterials materials = null;
-            try { GcodeToolpath path = GcodeToolpath.read(file); volumes = path.layerVolumes(); mainTools = path.layerMainTool(); } catch (Exception ignored) { }
+            double[] volumes = null; double[][] laidDown = null; double[] perTool = null; SlicedMaterials materials = null;
+            double[] progress = column(rows, "progress"), fractions = new double[progress.length];
+            for (int i = 0; i < progress.length; i++) fractions[i] = Double.isNaN(progress[i]) ? Double.NaN : progress[i] / 100.0;
+            try {
+                GcodeToolpath path = GcodeToolpath.read(file); volumes = path.layerVolumes();
+                int tools = path.toolCount(); laidDown = path.toolVolumesAt(fractions, tools); perTool = path.toolVolumes(tools);
+            } catch (Exception ignored) { }
             try { materials = GcodeInspector.inspect(file).materials; } catch (Exception ignored) { }
-            double[] perLayer = volumes; int[] layerTool = mainTools; SlicedMaterials used = materials;
+            double[] perLayer = volumes; double[][] cumulative = laidDown; double[] toolTotals = perTool; SlicedMaterials used = materials;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
-                note.setText(perLayer == null ? "The print's file could not be read." : "Material laid down in the layer being printed at each moment (mm³), from the sliced file.");
-                if (perLayer != null) {
-                    double[] layer = column(rows, "layer"), values = new double[layer.length];
-                    for (int i = 0; i < layer.length; i++) { int l = (int) layer[i] - 1; values[i] = Double.isNaN(layer[i]) || l < 0 || l >= perLayer.length ? Double.NaN : perLayer[l]; }
-                    // Each stretch of the line in the colour of the filament that laid down most of that layer (from the file's own colours).
-                    int[] filamentColour = new int[16]; Arrays.fill(filamentColour, blue);
-                    if (used != null) for (SlicedMaterials.Entry entry : used.entries) { String hex = TrayPlan.colour(entry.color); if (hex != null && entry.index < 16) filamentColour[entry.index] = Color.parseColor(hex); }
-                    int[] pointColours = new int[layer.length]; List<int[]> blocks = new ArrayList<>();   // {first sample, tool}
-                    for (int i = 0; i < layer.length; i++) {
-                        int l = (int) layer[i] - 1, tool = Double.isNaN(layer[i]) || layerTool == null || l < 0 || l >= layerTool.length ? -1 : layerTool[l];
-                        pointColours[i] = tool >= 0 && tool < 16 ? filamentColour[tool] : blue;
-                        if (tool >= 0 && (blocks.isEmpty() || blocks.get(blocks.size() - 1)[1] != tool)) blocks.add(new int[] {i, tool});
+                note.setText(perLayer == null || cumulative == null ? "The print's file could not be read."
+                    : "How fast each filament was laid down (grams per hour), from the print's progress and the sliced file.");
+                if (perLayer != null && cumulative != null && toolTotals != null) {
+                    int tools = toolTotals.length;
+                    int[] filamentColour = new int[tools]; Arrays.fill(filamentColour, blue);
+                    double[] gramsPerMm3 = new double[tools]; Arrays.fill(gramsPerMm3, 0.00124);   // PLA's density when the file does not say
+                    String[] names = new String[tools];
+                    for (int k = 0; k < tools; k++) names[k] = "Filament " + (k + 1);
+                    if (used != null) for (SlicedMaterials.Entry entry : used.entries) {
+                        if (entry.index >= tools) continue;
+                        String hex = TrayPlan.colour(entry.color);
+                        if (hex != null) { filamentColour[entry.index] = Color.parseColor(hex); String word = WorkshopUi.colourName(hex); if (word != null) names[entry.index] += " · " + word; }
+                        if (entry.massG != null && entry.massG > 0 && toolTotals[entry.index] > 0) gramsPerMm3[entry.index] = entry.massG / toolTotals[entry.index];
                     }
-                    boolean several = false; for (int[] b : blocks) several |= b[1] != blocks.get(0)[1];
-                    if (several) {
-                        // A band of the filament printing at each moment, then the changes in words.
+                    double[][] rate = depositionRates(t, cumulative, gramsPerMm3);
+                    List<ChartView.Series> lines = new ArrayList<>();
+                    for (int k = 0; k < tools; k++) {
+                        if (toolTotals[k] <= 0) continue;
+                        double[] values = new double[t.length]; for (int i = 0; i < t.length; i++) values[i] = rate[i][k];
+                        int[] same = new int[t.length]; Arrays.fill(same, filamentColour[k]);
+                        lines.add(new ChartView.Series(names[k], filamentColour[k], values, false).coloured(same));
+                    }
+                    // A band of the filament laid down most at each moment, and the changes in words.
+                    int[] lead = new int[t.length]; List<int[]> blocks = new ArrayList<>();
+                    for (int i = 0; i < t.length; i++) {
+                        int best = -1; double most = 1e-9; for (int k = 0; k < tools; k++) if (!Double.isNaN(rate[i][k]) && rate[i][k] > most) { most = rate[i][k]; best = k; }
+                        lead[i] = best;
+                        if (best >= 0 && (blocks.isEmpty() || blocks.get(blocks.size() - 1)[1] != best)) blocks.add(new int[] {i, best});
+                    }
+                    if (blocks.size() > 1) {
                         View band = new View(this) {
                             @Override protected void onDraw(android.graphics.Canvas canvas) {
                                 android.graphics.Paint paint = new android.graphics.Paint(); double end = t.length == 0 ? 1 : Math.max(1, t[t.length - 1]);
                                 for (int i = 0; i + 1 < t.length; i++) {
-                                    paint.setColor(pointColours[i]);
+                                    if (lead[i] < 0) continue;
+                                    paint.setColor(filamentColour[lead[i]]);
                                     canvas.drawRect((float) (t[i] / end * getWidth()), 0, (float) (t[i + 1] / end * getWidth()) + 1, getHeight(), paint);
                                 }
                                 paint.setStyle(android.graphics.Paint.Style.STROKE); paint.setColor((muted & 0x00ffffff) | 0x99000000); paint.setStrokeWidth(dp(1));
@@ -297,17 +317,14 @@ public final class RecordingsActivity extends Activity {
                             }
                         };
                         List<String> words = new ArrayList<>();
-                        for (int[] b : blocks) {
-                            String hex = String.format(Locale.ROOT, "#%06X", filamentColour[Math.min(15, b[1])] & 0xffffff), name = WorkshopUi.colourName(hex);
-                            words.add("From " + ChartView.elapsed(t[b[0]]) + ": filament " + (b[1] + 1) + (name == null ? "" : " (" + name + ")"));
-                        }
-                        label(chartBox, "Filament printing at each moment (most of each layer), from the sliced file.", 13, muted, false);
+                        for (int[] b : blocks) words.add("From " + ChartView.elapsed(t[b[0]]) + ": mostly " + names[b[1]].toLowerCase(Locale.ROOT));
+                        label(chartBox, "The filament laid down most at each moment.", 13, muted, false);
                         band.setContentDescription("Filament over time: " + String.join("; ", words));
                         LinearLayout.LayoutParams bandLayout = new LinearLayout.LayoutParams(-1, dp(24)); bandLayout.bottomMargin = dp(4); chartBox.addView(band, bandLayout);
-                        label(chartBox, String.join("\n", words), 12, muted, false);
+                        if (words.size() <= 12) label(chartBox, String.join("\n", words), 12, muted, false);
                     }
                     ChartView view = new ChartView(this, ink, muted, grid, surface);
-                    view.set("Material per layer", " mm³", t, Collections.singletonList(new ChartView.Series("Per layer", blue, values, false).coloured(pointColours)), 0, Double.NaN);
+                    view.set("Laying down", " g/h", t, lines, 0, Double.NaN);
                     if (shown != null && shown.start > 0) view.clock(shown.start);
                     chartBox.addView(view, new LinearLayout.LayoutParams(-1, dp(220)));
                 }
@@ -324,6 +341,28 @@ public final class RecordingsActivity extends Activity {
                 }
             });
         }, "recording-material").start();
+    }
+
+    /**
+     * Grams per hour of each filament at each reading: the material laid down per tool (`cumulative`, mm³, from the print's
+     * progress) over a window of a few minutes around the reading (wider for long prints), so a progress that moves in whole
+     * percents still gives a smooth line. NaN where there is no progress to go on.
+     */
+    static double[][] depositionRates(double[] t, double[][] cumulative, double[] gramsPerMm3) {
+        int n = t.length, tools = gramsPerMm3.length; double[][] out = new double[n][tools];
+        double window = Math.max(300, (n == 0 ? 0 : t[n - 1] - t[0]) / 30);
+        int lo = 0, hi = 0;
+        for (int i = 0; i < n; i++) {
+            while (lo < i && t[lo] < t[i] - window / 2) lo++;
+            while (hi + 1 < n && t[hi + 1] <= t[i] + window / 2) hi++;
+            int a = lo, b = Math.max(hi, i);
+            while (a < b && Double.isNaN(cumulative[a][0])) a++;
+            while (b > a && Double.isNaN(cumulative[b][0])) b--;
+            double span = t[b] - t[a];
+            for (int k = 0; k < tools; k++)
+                out[i][k] = span <= 0 || Double.isNaN(cumulative[i][0]) ? Double.NaN : Math.max(0, cumulative[b][k] - cumulative[a][k]) / span * gramsPerMm3[k] * 3600;
+        }
+        return out;
     }
 
     /** Every reading of the print: exact numbers, and the non-visual alternative to the charts. */

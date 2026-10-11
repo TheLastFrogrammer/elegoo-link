@@ -125,4 +125,20 @@ public class PrintRecorderTest {
         double[][] v = path.layerToolVolumes(2);
         assertTrue(v[0][0] > v[0][1]); assertTrue(v[0][1] > 0); assertTrue(v[1][1] > v[1][0]);
     }
+
+    /** Progress maps onto the file's extrusions in order, so each filament's share comes out as the print goes. */
+    @Test public void materialLaidDownFollowsProgressAndGivesSmoothRates() throws Exception {
+        String gcode = ";LAYER_CHANGE\n;Z:0.2\nG1 X0 Y0 Z0.2 F600\nT0\nG1 X10 Y0 E1\nT1\nG1 X20 Y0 E2\n";
+        GcodeToolpath path = GcodeToolpath.read(new java.io.ByteArrayInputStream(gcode.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        assertEquals(2, path.toolCount());
+        double[][] at = path.toolVolumesAt(new double[] {0, 0.5, 1, Double.NaN}, 2);
+        double half = path.toolVolumes(2)[0];
+        assertEquals(0, at[0][0], 1e-9); assertEquals(half, at[1][0], 1e-6); assertEquals(0, at[1][1], 1e-6);
+        assertEquals(half, at[2][1], 1e-6); assertTrue(Double.isNaN(at[3][0]));
+        // An even 1 mm³ a second of filament 1: 3.6 g/h at 1 g/cm³, steady even where readings are sparse.
+        double[] t = new double[20]; double[][] cumulative = new double[20][2];
+        for (int i = 0; i < 20; i++) { t[i] = i * 60; cumulative[i][0] = i * 60; }
+        double[][] rate = RecordingsActivity.depositionRates(t, cumulative, new double[] {0.001, 0.001});
+        for (int i = 0; i < 20; i++) { assertEquals(3.6, rate[i][0], 1e-9); assertEquals(0, rate[i][1], 1e-9); }
+    }
 }

@@ -501,7 +501,7 @@ public final class MainActivity extends Activity {
         firstLayer.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertFirstLayer", enabled).apply());
         CheckBox watchBox = checkbox(preferences, "Print watch: tell me if a print seems stuck or a heater drifts", settings.getBoolean("printWatch", true));
         watchBox.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("printWatch", enabled).apply());
-        CheckBox alertPictures = checkbox(preferences, "Add a camera picture to alerts (local connection)", settings.getBoolean("alertPictures", true));
+        CheckBox alertPictures = checkbox(preferences, "Add camera pictures to notifications", settings.getBoolean("alertPictures", true));
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(preferences, "Alerts need notification permission and a monitoring session. They stop when you disconnect or when Android stops the app. "
             + "While a print runs, Layer alert… on the Print tab adds one for a layer you choose. Tapping an alert only opens the app.", 13, MUTED, false);
