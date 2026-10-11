@@ -53,7 +53,7 @@ public final class CloudCameraActivity extends Activity {
         super.onCreate(saved);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         String serial = getIntent().getStringExtra(EXTRA_SERIAL), name = getIntent().getStringExtra(EXTRA_NAME);
-        int pad = Math.round(12 * getResources().getDisplayMetrics().density);
+        int pad = Math.round(12 * getResources().getDisplayMetrics().density), touch = Math.round(48 * getResources().getDisplayMetrics().density);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(Color.BLACK); root.setFitsSystemWindows(true);
         title = new TextView(this); title.setTextColor(0xffa7bec6); title.setTextSize(13); title.setPadding(pad, pad, pad, 0);
         title.setText((name == null || name.isEmpty() ? "Printer" : StatusPresentation.clean(name)) + " · camera through the Elegoo cloud");
@@ -80,13 +80,16 @@ public final class CloudCameraActivity extends Activity {
             handle(message.getData());
         });
         root.addView(web, new LinearLayout.LayoutParams(-1, 0, 1));
-        LinearLayout buttons = new LinearLayout(this); buttons.setGravity(Gravity.CENTER); buttons.setPadding(pad, pad / 2, pad, pad / 2);
+        // Side by side normally; stacked at large font sizes, so no label breaks mid-word.
+        boolean stack = getResources().getConfiguration().fontScale >= 1.3f;
+        LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(stack ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL); buttons.setGravity(Gravity.CENTER); buttons.setPadding(pad, pad / 2, pad, pad / 2);
         snapshot = new Button(this); snapshot.setText("Save snapshot to phone…"); snapshot.setAllCaps(false); snapshot.setEnabled(false);
         snapshot.setOnClickListener(v -> web.evaluateJavascript("snapshot()", null));
         retry = new Button(this); retry.setText("Try again"); retry.setAllCaps(false); retry.setVisibility(View.GONE); retry.setOnClickListener(v -> retry(serial));
         Button close = new Button(this); close.setText("Close camera"); close.setAllCaps(false); close.setOnClickListener(v -> finish());
-        buttons.addView(snapshot, new LinearLayout.LayoutParams(0, -2, 1)); buttons.addView(retry, new LinearLayout.LayoutParams(0, -2, 1));
-        buttons.addView(close, new LinearLayout.LayoutParams(0, -2, 1));
+        for (Button b : new Button[] {snapshot, retry, close}) b.setMinHeight(touch);
+        buttons.addView(snapshot, slot(stack)); buttons.addView(retry, slot(stack));
+        buttons.addView(close, slot(stack));
         root.addView(buttons);
         setContentView(root);
         web.loadUrl(ORIGIN + "/assets/camera/index.html");
@@ -153,6 +156,13 @@ public final class CloudCameraActivity extends Activity {
         if (snapshot != null) snapshot.setEnabled(false);
     }
 
+    /** A button's place in the row, or in the stack at large font sizes, with a small gap around it. */
+    private LinearLayout.LayoutParams slot(boolean stack) {
+        int gap = Math.round(4 * getResources().getDisplayMetrics().density);
+        LinearLayout.LayoutParams p = stack ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
+        p.setMargins(gap, gap, gap, gap); return p;
+    }
+
     /** True for the camera page's messages that mean the video did not start or stopped. */
     static boolean isProblem(String message) {
         return message.startsWith("The printer is not sending") || message.startsWith("The printer stopped") || message.startsWith("The printer left")
@@ -192,7 +202,7 @@ public final class CloudCameraActivity extends Activity {
 
     private void saveSnapshot(String dataUrl) {
         String prefix = "data:image/jpeg;base64,";
-        if (!dataUrl.startsWith(prefix)) { showNormal("There is no video frame to save yet. Wait for the picture, then try again."); return; }
+        if (!dataUrl.startsWith(prefix)) { showNormal("There is no picture to save yet. Wait for the video to appear, then try again."); return; }
         try { pendingSnapshot = Base64.decode(dataUrl.substring(prefix.length()), Base64.DEFAULT); }
         catch (IllegalArgumentException error) { showNormal("The snapshot could not be read. Try again."); return; }
         String stamp = new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.ROOT).format(new java.util.Date());

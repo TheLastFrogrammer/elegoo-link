@@ -1364,14 +1364,19 @@ public final class MainActivity extends Activity {
         localToggle = button(cameraLocalCard, "", () -> { localCameraOpen = !localCameraOpen; render(); });
         localCameraBody = new LinearLayout(this); localCameraBody.setOrientation(LinearLayout.VERTICAL); cameraLocalCard.addView(localCameraBody);
         LinearLayout card = localCameraBody;
-        cameraInfo = label(card, "The printer's stream on port 8080, or through your home VPN.", 14, MUTED, false);
+        cameraInfo = label(card, "Watch the printer's camera over local Wi-Fi, or through your home VPN.", 14, MUTED, false);
         cameraStart = button(card, "Start camera", this::toggleCamera);
         cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
+        // The picture's size toggles between the normal and the large height; the button names the size it switches to.
+        Button larger = button(card, "Make picture larger", () -> { });
+        larger.setOnClickListener(view -> {
+            boolean grow = cameraImage.getLayoutParams().height == dp(240);
+            cameraImage.getLayoutParams().height = grow ? dp(400) : dp(240); cameraImage.requestLayout(); larger.setText(grow ? "Make picture smaller" : "Make picture larger");
+        });
         cameraSnapshot = button(card, "Save snapshot to phone…", () -> {
             if (lastFrame == null) return; pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
         });
-        button(card, "Larger camera view", () -> { cameraImage.getLayoutParams().height = cameraImage.getLayoutParams().height == dp(240) ? dp(400) : dp(240); cameraImage.requestLayout(); });
         // Setup details sit behind one collapsed header; the header speaks its state.
         Button settingsToggle = button(card, "", () -> { });
         LinearLayout settings = new LinearLayout(this); settings.setOrientation(LinearLayout.VERTICAL); settings.setVisibility(View.GONE);
@@ -1383,11 +1388,11 @@ public final class MainActivity extends Activity {
         });
         settingsToggle.setText("Camera settings ▾"); A11y.expandable(settingsToggle, false);
         card.addView(settings);
-        cameraAddress = input(settings, "Camera URL on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        cameraAddress = input(settings, "Camera address on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         cameraQuery = button(settings, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
-        label(settings, "Camera stops when you leave this tab or the app goes to the background. Monitoring continues. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
+        label(settings, "The camera stops when you leave this tab or the app goes to the background. Monitoring keeps going. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
         LinearLayout lineUp = card("Camera in the 3D view");
-        label(lineUp, "Shows the camera picture in the 3D toolpath. Line it up once against the real bed, print or no print.", 13, MUTED, false);
+        label(lineUp, "Shows the camera picture in the 3D view. Line it up once against the real bed, with or without a print.", 13, MUTED, false);
         button(lineUp, "Line up the camera in 3D…", () -> {
             if (printer == null) return;
             Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true)); };
@@ -1401,11 +1406,11 @@ public final class MainActivity extends Activity {
             NetworkRoute route = NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
-                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live camera · up to 5 frames/second"); cameraSnapshot.setEnabled(true);
+                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
                     monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE); }
                 public void error(String text) { stopCamera(); cameraInfo.setText(text); monitorCameraInfo.setText(text); monitorCameraInfo.setVisibility(View.VISIBLE); }
             }); cameraStart.setText("Stop camera"); monitorCameraStart.setText("Stop camera");
-        } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN and use the camera URL on the home printer IP. The Pi/subnet route must allow its camera port." : "Enter a camera URL on the selected printer's IP and connect the phone to local Wi-Fi."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab → Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
+        } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN, then use the camera address for the home printer. The VPN route must allow the camera port." : "Enter the camera address for the selected printer, and connect the phone to the same Wi-Fi network as the printer."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab, then Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
     }
     private void stopCamera() { AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
     /** On the Files tab, ask for the printer's file list when there is none (or it is out of date): a read, at most once a minute. */
