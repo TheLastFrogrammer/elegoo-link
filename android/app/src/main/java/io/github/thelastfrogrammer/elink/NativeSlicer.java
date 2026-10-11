@@ -67,7 +67,7 @@ final class NativeSlicer implements AutoCloseable {
         final Map<String, String> overrides = new LinkedHashMap<>();
         int plate;
         boolean projectSettings;
-        /** One per copy: {file, object, x, y, rotation, scale[, down x, y, z]}; empty lets the engine arrange. */
+        /** One per copy: {file, object, x, y, rotation, scale[, down x, y, z[, stretch x, y, z[, filament slot]]]}; empty lets the engine arrange. */
         final List<double[]> placements = new ArrayList<>();
         /** Per filament slot: setting key -> value for that slot only. */
         final List<Map<String, String>> filamentOverrides = new ArrayList<>();
@@ -75,6 +75,8 @@ final class NativeSlicer implements AutoCloseable {
         final Map<String, Map<String, String>> objectSettings = new LinkedHashMap<>();
         /** A calibration print instead of model files: mode ("temperature", "pressure_advance", "flow", "max_flow", "retraction") and range. */
         String calibration; double calibrationStart, calibrationEnd, calibrationStep;
+        /** Automatic arranging: may turn copies to fit more; may shrink every copy by one factor (not below arrangeMinScale) so all fit; gap in mm (below 0: default). */
+        boolean arrangeRotate, arrangeShrink; double arrangeMinScale = 0.5, arrangeSpacing = -1;
 
         Selection(String printer, String process, List<String> filaments) { this.printer = printer; this.process = process; this.filaments.addAll(filaments); }
 
@@ -92,9 +94,11 @@ final class NativeSlicer implements AutoCloseable {
                     JSONObject place = new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", p[5]);
                     if (p.length >= 9 && (p[6] != 0 || p[7] != 0 || p[8] != 0)) place.put("down", new JSONArray().put(p[6]).put(p[7]).put(p[8]));
                     if (p.length >= 12 && (p[9] != 1 || p[10] != 1 || p[11] != 1)) place.put("stretch", new JSONArray().put(p[9]).put(p[10]).put(p[11]));
+                    if (p.length >= 13 && p[12] > 0) place.put("slot", (int) p[12]);
                     places.put(place);
                 }
                 json.put("placements", places);
+                json.put("arrange", new JSONObject().put("rotate", arrangeRotate).put("shrink", arrangeShrink).put("min_scale", arrangeMinScale).put("spacing", arrangeSpacing));
                 JSONArray perSlot = new JSONArray();
                 for (Map<String, String> slot : filamentOverrides) { JSONObject one = new JSONObject(); for (Map.Entry<String, String> e : slot.entrySet()) one.put(e.getKey(), e.getValue()); perSlot.put(one); }
                 json.put("filament_overrides", perSlot);

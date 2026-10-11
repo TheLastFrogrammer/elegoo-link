@@ -410,7 +410,7 @@
     scene.placements.forEach((p, i) => {
       const object = objectOf(p); if (!object || !object.vao) return;
       gl.uniformMatrix4fv(mesh.u.uModel, false, modelMatrix(p));
-      gl.uniform1i(mesh.u.uSlot, object.slot || 0);
+      gl.uniform1i(mesh.u.uSlot, p.slot || object.slot || 0);   // a filament chosen for this model in the layout wins
       const bad = issues[i].length > 0;
       gl.uniform3fv(mesh.u.uTint, theme.problem);
       gl.uniform1f(mesh.u.uTintAmount, bad ? 1 : 0);

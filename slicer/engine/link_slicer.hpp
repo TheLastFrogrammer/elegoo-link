@@ -38,8 +38,13 @@ struct Selection {
         // The outward normal (in the file's own orientation) of a face to lay on the bed, or zero to keep it upright.
         // Applied before `rotation`.
         double down[3] = {0, 0, 0};
+        // The filament slot (1-based) this object prints with, 0 = the file's own. Per object: copies of one object share it.
+        int slot = 0;
     };
     std::vector<Placement> placements;
+    // How automatic arranging places copies: let it turn them to fit more; shrink every copy by the same factor (down to
+    // `min_scale`) until all fit; and the gap between copies in mm (below 0: the printer's default).
+    struct Arrange { bool rotate = false, shrink = false; double min_scale = 0.5, spacing = -1; } arrange;
     // Filament settings per slot (key -> value for that slot only, e.g. nozzle_temperature -> 215), on top of the
     // filament presets.
     std::vector<std::vector<std::pair<std::string, std::string>>> filament_overrides;

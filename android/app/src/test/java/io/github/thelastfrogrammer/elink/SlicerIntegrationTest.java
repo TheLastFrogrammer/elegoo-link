@@ -269,6 +269,46 @@ public class SlicerIntegrationTest {
         }
     }
 
+    /** Arrange options: shrinking every copy by one factor until it fits, said in the layout and in the slice's warnings. */
+    @Test public void shrinkingToFitAndTurning() throws Exception {
+        List<File> model = Collections.singletonList(box(400, 50, 10));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("brim_type", "no_brim"); selection.overrides.put("skirt_loops", "0");
+            selection.arrangeShrink = true; selection.arrangeMinScale = 0.5;
+            org.json.JSONObject layout = slicer.arrange(model, selection);
+            assertEquals(0, layout.getInt("unfit"));
+            double shrunk = layout.getDouble("shrunk");
+            assertTrue("shrunk just enough: " + shrunk, shrunk < 0.66 && shrunk > 0.55);
+            assertEquals(shrunk, layout.getJSONArray("placements").getJSONObject(0).getDouble("scale"), 0.01);
+            NativeSlicer.Result result = slicer.slice(model, selection, new File(context().getCacheDir(), "shrunk.gcode"), null);
+            assertTrue(result.warnings.toString(), result.warnings.toString().contains("shrunk to " + Math.round(shrunk * 100) + " %"));
+            selection.arrangeMinScale = 0.9;
+            assertEquals("not below the floor: still too big", 1, slicer.arrange(model, selection).getInt("unfit"));
+            // Turning is allowed: a layout still comes back with the copy on the bed.
+            selection.arrangeShrink = false; selection.arrangeRotate = true;
+            assertEquals(1, slicer.arrange(Collections.singletonList(box(40, 20, 10)), selection).getJSONArray("placements").length());
+        }
+    }
+
+    /** A filament chosen for one model in the layout: the whole model prints with it. */
+    @Test public void aModelCanPrintWithItsOwnFilament() throws Exception {
+        List<File> model = Collections.singletonList(box(20, 20, 5));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, java.util.Arrays.asList(PLA, PLA));
+            selection.placements.add(new double[] {0, 0, 128, 128, 0, 1, 0, 0, 0, 1, 1, 1, 2});
+            File output = new File(context().getCacheDir(), "slot2.gcode");
+            slicer.slice(model, selection, output, null);
+            double[] grams = SlicedMaterials.gramsFromTail(output);
+            assertEquals(2, grams.length); assertEquals(0, grams[0], 1e-9); assertTrue(grams[1] > 0);
+            assertEquals(2, slicer.arrange(model, selection).getJSONArray("placements").getJSONObject(0).getInt("slot"));
+            // The same through the Slice screen's per-file choice, without a layout (this crashed the slicer before).
+            selection.placements.clear(); selection.modelFilaments = new int[] {2};
+            slicer.slice(model, selection, output, null);
+            double[] again = SlicedMaterials.gramsFromTail(output); assertEquals(0, again[0], 1e-9); assertTrue(again[1] > 0);
+        }
+    }
+
     @Test public void calibrationPrintsAndFilamentSettings() throws Exception {
         File output = new File(context().getCacheDir(), "calibration.gcode");
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {

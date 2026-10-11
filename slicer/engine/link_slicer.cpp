@@ -340,9 +340,48 @@ static std::optional<arrangement::ArrangePolygon> place_prime_tower(DynamicPrint
 
 // With `unfit` given, copies that do not fit are left centred on the bed (overlapping, for the layout view to show and the
 // user to scale or remove) and counted there; without it, they stop the slice.
-static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrangement::ArrangePolygons unselected, int* unfit = nullptr)
+// With options.shrink, every copy is scaled down by one factor (never below options.min_scale) until all fit; the factor
+// used is returned (1 when nothing was shrunk).
+static double place_on_bed(Model& model, const DynamicPrintConfig& config, arrangement::ArrangePolygons unselected, const Selection::Arrange& options, int* unfit = nullptr);
+static int nest(Model& model, const DynamicPrintConfig& config, const arrangement::ArrangePolygons& unselected_in, const Selection::Arrange& options, bool apply, int* unfit);
+
+static void scale_all(Model& model, double factor)
+{
+    for (ModelObject* object : model.objects) {
+        for (ModelInstance* instance : object->instances) instance->set_scaling_factor(instance->get_scaling_factor() * factor);
+        object->invalidate_bounding_box();
+        object->ensure_on_bed();
+    }
+}
+
+static double place_on_bed(Model& model, const DynamicPrintConfig& config, arrangement::ArrangePolygons unselected, const Selection::Arrange& options, int* unfit)
+{
+    double applied = 1;
+    if (options.shrink && nest(model, config, unselected, options, false, nullptr) > 0) {
+        // The largest factor (in steps of about 1 %) at which everything fits, between min_scale and 1.
+        const double floor = std::clamp(options.min_scale, 0.05, 1.0);
+        scale_all(model, floor);
+        if (nest(model, config, unselected, options, false, nullptr) == 0) {
+            double low = floor, high = 1;   // fits at low (the current scale), not at high
+            for (int step = 0; step < 7 && high - low > 0.01; ++step) {
+                const double mid = (low + high) / 2;
+                scale_all(model, mid / low);
+                if (nest(model, config, unselected, options, false, nullptr) == 0) low = mid;
+                else { scale_all(model, low / mid); high = mid; }
+            }
+            applied = low;
+        } else applied = floor;   // even the smallest allowed size does not fit: stays there, and the unfit copies say so
+    }
+    nest(model, config, unselected, options, true, unfit);
+    return applied;
+}
+
+// Arranges all copies; with `apply`, moves them (copies that do not fit go to the bed's centre and are counted in `unfit`,
+// or stop the slice when it is null). Returns how many did not fit.
+static int nest(Model& model, const DynamicPrintConfig& config, const arrangement::ArrangePolygons& unselected_in, const Selection::Arrange& options, bool apply, int* unfit)
 {
     using namespace arrangement;
+    ArrangePolygons unselected = unselected_in;
     ArrangePolygons selected, excluded_regions;
     std::vector<ModelInstance*> instances;
     for (ModelObject* object : model.objects)
@@ -354,8 +393,9 @@ static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrange
         }
 
     ArrangeParams params;
+    params.allow_rotations = options.rotate;
     params.is_seq_print = config.has("print_sequence") && config.opt_enum<PrintSequence>("print_sequence") == PrintSequence::ByObject;
-    params.min_obj_distance = 0;
+    params.min_obj_distance = options.spacing >= 0 ? scaled(options.spacing) : 0;
     if (params.is_seq_print)
         params.bed_shrink_x = params.bed_shrink_y = BED_SHRINK_SEQ_PRINT;
     if (const auto* structure = config.option<ConfigOptionEnum<PrinterStructure>>("printer_structure"))
@@ -387,6 +427,9 @@ static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrange
     if (bed.size() < 3)
         throw std::runtime_error("The printer preset has no printable_area");
     arrange(selected, unselected, bed, params);
+    int missing = 0;
+    for (const ArrangePolygon& ap : selected) if (ap.bed_idx != 0) ++missing;
+    if (!apply) return missing;
     BoundingBox bed_box; for (const Point& p : bed) bed_box.merge(p);
     const Vec2d centre = unscale(bed_box.center()).cast<double>();
     for (size_t i = 0; i < selected.size(); ++i) {
@@ -399,6 +442,7 @@ static void place_on_bed(Model& model, const DynamicPrintConfig& config, arrange
         const BoundingBoxf3 box = instance->get_object()->instance_bounding_box(*instance, false);
         instance->set_offset(instance->get_offset() + Vec3d(centre.x() - box.center().x(), centre.y() - box.center().y(), 0));
     }
+    return missing;
 }
 
 // ----------------------------------------------------------------------------------------------------------------
@@ -892,6 +936,8 @@ struct Engine::Loaded {
     std::vector<std::vector<std::array<double, 3>>> downs; // per model object: each placed copy's laid-down face
     std::vector<std::vector<std::array<double, 3>>> stretches; // per model object: each placed copy's per-axis stretch
     int unfit = 0;                          // layout view only: copies that did not fit, left centred on the bed
+    double shrunk = 1;                      // the factor arranging shrank every copy by to make them fit (1: none)
+    std::vector<int> slots;                 // per loaded object: its filament slot from the placements (0: the file's own)
     std::set<int> used;
     bool keep_layout = false;               // positions come from placements or the project plate
     Calib_Params calibration;
@@ -977,6 +1023,11 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
             ModelObject* object = loaded.model.add_object(*source);
             loaded.base.push_back(source->instances.front()->get_matrix_no_offset().linear());
             loaded.downs.emplace_back(); loaded.stretches.emplace_back();
+            int slot = 0;
+            for (const Selection::Placement* p : placed) if (p->slot > 0) { slot = p->slot; break; }
+            if (slot > int(filament_count))
+                throw std::runtime_error("A model is set to filament " + std::to_string(slot) + ", but only " + std::to_string(filament_count) + " are set up");
+            loaded.slots.push_back(slot);
             for (const Selection::Placement* p : placed) {
                 loaded.downs.back().push_back({p->down[0], p->down[1], p->down[2]});
                 loaded.stretches.back().push_back({p->stretch[0], p->stretch[1], p->stretch[2]});
@@ -987,7 +1038,11 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
                 for (int i = int(object->instances.size()) - 1; i >= 0; --i)
                     if (std::find(keep[o].begin(), keep[o].end(), i) == keep[o].end()) object->delete_instance(i);
             }
-            if (assigned > 0) {
+            if (slot > 0) {
+                // This object prints with the filament chosen for it in the layout: its parts' own ones are cleared.
+                object->config.set_key_value("extruder", new ConfigOptionInt(slot));
+                for (ModelVolume* volume : object->volumes) volume->config.erase("extruder");
+            } else if (assigned > 0) {
                 // The whole file prints with this filament: the object's setting, with its parts' own ones cleared.
                 object->config.set_key_value("extruder", new ConfigOptionInt(assigned));
                 for (ModelVolume* volume : object->volumes) volume->config.erase("extruder");
@@ -1064,6 +1119,9 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
         compute_flush_volumes(config);
     std::vector<int>& filament_map = config.option<ConfigOptionInts>("filament_map", true)->values;
     filament_map.assign(filament_count, 1);
+    // One nozzle: every filament is on it. The automatic grouping (for multi-nozzle printers) sizes its map by the filaments
+    // the print uses, so a print using only a later filament (say filament 2 of 2) read past it and crashed.
+    config.set_key_value("filament_map_mode", new ConfigOptionEnum<FilamentMapMode>(fmmManual));
     if (!config.has("nozzle_volume_type"))
         config.option<ConfigOptionEnumsGeneric>("nozzle_volume_type", true)->values.assign(1, nvtStandard);
 
@@ -1078,7 +1136,7 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
         arrangement::ArrangePolygons keep_clear;
         if (loaded.tower)
             keep_clear.push_back(*loaded.tower);
-        place_on_bed(loaded.model, config, keep_clear, lenient ? &loaded.unfit : nullptr);
+        loaded.shrunk = place_on_bed(loaded.model, config, keep_clear, selection.arrange, lenient ? &loaded.unfit : nullptr);
     }
     // The pattern is drawn by custom G-code around the handle cube, from the final settings (Plater::_calib_pa_pattern_gen_gcode).
     if (loaded.pattern && !loaded.model.objects.empty()) {
@@ -1127,6 +1185,11 @@ Selection selection_from_json(const std::string& text)
                 for (const auto& [key, value] : item["values"].items()) settings.values.emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
             selection.object_settings.push_back(settings);
         }
+    if (json.contains("arrange")) {
+        const auto& a = json["arrange"];
+        selection.arrange.rotate = a.value("rotate", false); selection.arrange.shrink = a.value("shrink", false);
+        selection.arrange.min_scale = a.value("min_scale", 0.5); selection.arrange.spacing = a.value("spacing", -1.0);
+    }
     if (json.contains("calibration")) {
         const auto& c = json["calibration"];
         selection.calibration.mode = c.value("mode", ""); selection.calibration.start = c.value("start", 0.0);
@@ -1138,6 +1201,7 @@ Selection selection_from_json(const std::string& text)
             placement.file = item.value("file", 0); placement.object = item.value("object", 0);
             placement.x = item.value("x", 0.0); placement.y = item.value("y", 0.0);
             placement.rotation = item.value("rotation", 0.0); placement.scale = item.value("scale", 1.0);
+            placement.slot = item.value("slot", 0);
             if (item.contains("stretch") && item["stretch"].is_array() && item["stretch"].size() == 3)
                 for (int k = 0; k < 3; ++k) placement.stretch[k] = item["stretch"][k].get<double>();
             if (item.contains("down") && item["down"].is_array() && item["down"].size() == 3)
@@ -1230,7 +1294,7 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
         arrangement::ArrangePolygons keep_clear;
         if (loaded.tower)
             keep_clear.push_back(*loaded.tower);
-        place_on_bed(loaded.model, loaded.config, keep_clear, &loaded.unfit);
+        loaded.shrunk = place_on_bed(loaded.model, loaded.config, keep_clear, selection.arrange, &loaded.unfit);
     }
     nlohmann::json placements = nlohmann::json::array();
     for (size_t f = 0; f < loaded.objects.size(); ++f)
@@ -1248,6 +1312,7 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
                 const auto [rotation, overall] = relative_rotation_scale(object->instances[i]->get_matrix_no_offset().linear(), base);
                 const double scale = overall / std::cbrt(stretch[0] * stretch[1] * stretch[2]);   // the uniform part, without the stretch
                 nlohmann::json item = {{"file", f}, {"object", o}, {"x", box.center().x()}, {"y", box.center().y()}, {"rotation", rotation}, {"scale", scale}};
+                if (index < int(loaded.slots.size()) && loaded.slots[index] > 0) item["slot"] = loaded.slots[index];
                 if (stretch[0] != 1 || stretch[1] != 1 || stretch[2] != 1) item["stretch"] = {stretch[0], stretch[1], stretch[2]};
                 if (down[0] != 0 || down[1] != 0 || down[2] != 0) item["down"] = {down[0], down[1], down[2]};
                 placements.push_back(item);
@@ -1259,7 +1324,8 @@ std::string Engine::arrange(const std::vector<std::string>& models, const Select
     if (const auto* area = loaded.config.option<ConfigOptionPoints>("bed_exclude_area"))
         for (const Vec2d& p : area->values) excluded.push_back({p.x(), p.y()});
     nlohmann::json result = {{"placements", placements}, {"bed", bed}, {"excluded", excluded}, {"height", loaded.config.opt_float("printable_height")},
-                             {"kept_layout", loaded.keep_layout && selection.placements.empty()}, {"warnings", loaded.warnings}, {"unfit", loaded.unfit}};
+                             {"kept_layout", loaded.keep_layout && selection.placements.empty()}, {"warnings", loaded.warnings}, {"unfit", loaded.unfit},
+                             {"shrunk", loaded.shrunk}};
     if (loaded.tower) {
         const BoundingBox box = loaded.tower->poly.contour.bounding_box();
         result["tower"] = {unscale<double>(box.min.x()), unscale<double>(box.min.y()), unscale<double>(box.max.x()), unscale<double>(box.max.y())};
@@ -1316,6 +1382,8 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     report(0, "Loading model");
     Loaded loaded = load(models, selection, true);
     Model& model = loaded.model;
+    if (loaded.shrunk < 0.999)
+        loaded.warnings.push_back("Every model was shrunk to " + std::to_string(int(std::lround(loaded.shrunk * 100))) + " % of its size so all of them fit the bed");
     DynamicPrintConfig& config = loaded.config;
     const size_t filament_count = selection.filaments.size();
 

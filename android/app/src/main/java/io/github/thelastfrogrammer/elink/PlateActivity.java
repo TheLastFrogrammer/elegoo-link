@@ -146,7 +146,8 @@ public final class PlateActivity extends Activity {
                     if (isDestroyed()) return;
                     scene = built; placements = initial; sceneReady = true;
                     int unfit = layout.optInt("unfit");
-                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, open More…, choose Scale…, then tap Fit to the bed."
+                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, open More…, choose Scale…, then tap Fit to the bed; or turn on shrinking in Arrange options on the Slice screen."
+                        : layout.optDouble("shrunk", 1) < 0.999 ? "Every model was shrunk to " + Math.round(layout.optDouble("shrunk") * 100) + " % so all of them fit (Arrange options on the Slice screen)."
                         : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
                     status.setTextColor(unfit > 0 ? ui.error : ui.muted);
                     load();
@@ -335,8 +336,8 @@ public final class PlateActivity extends Activity {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
-        String[] names = {"Select a model…", "Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
-        Runnable[] actions = {this::selectDialog, this::moveDialog, this::copiesDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
+        String[] names = {"Select a model…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
+        Runnable[] actions = {this::selectDialog, this::moveDialog, this::copiesDialog, this::filamentDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
                 status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
             () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings, () -> js("plate.resetCamera()")};
         for (int i = 0; i < names.length; i++) {
@@ -396,6 +397,34 @@ public final class PlateActivity extends Activity {
     private static String number(double value) { return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value); }
 
     /** Lets the engine arrange the current copies (with their turns, scales and duplicates). */
+    /** What arranging did: shrunk to fit, and what still does not fit. */
+    static String arrangedText(JSONObject result) {
+        double shrunk = result.optDouble("shrunk", 1); int unfit = result.optInt("unfit");
+        String text = shrunk < 0.999 ? "Arranged, with every model shrunk to " + Math.round(shrunk * 100) + " % so they fit." : "Arranged.";
+        if (unfit > 0) text += " " + (unfit == 1 ? "One model still does not" : unfit + " models still do not") + " fit: try Arrange options on the Slice screen (turn or shrink), or remove some.";
+        return text;
+    }
+    /** The filament the selected model (all its copies) prints with: one of the slots, or the file's own (as set on the Slice screen). */
+    private void filamentDialog() {
+        if (selected < 0 || selected >= placements.length()) return;
+        String[] colours = getIntent().getStringArrayExtra(EXTRA_COLOURS); int count = colours == null ? 0 : colours.length;
+        if (count < 2) { status.setText("Add a second filament on the Slice screen first; then each model can have its own."); status.setTextColor(ui.muted); return; }
+        JSONObject chosen = placements.optJSONObject(selected); int file = chosen.optInt("file"), object = chosen.optInt("object"), now = chosen.optInt("slot", 0);
+        String[] items = new String[count + 1]; items[0] = "As set on the Slice screen";
+        for (int i = 1; i <= count; i++) items[i] = "Filament " + i + (WorkshopUi.colourName(colours[i - 1]) == null ? "" : " · " + WorkshopUi.colourName(colours[i - 1]));
+        new android.app.AlertDialog.Builder(this).setTitle("Filament for " + name(selected)).setSingleChoiceItems(items, Math.min(now, count), (d, which) -> {
+            d.dismiss();
+            try {
+                JSONArray updated = new JSONArray(placements.toString());
+                for (int i = 0; i < updated.length(); i++) {
+                    JSONObject p = updated.getJSONObject(i);
+                    if (p.optInt("file") == file && p.optInt("object") == object) { if (which == 0) p.remove("slot"); else p.put("slot", which); }
+                }
+                int keep = selected; js("plate.setPlacements(" + updated + ")"); js(selectScript(keep));
+                status.setText(which == 0 ? "Uses the filament set on the Slice screen." : "Prints with filament " + which + " (all copies of this model)."); status.setTextColor(ui.muted);
+            } catch (JSONException impossible) { }
+        }).setNegativeButton("Cancel", null).show();
+    }
     private void arrangeAll() {
         if (placements.length() == 0) return;
         arrange.setEnabled(false); status.setText("Arranging…"); status.setTextColor(ui.muted);
@@ -403,8 +432,10 @@ public final class PlateActivity extends Activity {
         SliceActivity.worker().execute(() -> {
             try {
                 JSONObject request = new JSONObject(selection).put("placements", new JSONArray(current));
-                JSONArray arranged = SliceActivity.engine(getApplicationContext()).arrangeJson(models, request.toString()).getJSONArray("placements");
-                main.post(() -> { if (!isDestroyed()) { arrange.setEnabled(true); js("plate.setPlacements(" + arranged + ")"); status.setText("Arranged."); } });
+                JSONObject result = SliceActivity.engine(getApplicationContext()).arrangeJson(models, request.toString());
+                JSONArray arranged = result.getJSONArray("placements");
+                String said = arrangedText(result);
+                main.post(() -> { if (!isDestroyed()) { arrange.setEnabled(true); js("plate.setPlacements(" + arranged + ")"); status.setText(said); status.setTextColor(result.optInt("unfit") > 0 ? ui.error : ui.muted); } });
             } catch (Exception failure) {
                 main.post(() -> { if (!isDestroyed()) { arrange.setEnabled(true); status.setText("Could not arrange: " + failure.getMessage()); status.setTextColor(ui.error); } });
             }

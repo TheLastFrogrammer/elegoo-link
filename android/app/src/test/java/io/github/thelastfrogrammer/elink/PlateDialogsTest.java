@@ -80,15 +80,32 @@ public class PlateDialogsTest {
         more().performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Select a model…", "Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view", "Close"), names);
-        for (String name : names.subList(0, 10)) assertTrue(name, button(d, name).isEnabled());
+        assertEquals(Arrays.asList("Select a model…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view", "Close"), names);
+        for (String name : names.subList(0, 11)) assertTrue(name, button(d, name).isEnabled());
+    }
+
+    @Test public void eachModelCanHaveItsOwnFilament() throws Exception {
+        activity.getIntent().putExtra(PlateActivity.EXTRA_COLOURS, new String[] {"#D02828", "#FFFFFF"});
+        java.lang.reflect.Method dialog = PlateActivity.class.getDeclaredMethod("filamentDialog"); dialog.setAccessible(true); dialog.invoke(activity); idle();
+        AlertDialog d = dialog();
+        android.widget.ListView list = d.getListView();
+        assertEquals(3, list.getCount()); assertEquals("As set on the Slice screen", list.getItemAtPosition(0)); assertEquals("Filament 2 · white", list.getItemAtPosition(2));
+        org.robolectric.shadows.ShadowAlertDialog shadow = org.robolectric.shadow.api.Shadow.extract(d); shadow.clickOnItem(2); idle();
+        assertEquals("the model stays selected", "plate.select(0)", lastScript());
+        assertTrue(((TextView) get("status")).getText().toString().contains("filament 2"));
+    }
+
+    @Test public void arrangingSaysWhatItShrankAndWhatStillDoesNotFit() throws Exception {
+        assertEquals("Arranged.", PlateActivity.arrangedText(new JSONObject().put("shrunk", 1)));
+        String shrunk = PlateActivity.arrangedText(new JSONObject().put("shrunk", 0.84).put("unfit", 1));
+        assertTrue(shrunk, shrunk.startsWith("Arranged, with every model shrunk to 84 % so they fit. One model still does not fit"));
     }
 
     @Test public void moreIsDisabledUntilAModelIsSelected() throws Exception {
         select(-1);
         more().performClick(); idle();
         AlertDialog d = dialog();
-        for (String name : new String[] {"Move…", "Several copies…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
+        for (String name : new String[] {"Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
         assertTrue("choosing a model works without a selection", button(d, "Select a model…").isEnabled());
         assertTrue(button(d, "Reset view").isEnabled());
     }

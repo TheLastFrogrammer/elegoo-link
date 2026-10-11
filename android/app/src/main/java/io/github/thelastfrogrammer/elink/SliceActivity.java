@@ -135,6 +135,7 @@ public final class SliceActivity extends Activity {
         dark = appearance == 2 || appearance == 0 && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
         super.onCreate(saved);
+        sweepOldInputs(getCacheDir());
         ink = dark ? 0xffe6eef1 : 0xff17252c; muted = dark ? 0xff9fb3bb : 0xff5a6d76; teal = dark ? 0xff5fd4c4 : 0xff00796b;
         background = dark ? 0xff0e1417 : 0xfff2f5f6; surface = dark ? 0xff182227 : Color.WHITE; buttonColor = dark ? 0xff21343a : 0xffe2efed;
         error = dark ? 0xffffb4ab : 0xffba1a1a;
@@ -313,7 +314,7 @@ public final class SliceActivity extends Activity {
     private void restore(Bundle saved) {
         restored = saved;
         ArrayList<String> paths = saved.getStringArrayList("models");
-        if (paths != null) for (String path : paths) { File file = new File(path); if (file.isFile()) models.add(file); }
+        if (paths != null) for (String path : paths) { File file = new File(path); if (file.isFile()) { models.add(file); ownFolders.add(file.getParentFile()); } }
         int[] assigned = saved.getIntArray("modelSlots");
         if (assigned != null && assigned.length == models.size()) for (int value : assigned) modelSlots.add(value);
         try {
@@ -397,6 +398,7 @@ public final class SliceActivity extends Activity {
         editPlate = button(modelCard, "Edit layout…", this::openPlate, false);
         autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
+        arrangeOptions = button(modelCard, "", this::arrangeDialog, false); showArrangeOptions();
         // Rarely needed: per-model settings and calibration prints. Opens by itself while either is in use.
         LinearLayout modelExtrasBox = new LinearLayout(this);
         objectButton = button(modelExtrasBox, "Model settings…", this::chooseObjectSettings, false);
@@ -593,13 +595,16 @@ public final class SliceActivity extends Activity {
         if (calibration == null) for (Map.Entry<String, Map<String, String>> entry : objectSettings.entrySet()) selection.objectSettings.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
         if (calibration != null) { selection.calibration = calibration; selection.calibrationStart = calibrationRange[0]; selection.calibrationEnd = calibrationRange[1]; selection.calibrationStep = calibrationRange[2]; }
         selection.plate = plate == ALL_PLATES ? 1 : plate; selection.projectSettings = projectSettings && project() != null;
+        selection.arrangeRotate = settings.getBoolean("arrangeRotate", false); selection.arrangeShrink = settings.getBoolean("arrangeShrink", false);
+        selection.arrangeMinScale = settings.getInt("arrangeMinPercent", 50) / 100.0; selection.arrangeSpacing = settings.getFloat("arrangeSpacing", -1);
         if (withPlacements && placements != null)
             for (int i = 0; i < placements.length(); i++) {
                 org.json.JSONObject p = placements.optJSONObject(i);
                 org.json.JSONArray down = p.optJSONArray("down"), stretch = p.optJSONArray("stretch");
                 selection.placements.add(new double[] {p.optInt("file"), p.optInt("object"), p.optDouble("x"), p.optDouble("y"), p.optDouble("rotation"), p.optDouble("scale", 1),
                     down == null ? 0 : down.optDouble(0), down == null ? 0 : down.optDouble(1), down == null ? 0 : down.optDouble(2),
-                    stretch == null ? 1 : stretch.optDouble(0, 1), stretch == null ? 1 : stretch.optDouble(1, 1), stretch == null ? 1 : stretch.optDouble(2, 1)});
+                    stretch == null ? 1 : stretch.optDouble(0, 1), stretch == null ? 1 : stretch.optDouble(1, 1), stretch == null ? 1 : stretch.optDouble(2, 1),
+                    Math.min(p.optInt("slot", 0), slots.size())});
             }
         return selection;
     }
@@ -620,6 +625,12 @@ public final class SliceActivity extends Activity {
     private void startSlice() {
         NativeSlicer.Selection selection = selection(true);
         if ((models.isEmpty() && calibration == null) || selection == null) return;
+        // Model files can disappear from the phone's cache (Android clears it when storage runs low): say so instead of failing to load.
+        List<String> gone = new ArrayList<>(); if (calibration == null) for (File model : models) if (!model.isFile() || model.length() == 0) gone.add(model.getName());
+        if (!gone.isEmpty()) {
+            status.setText("These model files are no longer on the phone: " + String.join(", ", gone) + ". Remove them and choose them again (Choose model files).");
+            status.setTextColor(error); return;
+        }
         String printer = selection.printer, process = selection.process;
         List<String> filaments = new ArrayList<>(selection.filaments), colours = new ArrayList<>(selection.colours);
         TrayPlan plan = plan();
@@ -961,6 +972,7 @@ public final class SliceActivity extends Activity {
         String stamp = Long.toString(System.nanoTime());
         File inputDir = new File(inputRoot, stamp), meshDir = new File(meshRoot, stamp);
         List<File> earlier = new ArrayList<>(models); boolean customLayout = placements != null;
+        ownFolders.add(inputDir); ownFolders.add(meshDir);
         worker.execute(() -> {
             List<File> imported = new ArrayList<>(); String problem = null;
             inputDir.mkdirs(); meshDir.mkdirs();
@@ -1010,7 +1022,7 @@ public final class SliceActivity extends Activity {
             clearRunning();
             boolean keepPrevious = unreadable || imported.isEmpty();
             if (keepPrevious) { deleteTree(inputDir); deleteTree(meshDir); }
-            else { keepOnly(inputRoot, all); deleteOthers(meshRoot, meshDir); }
+            else cleanOwn(all, meshDir);
             String shownProblem = problem;
             org.json.JSONObject shownRead = read;
             main.post(() -> {
@@ -1057,11 +1069,12 @@ public final class SliceActivity extends Activity {
                 if (keep.isEmpty()) { models.clear(); modelSlots.clear(); inspected = null; plate = 0; showModels(); showProject(); showLayout(); status.setText(""); updateButtons(); return; }
                 busy = true; status.setText("Reading the remaining models…"); status.setTextColor(ink); updateButtons();
                 File meshRoot = new File(getCacheDir(), "slice-meshes"), meshDir = new File(meshRoot, Long.toString(System.nanoTime()));
+                ownFolders.add(meshDir);
                 worker.execute(() -> {
                     org.json.JSONObject read = null; String problem = null;
                     meshDir.mkdirs();
                     try { read = engine(getApplicationContext()).inspect(keep, meshDir, PREVIEW_TRIANGLES); } catch (IOException failure) { problem = failure.getMessage(); }
-                    if (read != null) { deleteOthers(meshRoot, meshDir); keepOnly(new File(getCacheDir(), "slice-input"), keep); } else deleteTree(meshDir);
+                    if (read != null) cleanOwn(keep, meshDir); else { deleteTree(meshDir); ownFolders.remove(meshDir); }
                     org.json.JSONObject shownRead = read; String why = problem;
                     main.post(() -> {
                         if (isDestroyed()) return;
@@ -1073,10 +1086,28 @@ public final class SliceActivity extends Activity {
                 });
             }).show();
     }
-    /** Deletes the pick folders under `root` that hold none of `files`. */
-    private static void keepOnly(File root, List<File> files) {
-        File[] children = root.listFiles(); if (children == null) return;
-        for (File child : children) { boolean used = false; for (File file : files) used |= child.equals(file.getParentFile()); if (!used) deleteTree(child); }
+    /**
+     * Pick and preview folders this screen made or took over. Only these are cleaned up by it: another Slice screen (opened
+     * from another app, say) may be using the rest, and deleting its models left it slicing empty files.
+     */
+    private final Set<File> ownFolders = Collections.synchronizedSet(new HashSet<>());
+    /** Deletes this screen's folders that hold none of `models` and are not `meshes`. */
+    private void cleanOwn(List<File> models, File meshes) {
+        synchronized (ownFolders) {
+            for (java.util.Iterator<File> it = ownFolders.iterator(); it.hasNext(); ) {
+                File folder = it.next(); boolean used = folder.equals(meshes);
+                for (File file : models) used |= folder.equals(file.getParentFile());
+                if (!used) { deleteTree(folder); it.remove(); }
+            }
+        }
+    }
+    /** Pick and preview folders no screen has touched for three days: left by a closed app. */
+    static void sweepOldInputs(File cache) {
+        long old = System.currentTimeMillis() - 3 * 24 * 3600_000L;
+        for (String name : new String[] {"slice-input", "slice-meshes"}) {
+            File[] children = new File(cache, name).listFiles();
+            if (children != null) for (File child : children) if (child.lastModified() < old) deleteTree(child);
+        }
     }
     private void showModels() {
         modelAssign.removeAllViews();
@@ -1181,6 +1212,40 @@ public final class SliceActivity extends Activity {
     }
 
     /** Automatic placement, or the plate view's layout. */
+    // ------------------------------------------------------------------ Arrange options
+    private Button arrangeOptions;
+    private static final int[] MIN_PERCENT = {90, 75, 50, 30};
+    private static final float[] SPACING = {-1, 2, 5, 10};
+    private void showArrangeOptions() {
+        List<String> on = new ArrayList<>();
+        if (settings.getBoolean("arrangeRotate", false)) on.add("turn to fit");
+        if (settings.getBoolean("arrangeShrink", false)) on.add("shrink to " + settings.getInt("arrangeMinPercent", 50) + " %");
+        float gap = settings.getFloat("arrangeSpacing", -1); if (gap >= 0) on.add(Math.round(gap) + " mm apart");
+        arrangeOptions.setText("Arrange options" + (on.isEmpty() ? "" : ": " + String.join(", ", on)) + "…");
+    }
+    /** How automatic arranging (and Arrange all in the layout) places models: turning them, shrinking them all to fit, the gap. */
+    private void arrangeDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(24), dp(8), dp(24), 0);
+        label(body, "Used when the app arranges models for you: on slicing without your own layout, and by Arrange all in the layout.", 13, muted, false);
+        CheckBox rotate = new CheckBox(this); rotate.setText("Turn models to fit more on the bed"); rotate.setTextColor(ink); rotate.setButtonTintList(ColorStateList.valueOf(teal)); rotate.setMinHeight(dp(48));
+        rotate.setChecked(settings.getBoolean("arrangeRotate", false)); body.addView(rotate);
+        CheckBox shrink = new CheckBox(this); shrink.setText("Shrink all models together until they fit"); shrink.setTextColor(ink); shrink.setButtonTintList(ColorStateList.valueOf(teal)); shrink.setMinHeight(dp(48));
+        shrink.setChecked(settings.getBoolean("arrangeShrink", false)); body.addView(shrink);
+        label(body, "No smaller than", 13, muted, false);
+        Spinner least = spinner(body); List<String> percents = new ArrayList<>(); for (int p : MIN_PERCENT) percents.add(p + " % of their size");
+        fill(least, percents, settings.getInt("arrangeMinPercent", 50) + " % of their size");
+        label(body, "Gap between models", 13, muted, false);
+        Spinner gap = spinner(body); List<String> gaps = Arrays.asList("Printer default", "2 mm", "5 mm", "10 mm");
+        float now = settings.getFloat("arrangeSpacing", -1); int at = 0; for (int i = 0; i < SPACING.length; i++) if (SPACING[i] == now) at = i;
+        fill(gap, gaps, gaps.get(at));
+        label(body, "Shrinking scales every model by the same amount, so parts made to fit together still match. The result says how much.", 12, muted, false);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        new AlertDialog.Builder(this).setTitle("Arrange options").setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            settings.edit().putBoolean("arrangeRotate", rotate.isChecked()).putBoolean("arrangeShrink", shrink.isChecked())
+                .putInt("arrangeMinPercent", MIN_PERCENT[Math.max(0, least.getSelectedItemPosition())]).putFloat("arrangeSpacing", SPACING[Math.max(0, gap.getSelectedItemPosition())]).apply();
+            showArrangeOptions();
+        }).show();
+    }
     private void showLayout() {
         boolean custom = placements != null;
         layoutLabel.setVisibility(models.isEmpty() ? View.GONE : View.VISIBLE);
@@ -1551,7 +1616,6 @@ public final class SliceActivity extends Activity {
 
     private static void deleteTree(File file) { File[] children = file.listFiles(); if (children != null) for (File child : children) deleteTree(child); file.delete(); }
     /** Removes everything in `root` except `keep` (the previous pick's folders and any flat files from older versions). */
-    private static void deleteOthers(File root, File keep) { File[] children = root.listFiles(); if (children != null) for (File child : children) if (!child.equals(keep)) deleteTree(child); }
     /** The last used preset when this printer offers it, otherwise the first one containing `fallback`. */
     private String remembered(String[] values, String key, String fallback) {
         String saved = settings.getString(key, null);
