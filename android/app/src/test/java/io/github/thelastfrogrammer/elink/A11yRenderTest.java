@@ -243,6 +243,21 @@ public class A11yRenderTest {
             setup.invoke(activity, file, "local");
             dialogShot("dialog-printsetup", scale, 6500);
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().dismiss();
+            // The review page before a print starts, with one filament to check and a short spool.
+            Class<?> rowType = Class.forName("io.github.thelastfrogrammer.elink.MainActivity$ReviewRow");
+            java.lang.reflect.Constructor<?> make = rowType.getDeclaredConstructor(); make.setAccessible(true);
+            Object row = make.newInstance();
+            for (String[] kv : new String[][] {{"title", "Filament 1"}, {"wants", "PLA Matte · red"}, {"wantsColour", "#D02828"}, {"tray", "PLA · white · CANVAS 0 tray 1"}, {"trayColour", "#F0F0F0"},
+                    {"problem", "The colour differs from what the file was sliced for."}, {"low", "Only about 40 g left on this spool; this filament needs about 55 g."}}) {
+                Field field = rowType.getDeclaredField(kv[0]); field.setAccessible(true); field.set(row, kv[1]);
+            }
+            Field level = rowType.getDeclaredField("level"); level.setAccessible(true); level.set(row, FilamentMatch.Level.CHECK);
+            Method review = null; for (Method m : MainActivity.class.getDeclaredMethods()) if (m.getName().equals("printReview")) review = m; review.setAccessible(true);
+            List<String[]> settingsShown = java.util.Arrays.asList(new String[] {"Build plate", "A"}, new String[] {"Printer / bed check", "On"}, new String[] {"Force bed leveling", "Off"}, new String[] {"Timelapse on the printer", "Off"});
+            review.invoke(activity, file, "local", settingsShown, java.util.Collections.singletonList(row), 1, 0, (Runnable) () -> { }, (Runnable) () -> { });
+            android.app.Dialog page = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            shot(page.getWindow().getDecorView(), 2340, "print-review", scale);
+            page.dismiss();
             invoke(activity, "temperatureDialog");
             dialogShot("dialog-temperature", scale, 3000);
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().dismiss();

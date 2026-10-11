@@ -1511,7 +1511,7 @@ public final class MainActivity extends Activity {
         main.post(watch[0]); setup.setOnDismissListener(d -> main.removeCallbacks(watch[0]));
         setup.setOnShowListener(d -> setup.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             JSONArray mapping = new JSONArray(); int count = toolCount.getSelectedItemPosition() + 1, explicit = 0, wrong = 0, check = 0;
-            StringBuilder lines = new StringBuilder();
+            List<ReviewRow> reviewRows = new ArrayList<>();
             try {
                 for (int t = 0; t < count; t++) {
                     int selected = maps[t].getSelectedItemPosition();
@@ -1525,31 +1525,105 @@ public final class MainActivity extends Activity {
                     for (int o = 0; o < count; o++) if (o != t && maps[o].getSelectedItemPosition() == selected) shared.add(o + 1);
                     FilamentMatch.Verdict verdict = FilamentMatch.check(needs[t], tray, shared);
                     if (verdict.level == FilamentMatch.Level.WRONG) wrong++; else if (verdict.level == FilamentMatch.Level.CHECK) check++;
-                    String wants = needs[t] == null ? "" : needs[t].describe();
-                    String low = spoolStore.shortfall(SpoolStore.slot(tray), toolGrams[t]);
-                    lines.append("\nFilament ").append(t + 1).append(wants.isEmpty() ? "" : " (" + wants + ")").append(" → ").append(choices.get(selected).replace("\n", ", "))
-                        .append(verdict.level == FilamentMatch.Level.OK ? "" : (verdict.level == FilamentMatch.Level.WRONG ? "\n   ✕ " : "\n   ! ") + verdict.text)
-                        .append(low == null ? "" : "\n   ! " + low);
+                    ReviewRow row = new ReviewRow();
+                    row.title = "Filament " + (t + 1); row.wants = needs[t] == null ? "" : needs[t].describe(); row.wantsColour = needs[t] == null ? null : needs[t].colour;
+                    row.tray = tray.material() + " · " + tray.where(); row.trayColour = tray.colour; row.level = verdict.level;
+                    row.problem = verdict.level == FilamentMatch.Level.OK ? "" : verdict.text; row.low = spoolStore.shortfall(SpoolStore.slot(tray), toolGrams[t]);
+                    row.grams = toolGrams[t];
+                    reviewRows.add(row);
                 }
             } catch (Exception error) { message("Could not read the tray choices. Refresh trays and try again."); return; }
             setup.dismiss();
-            String text = StatusPresentation.clean(name) + "\nStorage: " + (storage.equals("local") ? "Internal" : "USB") + "\nBuild plate " + (plate.getSelectedItemPosition() == 0 ? "A" : "B")
-                + " · Run printer / bed check " + (leveling.isChecked() ? "on" : "off") + " · Force bed leveling " + (force.isChecked() ? "on" : "off") + "\nTimelapse " + (timelapse.isChecked() ? "on" : "off")
-                + "\n\n" + count + (count == 1 ? " filament: " : " filaments: ") + (mapping.length() == 0 ? "the printer's own mapping" : "from these trays:" + lines)
-                + (wrong > 0 ? "\n\n" + wrong + (wrong == 1 ? " filament is" : " filaments are") + " a different material from what the file was sliced for. Printing with the wrong material can fail or clog the nozzle." : "")
-                + "\n\nStarting moves and heats the printer. Confirm the plate is clear and the filament is correct.";
+            List<String[]> settingsShown = new ArrayList<>();
+            settingsShown.add(new String[] {"Build plate", plate.getSelectedItemPosition() == 0 ? "A" : "B"});
+            settingsShown.add(new String[] {"Printer / bed check", leveling.isChecked() ? "On" : "Off"});
+            settingsShown.add(new String[] {"Force bed leveling", force.isChecked() ? "On" : "Off"});
+            settingsShown.add(new String[] {"Timelapse on the printer", timelapse.isChecked() ? "On" : "Off"});
             int wrongCount = wrong, checkCount = check;
-            new AlertDialog.Builder(this).setTitle(wrong > 0 ? "Materials don't match" : "Start this print?").setMessage(text).setNegativeButton(wrong > 0 ? "Go back" : "Cancel", (b2, w2) -> { if (wrongCount > 0) { setup.show(); main.post(watch[0]); } })
-                .setPositiveButton(wrong > 0 ? "Start anyway" : "Start print", (confirm, which) -> {
-                    if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
-                        + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
-                    if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
-                    // Remember the grams per tray, so they come off the spools when the print ends (only with chosen trays: the printer's own mapping is not known).
-                    Map<String, Double> uses = new HashMap<>();
-                    for (int t = 0; t < count && mapping.length() > 0; t++) { int at = maps[t].getSelectedItemPosition(); if (at > 0 && toolGrams[t] > 0) uses.merge(SpoolStore.slot(trays.get(at - 1)), toolGrams[t], Double::sum); }
-                    spoolStore.started(name, uses, System.currentTimeMillis());
-                }).show();
+            Runnable start = () -> {
+                if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
+                    + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
+                if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
+                // Remember the grams per tray, so they come off the spools when the print ends (only with chosen trays: the printer's own mapping is not known).
+                Map<String, Double> uses = new HashMap<>();
+                for (int t = 0; t < count && mapping.length() > 0; t++) { int at = maps[t].getSelectedItemPosition(); if (at > 0 && toolGrams[t] > 0) uses.merge(SpoolStore.slot(trays.get(at - 1)), toolGrams[t], Double::sum); }
+                spoolStore.started(name, uses, System.currentTimeMillis());
+            };
+            printReview(file, storage, settingsShown, reviewRows, count, wrongCount, start, () -> { setup.show(); main.post(watch[0]); });
         })); setup.show();
+    }
+    /** One filament on the review page: what the file was sliced for, the tray chosen, and anything to check. */
+    static final class ReviewRow { String title, wants, wantsColour, tray, trayColour, problem = "", low; FilamentMatch.Level level = FilamentMatch.Level.OK; double grams; }
+    /**
+     * The last step before a print starts: a full page with the file, the settings and each filament's tray side by side, the
+     * problems in colour, and one Start button (sent once per tap). Change settings goes back to the setup as it was.
+     */
+    private void printReview(JSONObject file, String storage, List<String[]> settingsShown, List<ReviewRow> rows, int count, int wrong, Runnable start, Runnable back) {
+        android.app.Dialog page = new android.app.Dialog(this, dark ? android.R.style.Theme_Material_NoActionBar : android.R.style.Theme_Material_Light_NoActionBar);
+        LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND); root.setFitsSystemWindows(true);
+        Button change = new Button(this); change.setText("‹ Change settings"); change.setAllCaps(false); change.setTextSize(15); change.setTextColor(TEAL); change.setBackground(null);
+        change.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); change.setMinHeight(dp(48)); change.setMinimumHeight(dp(48)); change.setPadding(dp(16), 0, dp(16), 0);
+        root.addView(change, new LinearLayout.LayoutParams(-2, -2));
+        ScrollView scroll = new ScrollView(this); LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(16), 0, dp(16), dp(16)); scroll.addView(body);
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        A11y.heading(label(body, wrong > 0 ? "Check the filaments" : "Ready to print?", 22, INK, true));
+        // The file: its picture from the printer (when it sent one), name and what the printer reports about it.
+        LinearLayout fileCard = reviewCard(body, null);
+        LinearLayout fileRow = new LinearLayout(this); fileRow.setOrientation(LinearLayout.HORIZONTAL); fileRow.setGravity(Gravity.CENTER_VERTICAL); fileCard.addView(fileRow);
+        Bitmap picture = printer == null ? null : decodeThumbnail(printer.thumbnails.get(storage + "/" + file.optString("filename")));
+        if (picture != null) { ImageView thumb = new ImageView(this); thumb.setImageBitmap(picture); thumb.setScaleType(ImageView.ScaleType.FIT_CENTER); thumb.setContentDescription("Preview of the file");
+            LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(88), dp(88)); size.rightMargin = dp(14); fileRow.addView(thumb, size); }
+        LinearLayout fileText = new LinearLayout(this); fileText.setOrientation(LinearLayout.VERTICAL); fileRow.addView(fileText, new LinearLayout.LayoutParams(0, -2, 1));
+        label(fileText, StatusPresentation.clean(file.optString("filename")), 16, INK, true);
+        List<String> facts = new ArrayList<>();
+        if (file.optLong("print_time", -1) > 0) facts.add("about " + FeatureData.duration(file.optLong("print_time")));
+        if (file.optInt("layer", 0) > 0) facts.add(file.optInt("layer") + " layers");
+        double grams = 0; for (ReviewRow row : rows) grams += row.grams; if (grams > 0) facts.add(String.format(Locale.getDefault(), "about %.0f g of filament", grams));
+        facts.add(storage.equals("local") ? "on the printer" : "on the USB drive");
+        label(fileText, String.join(" · ", facts), 13, MUTED, false);
+        // The settings chosen.
+        LinearLayout settingsCard = reviewCard(body, "Settings");
+        for (String[] item : settingsShown) {
+            LinearLayout line = new LinearLayout(this); line.setOrientation(LinearLayout.HORIZONTAL); line.setPadding(0, dp(4), 0, dp(4)); settingsCard.addView(line);
+            TextView key = label(line, item[0], 14, MUTED, false); ((LinearLayout.LayoutParams) key.getLayoutParams()).width = 0; ((LinearLayout.LayoutParams) key.getLayoutParams()).weight = 1;
+            TextView value = label(line, item[1], 14, INK, true); value.setGravity(Gravity.END); ((LinearLayout.LayoutParams) value.getLayoutParams()).width = -2;
+            line.setContentDescription(item[0] + ": " + item[1]); line.setFocusable(true);
+        }
+        // Each filament: sliced for → tray, with what to check.
+        LinearLayout filamentCard = reviewCard(body, count == 1 ? "Filament" : count + " filaments");
+        if (rows.isEmpty()) label(filamentCard, "The printer's own mapping: it uses the trays the file was sliced for. Choose trays in the setup to set them yourself.", 14, INK, false);
+        for (int i = 0; i < rows.size(); i++) {
+            ReviewRow row = rows.get(i);
+            if (i > 0) { View rule = new View(this); rule.setBackgroundColor(TRACK); LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1))); l.topMargin = dp(8); l.bottomMargin = dp(8); filamentCard.addView(rule, l); }
+            label(filamentCard, row.title, 14, INK, true);
+            TextView from = label(filamentCard, "Sliced for: " + (row.wants.isEmpty() ? "not stated in the file" : row.wants), 13, MUTED, false);
+            if (row.wantsColour != null) { from.setCompoundDrawablesRelativeWithIntrinsicBounds(swatch(row.wantsColour), null, null, null); from.setCompoundDrawablePadding(dp(8)); }
+            TextView to = label(filamentCard, "Prints from: " + row.tray, 14, INK, false);
+            if (row.trayColour != null) { to.setCompoundDrawablesRelativeWithIntrinsicBounds(swatch(row.trayColour), null, null, null); to.setCompoundDrawablePadding(dp(8)); }
+            if (!row.problem.isEmpty()) label(filamentCard, (row.level == FilamentMatch.Level.WRONG ? "✕ " : "! ") + row.problem, 13, row.level == FilamentMatch.Level.WRONG ? ERROR : AMBER, false);
+            if (row.low != null) label(filamentCard, "! " + row.low, 13, AMBER, false);
+        }
+        if (wrong > 0) label(body, wrong + (wrong == 1 ? " filament is" : " filaments are") + " a different material from what the file was sliced for. Printing with the wrong material can fail or clog the nozzle.", 14, ERROR, true);
+        label(body, "Starting moves and heats the printer. Make sure the build plate is clear and the filament is right.", 13, MUTED, false);
+        // Start and Change, always on screen below the page.
+        LinearLayout bar = new LinearLayout(this); bar.setOrientation(LinearLayout.HORIZONTAL); bar.setPadding(dp(16), dp(8), dp(16), dp(12)); bar.setBackgroundColor(SURFACE);
+        root.addView(bar, new LinearLayout.LayoutParams(-1, -2));
+        Button back2 = rowButton(bar, "Change settings", () -> { }, false);
+        Button go = rowButton(bar, wrong > 0 ? "Start anyway" : "Start print", () -> { }, true);
+        if (wrong > 0) go.setBackgroundTintList(ColorStateList.valueOf(ERROR));
+        boolean[] sent = {false};
+        Runnable goBack = () -> { page.dismiss(); back.run(); };
+        change.setOnClickListener(v -> goBack.run()); back2.setOnClickListener(v -> goBack.run());
+        go.setOnClickListener(v -> { if (sent[0]) return; sent[0] = true; go.setEnabled(false); page.dismiss(); start.run(); });
+        page.setOnCancelListener(d -> back.run());   // system back: to the setup, nothing sent
+        page.setContentView(root); page.show();
+    }
+    private LinearLayout reviewCard(LinearLayout parent, String title) {
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(12), dp(16), dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(SURFACE); shape.setCornerRadius(dp(20)); card.setBackground(shape);
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); parent.addView(card, layout);
+        if (title != null) A11y.heading(label(card, title, 16, INK, true));
+        return card;
     }
     /** A small round colour swatch for a "sliced for" line. */
     private android.graphics.drawable.Drawable swatch(String colour) {
@@ -1908,7 +1982,7 @@ public final class MainActivity extends Activity {
         controlsCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
         // On first run the Get started card already says how to connect; the "Not connected" summary would repeat it.
         heroCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
-        canvasCard.setVisibility(noData ? View.GONE : View.VISIBLE); tilesRow.setVisibility(noData ? View.GONE : View.VISIBLE);
+        canvasCard.setVisibility(noData && !(connecting && renderedCanvas != null) ? View.GONE : View.VISIBLE); tilesRow.setVisibility(noData ? View.GONE : View.VISIBLE);
         printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData || !canControl ? View.GONE : View.VISIBLE);
         cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
         transferRow.setVisibility(cancelUpload.getVisibility() == View.VISIBLE || cancelDownload.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
@@ -2041,7 +2115,8 @@ public final class MainActivity extends Activity {
         connectionSection.detail.setText(ready ? (printer.pinProbe() ? "Connected on your network, read-only" : "Connected on your network")
             : cloudFresh ? "Watching through the Elegoo cloud" : connecting ? "Connecting…" : chipNow);
         main.post(this::autoLoadTrays);
-        JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
+        // The last trays stay on screen while the connection changes over (a reconnect, local to cloud); they go only when nothing is connected.
+        JSONObject canvasNow = (ready || cloud || connecting) && printer.canvas != null ? printer.canvas : null;
         renderTrays(canvasNow);
         renderSpools(canvasNow);
         if (canvasNow != null) {
@@ -2122,10 +2197,29 @@ public final class MainActivity extends Activity {
         }).show();
     }
     private void renderTrays(JSONObject canvas) {
-        String key = canvas == null ? null : canvas.toString();
+        // Rebuilt only when something shown changes: the printer's report also carries values that are not shown here (and
+        // reorders its fields), and rebuilding on each of those made the strip flicker and the page jump.
+        String key = trayKey(canvas);
         if (java.util.Objects.equals(key, renderedCanvas)) return;
         renderedCanvas = key; trayList.removeAllViews(); trayStrip.removeAllViews();
         try { buildTrays(canvas); } finally { renderTrayDetails(); }
+    }
+    /** What the tray strip and list show, as one string: units, their trays (material, name, colour, range) and the active tray. */
+    static String trayKey(JSONObject canvas) {
+        if (canvas == null) return null;
+        StringBuilder key = new StringBuilder().append(canvas.optInt("active_canvas_id", -1)).append('/').append(canvas.optInt("active_tray_id", -1));
+        JSONArray units = canvas.optJSONArray("canvas_list");
+        for (int u = 0; units != null && u < units.length(); u++) {
+            JSONObject unit = units.optJSONObject(u); if (unit == null) continue;
+            key.append('|').append(unit.optInt("canvas_id", -1)).append(':').append(unit.opt("connected"));
+            JSONArray list = unit.optJSONArray("tray_list");
+            for (int t = 0; list != null && t < list.length(); t++) {
+                JSONObject tray = list.optJSONObject(t); if (tray == null) continue;
+                key.append(';').append(tray.optInt("tray_id", -1)).append(',').append(tray.optString("filament_type")).append(',').append(tray.optString("filament_name"))
+                    .append(',').append(TrayPlan.colour(tray.optString("filament_color"))).append(',').append(tray.optInt("min_nozzle_temp")).append('-').append(tray.optInt("max_nozzle_temp"));
+            }
+        }
+        return key.toString();
     }
     private void buildTrays(JSONObject canvas) {
         JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
