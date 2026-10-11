@@ -1,9 +1,9 @@
 {
-  "zip_sha256": "48a4db5176959c0a752e4d15cf81d81a40ec9c0dbe3a6f33a16e9ad20b58ead9",
+  "zip_sha256": "4b92d48c82a11870742023b3c6771b9e1de9afb6fae5d0bc8dbfd59c2694f750",
   "elegooslicer_and_build": "2d507e39a96ab9562b35d06b23ef5df8fe613297 76f3bdf 20261007025911",
   "source_trees": {
-    "slicer/engine": "5c0f1dd1e083fe94e64d3e688edff0ef09792fdb",
+    "slicer/engine": "1e5c5388a8b652657221254b483cec1a4804e932",
     "slicer/jni": "cbd56ee056d389df4888dc9d16d70f13d18a3df2"
   },
-  "library_sha256": "4bb5018982702564b606ce51d38de902e66031b41938cd32e97819b3ff3751db"
+  "library_sha256": "a42aae0caadde9beab6a7cc48595bef3f67dc0a4380d66dbe5f857fa0aa25338"
 }
