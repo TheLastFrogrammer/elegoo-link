@@ -100,7 +100,7 @@ public final class ModelSearchActivity extends Activity {
         showBrowseIn();
         results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); content.addView(results);
         more = button(content, "More results", () -> search(page + 1)); more.setVisibility(View.GONE);
-        label(content, "Models belong to their designers: check each model's licence on its page before printing or sharing it.", 12, muted, false);
+        label(content, "Models belong to their designers. Check each model's license on its page before you print or share it.", 12, muted, false);
         showStatus();
     }
 
@@ -109,13 +109,13 @@ public final class ModelSearchActivity extends Activity {
     private void showStatus() {
         boolean thingiverse = keys.has(SiteKeys.THINGIVERSE), mmf = keys.has(SiteKeys.MYMINIFACTORY);
         status.setText(thingiverse || mmf ? "Searches " + (thingiverse && mmf ? "Thingiverse and MyMiniFactory" : thingiverse ? "Thingiverse" : "MyMiniFactory") + " here."
-            : "To search here, add your own free Thingiverse app token or MyMiniFactory API key (Site keys…). Without one, browse the sites below.");
+            : "To search here, add a free Thingiverse app token or MyMiniFactory API key under Site keys. Without one, use the sites below.");
     }
 
     // ------------------------------------------------------------------ searching
     private void search(int nextPage) {
         String term = query.getText().toString().trim();
-        if (term.isEmpty()) { status.setText("Type what you are looking for first."); return; }
+        if (term.isEmpty()) { status.setText("Type a word or two first, such as cable clip."); return; }
         String thingToken = keys.load(SiteKeys.THINGIVERSE), mmfKey = keys.load(SiteKeys.MYMINIFACTORY);
         if (thingToken.isEmpty() && mmfKey.isEmpty()) { keysDialog(); return; }
         if (nextPage == 1) { results.removeAllViews(); lastTerm = term; }
@@ -132,7 +132,7 @@ public final class ModelSearchActivity extends Activity {
             main.post(() -> {
                 if (mine != generation || isDestroyed()) return;
                 for (ModelSites.Model model : merged) results.addView(card(model));
-                status.setText((merged.isEmpty() ? "Nothing found" + (nextPage > 1 ? " on this page." : ".") : merged.size() + " found" + (nextPage > 1 ? " on page " + nextPage : "") + ".")
+                status.setText((merged.isEmpty() ? "Nothing found" + (nextPage > 1 ? " on this page. Try the first page or a different word." : ". Try a different word, or browse the sites above.") : merged.size() + " found" + (nextPage > 1 ? " on page " + nextPage : "") + ".")
                     + (problems.isEmpty() ? "" : " " + String.join(" ", problems)));
                 more.setVisibility(merged.isEmpty() ? View.GONE : View.VISIBLE);
             });
@@ -196,7 +196,7 @@ public final class ModelSearchActivity extends Activity {
                 for (ModelSites.ModelFile file : list) if (file.printable()) printable.add(file);
                 if (printable.isEmpty()) {
                     new AlertDialog.Builder(this).setTitle(model.name).setMessage(why != null ? "The file list could not be read: " + why
-                        : "No STL, 3MF, OBJ or STEP file is listed for this model. Its page may have more.").setPositiveButton("Open page", (d, w) -> openBrowser(model.page)).setNegativeButton("Close", null).show();
+                        : "No model files are listed here. Open the model's page to see them.").setPositiveButton("Open page", (d, w) -> openBrowser(model.page)).setNegativeButton("Close", null).show();
                     return;
                 }
                 String[] names = new String[printable.size()]; boolean[] chosen = new boolean[printable.size()];
@@ -248,10 +248,10 @@ public final class ModelSearchActivity extends Activity {
     // ------------------------------------------------------------------ site keys
     private void keysDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
-        label(body, "Searching here uses each site's official API with your own free key. They are stored encrypted on this phone and sent only to their own site.", 13, ink, false);
+        label(body, "Search uses each site's official API with your own free key. Keys are stored encrypted on this phone and sent only to their own site.", 13, ink, false);
         label(body, "Thingiverse app token: sign in at thingiverse.com, open thingiverse.com/developers, create an app, and copy its App Token.", 12, muted, false);
         EditText thingiverse = secret(body, keys.has(SiteKeys.THINGIVERSE) ? "Saved — type to replace, or clear below" : "Thingiverse app token");
-        label(body, "MyMiniFactory API key: from MyMiniFactory's developer page (myminifactory.com, For developers). Its downloads need a MyMiniFactory login, so its models open on its site.", 12, muted, false);
+        label(body, "MyMiniFactory API key: from the For developers page on myminifactory.com. Its downloads need a MyMiniFactory login, so its models open on its site.", 12, muted, false);
         EditText mmf = secret(body, keys.has(SiteKeys.MYMINIFACTORY) ? "Saved — type to replace, or clear below" : "MyMiniFactory API key");
         new AlertDialog.Builder(this).setTitle("Site keys").setView(body)
             .setNeutralButton("Clear both", (d, w) -> { try { keys.save(SiteKeys.THINGIVERSE, ""); keys.save(SiteKeys.MYMINIFACTORY, ""); } catch (Exception ignored) { } showStatus(); })
@@ -294,7 +294,7 @@ public final class ModelSearchActivity extends Activity {
         style(inFirefox, useFirefox); style(inApp, !useFirefox);
         getFirefox.setVisibility(installed ? View.GONE : View.VISIBLE);
         browseNote.setText(useFirefox
-            ? "Sites open in Firefox with your search, your sign-ins and add-ons such as uBlock Origin. When a download finishes, tap Open and choose Link Workshop: the model goes straight to the slicer (a ZIP is unpacked)."
+            ? "Sites open in Firefox with your search, your sign-ins and add-ons such as uBlock Origin. When a download finishes, tap Open and choose Link Workshop. The model then goes to the slicer (a ZIP is unpacked)."
             : installed ? "Sites open in this app's browser (no ad blocker). Files you download come straight to the slicer."
             : "Sites open in this app's browser (no ad blocker); files you download come straight to the slicer. With Firefox installed they can open there instead, with an ad blocker such as uBlock Origin.");
     }

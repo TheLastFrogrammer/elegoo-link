@@ -134,8 +134,8 @@ public final class ModelBrowserActivity extends Activity {
         readyBar = bar(root);
         readyText = A11y.polite(label(readyBar, "", 13, ink, false));
         LinearLayout readyRow = row(readyBar);
-        rowButton(readyRow, "Clear", () -> { ready.clear(); showReady(); }, false);
         sliceButton = rowButton(readyRow, "Slice", this::finishWithModels, true);
+        rowButton(readyRow, "Clear list", () -> { ready.clear(); showReady(); }, false);
 
         if (android.os.Build.VERSION.SDK_INT >= 33) {
             android.window.OnBackInvokedCallback callback = () -> { if (web.canGoBack()) web.goBack(); else finishWithModels(); };
@@ -184,8 +184,8 @@ public final class ModelBrowserActivity extends Activity {
     }
 
     private void moreMenu() {
-        String[] items = {"Reload", "Open this page in the phone's browser", "Sign out of all sites (clears their cookies)"};
-        new AlertDialog.Builder(this).setTitle("Browser").setItems(items, (d, which) -> {
+        String[] items = {"Reload", "Open this page in the phone's browser…", "Sign out of all sites…"};
+        new AlertDialog.Builder(this).setTitle("Browser options").setItems(items, (d, which) -> {
             if (which == 0) web.reload();
             else if (which == 1) {
                 String url = web.getUrl();
@@ -209,10 +209,10 @@ public final class ModelBrowserActivity extends Activity {
         if (!blob && !data && !"https".equalsIgnoreCase(scheme)) { explain("Download not taken", "The site offered this file over an address that is not secure, so it was not downloaded."); return; }
         String name = ModelSites.fileNameFor(blob || data ? null : url, disposition, mimeType);
         if (!ModelSites.browserTakes(name)) {
-            explain("Not a model file", "\"" + name + "\" is not a model. The app takes STL, 3MF, OBJ, STEP and AMF files, and ZIPs of them.");
+            explain("Not a model file", "\"" + name + "\" is not a model the app can open. It takes STL, 3MF, OBJ, STEP and AMF files, and ZIPs of them.");
             return;
         }
-        if (length > ModelSites.MAX_DOWNLOAD || blob && length > MAX_BLOB) { explain("File too large", "The file is larger than " + (blob ? "50" : "200") + " MB."); return; }
+        if (length > ModelSites.MAX_DOWNLOAD || blob && length > MAX_BLOB) { explain("File too large", "The file is larger than " + (blob ? "50" : "200") + " MB, so it was not downloaded."); return; }
         if (!folder.isDirectory() && !folder.mkdirs()) { explain("Download stopped", "Could not make room for the download."); return; }
         File target = unique(new File(folder, name));
         downloading = true; cancelDownload = false;
