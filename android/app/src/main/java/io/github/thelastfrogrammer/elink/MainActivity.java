@@ -224,9 +224,9 @@ public final class MainActivity extends Activity {
         for (int i = 0; i < TAB_COUNT; i++) buildHub(i);
         // Settings: a short front page of sections, the connection first.
         connectionSection = section(SETTINGS, "Printer connection", "");
-        preferencesSection = section(SETTINGS, "App preferences", "Appearance, print recordings, camera pictures and notifications");
+        preferencesSection = section(SETTINGS, "App preferences", "Appearance, recordings, camera pictures and notifications");
         helpSection = section(SETTINGS, "Help & diagnostics", "Connection help, Field check, printer probe and diagnostics");
-        aboutSection = section(SETTINGS, "About", "Version " + appVersion() + ", licences and what is planned");
+        aboutSection = section(SETTINGS, "About", "Version " + appVersion() + ", licences and planned features");
         currentSection = connectionSection.body;
         // Local or cloud: one connection card at a time, so the page stays short.
         LinearLayout modeRow = row(currentSection); ((LinearLayout.LayoutParams) modeRow.getLayoutParams()).topMargin = dp(12);
@@ -369,9 +369,9 @@ public final class MainActivity extends Activity {
         printerStatus = label(status, "", 13, MUTED, false);
         printerFix = rowButton(row(status), "", this::fixControl, true); ((View) printerFix.getParent()).setVisibility(View.GONE);
         emergencyButton(status);
-        tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and the print speed mode");
+        tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and print speed");
         filamentSection = section(PRINTER, "Filament", "Load or unload filament and CANVAS trays");
-        motionSection = section(PRINTER, "Move & calibrate", "Home, move the axes, level the bed, vibration test and self-check");
+        motionSection = section(PRINTER, "Move & calibrate", "Home, move axes, level the bed, vibration test and full self-check");
         currentSection = tuningSection.body;
         LinearLayout tuning = card(null); tuningCard = tuning;
         tuningHint = label(tuning, "", 13, MUTED, false);
@@ -479,15 +479,15 @@ public final class MainActivity extends Activity {
         setSettingsMode(settingsModeAtStart());
         currentSection = preferencesSection.body;
         LinearLayout preferences = card(null);
-        button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "Follow system" : dark ? "Dark" : "Light"), this::appearanceDialog);
+        button(preferences, "Appearance: " + (settings.getInt("theme", 0) == 0 ? "Follow system" : dark ? "Dark" : "Light") + "…", this::appearanceDialog);
         CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         Button pictures = button(preferences, "", () -> pictureDialog(true));
         pictureDefault = pictures; showPictureDefault();
-        label(preferences, "Camera pictures are kept with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can have its own interval (Pictures… on the Print tab while it prints).", 12, MUTED, false);
+        label(preferences, "Camera pictures are saved with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can set its own interval (Pictures… on the Print tab while it prints).", 12, MUTED, false);
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
-        label(preferences, "Alerts need notification permission and an active monitoring session. They stop when you disconnect, or when Android stops the app.", 13, MUTED, false);
+        label(preferences, "Alerts need notification permission and a monitoring session. They stop when you disconnect or when Android stops the app.", 13, MUTED, false);
         currentSection = helpSection.body;
         LinearLayout help = card(null);
         button(help, "Connection help…", this::connectionHelp);
@@ -500,7 +500,7 @@ public final class MainActivity extends Activity {
         button(help, "Share diagnostics…", this::shareDiagnostics);
         currentSection = aboutSection.body;
         LinearLayout about = card("Link Workshop " + appVersion());
-        label(about, "Development build: printer behaviour still needs hardware testing (Field check… above walks through it). Planned next: painting tools in the slicer and other printer models.", 13, MUTED, false);
+        label(about, "Development build. Printer behaviour still needs hardware testing; Field check (in Help & diagnostics) walks through it. Planned next: painting tools in the slicer and more printer models.", 13, MUTED, false);
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
@@ -1177,7 +1177,7 @@ public final class MainActivity extends Activity {
     /** History: what was printed (with Print again and timelapses), the app's own recordings, then the printer's storage. */
     private void buildHistory() {
         LinearLayout recordings = card("Print recordings");
-        label(recordings, "Graphs of progress, layers, temperatures and fans for each print this app has watched, with its camera pictures.", 13, MUTED, false);
+        label(recordings, "Progress, layer, temperature and fan graphs, plus camera pictures, for each print the app watched.", 13, MUTED, false);
         button(recordings, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
         LinearLayout history = card("Print history");
         LinearLayout refreshRow = row(history); historyButtons = refreshRow;
@@ -1859,7 +1859,10 @@ public final class MainActivity extends Activity {
         printerStatus.setText(controlSource.getText()); printerFix.setText(controlFix.getText()); ((View) printerFix.getParent()).setVisibility(fix ? View.VISIBLE : View.GONE);
         if (!canControl) { tuningHint.setText(controlSource.getText()); upkeepHint.setText(controlSource.getText()); }
         filamentHint.setText(upkeepHint.getText());
-        connectionSection.detail.setText(summary.getText());
+        // The connection row says plainly what the chip in the header means.
+        String chipNow = summary.getText().toString();
+        connectionSection.detail.setText(ready ? (printer.pinProbe() ? "Connected on your network, read-only" : "Connected on your network")
+            : cloudFresh ? "Watching through the Elegoo cloud" : connecting ? "Connecting…" : chipNow);
         main.post(this::autoLoadTrays);
         JSONObject canvasNow = (ready || cloud) && printer.canvas != null ? printer.canvas : null;
         renderTrays(canvasNow);
