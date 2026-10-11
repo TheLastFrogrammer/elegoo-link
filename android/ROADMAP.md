@@ -19,11 +19,23 @@ checklist is [FIELD_TEST.md](FIELD_TEST.md); Settings → Share diagnostics reco
 
 ## Next
 
-1. Hardware round: work through FIELD_TEST.md on the phone and CC2 and fix what the diagnostics show (Files tab blank, plate margins).
-2. Layout: a handle to drag-scale a model in the 3D view (sizes in millimetres are done).
-3. Slicer: supports and seam painting on models; modifier volumes (a box or cylinder with its own settings inside a model).
-4. Find out why the printer refused a cloud-mode download on port 80 (Elegoo's own cloud page uses the same request); check with the phone's browser and diagnostics.
-5. Other printer models (the Centauri Carbon 1 uses a different protocol).
+Plans, in order. Each round ends with tests, a build and a field check on the phone.
+
+1. **Field check (closes the loop with the hardware).** An in-app "Field check" page that walks through FIELD_TEST.md on the phone and
+   CC2, records pass/fail and notes, and gathers the matching diagnostics lines into one report to share (no codes, PINs, addresses
+   or serials, as now). Open items it covers first: the Files tab shown blank, plate margins for the camera line-up, printhead mask
+   and fan sizes, the camera delay, tray refresh through the cloud, maintenance commands, timelapse download, first LAN connection.
+2. **Printing workflow.** Print setup shows the trays as the Monitor's colour strip and remembers the last tray choice per file
+   (prefilled, still confirmed); Print again from history opens Print setup prefilled; a progress notification with the file's
+   preview and time left (its buttons only open the app).
+3. **Layout and slicer.** A drag handle to scale in the 3D view; support blockers and enforcers as boxes; modifier boxes (settings
+   for part of a model); then support and seam painting. Measure slicing speed and memory on the phone.
+4. **Live toolpath.** Line up from a printed test shape (tap its corners) to set the plate margins without guessing; keep a line-up
+   per saved printer.
+5. **Engineering.** Split MainActivity (over 2,000 lines) into one controller per tab, behind the existing tests; a CI build that
+   produces the APK on each push; signed release builds.
+6. Find out why the printer refused a cloud-mode download on port 80 (Elegoo's own cloud page uses the same request).
+7. Other printer models (the Centauri Carbon 1 uses a different protocol).
 
 ## Rules that stay
 
