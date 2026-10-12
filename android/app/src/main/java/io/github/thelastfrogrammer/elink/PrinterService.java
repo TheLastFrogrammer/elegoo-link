@@ -79,30 +79,50 @@ public final class PrinterService extends Service {
         recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5));
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name);
-        if (recorder.pictureDue(mono)) takePicture(mono);
+        if (recorder.pictureDue(mono)) grab(null);
     }
     /**
-     * A camera picture for the running print's recording, from the printer's own stream on this network (or the home VPN):
-     * one frame, then the stream closes. Through the cloud, pictures are taken while the cloud camera is open in the app.
+     * The printer's camera, for pictures: one connection at a time (the printer's own stream may serve only one), opened for a
+     * single frame and closed again. Every frame the app gets, here or from a camera on screen (offerFrame), goes to the running
+     * print's recording when a picture is due and to the progress notification. A failed try waits 30 s before the next.
      */
-    private volatile boolean picturing;
-    private void takePicture(long mono) {
-        if (picturing || !ready() || route == null) return;
+    private volatile boolean grabbing;
+    private long grabRetryAt;
+    private final List<Frame> grabWaiting = new ArrayList<>();
+    private void grab(Frame then) {
+        if (then != null) synchronized (grabWaiting) { grabWaiting.add(then); }
+        long now = SystemClock.elapsedRealtime();
+        if (grabbing || !ready() || route == null || now < grabRetryAt) { if (!grabbing) synchronized (grabWaiting) { grabWaiting.clear(); } return; }
         String url;
         try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); } catch (Exception invalid) { return; }
-        picturing = true;
+        grabbing = true;
         MjpegPlayer[] player = new MjpegPlayer[1];
+        Runnable finish = () -> { MjpegPlayer p = player[0]; player[0] = null; grabbing = false; if (p != null) p.close(); };
         player[0] = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
             public void frame(android.graphics.Bitmap image) {
                 if (player[0] == null) return;
-                java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg);
-                if (recorder != null) recorder.savePicture(jpeg.toByteArray(), mono);
-                done();
+                finish.run();
+                main.post(() -> {
+                    if (destroyed) return;
+                    offerFrame(image);
+                    List<Frame> waiting; synchronized (grabWaiting) { waiting = new ArrayList<>(grabWaiting); grabWaiting.clear(); }
+                    for (Frame f : waiting) f.take(image);
+                });
             }
-            public void error(String message) { done(); }
-            private void done() { MjpegPlayer p = player[0]; player[0] = null; picturing = false; if (p != null) p.close(); }
+            public void error(String message) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; synchronized (grabWaiting) { grabWaiting.clear(); } }
         });
-        main.postDelayed(() -> { MjpegPlayer p = player[0]; player[0] = null; picturing = false; if (p != null) p.close(); }, 15_000);   // never left open
+        main.postDelayed(() -> { if (player[0] != null) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; } }, 15_000);   // never left open
+    }
+    private long offeredAt;
+    /** A camera frame from anywhere in the app: kept as the print's picture when one is due, and shown in the progress notification. */
+    public void offerFrame(android.graphics.Bitmap image) {
+        if (image == null) return;
+        long mono = SystemClock.elapsedRealtime();
+        if (recorder != null && recorder.pictureDue(mono)) {
+            java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg);
+            recorder.savePicture(jpeg.toByteArray(), mono);
+        }
+        if (offeredAt == 0 || mono - offeredAt > 30_000) { offeredAt = mono; progressPicture = scaled(image, 640); progressPictureKey = "live"; progressGrabAt = mono; }
     }
     private boolean cloudVisible, cloudPolling;
     public JSONObject cloudStatus = new JSONObject();
@@ -1030,7 +1050,7 @@ public final class PrinterService extends Service {
         manager.notify(id, builder.build());
         // Then, on the local connection, the same alert again with a picture from the printer's camera (it alerts only once).
         if (getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alertPictures", true))
-            grabFrame(image -> {
+            grab(image -> {
                 // Small copies only: a notification travels between processes, and a full camera frame (megabytes) can be refused.
                 android.graphics.Bitmap picture = scaled(image, 640), icon = scaled(image, 128);
                 manager.notify(id, builder.setLargeIcon(icon).setStyle(new Notification.BigPictureStyle().bigPicture(picture).setSummaryText(text)).build());
@@ -1051,7 +1071,7 @@ public final class PrinterService extends Service {
         long now = SystemClock.elapsedRealtime();
         if (ready() && (progressGrabAt == 0 || now - progressGrabAt > 120_000)) {
             progressGrabAt = now;
-            grabFrame(image -> { progressPicture = scaled(image, 640); progressPictureKey = "live"; updateNotification(true); });
+            grab(image -> updateNotification(true));
         }
         if (!"live".equals(progressPictureKey) && recorder != null) {
             PrintRecorder.Recording current = recorder.current();
@@ -1068,18 +1088,7 @@ public final class PrinterService extends Service {
         return progressPicture;
     }
     private interface Frame { void take(android.graphics.Bitmap image); }
-    /** One frame from the printer's own camera stream on this network (or the home VPN); the stream closes at once, or after 15 s. */
-    private void grabFrame(Frame done) {
-        if (!ready() || route == null) return;
-        String url;
-        try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); } catch (Exception invalid) { return; }
-        MjpegPlayer[] player = new MjpegPlayer[1];
-        player[0] = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
-            public void frame(android.graphics.Bitmap image) { MjpegPlayer p = player[0]; player[0] = null; if (p == null) return; p.close(); main.post(() -> { if (!destroyed) done.take(image); }); }
-            public void error(String message) { MjpegPlayer p = player[0]; player[0] = null; if (p != null) p.close(); }
-        });
-        main.postDelayed(() -> { MjpegPlayer p = player[0]; player[0] = null; if (p != null) p.close(); }, 15_000);
-    }
+
     private Notification notification() {
         Intent open = new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent view = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);

@@ -275,7 +275,7 @@ public final class RecordingsActivity extends Activity {
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 note.setText(perLayer == null || cumulative == null ? "The print's file could not be read."
-                    : "How fast each filament was laid down (grams per hour), from the print's progress and the sliced file.");
+                    : "How fast each filament was laid down (grams per hour) and how much was used in all, from the print's progress and the sliced file.");
                 if (perLayer != null && cumulative != null && toolTotals != null) {
                     int tools = toolTotals.length;
                     int[] filamentColour = new int[tools]; Arrays.fill(filamentColour, blue);
@@ -327,6 +327,28 @@ public final class RecordingsActivity extends Activity {
                     view.set("Laying down", " g/h", t, lines, 0, Double.NaN);
                     if (shown != null && shown.start > 0) view.clock(shown.start);
                     chartBox.addView(view, new LinearLayout.LayoutParams(-1, dp(220)));
+                    // The total so far: each filament's grams added up over the build, and all of them together.
+                    double[][] usedSoFar = usedGrams(cumulative, gramsPerMm3);
+                    List<ChartView.Series> totals = new ArrayList<>(); int shownTools = 0;
+                    for (int k = 0; k < tools; k++) {
+                        if (toolTotals[k] <= 0) continue; shownTools++;
+                        double[] values = new double[t.length]; for (int i = 0; i < t.length; i++) values[i] = usedSoFar[i][k];
+                        int[] same = new int[t.length]; Arrays.fill(same, filamentColour[k]);
+                        totals.add(new ChartView.Series(names[k], filamentColour[k], values, false).coloured(same));
+                    }
+                    if (shownTools > 1) { double[] all = new double[t.length]; for (int i = 0; i < t.length; i++) all[i] = usedSoFar[i][tools]; totals.add(new ChartView.Series("All filaments", ink, all, false)); }
+                    int last = -1; for (int i = t.length - 1; i >= 0 && last < 0; i--) if (!Double.isNaN(usedSoFar[i][tools])) last = i;
+                    double planned = 0; for (int k = 0; k < tools; k++) planned += toolTotals[k] * gramsPerMm3[k];
+                    if (last >= 0) {
+                        StringBuilder each = new StringBuilder();
+                        if (shownTools > 1) for (int k = 0; k < tools; k++) if (toolTotals[k] > 0) each.append(each.length() == 0 ? " (" : ", ").append(names[k]).append(String.format(Locale.getDefault(), " %.1f g", usedSoFar[last][k]));
+                        if (each.length() > 0) each.append(")");
+                        label(chartBox, String.format(Locale.getDefault(), "Filament used by %s: %.1f g of the %.1f g sliced%s.", ChartView.elapsed(t[last]), usedSoFar[last][tools], planned, each), 13, ink, false);
+                    }
+                    ChartView usedView = new ChartView(this, ink, muted, grid, surface);
+                    usedView.set("Used so far", " g", t, totals, 0, Double.NaN);
+                    if (shown != null && shown.start > 0) usedView.clock(shown.start);
+                    chartBox.addView(usedView, new LinearLayout.LayoutParams(-1, dp(220)));
                 }
                 if (used != null) for (SlicedMaterials.Entry entry : used.entries) {
                     if (entry.lengthMm == null && entry.massG == null) continue;
@@ -341,6 +363,20 @@ public final class RecordingsActivity extends Activity {
                 }
             });
         }, "recording-material").start();
+    }
+
+    /**
+     * Grams of each filament laid down by each reading (from `cumulative`, mm³ per tool), with all of them together in the last
+     * column. NaN where the reading has no progress.
+     */
+    static double[][] usedGrams(double[][] cumulative, double[] gramsPerMm3) {
+        int tools = gramsPerMm3.length; double[][] out = new double[cumulative.length][tools + 1];
+        for (int i = 0; i < cumulative.length; i++) {
+            double sum = 0; boolean known = cumulative[i].length >= tools && tools > 0 && !Double.isNaN(cumulative[i][0]);
+            for (int k = 0; k < tools; k++) { out[i][k] = known ? cumulative[i][k] * gramsPerMm3[k] : Double.NaN; if (known) sum += out[i][k]; }
+            out[i][tools] = known ? sum : Double.NaN;
+        }
+        return out;
     }
 
     /**

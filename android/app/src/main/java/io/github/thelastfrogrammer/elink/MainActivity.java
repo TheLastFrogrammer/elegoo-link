@@ -1730,7 +1730,9 @@ public final class MainActivity extends Activity {
                 public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
                     monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE);
                     if (fullView != null) fullView.setImageBitmap(image);
-                    tone(image); }
+                    tone(image);
+                    // While this stream is open the printer may not serve another: the print's pictures come from it.
+                    if (printer != null) printer.offerFrame(image); }
                 public void error(String text) { stopCamera(); cameraInfo.setText(text); monitorCameraInfo.setText(text); monitorCameraInfo.setVisibility(View.VISIBLE); }
             }); cameraStart.setText("Stop camera"); monitorCameraStart.setText("Stop camera");
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN, then use the camera address for the home printer. The VPN route must allow the camera port." : "Enter the camera address for the selected printer, and connect the phone to the same Wi-Fi network as the printer."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab, then Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }

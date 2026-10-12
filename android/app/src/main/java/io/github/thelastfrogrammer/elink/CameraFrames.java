@@ -44,6 +44,8 @@ final class CameraFrames implements AutoCloseable {
     }
 
     /** The newest frame (or null), and permission to announce the next one. */
+    /** The newest frame without taking it (null before the first). */
+    byte[] latest() { return latest; }
     byte[] take() { byte[] frame = latest; announced.set(false); return frame; }
 
     @Override public void close() { closed = true; HttpURLConnection stream = connection; if (stream != null) stream.disconnect(); thread.interrupt(); }

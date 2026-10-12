@@ -431,7 +431,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             try { route = NetworkRoute.select(this, printer.remote()); } catch (IOException unavailable) { cameraMessage(unavailable.getMessage()); return; }
             cameraStarted = true; cameraCloud = false;
             cameraFrames = new CameraFrames(url, route.http(), new CameraFrames.Listener() {
-                public void frame() { main.post(() -> { if (web != null && cameraFrames != null) web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); }); }
+                public void frame() { main.post(() -> { if (web != null && cameraFrames != null) { web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); keepLocalPicture(); } }); }
                 public void error(String message) { main.post(() -> { cameraStarted = false; cameraFrames = null; cameraMessage(message + " Open the camera from Monitor to check it."); }); }
             });
             cameraMessage("Camera: the printer's own stream on this network.");
@@ -1161,6 +1161,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                     printer.recorder.savePicture(android.util.Base64.decode(url.substring(23), android.util.Base64.DEFAULT), mono);
             } catch (Exception ignored) { }
         });
+    }
+    /** Locally the printer gives one camera stream at a time: while it plays here, the print's recording takes its pictures from it. */
+    private void keepLocalPicture() {
+        if (printer == null || printer.recorder == null || cameraFrames == null) return;
+        long mono = android.os.SystemClock.elapsedRealtime();
+        if (printer.recorder.pictureDue(mono)) printer.recorder.savePicture(cameraFrames.latest(), mono);
     }
     private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
     private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }

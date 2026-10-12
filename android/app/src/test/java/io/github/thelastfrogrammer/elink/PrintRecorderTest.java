@@ -141,4 +141,13 @@ public class PrintRecorderTest {
         double[][] rate = RecordingsActivity.depositionRates(t, cumulative, new double[] {0.001, 0.001});
         for (int i = 0; i < 20; i++) { assertEquals(3.6, rate[i][0], 1e-9); assertEquals(0, rate[i][1], 1e-9); }
     }
+
+    @Test public void filamentUsedAddsUpEachFilamentAndAll() {
+        double[][] cumulative = {{0, 0}, {1000, 0}, {Double.NaN, Double.NaN}, {2000, 500}};
+        double[][] used = RecordingsActivity.usedGrams(cumulative, new double[] {0.00124, 0.001});
+        assertEquals(0, used[0][2], 1e-9);
+        assertEquals(1.24, used[1][0], 1e-9); assertEquals(1.24, used[1][2], 1e-9);
+        assertTrue(Double.isNaN(used[2][0])); assertTrue(Double.isNaN(used[2][2]));
+        assertEquals(2.48, used[3][0], 1e-9); assertEquals(0.5, used[3][1], 1e-9); assertEquals(2.98, used[3][2], 1e-9);
+    }
 }
