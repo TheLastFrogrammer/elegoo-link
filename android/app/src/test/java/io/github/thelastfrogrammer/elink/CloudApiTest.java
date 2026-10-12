@@ -189,7 +189,7 @@ public class CloudApiTest {
     }
 
     @Test public void storedNamesKeepTheirShapeButNotSerialsIdsOrHashes() throws Exception {
-        assertEquals("thumbnail/<id16>/<hex32>.png", CloudApi.pattern("thumbnail/F01AB2C3D4E5F607/0cc175b9c0f1b6a831c399e269772661.png"));
+        assertEquals("thumbnail/<id16>/<hex32>.png", CloudApi.pattern("thumbnail/SNX1AB2C3D4E5F67/0cc175b9c0f1b6a831c399e269772661.png"));
         assertEquals("https://elegoo-iot.oss.<word16>.com/gcode/<num6>_<hex32>.gcode?Expires=…&Signature=…",
             CloudApi.pattern("https://elegoo-iot.oss.accelerateglobal.com/gcode/123456_0cc175b9c0f1b6a831c399e269772661.gcode?Expires=1700000000&Signature=abc%2Fdef"));
         assertEquals("Benchy_PLA_<num1>.<id3>.gcode", CloudApi.pattern("Benchy_PLA_0.2mm.gcode"));
