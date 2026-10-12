@@ -330,7 +330,7 @@ public class A11yRenderTest {
             long until = System.currentTimeMillis() + 5_000;
             TextView panel = (TextView) field(activity, "details");
             while (panel.getText().length() == 0 && System.currentTimeMillis() < until) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
-            assertTrue(panel.getText().toString(), panel.getText().toString().startsWith("Line "));
+            assertTrue(panel.getText().toString(), panel.getText().toString().startsWith("G-code"));
             shot(activity.getWindow().getDecorView(), 2340, "viewer-details", scale);
             context().getSharedPreferences("viewer-hints", 0).edit().remove("details").commit();
             invoke(activity, "moreDialog");

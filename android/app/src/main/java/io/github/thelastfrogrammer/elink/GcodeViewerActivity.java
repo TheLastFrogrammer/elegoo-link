@@ -149,12 +149,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         // Scrolls when a short view or large text can't fit the whole column, so no button is ever cut off.
         ScrollView column = new ScrollView(this); column.setVerticalScrollBarEnabled(false); column.addView(overlay);
         stage.addView(column, new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.END));
-        // Details over the picture's top-left corner: the G-code line, the file's time there, the camera's lag and the filament.
-        details = new TextView(this); details.setTextSize(11); details.setTextColor(0xffffffff); details.setTypeface(android.graphics.Typeface.MONOSPACE);
-        details.setPadding(dp(8), dp(6), dp(8), dp(6)); details.setMaxWidth(Math.round(getResources().getDisplayMetrics().widthPixels * 0.62f)); details.setMaxLines(9);
+        // Details in the bottom-left corner, clear of the button column: the G-code line, the file's time there, the camera's lag and the filament.
+        details = new TextView(this); details.setTextSize(12); details.setTextColor(0xffffffff); details.setLineSpacing(dp(2), 1);
+        details.setPadding(dp(10), dp(8), dp(10), dp(8)); details.setMaxWidth(Math.round(getResources().getDisplayMetrics().widthPixels * 0.66f)); details.setMaxLines(9);
         GradientDrawable plate = new GradientDrawable(); plate.setColor(0xb3000000); plate.setCornerRadius(dp(10)); details.setBackground(plate); A11y.polite(details);
-        android.widget.FrameLayout.LayoutParams corner = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.START);
-        corner.setMargins(dp(8), dp(8), 0, 0); stage.addView(details, corner); details.setVisibility(View.GONE);
+        android.widget.FrameLayout.LayoutParams corner = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.BOTTOM | android.view.Gravity.START);
+        corner.setMargins(dp(8), 0, 0, dp(8)); stage.addView(details, corner); details.setVisibility(View.GONE);
         buildOverlay();
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12)); mainPanel = panel;
@@ -261,7 +261,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             String next = "off".equals(headLook()) ? "mask" : "mask".equals(headLook()) ? "outline" : "off";
             viewerPrefs().edit().putString("headLook", next).apply(); pushView(); syncOverlay();
         });
-        detailsButton = chipButton("Details", () -> { viewerPrefs().edit().putBoolean("details", !viewerPrefs().getBoolean("details", false)).apply(); syncOverlay(); showDetails(shownSegment, true); });
+        detailsButton = chipButton("Details", () -> { viewerPrefs().edit().putBoolean("details", !viewerPrefs().getBoolean("details", true)).apply(); syncOverlay(); showDetails(shownSegment, true); });
         chipButton("Reset view", () -> js("viewer.resetCamera()"));
         syncOverlay();
     }
@@ -290,7 +290,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 viewButton.setText(fromCamera ? "3D view" : "Camera view"); viewButton.setContentDescription(fromCamera ? "Leave the camera view" : "Look from the printer's camera");
             });
         }
-        if (detailsButton != null) { boolean on = viewerPrefs().getBoolean("details", false); detailsButton.setText(on ? "Details: on" : "Details: off"); A11y.state(detailsButton, on ? "On" : "Off"); }
+        if (detailsButton != null) { boolean on = viewerPrefs().getBoolean("details", true); detailsButton.setText(on ? "Details: on" : "Details: off"); A11y.state(detailsButton, on ? "On" : "Off"); }
         overlayToggle.setText(shown ? "Hide ›" : "‹ Buttons");
         overlayToggle.setContentDescription(shown ? "Hide the quick buttons" : "Show the quick buttons");
         A11y.expandable(overlayToggle, shown);
@@ -431,7 +431,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             try { route = NetworkRoute.select(this, printer.remote()); } catch (IOException unavailable) { cameraMessage(unavailable.getMessage()); return; }
             cameraStarted = true; cameraCloud = false;
             cameraFrames = new CameraFrames(url, route.http(), new CameraFrames.Listener() {
-                public void frame() { main.post(() -> { if (web != null && cameraFrames != null) { web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); keepLocalPicture(); } }); }
+                public void frame() { main.post(() -> { if (web != null && cameraFrames != null) { web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); frameAt = System.currentTimeMillis(); keepLocalPicture(); } }); }
                 public void error(String message) { main.post(() -> { cameraStarted = false; cameraFrames = null; cameraMessage(message + " Open the camera from Monitor to check it."); }); }
             });
             cameraMessage("Camera: the printer's own stream on this network.");
@@ -997,32 +997,54 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private Button detailsButton;
     private GcodeToolpath.LineCursor cursor;
     private int shownSegment = -1, detailedSegment = -2;
+    /** When the local camera's newest picture reached the phone (wall clock), 0 before any. */
+    private volatile long frameAt;
     /** Fills the details for the segment drawn last: its G-code line (read off the main thread), the file's time, camera and filament. */
     private void showDetails(int segment, boolean force) {
         shownSegment = segment;
-        boolean on = viewerPrefs().getBoolean("details", false) && path != null;
+        boolean on = viewerPrefs().getBoolean("details", true) && path != null;
         details.setVisibility(on ? View.VISIBLE : View.GONE);
         if (!on || (!force && segment == detailedSegment)) return;
         detailedSegment = segment;
         GcodeToolpath read = path; GcodeToolpath.LineCursor lines = cursor;
         int line = read.lineOf(segment), tool = read.toolOf(segment); float[] time = read.timeAt(segment);
         String filament = read.filamentText(tool), camera = cameraText();
-        String timeText = time == null ? "File time: not in the file" : "File time: " + minutes(time[0]) + " of " + minutes(time[1]) + " (slicer estimate)";
+        String hex = read.filamentColour(tool);
+        String timeText = time == null ? "time not in the file" : minutes(time[0]) + " of " + minutes(time[1]);
+        int labelColour = 0xffb8c4cc, tab = dp(64);
         worker.execute(() -> {
             String code = lines == null || line <= 0 ? "" : lines.line(line).trim();
-            if (code.length() > 64) code = code.substring(0, 63) + "…";
-            String text = (line > 0 ? "Line " + line + ": " + code : "G-code line: not known") + "\n" + timeText + "\n" + camera + "\n" + filament;
-            main.post(() -> { if (!isDestroyed() && detailedSegment == segment) details.setText(text); });
+            if (code.length() > 30) code = code.substring(0, 29) + "…";
+            android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder();
+            row(text, "G-code", line > 0 ? code : "not known", labelColour, tab, line > 0);
+            row(text, "Print at", (line > 0 ? String.format(Locale.getDefault(), "line %,d · ", line) : "") + timeText, labelColour, tab, false);
+            row(text, "Camera", camera, labelColour, tab, false);
+            row(text, "Filament", "", labelColour, tab, false);
+            if (hex != null) text.append("● ", new android.text.style.ForegroundColorSpan(Color.parseColor(hex)), 0);
+            text.append(filament.replaceFirst("^Filament ", ""));
+            main.post(() -> { if (!isDestroyed() && detailedSegment == segment) { details.setText(text); details.requestLayout(); } });
         });
+    }
+    /** One "label  value" row: labels in a column, wrapped values kept under their value. */
+    private static void row(android.text.SpannableStringBuilder text, String label, String value, int labelColour, int tab, boolean mono) {
+        if (text.length() > 0) text.append("\n");
+        int start = text.length();
+        text.append(label, new android.text.style.ForegroundColorSpan(labelColour), 0).append("\t");
+        int valueStart = text.length(); text.append(value);
+        if (mono) { text.setSpan(new android.text.style.TypefaceSpan("monospace"), valueStart, text.length(), 0); text.setSpan(new android.text.style.RelativeSizeSpan(0.92f), valueStart, text.length(), 0); }
+        text.setSpan(new android.text.style.TabStopSpan.Standard(tab), start, text.length(), android.text.Spanned.SPAN_PARAGRAPH);
+        text.setSpan(new android.text.style.LeadingMarginSpan.Standard(0, tab), start, text.length(), android.text.Spanned.SPAN_PARAGRAPH);
     }
     private static String minutes(float m) { int total = Math.round(m); return total >= 60 ? total / 60 + " h " + total % 60 + " min" : total + " min"; }
     /** What the picture lags by: measured from the cloud video's own frame times, else the delay set by hand, else not known. */
     private String cameraText() {
         long delay = effectiveDelay();
-        if (delay <= 0) return "Camera: delay not reported";
+        if (delay <= 0 && cameraStarted && !cameraCloud && frameAt > 0)
+            return "picture arrived " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(frameAt)) + " (the stream has no time of its own)";
+        if (delay <= 0) return "delay not known";
         String when = new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(System.currentTimeMillis() - delay));
         boolean measured = viewerPrefs().getBoolean("autoDelay", true) && measuredDelay > 0;
-        return String.format(Locale.getDefault(), "Camera: picture from %s (%.1f s behind, %s)", when, delay / 1000.0, measured ? "measured" : "set by hand");
+        return String.format(Locale.getDefault(), "%s · %.1f s behind (%s)", when, delay / 1000.0, measured ? "measured" : "set by hand");
     }
     private void load(File file, String name) {
         if (name.equals(loadingName)) return;

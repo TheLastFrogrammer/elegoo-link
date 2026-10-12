@@ -327,7 +327,7 @@ public final class RecordingsActivity extends Activity {
                     view.set("Laying down", " g/h", t, lines, 0, Double.NaN);
                     if (shown != null && shown.start > 0) view.clock(shown.start);
                     chartBox.addView(view, new LinearLayout.LayoutParams(-1, dp(220)));
-                    // The total so far: each filament's grams added up over the build, and all of them together.
+                    // The total so far: each filament's grams added up over the build (all of them together in words, so no line hides a filament's own).
                     double[][] usedSoFar = usedGrams(cumulative, gramsPerMm3);
                     List<ChartView.Series> totals = new ArrayList<>(); int shownTools = 0;
                     for (int k = 0; k < tools; k++) {
@@ -336,7 +336,6 @@ public final class RecordingsActivity extends Activity {
                         int[] same = new int[t.length]; Arrays.fill(same, filamentColour[k]);
                         totals.add(new ChartView.Series(names[k], filamentColour[k], values, false).coloured(same));
                     }
-                    if (shownTools > 1) { double[] all = new double[t.length]; for (int i = 0; i < t.length; i++) all[i] = usedSoFar[i][tools]; totals.add(new ChartView.Series("All filaments", ink, all, false)); }
                     int last = -1; for (int i = t.length - 1; i >= 0 && last < 0; i--) if (!Double.isNaN(usedSoFar[i][tools])) last = i;
                     double planned = 0; for (int k = 0; k < tools; k++) planned += toolTotals[k] * gramsPerMm3[k];
                     if (last >= 0) {

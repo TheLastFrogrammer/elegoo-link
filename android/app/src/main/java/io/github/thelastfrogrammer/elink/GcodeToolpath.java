@@ -287,6 +287,8 @@ public final class GcodeToolpath {
         return new float[] {Math.max(0, total - left), total};
     }
     /** "Filament 2 · PLA · green · Elegoo PLA @ECC2", from the file's own comments. */
+    /** A filament's colour from the file ("#rrggbb"), or null. */
+    public String filamentColour(int tool) { return tool >= 0 && tool < filamentColours.size() ? TrayPlan.colour(filamentColours.get(tool)) : null; }
     public String filamentText(int tool) {
         String type = tool < filamentTypes.size() ? filamentTypes.get(tool) : "", colour = tool < filamentColours.size() ? TrayPlan.colour(filamentColours.get(tool)) : null;
         String name = tool < filamentNames.size() ? filamentNames.get(tool) : "", word = colour == null ? null : WorkshopUi.colourName(colour);
