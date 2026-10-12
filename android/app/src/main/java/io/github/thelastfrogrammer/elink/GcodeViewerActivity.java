@@ -1630,15 +1630,30 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             label(missingCard, StatusPresentation.NO_FILE_LINE, 13, ink, false);
             buildMissingActions(filename);
             missingDetail = A11y.polite(label(missingCard, "", 13, ink, false)); missingDetail.setTextIsSelectable(true);
+            // Why a download fails, and a download that waits for the printer to serve the file: both only read from the printer.
+            LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(more);
+            rowButton(more, "Check file access", () -> { if (printer != null) printer.checkFileAccess(); });
+            waitButton = rowButton(more, "Download when it opens", () -> {
+                if (printer == null) return;
+                lastAttempt = true;
+                if (filename.replaceFirst("^/+", "").equals(printer.waitingFor())) printer.stopWaiting("Stopped waiting for the printer's file server."); else printer.downloadWhenOpen("local", filename);
+            });
+            accessText = A11y.polite(label(missingCard, "", 13, ink, false)); accessText.setTextIsSelectable(true); accessText.setVisibility(View.GONE);
         }
         if (printer != null) {
             printer.thumbnail("local", filename);
             android.graphics.Bitmap picture = ThumbnailDecoder.decodeBase64(printer.thumbnails.get("local/" + filename));
             if (picture != null) { missingPreview.setImageBitmap(picture); missingPreview.setVisibility(View.VISIBLE); }
         }
-        missingDetail.setText(failed ? "The download did not work: " + StatusPresentation.clean(printer.feedback) : "");
-        missingDetail.setVisibility(failed ? View.VISIBLE : View.GONE);
+        boolean waiting = printer != null && filename.replaceFirst("^/+", "").equals(printer.waitingFor());
+        missingDetail.setText(waiting ? StatusPresentation.clean(printer.feedback) : failed ? "The download did not work: " + StatusPresentation.clean(printer.feedback) : "");
+        missingDetail.setVisibility(waiting || failed ? View.VISIBLE : View.GONE);
+        if (waitButton != null) waitButton.setText(waiting ? "Stop waiting" : "Download when it opens");
+        String access = printer == null ? null : printer.fileAccessText;
+        if (accessText != null) { accessText.setText(access == null ? "" : StatusPresentation.clean(access)); accessText.setVisibility(access == null ? View.GONE : View.VISIBLE); }
     }
+
+    private Button waitButton; private TextView accessText;
 
     private TextView missingDetail, hint;
     private void buildMissingActions(String filename) {

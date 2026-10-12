@@ -251,3 +251,25 @@ Slice → Find models online… searches model sites only through their official
 Token and key are stored encrypted (Android Keystore, AES-GCM) and never logged. The answers' shapes above are from the
 sites' documentation and third-party clients; the app logs the field names (never values) of each site's first answer
 under "Model sites" in Share diagnostics, so a different shape shows up there.
+
+## File access in cloud mode (v0.44.0)
+
+Re-checked against every reference on hand (the SDK at the pinned commit, ElegooSlicer's bundled LAN and cloud printer
+pages). Every evidenced way to fetch a CC2 file is `GET http://<printer>:80/download[/udisk|/sdcard]?X-Token=<access code,
+default 123456>&file_name=<name>`; no MQTT/RTM command opens or authorizes that server. The cloud printer page builds the
+same LAN URL in cloud mode, and the slicer hands it to the system browser for a CC2. Cloud APIs (`local-file/page`,
+`local-file/filename`, `device/event-data/page`) carry file details and thumbnails but no G-code or video URL; signed links
+(`oss/generate-pre-access-url`) are used only for objects whose names the app already holds (its own uploads). The cloud
+page fills timelapse fields with "none" in RTM mode, so there is no cloud timelapse export either.
+
+Correction to "Timelapse videos" above: Elegoo's LAN printer page does compose a recorded-but-not-generated video
+(`time_lapse_video_status` 1) by sending method 1051 `{url: <time_lapse_video_url>}`, waiting for sub-status 3021
+(3020 generating, 3022 failed; main state 12 while generating), then downloading the returned url through `/download`.
+The app does not send 1051 yet.
+
+The open question is firmware behaviour: on the owner's CC2 in cloud mode, port 80 refused a connection during a print.
+The app now has a read-only **Check file access** (UDP discovery for mode and code protection, TCP connects to 80, 8080,
+1883, 3030 and 9001, the printer's state; diagnostics hold no address, serial or code) and **Download when it opens**,
+which re-checks port 80 (TCP connect only) when the printer's state changes and every 3 minutes for up to 12 hours, and
+downloads once it accepts. Its diagnostics lines (port 80 result with printer state) show whether the server opens when a
+print ends, in LAN Only mode, or never in cloud mode.

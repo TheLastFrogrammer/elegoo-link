@@ -71,6 +71,7 @@ public final class PrinterService extends Service {
     /** Spools and their filament left (see SpoolStore): follows fresh tray reports, and takes a finished print's use off. */
     public SpoolStore spools() { return SpoolStore.at(new java.io.File(getFilesDir(), "spools.json")); }
     private void record(JSONObject value, String source, String name) {
+        checkWaiting(value);
         SpoolStore spools = spools(); long now = System.currentTimeMillis();
         if (canvasFresh() && canvas != null) spools.sync(canvas, now);
         String used = spools.observe(value, now); if (used != null) feedback = used;
@@ -450,6 +451,7 @@ public final class PrinterService extends Service {
         boolean cloudCapable = "local".equals(storage) && usingCloud() && cloud != null && !cloud.needsSignIn() && !serial.isEmpty();
         directDownloading = true; cloudCancel.set(false);
         feedback = cloudCapable ? "Checking Elegoo's cloud for this file…" : "Looking for the printer on this Wi-Fi…"; changed();
+        refusedAt = null;
         files.execute(() -> {
             File local = null; String failure = null; String[] reached = {null}; NetworkRoute[] via = {null};
             boolean cloudDone = false, cloudUnknown = false; String cloudFailure = null;
@@ -502,6 +504,7 @@ public final class PrinterService extends Service {
                 Diagnostics.note(Diagnostics.FILES, "direct download: connection to the printer's HTTP port refused while " + (usingCloud() ? "watching through the cloud" : "not connected") + ", printer state " + StatusPresentation.state(cloudStatus)
                     + " · reason: " + PrinterHttp.causes(refused));
                 if (reached[0] != null && via[0] != null) Diagnostics.note(Diagnostics.FILES, "printer ports from this phone: " + PrinterHttp.probePorts(via[0].sockets(), reached[0], new int[] {80, 1883, 9001, 8080, 3030}));
+                refusedAt = reached[0];
                 failure = "The printer was found on this Wi-Fi, but it refused the connection to its file server (port 80). Try again in a minute; if it keeps failing, "
                     + "open http://" + (reached[0] == null ? "<printer IP>" : reached[0]) + "/ in the phone's browser: if that also fails, the printer is not serving files right now. Downloading also works over the local connection (LAN Only).";
             } catch (Exception error) {
@@ -516,11 +519,107 @@ public final class PrinterService extends Service {
             File done = local; String problem = failure;
             main.post(() -> {
                 directDownloading = false;
+                if (waitingFile != null && waitingFile.equals(filename)) {
+                    if (done != null && problem == null) stopWaiting(null);
+                    else if (refusedAt == null) stopWaiting("Stopped waiting for " + StatusPresentation.clean(filename) + ": " + problem);
+                    else { feedback = "Still waiting for the printer to serve " + StatusPresentation.clean(filename) + "."; changed(); return; }
+                }
                 if (problem != null || done == null) { if (done != null) done.delete(); feedback = problem; changed(); return; }
                 received(done, filename);
             });
         });
     }
+    // ------------------------------------------------------------------ file access: why downloads fail, and waiting for them to work
+
+    /** The address whose file server refused the last direct download (null when it did not refuse). */
+    private volatile String refusedAt;
+    public boolean fileServerRefused() { return refusedAt != null; }
+    /** The last file access check, in words (null before any). */
+    public String fileAccessText; public boolean fileAccessRunning;
+
+    /** Finds the printer on this Wi-Fi: by the cloud serial when watching through the cloud, else the connected address. */
+    private Cc2Discovery.Found locate(NetworkRoute route) throws IOException {
+        String serial = cloudSerial, knownHost = host;
+        try (Cc2Discovery scanner = route.discovery()) {
+            for (Cc2Discovery.Found found : scanner.scan())
+                if (!serial.isEmpty() ? found.info.serial.equalsIgnoreCase(serial) : found.host.equals(knownHost)) return found;
+        }
+        return null;
+    }
+
+    /**
+     * Read-only: finds the printer on this Wi-Fi, notes the mode it reports and which ports accept a connection (opened and
+     * closed, nothing sent), and says in words why a download would or would not work. Changes nothing on the printer.
+     */
+    public void checkFileAccess() {
+        if (fileAccessRunning) return;
+        fileAccessRunning = true; fileAccessText = "Checking the printer's file server…"; changed();
+        String state = StatusPresentation.state(liveStatus());
+        files.execute(() -> {
+            FileAccess.Evidence e = new FileAccess.Evidence(); e.state = state;
+            try {
+                NetworkRoute route = NetworkRoute.local(getApplicationContext());
+                Cc2Discovery.Found found = null;
+                try { found = locate(route); } catch (IOException ignored) { }
+                String address = found != null ? found.host : ready() ? host : null;
+                if (address != null) {
+                    e.found = true;
+                    if (found != null) { e.lanOnly = found.info.lanOnly; e.codeProtected = found.info.codeProtected; }
+                    try { e.savedCode = new CredentialStore(this).remembers(address); } catch (Exception ignored) { }
+                    e.ports.putAll(FileAccess.parse(PrinterHttp.probePorts(route.sockets(), address, FileAccess.PORTS)));
+                    if (FileAccess.open(e)) refusedAt = null;
+                }
+            } catch (IOException noWifi) { e.wifi = false; }
+            Diagnostics.note(Diagnostics.FILES, FileAccess.report(e));
+            String text = FileAccess.verdict(e);
+            main.post(() -> { fileAccessRunning = false; fileAccessText = text; changed(); });
+        });
+    }
+
+    /** A download waiting for the printer's file server to open, and when it was asked for. */
+    private String waitingFile, waitingStorage, waitingState = ""; private long waitingSince, nextWaitProbe; private boolean waitProbing;
+    static final long WAIT_PROBE_MS = 3 * 60_000L, WAIT_LIMIT_MS = 12 * 3600_000L;
+    public String waitingFor() { return waitingFile; }
+    /**
+     * Downloads `filename` once the printer's file server accepts connections: checked (a TCP connect to port 80, nothing sent)
+     * when the printer's state changes and every three minutes, for up to twelve hours. Downloading only reads from the printer.
+     */
+    public void downloadWhenOpen(String storage, String filename) {
+        waitingFile = filename.replaceFirst("^/+", ""); waitingStorage = storage; waitingSince = SystemClock.elapsedRealtime(); nextWaitProbe = 0; waitingState = "";
+        feedback = "Waiting for the printer to serve " + StatusPresentation.clean(waitingFile) + ". The app checks when the printer's state changes and every 3 minutes, then downloads it.";
+        Diagnostics.note(Diagnostics.FILES, "waiting for the file server to open");
+        changed(); checkWaiting(liveStatus());
+    }
+    public void stopWaiting(String why) {
+        if (waitingFile == null) return;
+        waitingFile = null; if (why != null) { feedback = why; Diagnostics.note(Diagnostics.FILES, "stopped waiting for the file server"); } changed();
+    }
+    private void checkWaiting(JSONObject status) {
+        if (waitingFile == null || waitProbing || directDownloading) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now - waitingSince > WAIT_LIMIT_MS) { stopWaiting("Stopped waiting: the printer did not serve " + StatusPresentation.clean(waitingFile) + " within 12 hours."); return; }
+        String state = StatusPresentation.state(status == null ? new JSONObject() : status);
+        if (state.equals(waitingState) && now < nextWaitProbe) return;
+        boolean changedState = !state.equals(waitingState); waitingState = state; nextWaitProbe = now + WAIT_PROBE_MS; waitProbing = true;
+        String file = waitingFile, storage = waitingStorage;
+        files.execute(() -> {
+            String result;
+            try {
+                NetworkRoute route = NetworkRoute.local(getApplicationContext());
+                Cc2Discovery.Found found = null; try { found = locate(route); } catch (IOException ignored) { }
+                String address = found != null ? found.host : ready() ? host : null;
+                result = address == null ? "not found" : FileAccess.parse(PrinterHttp.probePorts(route.sockets(), address, new int[] {80})).getOrDefault(80, "failed");
+            } catch (IOException noWifi) { result = "no wifi"; }
+            String port = result;
+            Diagnostics.note(Diagnostics.FILES, "waiting: port 80 " + port + " · printer " + (state.isEmpty() ? "state unknown" : state) + (changedState ? " (state changed)" : ""));
+            main.post(() -> {
+                waitProbing = false;
+                if (waitingFile == null || !waitingFile.equals(file)) return;
+                if ("open".equals(port)) { feedback = "The printer's file server is open. Downloading " + StatusPresentation.clean(file) + "…"; changed(); downloadDirect(storage, file); }
+            });
+        });
+    }
+
     /** The last downloaded timelapse video on the phone (cache), and the name to save it under. */
     public File timelapseFile; public String timelapseName; private String timelapseRequested;
     public void downloadTimelapse(String videoUrl, String taskName) {
