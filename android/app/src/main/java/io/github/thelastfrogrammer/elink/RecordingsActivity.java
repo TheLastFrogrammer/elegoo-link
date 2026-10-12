@@ -10,6 +10,7 @@ import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.*;
 import java.io.*;
 import java.text.SimpleDateFormat;
@@ -41,7 +42,32 @@ public final class RecordingsActivity extends Activity {
         setContentView(scroll);
         String meta = getIntent().getStringExtra(EXTRA_META);
         if (meta == null) showList(); else showRecording(new File(meta));
+        if (meta != null && getIntent().getBooleanExtra(Showcase.EXTRA, false) && Showcase.stage == Showcase.RECORDING) showcase(scroll);
     }
+
+    // ---- Showcase tour: glides through this print's graphs with captions, then the tour ends ----
+    private Showcase.Script showcaseScript;
+    private void showcase(ScrollView scroll) {
+        Showcase.Script script = new Showcase.Script(this); showcaseScript = script;
+        script.then(700, () -> Showcase.caption(this, "Every print the app watches is recorded"))
+            .until(8000, () -> Showcase.find(content, "Filament used by") != null || Showcase.find(content, "The print's file") != null || charts().size() >= 6)
+            .then(2600, () -> { View pictures = Showcase.find(content, "Camera pictures"); if (pictures != null) { Showcase.glideTo(scroll, pictures, 1800); Showcase.caption(this, "Camera pictures through the print, made into a timelapse on the phone"); } })
+            .then(4600, () -> { View chart = chart(2); if (chart != null) { Showcase.glideTo(scroll, chart, 2000); Showcase.caption(this, "Temperatures, fans, progress and layers over time"); } })
+            .then(4800, () -> { View trays = Showcase.find(content, "Filament over time"); if (trays != null) { Showcase.glideTo(scroll, trays, 1800); Showcase.caption(this, "Which filament was loaded, and when"); } })
+            .then(4400, () -> { View rate = chart(4); if (rate != null) { Showcase.glideTo(scroll, rate, 1800); Showcase.caption(this, "How fast each filament was laid down"); } })
+            .then(4600, () -> { View used = chart(5); if (used != null) { Showcase.glideTo(scroll, used, 1800); Showcase.caption(this, "And how much was used, filament by filament"); } })
+            .then(5000, () -> Showcase.caption(this, null))
+            .then(500, () -> { Showcase.stage = Showcase.END; finish(); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out); });
+        script.run(null);
+    }
+    private List<View> charts() { List<View> out = new ArrayList<>(); collectCharts(content, out); return out; }
+    private static void collectCharts(View view, List<View> out) {
+        if (view instanceof ChartView && view.getVisibility() == View.VISIBLE) out.add(view);
+        else if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) collectCharts(((ViewGroup) view).getChildAt(i), out);
+    }
+    /** The nth graph on the page (progress, layer, temperatures, fans, laying down, used so far), or null. */
+    private View chart(int n) { List<View> all = charts(); return n < all.size() ? all.get(n) : null; }
+    @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); super.onDestroy(); }
 
     static File directory(android.content.Context context) { return new File(context.getFilesDir(), "recordings"); }
 
@@ -126,7 +152,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout back = new LinearLayout(this); back.setOrientation(LinearLayout.HORIZONTAL); content.addView(back);
         action(back, "All recordings", () -> startActivity(new Intent(this, RecordingsActivity.class)));
         heading(StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")));
-        String details = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + " · " + StatusPresentation.clean(recording.printer);
+        String details = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + (Showcase.running() ? "" : " · " + StatusPresentation.clean(recording.printer));
         if (recording.layers > 0) details += " · " + recording.layers + " layers";
         label(details, 13, muted, false);
         // Summary tiles: how long, how it ended, and when it ended on the clock.

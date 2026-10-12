@@ -932,8 +932,19 @@
     if (!printerCam.looking) fit();
     lookFromCamera();
   }
+  // Turns the free 3D view around the print by `degrees` over `ms`, easing in and out (for the app's showcase tour).
+  function orbit(ms, degrees) {
+    leaveCameraView();
+    const start = performance.now(), from = camera.yaw;
+    function step(now) {
+      const t = Math.min(1, (now - start) / ms), eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      camera.yaw = from + degrees * eased; redraw();
+      if (t < 1) requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+  }
   // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
   function probe() { return { end: view.end, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
-  window.viewer = { probe, load, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { probe, orbit, load, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

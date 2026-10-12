@@ -31,6 +31,7 @@ const server = http.createServer((q, r) => {
       const t = Date.now(); viewer.update({ end: 100, at: t - 2000 }); viewer.update({ end: 400, at: t });
       await wait(800); out.lockEnd = viewer.probe().end;
       viewer.setLockstep({ on: false });
+      const yaw0 = viewer.camera.yaw; viewer.orbit(200, 90); await wait(500); out.orbit = viewer.camera.yaw - yaw0;
       viewer.setViewState({ looking: false, camera: { yaw: 12, pitch: 34, distance: 222, target: [10, 20, 3] } });
       out.view = viewer.getViewState();
       return out;
@@ -41,6 +42,7 @@ const server = http.createServer((q, r) => {
     if (r.lockEnd !== 400) fail('lockstep did not reach the latest position (' + r.lockEnd + ')');
     const c = r.view && r.view.camera;
     if (!c || c.yaw !== 12 || c.pitch !== 34 || c.distance !== 222 || c.target.join() !== '10,20,3') fail('the view did not survive a save and restore: ' + JSON.stringify(r.view));
-    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep and view state work`);
+    if (!(Math.abs(r.orbit - 90) < 0.01)) fail('the showcase orbit did not turn the view by 90 degrees: ' + r.orbit);
+    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit and view state work`);
   } catch (e) { fail(e.message); } finally { await browser.close(); server.close(); }
 });

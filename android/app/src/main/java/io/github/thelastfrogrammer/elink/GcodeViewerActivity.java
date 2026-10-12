@@ -122,7 +122,55 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (file != null) load(new File(file), name != null ? name : new File(file).getName());
         else if (!followMode) status.setText("No G-code file to show.");
         if (followMode) bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
+        if (getIntent().getBooleanExtra(Showcase.EXTRA, false) && Showcase.stage == Showcase.VIEWER) showcase();
     }
+
+    // ------------------------------------------------------------------ showcase tour
+    private boolean loadedOnce;
+    private Showcase.Script showcaseScript;
+    /** The live toolpath's part of the showcase: changes only how things are shown here, and puts every option back after. */
+    private void showcase() {
+        boolean details = viewerPrefs().getBoolean("details", true), buttons = viewerPrefs().getBoolean("quickButtons", true);
+        String head = headLook(); int[] hiddenBefore = {0};
+        Showcase.Script script = new Showcase.Script(this); showcaseScript = script;
+        script.until(30_000, () -> loadedOnce && path != null)
+            .then(followMode ? 2500 : 800, () -> {
+                hiddenBefore[0] = hidden;
+                viewerPrefs().edit().putBoolean("quickButtons", true).putBoolean("details", false).apply(); syncOverlay(); showDetails(shownSegment, true);
+                Showcase.caption(this, followMode ? "Live toolpath: the file drawn up to the nozzle, over the camera" : "The toolpath of the file, in 3D");
+            })
+            .then(4800, () -> Showcase.fade(details(), () -> { viewerPrefs().edit().putBoolean("details", true).apply(); syncOverlay(); showDetails(shownSegment, true);
+                Showcase.caption(this, "Details: the G-code line, the file's time, the camera's lag and the filament"); }))
+            .then(followMode ? 5200 : 0, () -> { if (!followMode) return;
+                Showcase.fade(stage, () -> { viewerPrefs().edit().putString("headLook", "mask").apply(); pushView(); syncOverlay(); }); Showcase.caption(this, "The print head masked out of the picture"); })
+            .then(followMode ? 4000 : 0, () -> { if (!followMode) return;
+                Showcase.fade(stage, () -> { viewerPrefs().edit().putString("headLook", "outline").apply(); pushView(); syncOverlay(); }); Showcase.caption(this, "…or drawn as an outline"); })
+            .then(followMode ? 4000 : 0, () -> {
+                if (followMode) { viewerPrefs().edit().putString("headLook", head).apply(); pushView(); syncOverlay(); }
+                Showcase.fade(stage, () -> js("viewer.resetCamera()")); Showcase.caption(this, "Turn it freely in 3D");
+            })
+            .then(900, () -> js("viewer.orbit(6500, 110)"))
+            .then(6800, () -> Showcase.fade(stage, () -> { hidden = soloMask(0); buildLegend(); pushView(); }))
+            .then(0, () -> Showcase.caption(this, "Line types: only the outer walls…"))
+            .then(3800, () -> { int infill = path.featureLengths().length > 3 && path.featureLengths()[3] > 0 ? 3 : 1; Showcase.fade(stage, () -> { hidden = soloMask(infill); buildLegend(); pushView(); });
+                Showcase.caption(this, "…only the infill…"); })
+            .then(3800, () -> { Showcase.fade(stage, () -> { hidden = 0; buildLegend(); pushView(); }); Showcase.caption(this, "…or everything"); })
+            .then(3200, () -> { showFirstLayer(); Showcase.caption(this, "Replay the print layer by layer"); })
+            .then(1200, () -> setPlaying(true))
+            .then(7500, () -> setPlaying(false))
+            .then(300, () -> {
+                if (followMode && follow != null) { follow.performClick(); Showcase.fade(stage, () -> { if (cameraWanted()) js("viewer.setView('printer')"); else js("viewer.resetCamera()"); }); Showcase.caption(this, "Back to live: where the nozzle is now"); }
+                else Showcase.caption(this, null);
+            })
+            .then(followMode ? 4200 : 300, () -> {
+                hidden = hiddenBefore[0]; buildLegend(); pushView();
+                viewerPrefs().edit().putBoolean("details", details).putBoolean("quickButtons", buttons).apply(); syncOverlay(); showDetails(shownSegment, true);
+                Showcase.caption(this, null);
+            })
+            .then(500, () -> Showcase.toRecording(this, printer));
+        script.run(null);
+    }
+    private View details() { return details; }
 
     @Override protected void onStart() { super.onStart(); lastStepAt = 0; if (printer != null && followMode) printer.watch(this); startCamera(); }
     @Override protected void onStop() {
@@ -130,6 +178,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             try { Object text = new org.json.JSONTokener(value).nextValue(); if (text instanceof String) viewerPrefs().edit().putString("liveView", (String) text).apply(); } catch (Exception ignored) { }
         }); setPlaying(false); stopCamera(); if (printer != null) printer.unwatch(this); super.onStop(); }
     @Override protected void onDestroy() {
+        if (showcaseScript != null) showcaseScript.cancel();
         stopCamera();
         if (printer != null) printer.unwatch(this);
         if (bound) unbindService(connection);
@@ -982,7 +1031,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
-        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); syncOverlay(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
+        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { loadedOnce = true; setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); syncOverlay(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
             // Taps are tied to the bed's height: none while it is unknown or moving.

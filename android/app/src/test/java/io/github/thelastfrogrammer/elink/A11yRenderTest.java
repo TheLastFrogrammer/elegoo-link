@@ -214,6 +214,19 @@ public class A11yRenderTest {
                 page.invoke(activity, i); render.invoke(activity);
                 shot(activity.getWindow().getDecorView(), 4200, "main-" + names[i], scale);
             }
+            // The showcase tour: a caption over the screen, the title card, and no printer address in the header while it records.
+            if (scale == 1f) {
+                page.invoke(activity, 0); Showcase.stage = Showcase.MAIN; render.invoke(activity);
+                String header = ((TextView) field(activity, "identity")).getText().toString();
+                assertTrue("no address while recording: " + header, !header.matches(".*\\d+\\.\\d+\\.\\d+\\.\\d+.*"));
+                Showcase.caption(activity, "Live status: progress, layer, temperatures and time left");
+                org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS);
+                shot(activity.getWindow().getDecorView(), 2340, "showcase-caption", scale);
+                Showcase.card(activity, "Link Workshop", "A tour on a real print", 0);
+                org.robolectric.shadows.ShadowLooper.idleMainLooper(2, java.util.concurrent.TimeUnit.SECONDS);
+                shot(activity.getWindow().getDecorView(), 2340, "showcase-card", scale);
+                Showcase.clear(activity); Showcase.stop(); render.invoke(activity);
+            }
             // Every section of every tab, opened as from its row.
             Method open = null; for (Method m : MainActivity.class.getDeclaredMethods()) if (m.getName().equals("openSection")) open = m; open.setAccessible(true);
             for (Object section : (List<?>) field(activity, "sections")) {

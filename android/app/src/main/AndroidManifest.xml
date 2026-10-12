@@ -4,6 +4,7 @@
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- To see whether Firefox is installed, so the model sites can open there (Find models). -->
     <queries>
@@ -127,5 +128,6 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <activity android:name=".GcodeViewerActivity" android:exported="false" android:label="Toolpath" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />
+        <service android:name=".ShowcaseService" android:exported="false" android:foregroundServiceType="mediaProjection" />
     </application>
 </manifest>

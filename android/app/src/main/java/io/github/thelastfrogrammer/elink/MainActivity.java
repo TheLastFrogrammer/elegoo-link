@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7, SHOWCASE = 8, SAVE_SHOWCASE = 9;
     private String pendingExportHash = "";
     private android.net.Uri pendingExportUri;
     private TextView inspection;
@@ -1197,6 +1197,7 @@ public final class MainActivity extends Activity {
         LinearLayout stats = card("Your printing");
         statsText = label(stats, "Counting…", 14, INK, false);
         button(stats, "Filament price…", this::priceDialog);
+        button(stats, "Make a showcase video…", this::showcaseIntro);
         LinearLayout recordings = card("Print recordings");
         label(recordings, "Progress, layer, temperature and fan graphs, plus camera pictures, for each print the app watched.", 13, MUTED, false);
         button(recordings, "Print recordings…", () -> startActivity(new Intent(this, RecordingsActivity.class)));
@@ -2023,6 +2024,9 @@ public final class MainActivity extends Activity {
         }
         // The name doubles as the printer switcher once a printer is saved.
         boolean canSwitch = profiles.all().length() > 0;
+        if (Showcase.running()) {   // a video to share: no address, serial or the printer's own name
+            name = "Centauri Carbon 2"; model = ready ? StatusPresentation.clean(printer.attributes.optString("machine_model", "Centauri Carbon 2")) : "Centauri Carbon 2";
+        }
         title.setText(canSwitch ? name + " ▾" : name); title.setClickable(canSwitch);
         title.setContentDescription(canSwitch ? name + ", switch printer" : name); identity.setText(model);
         // Hero: state and job.
@@ -2319,6 +2323,24 @@ public final class MainActivity extends Activity {
                 String done = text; main.post(() -> { if (!isDestroyed()) message(done); });
             });
         }
+        if (request == SHOWCASE) {
+            if (result != RESULT_OK || data == null) { message("The showcase was not recorded: Android's screen recording was not allowed."); return; }
+            ShowcaseService.listener = showcaseListener; Showcase.stage = Showcase.MAIN; Showcase.video = null;
+            try { startForegroundService(new Intent(this, ShowcaseService.class).putExtra(ShowcaseService.EXTRA_RESULT, result).putExtra(ShowcaseService.EXTRA_DATA, data)); }
+            catch (Exception failed) { Showcase.stop(); message("The showcase could not start recording: " + failed.getMessage()); }
+        }
+        if (request == SAVE_SHOWCASE && result == RESULT_OK && data != null && data.getData() != null && Showcase.video != null) {
+            File source = Showcase.video; android.net.Uri target = data.getData();
+            checks.execute(() -> {
+                String text;
+                try (InputStream in = new FileInputStream(source); OutputStream out = getContentResolver().openOutputStream(target)) {
+                    if (out == null) throw new IOException();
+                    byte[] buffer = new byte[1 << 16]; int count; while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+                    text = "Showcase video saved.";
+                } catch (IOException error) { text = "The showcase video could not be saved there."; }
+                String done = text; main.post(() -> { if (!isDestroyed()) message(done); });
+            });
+        }
         if (request == SAVE_GCODE) {
             if (result == RESULT_OK && data != null && data.getData() != null) { pendingExportUri = data.getData(); finishPendingExport(); }
             else { pendingExportHash = ""; pendingExportUri = null; }
@@ -2347,12 +2369,92 @@ public final class MainActivity extends Activity {
         // Background cloud watching runs as a started foreground service; start it while the app is visible.
         if (settings.getBoolean("cloudBackground", false) && cloudBackground != null && cloudBackground.isEnabled()) try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { }
         if (printer != null) { printer.observe(this::render); printer.cloudVisible(true); } main.post(clock);
+        if (Showcase.stage == Showcase.END) main.postDelayed(this::showcaseEnd, 400);
     }
     @Override protected void onStop() { active = false; stopCamera(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
-    @Override protected void onDestroy() { if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
+    @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); if (ShowcaseService.listener == showcaseListener && !isChangingConfigurations()) ShowcaseService.listener = null; if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
+    // ------------------------------------------------------------------ showcase video
+
+    /** What the showcase does, before Android asks to allow the screen recording. */
+    private void showcaseIntro() {
+        new AlertDialog.Builder(this).setTitle("Showcase video")
+            .setMessage("The app tours itself for about two minutes while it records the screen: the Print, Printer, Files and History tabs, "
+                + "the live toolpath with its options changing, and a print's graphs, with captions.\n\n"
+                + "It only moves between screens and changes how things are shown; nothing is sent to the printer. The printer's address, "
+                + "serial and name are left out. No sound is recorded. Best during a print, with its file on this phone.\n\n"
+                + "Android will ask to allow the recording: choose this app (or the entire screen). Please don't touch the screen until it ends.")
+            .setPositiveButton("Start", (d, w) -> {
+                android.media.projection.MediaProjectionManager manager = getSystemService(android.media.projection.MediaProjectionManager.class);
+                try { startActivityForResult(manager.createScreenCaptureIntent(), SHOWCASE); } catch (Exception none) { message("This phone cannot record its screen for apps."); }
+            })
+            .setNegativeButton("Cancel", null).show();
+    }
+    private final ShowcaseService.Listener showcaseListener = new ShowcaseService.Listener() {
+        @Override public void started(boolean ok, String problem) {
+            if (!ok) { Showcase.stop(); message("The showcase could not start recording: " + problem); return; }
+            if (!isDestroyed()) main.postDelayed(MainActivity.this::showcaseMain, 600);
+        }
+        @Override public void finished(File video) {
+            Showcase.stop(); Showcase.video = video;
+            if (isDestroyed()) return;
+            Showcase.clear(MainActivity.this); render();
+            if (video == null) { message("The showcase recording was too short to keep."); return; }
+            new AlertDialog.Builder(MainActivity.this).setTitle("Showcase recorded")
+                .setMessage(String.format(Locale.getDefault(), "The video is ready (%.1f MB). Save it where you like, then share it from there.", video.length() / 1e6))
+                .setPositiveButton("Save…", (d, w) -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "link-workshop-showcase.mp4"), SAVE_SHOWCASE))
+                .setNegativeButton("Discard", (d, w) -> video.delete()).show();
+        }
+    };
+    private Showcase.Script showcaseScript;
+    /** The main tabs' part of the tour. Only shows things: the camera stream it may open is read-only. */
+    private void showcaseMain() {
+        if (Showcase.stage != Showcase.MAIN) return;
+        render();
+        JSONObject snapshot = printer == null ? null : printer.liveStatus();
+        JSONObject machineState = snapshot == null ? null : snapshot.optJSONObject("machine_status");
+        boolean printing = machineState != null && machineState.optInt("status", -1) == 2;
+        boolean[] cameraByTour = {false};
+        Showcase.Script script = new Showcase.Script(this); showcaseScript = script;
+        script.then(0, () -> { selectPage(PRINT); mainScroll.scrollTo(0, 0); Showcase.card(this, "Link Workshop", printing ? "A tour on a real print" : "A tour of the app", 2600); })
+            .then(3300, () -> Showcase.caption(this, printing ? "Live status: progress, layer, temperatures and time left" : "The printer at a glance"))
+            .then(3800, () -> {
+                if (printer != null && printer.ready() && cameraPlayer == null) { cameraByTour[0] = true; toggleCamera(); Showcase.caption(this, "The printer's camera, live on the phone"); }
+            })
+            .then(cameraByTour[0] || (printer != null && printer.ready()) ? 4200 : 0, () -> { Showcase.caption(this, "Everything for the print on one page"); Showcase.glide(mainScroll, (int) (pages[PRINT].getHeight() * 0.45f), 3200); })
+            .then(4200, () -> Showcase.glide(mainScroll, 0, 1400))
+            .then(1700, () -> Showcase.fade(mainScroll, () -> { if (cameraByTour[0]) stopCamera(); selectPage(PRINTER); mainScroll.scrollTo(0, 0); Showcase.caption(this, "Printer: temperatures, fans, light and spools"); }))
+            .then(3600, () -> Showcase.glide(mainScroll, (int) (pages[PRINTER].getHeight() * 0.4f), 3000))
+            .then(3600, () -> Showcase.fade(mainScroll, () -> { selectPage(FILES); mainScroll.scrollTo(0, 0); Showcase.caption(this, "Files on the printer and on this phone, sliced right here"); }))
+            .then(3800, () -> Showcase.fade(mainScroll, () -> { selectPage(HISTORY); mainScroll.scrollTo(0, 0); Showcase.caption(this, "Your printing: prints, hours, filament and its cost"); }))
+            .then(4000, () -> Showcase.caption(this, null))
+            .then(400, this::showcaseNext);
+        script.run(null);
+    }
+    /** From the tabs to the live toolpath (or a file's toolpath), or on to a recording when there is no toolpath to show. */
+    private void showcaseNext() {
+        if (Showcase.stage != Showcase.MAIN) return;
+        JSONObject snapshot = printer == null ? null : printer.liveStatus();
+        JSONObject machineState = snapshot == null ? null : snapshot.optJSONObject("machine_status");
+        boolean printing = machineState != null && machineState.optInt("status", -1) == 2;
+        Intent viewer = null;
+        if (printing && printer != null && (printer.ready() || printer.usingCloud())) viewer = new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true);
+        else if (printer != null && printer.selectedFile != null) viewer = new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, printer.selectedFile.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, printer.selectedName);
+        if (viewer != null) { Showcase.stage = Showcase.VIEWER; startActivity(viewer.putExtra(Showcase.EXTRA, true)); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out); return; }
+        String meta = Showcase.recordingMeta(this, printer);
+        if (meta != null) { Showcase.stage = Showcase.RECORDING; startActivity(new Intent(this, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, meta).putExtra(Showcase.EXTRA, true)); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out); return; }
+        Showcase.stage = Showcase.END; showcaseEnd();
+    }
+    /** The closing card, then the recording stops (and the save offer follows). */
+    private void showcaseEnd() {
+        if (Showcase.stage != Showcase.END || isDestroyed()) return;
+        selectPage(PRINT); mainScroll.scrollTo(0, 0);
+        Showcase.card(this, "Link Workshop", "Recorded in the app, on a real printer", 0);
+        main.postDelayed(() -> { if (ShowcaseService.recording) startService(new Intent(this, ShowcaseService.class).setAction(ShowcaseService.ACTION_STOP)); else { Showcase.stop(); Showcase.clear(this); } }, 3800);
+    }
+
     private void showLicenses() {
         try {
             StringBuilder text = new StringBuilder("Link Workshop v" + appVersion() + "\nIndependent Android app derived from Elegoo Link. Cloud commands use Agora RTM, Elegoo's cloud command service.\n\n");
