@@ -31,6 +31,12 @@ jobs:
         run: ./gradlew --no-daemon --no-build-cache --max-workers=2 testDebugUnitTest lintDebug assembleDebug
       - name: The APK carries the slicer engine and its presets
         run: python3 ../.github/workflows/check-engine.py app/build/outputs/apk/debug/app-debug.apk
+      - name: Keep the debug APK for testing on a phone
+        uses: actions/upload-artifact@v4
+        with:
+          name: link-workshop-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
       - name: The toolpath viewer loads in a browser
         run: |
           npm install --no-save --no-package-lock --silent playwright@1.56.1
