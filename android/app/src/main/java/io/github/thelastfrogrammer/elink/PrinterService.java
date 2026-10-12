@@ -578,7 +578,10 @@ public final class PrinterService extends Service {
 
     /** A download waiting for the printer's file server to open, and when it was asked for. */
     private String waitingFile, waitingStorage, waitingState = ""; private long waitingSince, nextWaitProbe; private boolean waitProbing;
-    static final long WAIT_PROBE_MS = 3 * 60_000L, WAIT_LIMIT_MS = 12 * 3600_000L;
+    static final long WAIT_PROBE_MS = 60_000L, WAIT_LIMIT_MS = 12 * 3600_000L;
+    /** Checks again every minute even when no status arrives (a printer switched to LAN Only goes quiet on the cloud). */
+    private final Runnable waitTick = new Runnable() { @Override public void run() { if (waitingFile == null) return; checkWaiting(liveStatus()); main.postDelayed(this, WAIT_PROBE_MS); } };
+    private volatile String waitAddress, lastWaitResult = "";
     public String waitingFor() { return waitingFile; }
     /**
      * Downloads `filename` once the printer's file server accepts connections: checked (a TCP connect to port 80, nothing sent)
@@ -586,13 +589,15 @@ public final class PrinterService extends Service {
      */
     public void downloadWhenOpen(String storage, String filename) {
         waitingFile = filename.replaceFirst("^/+", ""); waitingStorage = storage; waitingSince = SystemClock.elapsedRealtime(); nextWaitProbe = 0; waitingState = "";
-        feedback = "Waiting for the printer to serve " + StatusPresentation.clean(waitingFile) + ". The app checks when the printer's state changes and every 3 minutes, then downloads it.";
+        feedback = "Waiting for the printer to serve " + StatusPresentation.clean(waitingFile) + ". The app checks every minute and downloads it as soon as the printer's file server answers. "
+            + "In cloud mode the printer keeps that server closed: turning on LAN Only on the printer's screen should open it, and once the file is in, LAN Only can go off again.";
         Diagnostics.note(Diagnostics.FILES, "waiting for the file server to open");
+        main.removeCallbacks(waitTick); main.postDelayed(waitTick, WAIT_PROBE_MS);
         changed(); checkWaiting(liveStatus());
     }
     public void stopWaiting(String why) {
         if (waitingFile == null) return;
-        waitingFile = null; if (why != null) { feedback = why; Diagnostics.note(Diagnostics.FILES, "stopped waiting for the file server"); } changed();
+        waitingFile = null; main.removeCallbacks(waitTick); if (why != null) { feedback = why; Diagnostics.note(Diagnostics.FILES, "stopped waiting for the file server"); } changed();
     }
     private void checkWaiting(JSONObject status) {
         if (waitingFile == null || waitProbing || directDownloading) return;
@@ -606,12 +611,15 @@ public final class PrinterService extends Service {
             String result;
             try {
                 NetworkRoute route = NetworkRoute.local(getApplicationContext());
-                Cc2Discovery.Found found = null; try { found = locate(route); } catch (IOException ignored) { }
-                String address = found != null ? found.host : ready() ? host : null;
+                String address = waitAddress;
+                if (address == null) { Cc2Discovery.Found found = null; try { found = locate(route); } catch (IOException ignored) { } address = found != null ? found.host : ready() ? host : null; }
                 result = address == null ? "not found" : FileAccess.parse(PrinterHttp.probePorts(route.sockets(), address, new int[] {80})).getOrDefault(80, "failed");
+                // A refusal proves the address is the printer's; anything else finds it again next time (its address may change).
+                waitAddress = "open".equals(result) || "refused".equals(result) ? address : null;
             } catch (IOException noWifi) { result = "no wifi"; }
             String port = result;
-            Diagnostics.note(Diagnostics.FILES, "waiting: port 80 " + port + " · printer " + (state.isEmpty() ? "state unknown" : state) + (changedState ? " (state changed)" : ""));
+            if (changedState || !port.equals(lastWaitResult)) Diagnostics.note(Diagnostics.FILES, "waiting: port 80 " + port + " · printer " + (state.isEmpty() ? "state unknown" : state) + (changedState ? " (state changed)" : ""));
+            lastWaitResult = port;
             main.post(() -> {
                 waitProbing = false;
                 if (waitingFile == null || !waitingFile.equals(file)) return;

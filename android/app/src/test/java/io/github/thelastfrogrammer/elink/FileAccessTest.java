@@ -19,8 +19,11 @@ public class FileAccessTest {
         e.found = true; e.lanOnly = false; e.state = "Printing"; e.ports.putAll(FileAccess.parse("80 refused (3 ms), 8080 open (5 ms)"));
         String refused = FileAccess.verdict(e);
         assertTrue(refused, refused.contains("cloud mode") && refused.contains("refuses connections while it prints"));
-        assertTrue(refused, refused.contains("camera port answers") && refused.contains("Download when it opens") && refused.contains("not been confirmed"));
+        assertTrue(refused, refused.contains("camera port answers") && refused.contains("Download when it opens") && refused.contains("switch LAN Only on"));
 
+        e.lanOnly = true; String printingLan = FileAccess.verdict(e);
+        assertTrue(printingLan, printingLan.contains("LAN Only mode") && printingLan.contains("may open once the print ends"));
+        e.lanOnly = false;
         e.state = "Idle"; e.ports.put(80, "open"); e.codeProtected = true;
         String open = FileAccess.verdict(e);
         assertTrue(open, open.startsWith("The printer's file server (port 80) is open in cloud mode: downloads should work now."));

@@ -50,8 +50,9 @@ final class FileAccess {
         String port = e.port(80);
         if ("refused".equals(port)) {
             StringBuilder out = new StringBuilder("The printer is on this Wi-Fi in " + mode + ", but its file server (port 80) refuses connections" + (printing ? " while it prints" : "") + "." + others);
-            if (printing) out.append(" It may open once the print ends: “Download when it opens” keeps checking and downloads then.");
-            if (Boolean.FALSE.equals(e.lanOnly)) out.append(" In cloud mode the printer may keep its file server closed; whether LAN Only opens it on this printer has not been confirmed yet.");
+            if (Boolean.FALSE.equals(e.lanOnly)) out.append(" This printer has kept it closed in cloud mode both while printing and while idle. Turning on LAN Only on the printer's screen should open it: "
+                + "tap “Download when it opens” first, switch LAN Only on, and the app downloads as soon as the server answers; then switch LAN Only off again.");
+            else if (printing) out.append(" It may open once the print ends: “Download when it opens” keeps checking and downloads then.");
             return out.toString();
         }
         if ("timeout".equals(port) || "unreachable".equals(port))

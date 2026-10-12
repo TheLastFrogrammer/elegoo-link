@@ -273,3 +273,11 @@ The app now has a read-only **Check file access** (UDP discovery for mode and co
 which re-checks port 80 (TCP connect only) when the printer's state changes and every 3 minutes for up to 12 hours, and
 downloads once it accepts. Its diagnostics lines (port 80 result with printer state) show whether the server opens when a
 print ends, in LAN Only mode, or never in cloud mode.
+
+Field evidence, owner's CC2 in cloud mode (2026-10-08 and 2026-10-11): port 80 refused during a print and again with the
+printer idle (no file in `print_status`); 443, 554, 3030, 8554 and 8883 refused; 1883, 8080 and 9001 open; port 8080 gave
+no HTTP answer to the probe's request in 3 s. So in cloud mode this firmware keeps the file server closed, not only while
+printing. LAN Only is the printer's local mode that the SDK's LAN path (and its `/download`) is written for; that it opens
+port 80 on this printer is still to be seen. "Download when it opens" now checks every minute on its own (a printer
+switched to LAN Only stops reporting through the cloud), keeps the printer's address once port 80 has answered or refused,
+and logs a line only when the result or the printer's state changes.
