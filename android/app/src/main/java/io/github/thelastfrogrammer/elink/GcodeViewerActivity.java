@@ -483,18 +483,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void startCamera() {
         if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null && !alignOnly) return;
         if (aligning == null) try { web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
-        if (printer.ready()) {
-            String host = printer.host(), url;
-            try { url = FeatureData.cameraUrl(host, printer.cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : printer.cameraUrl); }
+        if (printer.ready() || printer.localCamera()) {
+            // Locally, or alongside the cloud when the printer's own stream was found to work on this Wi-Fi.
+            boolean alongside = !printer.ready();
+            String host = alongside ? printer.localHost : printer.host(), url;
+            try { url = alongside ? printer.localCameraUrl() : FeatureData.cameraUrl(host, printer.cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : printer.cameraUrl); }
             catch (Exception invalid) { cameraMessage("The camera address is not on the printer, so it was not opened."); return; }
             NetworkRoute route;
-            try { route = NetworkRoute.select(this, printer.remote()); } catch (IOException unavailable) { cameraMessage(unavailable.getMessage()); return; }
+            try { route = alongside ? NetworkRoute.local(this) : NetworkRoute.select(this, printer.remote()); } catch (IOException unavailable) { cameraMessage(unavailable.getMessage()); return; }
             cameraStarted = true; cameraCloud = false;
             cameraFrames = new CameraFrames(url, route.http(), new CameraFrames.Listener() {
                 public void frame() { main.post(() -> { if (web != null && cameraFrames != null) { web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); frameAt = System.currentTimeMillis(); keepLocalPicture(); } }); }
                 public void error(String message) { main.post(() -> { cameraStarted = false; cameraFrames = null; cameraMessage(message + " Open the camera from Monitor to check it."); }); }
             });
-            cameraMessage("Camera: the printer's own stream on this network.");
+            cameraMessage(alongside ? "Camera: the printer's own stream on this Wi-Fi, alongside the cloud." : "Camera: the printer's own stream on this network.");
         } else if (printer.usingCloud() && !printer.cloudSerial.isEmpty()) {
             if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false)) {
                 cameraMessage("The camera through Elegoo's cloud needs cloud control turned on: Print > Camera explains it. The camera model is shown without a picture."); return;
@@ -1649,7 +1651,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         missingDetail.setText(waiting ? StatusPresentation.clean(printer.feedback) : failed ? "The download did not work: " + StatusPresentation.clean(printer.feedback) : "");
         missingDetail.setVisibility(waiting || failed ? View.VISIBLE : View.GONE);
         if (waitButton != null) waitButton.setText(waiting ? "Stop waiting" : "Download when it opens");
-        String access = printer == null ? null : printer.fileAccessText;
+        String access = printer == null ? null : printer.fileAccessText != null && printer.folderText != null ? printer.fileAccessText + "\n" + printer.folderText : printer.fileAccessText != null ? printer.fileAccessText : printer.folderText;
         if (accessText != null) { accessText.setText(access == null ? "" : StatusPresentation.clean(access)); accessText.setVisibility(access == null ? View.GONE : View.VISIBLE); }
     }
 

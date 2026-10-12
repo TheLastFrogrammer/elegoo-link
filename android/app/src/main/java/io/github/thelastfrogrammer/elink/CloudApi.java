@@ -254,6 +254,21 @@ public final class CloudApi {
         return data;
     }
 
+    /** One page of the cloud's record of the printer's files (SDK getFileList): `list` and `total`. */
+    public JSONObject filePage(String serial, int pageNo, int pageSize) throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/local-file/page?serialNo=" + URLEncoder.encode(serial, "UTF-8")
+            + "&pageNo=" + pageNo + "&pageSize=" + pageSize, null, true).optJSONObject("data");
+        if (data == null) throw new CloudException("Elegoo's cloud sent no file list.", false);
+        return data;
+    }
+    /** One page of the printer's print history as the cloud keeps it (SDK getPrintTaskList), newest first. */
+    public JSONObject historyPage(String serial, int pageNo, int pageSize) throws IOException {
+        JSONObject data = authorized("GET", "/api/v1/device-management-server/device/event-data/page?deviceCode=" + URLEncoder.encode(serial, "UTF-8")
+            + "&pageNo=" + pageNo + "&pageSize=" + pageSize + "&eventKey=history_task&sort=create_time,desc", null, true).optJSONObject("data");
+        if (data == null) throw new CloudException("Elegoo's cloud sent no print history.", false);
+        return data;
+    }
+
     /** First item of the cloud's file list for the printer: only its field names and kinds are logged, once, to see what Elegoo returns. */
     public void logFileListShape(String serial) {
         try {

@@ -71,7 +71,7 @@ public final class PrinterService extends Service {
     /** Spools and their filament left (see SpoolStore): follows fresh tray reports, and takes a finished print's use off. */
     public SpoolStore spools() { return SpoolStore.at(new java.io.File(getFilesDir(), "spools.json")); }
     private void record(JSONObject value, String source, String name) {
-        checkWaiting(value);
+        checkWaiting(value); checkFolder(value);
         SpoolStore spools = spools(); long now = System.currentTimeMillis();
         if (canvasFresh() && canvas != null) spools.sync(canvas, now);
         String used = spools.observe(value, now); if (used != null) feedback = used;
@@ -93,13 +93,17 @@ public final class PrinterService extends Service {
     private void grab(Frame then) {
         if (then != null) synchronized (grabWaiting) { grabWaiting.add(then); }
         long now = SystemClock.elapsedRealtime();
-        if (grabbing || !ready() || route == null || now < grabRetryAt) { if (!grabbing) synchronized (grabWaiting) { grabWaiting.clear(); } return; }
-        String url;
-        try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); } catch (Exception invalid) { return; }
+        boolean viaLocal = ready();
+        if (grabbing || !(viaLocal ? route != null : localCamera()) || now < grabRetryAt) { if (!grabbing) synchronized (grabWaiting) { grabWaiting.clear(); } return; }
+        String url; PrinterHttp.ConnectionFactory http;
+        try {
+            if (viaLocal) { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); http = route.http(); }
+            else { url = localCameraUrl(); http = NetworkRoute.local(getApplicationContext()).http(); }
+        } catch (Exception invalid) { return; }
         grabbing = true;
         MjpegPlayer[] player = new MjpegPlayer[1];
         Runnable finish = () -> { MjpegPlayer p = player[0]; player[0] = null; grabbing = false; if (p != null) p.close(); };
-        player[0] = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
+        player[0] = new MjpegPlayer(url, http, new MjpegPlayer.Listener() {
             public void frame(android.graphics.Bitmap image) {
                 if (player[0] == null) return;
                 finish.run();
@@ -156,6 +160,7 @@ public final class PrinterService extends Service {
         cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         if (cloudBackground()) main.post(cloudPoll);
+        main.postDelayed(followTick, 20_000);
     }
     @Override public IBinder onBind(Intent intent) { return binder; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -194,6 +199,7 @@ public final class PrinterService extends Service {
     public void connect(String host, String code, String serial, boolean remote, boolean pinProbe) {
         new PrinterAuthentication(pinProbe, code); new PrinterHttp(host, pinProbe ? "" : code);
         if (!serial.isEmpty() && !Cc2Discovery.validSerial(serial)) throw new IllegalArgumentException("Invalid serial number");
+        followed = false;   // a connection made here is the user's own (follow mode marks its own afterwards)
         generation++; main.removeCallbacks(reconnect); clearRoute(); if (session != null) session.close(); session = null;
         this.host = host; this.code = code; this.serial = serial; this.remote = remote; this.pinProbe = pinProbe; wanted = true; retries.connected(); alerts = new PrintAlerts();
         startMonitoring(); attempt();
@@ -520,7 +526,7 @@ public final class PrinterService extends Service {
             main.post(() -> {
                 directDownloading = false;
                 if (waitingFile != null && waitingFile.equals(filename)) {
-                    if (done != null && problem == null) stopWaiting(null);
+                    if (done != null && problem == null) { stopWaiting(null); if (followed || lanOnlySeen) followText = "Downloaded " + StatusPresentation.clean(filename) + ". LAN Only can go off again; the app goes back to the cloud by itself."; }
                     else if (refusedAt == null) stopWaiting("Stopped waiting for " + StatusPresentation.clean(filename) + ": " + problem);
                     else { feedback = "Still waiting for the printer to serve " + StatusPresentation.clean(filename) + "."; changed(); return; }
                 }
@@ -661,8 +667,229 @@ public final class PrinterService extends Service {
     static final long FILES_WAIT_MS = 45_000;
     private long filesAsked;
     public boolean filesFresh() { return canQuery() && filesAt != 0 && System.nanoTime() - filesAt < TimeUnit.MINUTES.toNanos(2); }
+    // ------------------------------------------------------------------ following the printer's mode (LAN Only or cloud)
+
+    /** The local connection was made by follow mode (not by the user); follow mode is paused after a disconnect by hand. */
+    private boolean followed, followPaused, followChecking; private volatile boolean lanOnlySeen;
+    /** What follow mode did last, in words (null before anything). */
+    public String followText;
+    public boolean followMode() { return workshop().getBoolean("followMode", true); }
+    public void setFollowMode(boolean on) { workshop().edit().putBoolean("followMode", on).apply(); followPaused = false; if (on) main.post(this::followCheck); changed(); }
+    private final Runnable followTick = new Runnable() { @Override public void run() { followCheck(); main.postDelayed(this, 60_000); } };
+    /**
+     * Watching through the cloud (or connected by follow mode): once a minute, while the app is open or watching in the
+     * background, the printer is looked for on this Wi-Fi (read-only UDP discovery). LAN Only with a saved access code (or no
+     * code protection) connects locally; back in cloud mode, a connection follow mode made is closed and the cloud takes over.
+     */
+    private void followCheck() {
+        if (followChecking || !followMode() || cloudSerial.isEmpty() || !cloudSignedIn || !(cloudVisible || foreground)) return;
+        if (wanted && !followed) return;   // the user's own local connection is left alone
+        followChecking = true;
+        cloudReads.execute(() -> {
+            Cc2Discovery.Found found = null;
+            try { found = locate(NetworkRoute.local(getApplicationContext())); } catch (IOException ignored) { }
+            Cc2Discovery.Found seen = found;
+            main.post(() -> { followChecking = false; if (!destroyed) applyFollow(seen); });
+        });
+    }
+    private void applyFollow(Cc2Discovery.Found found) {
+        if (found == null) return;
+        localHost = found.host;
+        boolean lan = Boolean.TRUE.equals(found.info.lanOnly), cloud = Boolean.FALSE.equals(found.info.lanOnly);
+        if (cloud) { followPaused = false; lanOnlySeen = false; }
+        if (lan) lanOnlySeen = true;
+        if (lan && !wanted && !followPaused) {
+            String code = null;
+            if (Boolean.FALSE.equals(found.info.codeProtected)) code = "";
+            else try { CredentialStore credentials = new CredentialStore(this); if (credentials.remembers(found.host)) code = credentials.load(found.host); } catch (Exception ignored) { }
+            if (code == null) {
+                String text = "The printer is in LAN Only mode, but this phone has no access code saved for it. Connect once in Settings with \u201cRemember access code\u201d on, and the app will switch by itself next time.";
+                if (!text.equals(followText)) { followText = text; Diagnostics.note(Diagnostics.HYBRID, "follow: LAN Only seen, no saved access code"); changed(); }
+                return;
+            }
+            Diagnostics.note(Diagnostics.HYBRID, "follow: LAN Only seen, connecting locally");
+            try { connect(found.host, code, found.info.serial); } catch (IllegalArgumentException invalid) { followText = "LAN Only seen, but the local connection could not start: " + invalid.getMessage(); changed(); return; }
+            followed = true;
+            followText = "The printer switched to LAN Only: connected on this Wi-Fi (files, camera and controls). Switch LAN Only off to go back to the cloud.";
+            feedback = followText; changed();
+        } else if (cloud && wanted && followed) {
+            Diagnostics.note(Diagnostics.HYBRID, "follow: cloud mode seen, back to the cloud");
+            disconnect(); followPaused = false;
+            followText = "The printer is back in cloud mode: watching through the cloud again.";
+            feedback = followText; changed();
+        }
+    }
+
+    // ------------------------------------------------------------------ experiment: does cloud mode publish status on the local broker?
+
+    public String listenText; public boolean listening;
+    /** Listen-only, once, for 30 seconds, with the pairing PIN the user typed (kept for this call only). Publishes nothing. */
+    public void tryListen(String pin) {
+        if (listening || pin == null || pin.trim().isEmpty()) return;
+        listening = true; listenText = "Looking for the printer on this Wi-Fi…"; changed();
+        String secret = pin.trim();
+        Thread thread = new Thread(() -> {
+            String text;
+            try {
+                NetworkRoute route = NetworkRoute.local(getApplicationContext());
+                Cc2Discovery.Found found = locate(route);
+                if (found == null) text = "The printer did not answer on this Wi-Fi.";
+                else if (Boolean.TRUE.equals(found.info.lanOnly)) text = "The printer is in LAN Only mode right now; this test is for cloud mode.";
+                else {
+                    main.post(() -> { listenText = "Listening on your Wi-Fi for 30 seconds…"; changed(); });
+                    LocalListen.Result result = LocalListen.listen(found.host, found.info.serial, secret, route.sockets(), LocalListen.paho(), 30_000);
+                    Diagnostics.note(Diagnostics.HYBRID, "listen-only test: " + result.report());
+                    text = result.verdict(30);
+                }
+            } catch (IOException noWifi) { text = "The phone is not on Wi-Fi."; }
+            String said = text; main.post(() -> { listening = false; listenText = said; changed(); });
+        }, "listen-test");
+        thread.setDaemon(true); thread.start();
+    }
+
+    // ------------------------------------------------------------------ G-code from a folder of the user's (Storage Access Framework)
+
+    /** The running print's file last looked for in the folder, and what came of it in words (null before any). */
+    private volatile String folderTried = ""; public String folderText;
+    public boolean hasGcodeFolder() { return !workshop().getString("gcodeFolder", "").isEmpty(); }
+    public void setGcodeFolder(Uri tree) {
+        workshop().edit().putString("gcodeFolder", tree == null ? "" : tree.toString()).apply();
+        folderTried = ""; folderText = tree == null ? null : "Folder chosen. When a print starts whose file is not on this phone, the app looks for it there."; changed();
+        if (tree != null) checkFolder(liveStatus());
+    }
+    /** Looks for `filename` in the folder now, even if it was looked for before (from the live toolpath's button). */
+    public void searchFolder(String filename) { folderTried = ""; checkFolderFor(filename); }
+    private void checkFolder(JSONObject status) {
+        JSONObject print = status == null ? null : status.optJSONObject("print_status");
+        String filename = print == null ? "" : print.optString("filename", "");
+        if (!filename.isEmpty() && !filename.equals(folderTried)) checkFolderFor(filename);
+    }
+    private void checkFolderFor(String filename) {
+        String tree = workshop().getString("gcodeFolder", "");
+        if (tree.isEmpty() || filename.isEmpty()) return;
+        folderTried = filename;
+        if (library != null && library.find(filename) != null) return;
+        String base = filename.substring(filename.lastIndexOf('/') + 1);
+        long expected = reportedSize(base);
+        cloudReads.execute(() -> {
+            String text; File kept = null;
+            try {
+                FolderMatch match = FolderMatch.search(getContentResolver(), Uri.parse(tree), base);
+                if (match == null) text = StatusPresentation.clean(base) + " is not in your G-code folder.";
+                else if (expected > 0 && match.size > 0 && match.size != expected) text = "Your G-code folder has a " + StatusPresentation.clean(base) + ", but its size (" + match.size + " bytes) differs from the printer's (" + expected + "), so it was not used.";
+                else {
+                    File copy = File.createTempFile("folder-", ".gcode", getCacheDir());
+                    try (InputStream in = getContentResolver().openInputStream(match.uri); OutputStream out = new FileOutputStream(copy)) {
+                        if (in == null) throw new IOException("unreadable");
+                        byte[] buffer = new byte[65536]; int n; long total = 0;
+                        while ((n = in.read(buffer)) != -1) { total += n; if (total > GcodeInspector.MAX_BYTES) throw new IOException("too large"); out.write(buffer, 0, n); }
+                    }
+                    keep(copy, base); copy.delete(); kept = copy;
+                    text = "Found " + StatusPresentation.clean(base) + " in your G-code folder" + (expected > 0 ? " (same size as on the printer)" : "") + ".";
+                }
+            } catch (SecurityException lost) { text = "The app can no longer read your G-code folder. Choose it again."; }
+            catch (Exception error) { text = "Your G-code folder could not be read (" + error.getClass().getSimpleName() + ")."; }
+            Diagnostics.note(Diagnostics.HYBRID, "G-code folder: " + (kept != null ? "match found" + (expected > 0 ? ", size agrees" : ", size not reported") : text.contains("differs") ? "name found, size differs" : text.contains("not in your") ? "no match" : "folder unreadable"));
+            String said = text; main.post(() -> { folderText = said; changed(); });
+        });
+    }
+    /** The size the printer (or the cloud's record of it) reports for a file, or -1. */
+    private long reportedSize(String base) {
+        org.json.JSONArray list = filePage.optJSONArray("file_list");
+        for (int i = 0; list != null && i < list.length(); i++) { JSONObject file = list.optJSONObject(i); if (file != null && base.equals(file.optString("filename"))) return file.optLong("size", -1); }
+        return -1;
+    }
+
+    // ------------------------------------------------------------------ the printer's own camera while watching through the cloud
+
+    /** The printer's address on this Wi-Fi, found by its cloud serial (UDP discovery); null until found. */
+    public volatile String localHost;
+    /** The last "Try the local camera" result, in words (null before any). */
+    public String localCameraText; public boolean localCameraTrying;
+    private android.content.SharedPreferences workshop() { return getSharedPreferences("workshop-settings", MODE_PRIVATE); }
+    /** Watched through the cloud, with the local camera chosen and the printer found on this Wi-Fi: the picture comes from the printer's own stream. */
+    public boolean localCamera() { return !ready() && usingCloud() && localHost != null && workshop().getBoolean("localCameraInCloud", false); }
+    public String localCameraUrl() { return "http://" + localHost + ":8080/?action=stream"; }
+    public void useLocalCamera(boolean on) { workshop().edit().putBoolean("localCameraInCloud", on).apply(); if (on) findLocalHost(); changed(); }
+    /** Finds the printer on this Wi-Fi by its cloud serial, in the background (read-only UDP discovery). */
+    public void findLocalHost() {
+        if (cloudSerial.isEmpty()) return;
+        cloudReads.execute(() -> {
+            try { Cc2Discovery.Found found = locate(NetworkRoute.local(getApplicationContext())); if (found != null) { localHost = found.host; main.post(this::changed); } }
+            catch (IOException ignored) { }
+        });
+    }
+    /**
+     * Read-only: finds the printer on this Wi-Fi and opens its MJPEG stream (port 8080, as in LAN mode) for one picture, at most
+     * 12 seconds, then closes it. On success the local camera can be used alongside the cloud.
+     */
+    public void tryLocalCamera() {
+        if (localCameraTrying) return;
+        localCameraTrying = true; localCameraText = "Looking for the printer on this Wi-Fi…"; changed();
+        cloudReads.execute(() -> {
+            String host = null; NetworkRoute route = null; Boolean lanOnly = null;
+            try { route = NetworkRoute.local(getApplicationContext()); Cc2Discovery.Found found = locate(route); if (found != null) { host = found.host; lanOnly = found.info.lanOnly; } else if (ready()) host = this.host; }
+            catch (IOException noWifi) { }
+            if (host == null || route == null) { finishCameraTry(false, route == null ? "The phone is not on Wi-Fi, so the printer's own camera cannot be reached." : "The printer did not answer on this Wi-Fi.", "not found"); return; }
+            String address = host, mode = Boolean.FALSE.equals(lanOnly) ? "cloud mode" : Boolean.TRUE.equals(lanOnly) ? "LAN Only" : "unknown mode";
+            main.post(() -> { localCameraText = "Opening the printer's camera stream…"; changed(); });
+            MjpegPlayer[] player = new MjpegPlayer[1]; boolean[] done = {false};
+            Runnable close = () -> { MjpegPlayer p = player[0]; player[0] = null; if (p != null) p.close(); };
+            player[0] = new MjpegPlayer("http://" + address + ":8080/?action=stream", route.http(), new MjpegPlayer.Listener() {
+                public void frame(android.graphics.Bitmap image) {
+                    synchronized (done) { if (done[0]) return; done[0] = true; }
+                    close.run(); localHost = address;
+                    finishCameraTry(true, "The printer's own camera works on this Wi-Fi in " + mode + " (" + image.getWidth() + "×" + image.getHeight() + "). It is used instead of the cloud video while you are on this Wi-Fi; turn it off below to go back.", "picture received, " + image.getWidth() + "x" + image.getHeight() + ", " + mode);
+                }
+                public void error(String message) {
+                    synchronized (done) { if (done[0]) return; done[0] = true; }
+                    close.run(); finishCameraTry(false, "The printer's camera stream did not open in " + mode + ": " + StatusPresentation.clean(message) + " The cloud camera stays in use.", "failed in " + mode);
+                }
+            });
+            main.postDelayed(() -> {
+                synchronized (done) { if (done[0]) return; done[0] = true; }
+                close.run(); finishCameraTry(false, "The printer's camera sent no picture within 12 seconds in " + mode + ". The cloud camera stays in use.", "no picture in 12 s, " + mode);
+            }, 12_000);
+        });
+    }
+    private void finishCameraTry(boolean ok, String text, String note) {
+        Diagnostics.note(Diagnostics.HYBRID, "try local camera: " + note);
+        main.post(() -> { localCameraTrying = false; localCameraText = text; if (ok) workshop().edit().putBoolean("localCameraInCloud", true).apply(); changed(); });
+    }
+
+    // ------------------------------------------------------------------ the cloud's records of the printer (cloud mode)
+
+    /** Reads that go to Elegoo's cloud records, apart from file transfers. */
+    private final ExecutorService cloudReads = Executors.newSingleThreadExecutor();
+    /** Watched through the cloud and signed in: the printer's files and history come from the cloud's records, as in the SDK. */
+    private boolean cloudRecords() { CloudApi cloud = cloudApi; return !ready() && usingCloud() && cloud != null && !cloud.needsSignIn() && !cloudSerial.isEmpty(); }
+
     public void browse(String storage, int offset) {
         if (!canQuery() || busy(Cc2Codec.FILES)) return; Cc2Codec.storage(storage); if (offset < 0) throw new IllegalArgumentException("Invalid offset");
+        if (cloudRecords() && "local".equals(storage)) {
+            queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files from Elegoo's cloud…"; changed();
+            CloudApi cloud = cloudApi; String serial = cloudSerial;
+            cloudReads.execute(() -> {
+                JSONObject result = null; String why = null;
+                try { result = CloudRecords.files(cloud.filePage(serial, offset / CloudRecords.PAGE + 1, CloudRecords.PAGE), offset); }
+                catch (IOException error) { why = StatusPresentation.clean(String.valueOf(error.getMessage())); }
+                JSONObject answer = result; String problem = why;
+                main.post(() -> {
+                    queryBusy.remove(Cc2Codec.FILES);
+                    if (answer == null) { Diagnostics.note(Diagnostics.FILES, "cloud file records unavailable (" + problem + "); asking the printer"); askFiles(storage, offset); return; }
+                    filePage = FeatureData.normalizeFiles(answer); this.storage = "local"; fileOffset = offset; filesAt = System.nanoTime();
+                    fileMessage = "Files from Elegoo's cloud records (the printer reports each file there).";
+                    Diagnostics.note(Diagnostics.FILES, "file list from cloud records: " + filePage.optJSONArray("file_list").length() + " shown, total " + answer.optInt("total", -1));
+                    changed();
+                });
+            });
+            return;
+        }
+        askFiles(storage, offset);
+    }
+    /** The printer's own file list (1044), locally or through the cloud channel. */
+    private void askFiles(String storage, int offset) {
+        if (busy(Cc2Codec.FILES)) return;
         queryBusy.add(Cc2Codec.FILES); fileMessage = "Loading printer files…";
         boolean local = ready();
         if (local) session.files(storage, offset); else cloudSafe(() -> Cc2Codec.filesRequest(0, storage, offset));
@@ -678,7 +905,26 @@ public final class PrinterService extends Service {
         changed();
     }
     public void loadHistory() {
-        if (!canQuery() || busy(Cc2Codec.HISTORY)) return; queryBusy.add(Cc2Codec.HISTORY); historyMessage = "Loading history…";
+        if (!canQuery() || busy(Cc2Codec.HISTORY)) return;
+        if (cloudRecords()) {
+            queryBusy.add(Cc2Codec.HISTORY); historyMessage = "Loading history from Elegoo's cloud…"; changed();
+            CloudApi cloud = cloudApi; String serial = cloudSerial;
+            cloudReads.execute(() -> {
+                JSONObject result = null;
+                try { result = CloudRecords.history(cloud.historyPage(serial, 1, CloudRecords.PAGE)); } catch (IOException error) { Diagnostics.note(Diagnostics.FILES, "cloud history unavailable: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
+                JSONObject answer = result;
+                main.post(() -> {
+                    queryBusy.remove(Cc2Codec.HISTORY);
+                    if (answer == null) { askHistory(); return; }
+                    history = answer; historyMessage = "History from Elegoo's cloud records."; changed();
+                });
+            });
+            return;
+        }
+        askHistory();
+    }
+    private void askHistory() {
+        if (busy(Cc2Codec.HISTORY)) return; queryBusy.add(Cc2Codec.HISTORY); historyMessage = "Loading history…";
         if (ready()) session.history(); else cloudSafe(() -> Cc2Codec.request(0, Cc2Codec.HISTORY));
         changed();
     }
@@ -760,11 +1006,41 @@ public final class PrinterService extends Service {
     public final Map<String, String> thumbnails = new HashMap<>();
     public void thumbnail(String storage, String filename) {
         if (!canQuery() || busy(Cc2Codec.THUMBNAIL) || thumbnails.containsKey(storage + "/" + filename)) return;
+        String stored = cloudRecords() && "local".equals(storage) ? cloudThumbnail(filename) : null;
+        if (stored != null) {
+            // The picture the printer stored with Elegoo, by the name the cloud's record gives; fetched once.
+            queryBusy.add(Cc2Codec.THUMBNAIL); String key = storage + "/" + filename; CloudApi cloud = cloudApi;
+            cloudReads.execute(() -> {
+                String data = "";
+                try {
+                    // A link in the record itself is followed only on Elegoo's own hosts; otherwise the cloud signs one for the named object.
+                    String host = stored.startsWith("https://") ? CloudApi.hostOf(stored) : null;
+                    if (stored.contains("://") && (host == null || !(host.equals("elegoo.com") || host.endsWith(".elegoo.com") || host.equals("elegoo.com.cn") || host.endsWith(".elegoo.com.cn")))) throw new IOException("unexpected host");
+                    String link = stored.contains("://") ? stored : cloud.signedLink(stored);
+                    java.net.HttpURLConnection connection = cloudConnections.open(new java.net.URL(link));
+                    connection.setInstanceFollowRedirects(false); connection.setConnectTimeout(10_000); connection.setReadTimeout(15_000);
+                    try (InputStream in = connection.getInputStream(); ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
+                        if (connection.getResponseCode() != 200) throw new IOException("HTTP " + connection.getResponseCode());
+                        byte[] buffer = new byte[16384]; int n; while ((n = in.read(buffer)) != -1) { bytes.write(buffer, 0, n); if (bytes.size() > 1 << 20) throw new IOException("too large"); }
+                        data = android.util.Base64.encodeToString(bytes.toByteArray(), android.util.Base64.NO_WRAP);
+                    } finally { connection.disconnect(); }
+                } catch (Exception error) { Diagnostics.note(Diagnostics.FILES, "cloud thumbnail unavailable: " + error.getClass().getSimpleName()); }
+                String picture = data;
+                main.post(() -> { queryBusy.remove(Cc2Codec.THUMBNAIL); thumbnails.put(key, picture); changed(); });
+            });
+            return;
+        }
         queryBusy.add(Cc2Codec.THUMBNAIL);
         try {
             JSONObject request = Cc2Codec.thumbnailRequest(0, storage, filename);
             if (ready()) session.request(request); else cloudSafe(() -> request);
         } catch (Exception error) { queryBusy.remove(Cc2Codec.THUMBNAIL); }
+    }
+    /** The thumbnail object the cloud's record names for this file, or null. */
+    private String cloudThumbnail(String filename) {
+        org.json.JSONArray list = filePage.optJSONArray("file_list");
+        for (int i = 0; list != null && i < list.length(); i++) { JSONObject file = list.optJSONObject(i); if (file != null && filename.equals(file.optString("filename"))) { String t = file.optString("cloud_thumbnail", ""); return t.isEmpty() ? null : t; } }
+        return null;
     }
     public void temperatures(int nozzle, int bed) {
         if (!Cc2Codec.heatersAdjustable(liveStatus())) return;
@@ -786,6 +1062,8 @@ public final class PrinterService extends Service {
         historyDetails.clear(); historyDetailMessages.clear(); queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
     }
     public void disconnect() {
+        if (followed) followPaused = true;   // disconnected by hand: no automatic local connection until the printer is seen in cloud mode again
+        followed = false;
         wanted = false; generation++; main.removeCallbacks(reconnect); clearRoute();
         if (session != null) session.close(); session = null; code = "";
         resetData();
@@ -819,6 +1097,7 @@ public final class PrinterService extends Service {
                     }
                 }
                 if (local.length() == 0) throw new IOException("File is empty");
+                keep(local, name);   // the live toolpath finds it by name when the printer prints it
                 File readyFile = local; String readyName = name; GcodeInspector.Report report = GcodeInspector.inspect(local);
                 android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
                 main.post(() -> finishFile(readyFile, readyName, report, preview, "Kept copy inspected. Uploading does not start a print."));
@@ -886,7 +1165,10 @@ public final class PrinterService extends Service {
     }
 
     /** Monitoring through the cloud while the app is visible; background watching is a separate opt-in setting. */
-    public void cloudVisible(boolean visible) { cloudVisible = visible; if (visible) { main.removeCallbacks(cloudPoll); main.post(cloudPoll); } }
+    public void cloudVisible(boolean visible) {
+        cloudVisible = visible; if (visible) { main.removeCallbacks(cloudPoll); main.post(cloudPoll); }
+        if (visible && localHost == null && usingCloud() && workshop().getBoolean("localCameraInCloud", false)) findLocalHost();
+    }
     public boolean cloudBackground() { return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudBackground", false) && cloudAccountPresent(); }
     /** Called after the setting changes or the account changes, while the app is visible. */
     public void cloudSettingsChanged() {

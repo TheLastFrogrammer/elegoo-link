@@ -53,6 +53,31 @@ public class FailureCloudFileServiceTest {
     }
     private static CloudFileMemory memory(PrinterService service) throws Exception { java.lang.reflect.Field f = PrinterService.class.getDeclaredField("cloudFiles"); f.setAccessible(true); return (CloudFileMemory) f.get(service); }
 
+    @Test public void inCloudModeFilesComeFromTheCloudRecordsWithTheirThumbnails() throws Exception {
+        PrinterService service = Robolectric.buildService(PrinterService.class).create().get();
+        AtomicInteger signed = new AtomicInteger();
+        CloudApi api = new CloudApi(false, new CloudLogin.Account("42", "Maker", "token", "refresh", 0, 0), "agent", (method, url, headers, body) -> {
+            if (url.contains("local-file/page")) return new CloudApi.Response(200, "{\"code\":0,\"data\":{\"total\":1,\"list\":[{\"filename\":\"Hook.gcode\",\"size\":42,\"thumbnail\":\"thumbs/h.png\"}]}}");
+            if (url.contains("event-data/page")) return new CloudApi.Response(200, "{\"code\":0,\"data\":{\"total\":1,\"list\":[{\"id\":\"e1\",\"eventValue\":\"{\\\"task_name\\\":\\\"Hook.gcode\\\",\\\"task_status\\\":1}\"}]}}");
+            if (url.contains("generate-pre-access-url")) { signed.incrementAndGet(); assertTrue(url, url.contains("objectName=thumbs%2Fh.png")); return new CloudApi.Response(200, "{\"code\":0,\"data\":{\"accessUrl\":\"https://oss.example.com/h.png?sig=1\"}}"); }
+            return new CloudApi.Response(404, "{}");
+        });
+        byte[] png = {(byte) 0x89, 'P', 'N', 'G'};
+        set(service, "cloudApi", api); set(service, "cloudSignedIn", true); set(service, "cloudSerial", SERIAL); set(service, "cloudConnections", (PrinterHttp.ConnectionFactory) url -> answer(url, 200, png));
+        set(service, "cloudOnline", 1); set(service, "cloudCheckedAt", System.currentTimeMillis()); set(service, "cloudOnlineSignal", true);
+        set(service, "cloudStatus", new JSONObject().put("machine_status", new JSONObject().put("status", 1)));
+        service.browse("local", 0);
+        waitFor(() -> service.filePage.optJSONArray("file_list") != null && service.filePage.optJSONArray("file_list").length() == 1);
+        assertEquals("Hook.gcode", service.filePage.getJSONArray("file_list").getJSONObject(0).getString("filename"));
+        assertTrue(service.fileMessage, service.fileMessage.contains("cloud records"));
+        service.thumbnail("local", "Hook.gcode");
+        waitFor(() -> service.thumbnails.containsKey("local/Hook.gcode"));
+        assertEquals(1, signed.get()); assertEquals(android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP), service.thumbnails.get("local/Hook.gcode"));
+        service.loadHistory();
+        waitFor(() -> service.history.optJSONArray("history_task_list") != null);
+        assertEquals("Hook.gcode", service.history.getJSONArray("history_task_list").getJSONObject(0).getString("task_name"));
+    }
+
     @Test public void theMemoryKeepsObjectNamesPerPrinterAndNeverALink() throws Exception {
         CloudFileMemory memory = new CloudFileMemory(RuntimeEnvironment.getApplication());
         memory.remember(SERIAL, "a.gcode", "gcode/obj-a.gcode");

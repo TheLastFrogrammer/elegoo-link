@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7, SHOWCASE = 8, SAVE_SHOWCASE = 9;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7, SHOWCASE = 8, SAVE_SHOWCASE = 9, GCODE_FOLDER = 10;
     private String pendingExportHash = "";
     private android.net.Uri pendingExportUri;
     private TextView inspection;
@@ -146,7 +146,7 @@ public final class MainActivity extends Activity {
             printer = ((PrinterService.LocalBinder) binder).service();
             if (pendingFeedback != null) { printer.feedback = pendingFeedback; pendingFeedback = null; }
             finishPendingExport();
-            takeSliced();
+            takeSliced(); takeShared();
             if (printer.connecting()) { routePicker.setSelection(printer.remote() ? 1 : 0); authPicker.setSelection(printer.pinProbe() ? 1 : 0); host.setText(printer.host()); if (printer.pinProbe()) pairingPin.setText(printer.accessCode()); else access.setText(printer.accessCode()); serial.setText(printer.serial()); }
             if (active) { printer.observe(MainActivity.this::render); printer.cloudVisible(true); }
             render();
@@ -378,6 +378,7 @@ public final class MainActivity extends Activity {
         tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and print speed");
         filamentSection = section(PRINTER, "Filament", "Load or unload filament and CANVAS trays");
         motionSection = section(PRINTER, "Move & calibrate", "Home, move axes, level the bed, vibration test and full self-check");
+        hybridSection = section(PRINTER, "Local and cloud together", "Your Wi-Fi alongside the Elegoo cloud: camera, files, LAN Only switching and tests");
         currentSection = tuningSection.body;
         LinearLayout tuning = card(null); tuningCard = tuning;
         tuningHint = label(tuning, "", 13, MUTED, false);
@@ -410,6 +411,7 @@ public final class MainActivity extends Activity {
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration optimization?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
         emergencyButton(upkeep);
+        buildHybrid();
         currentSection = fronts[FILES];
         // Order on the Files tab: what is on the printer, then sending a new file. What was printed is on History.
         buildFileBrowser();
@@ -526,12 +528,27 @@ public final class MainActivity extends Activity {
         TransientInputs transientInputs = (TransientInputs) getLastNonConfigurationInstance();
         if (transientInputs != null && host.getText().toString().equals(transientInputs.host)) { access.setText(transientInputs.code); pendingSnapshot = transientInputs.snapshot; }
         selectPage(saved == null ? savedTab() : saved.getInt("tab", PRINT));
-        if (saved == null) receiveSliced(getIntent());
+        if (saved == null) { receiveSliced(getIntent()); receiveShared(getIntent()); }
         openRequestedPage(getIntent());
         bound = bindService(new Intent(this, PrinterService.class), binding, BIND_AUTO_CREATE);
         render();
     }
-    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); receiveSliced(intent); openRequestedPage(intent); }
+    @Override protected void onNewIntent(Intent intent) { super.onNewIntent(intent); setIntent(intent); receiveSliced(intent); receiveShared(intent); openRequestedPage(intent); }
+    /** A .gcode file shared or opened from another app: taken in as if chosen on the Files tab, and kept for the live toolpath. */
+    private android.net.Uri pendingShared;
+    private void receiveShared(Intent intent) {
+        if (intent == null) return;
+        android.net.Uri uri = null;
+        if (Intent.ACTION_SEND.equals(intent.getAction())) uri = Build.VERSION.SDK_INT >= 33 ? intent.getParcelableExtra(Intent.EXTRA_STREAM, android.net.Uri.class) : intent.getParcelableExtra(Intent.EXTRA_STREAM);
+        else if (Intent.ACTION_VIEW.equals(intent.getAction())) uri = intent.getData();
+        if (uri == null || !"content".equals(uri.getScheme())) return;
+        intent.setAction(Intent.ACTION_MAIN);   // taken once, not again on recreation
+        pendingShared = uri; selectPage(FILES); takeShared();
+    }
+    private void takeShared() {
+        if (pendingShared == null || printer == null) return;
+        android.net.Uri uri = pendingShared; pendingShared = null; printer.select(uri);
+    }
 
     /** The tab open last time; from before the History and Printer tabs, the old tab's new place (Camera is on Print now). */
     private int savedTab() {
@@ -946,7 +963,7 @@ public final class MainActivity extends Activity {
     private final Section[] opened = new Section[TAB_COUNT];
     private final LinearLayout[] fronts = new LinearLayout[TAB_COUNT], sectionRows = new LinearLayout[TAB_COUNT];
     private final Button[] backBars = new Button[TAB_COUNT];
-    private Section connectionSection, preferencesSection, helpSection, aboutSection, cameraSection, tuningSection, filamentSection, motionSection;
+    private Section connectionSection, preferencesSection, helpSection, aboutSection, cameraSection, tuningSection, filamentSection, motionSection, hybridSection;
     private Object backCallback;
     /** A tab: the back bar (shown in a section), then the front page; sections are added after it. */
     private void buildHub(int tab) {
@@ -1724,8 +1741,9 @@ public final class MainActivity extends Activity {
     private void toggleCamera() {
         if (cameraPlayer != null) { stopCamera(); return; }
         try {
-            String address = host.getText().toString().trim(), url = FeatureData.cameraUrl(address, cameraAddress.getText().toString().trim());
-            NetworkRoute route = NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
+            boolean alongsideCloud = printer != null && !printer.ready() && printer.localCamera();
+            String address = host.getText().toString().trim(), url = alongsideCloud ? printer.localCameraUrl() : FeatureData.cameraUrl(address, cameraAddress.getText().toString().trim());
+            NetworkRoute route = alongsideCloud ? NetworkRoute.local(this) : NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
                 public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
@@ -1921,6 +1939,7 @@ public final class MainActivity extends Activity {
     }
     private void render() {
         if (connect == null || isDestroyed()) return;
+        renderHybrid();
         if (probeButton != null) {
             boolean probing = printer != null && printer.probing;
             probeButton.setText(probing ? "Stop probe" : "Probe printer (read-only)…");
@@ -2066,8 +2085,9 @@ public final class MainActivity extends Activity {
         monitorCamera.setVisibility(showCamera ? View.VISIBLE : View.GONE);
         boolean cameraSectionOpen = opened[PRINT] == cameraSection;   // its own Start camera keeps the stream when nothing prints
         if (page == PRINT && cameraPlayer != null && !showCamera && !cameraSectionOpen) stopCamera();
-        if (page == PRINT && active && showCamera && ready && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
-        monitorImage.setVisibility(showCamera && ready && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
+        boolean ownCamera = ready || printer != null && printer.localCamera();   // the printer's own stream, locally or alongside the cloud
+        if (page == PRINT && active && showCamera && ownCamera && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
+        monitorImage.setVisibility(showCamera && ownCamera && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
         if (!ready) monitorCameraStart.setText("Watch through the Elegoo cloud");
         else if (cameraPlayer == null && monitorCameraStart.getText().toString().startsWith("Watch through")) monitorCameraStart.setText("Watch camera");
         monitorCameraSize.setVisibility(ready && monitorImage.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
@@ -2341,6 +2361,10 @@ public final class MainActivity extends Activity {
                 String done = text; main.post(() -> { if (!isDestroyed()) message(done); });
             });
         }
+        if (request == GCODE_FOLDER && result == RESULT_OK && data != null && data.getData() != null && printer != null) {
+            try { getContentResolver().takePersistableUriPermission(data.getData(), Intent.FLAG_GRANT_READ_URI_PERMISSION); printer.setGcodeFolder(data.getData()); }
+            catch (SecurityException refused) { message("Android did not let the app keep reading that folder. Choose it again."); }
+        }
         if (request == SAVE_GCODE) {
             if (result == RESULT_OK && data != null && data.getData() != null) { pendingExportUri = data.getData(); finishPendingExport(); }
             else { pendingExportHash = ""; pendingExportUri = null; }
@@ -2376,6 +2400,72 @@ public final class MainActivity extends Activity {
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
+    // ------------------------------------------------------------------ local and cloud together
+
+    private CheckBox followBox, localCameraBox;
+    private TextView followLabel, cameraTryLabel, folderLabel, listenLabel;
+    private Button cameraTry, folderButton, folderStop, listenButton;
+    /** The Printer tab's card for using this Wi-Fi alongside the cloud. Everything here only reads from the printer. */
+    private void buildHybrid() {
+        currentSection = hybridSection.body;
+        LinearLayout follow = card("Follow the printer's mode");
+        label(follow, "In cloud mode the printer keeps its file server closed, so files come down only in LAN Only mode. With this on, the app looks for the printer on this Wi-Fi once a minute: when it reports LAN Only, the app connects locally with your saved access code (files, camera, controls); when it is back in cloud mode, the app goes back to the cloud.", 13, MUTED, false);
+        followBox = checkbox(follow, "Switch with the printer's mode", true);
+        followBox.setOnCheckedChangeListener((view, on) -> { if (printer != null && on != printer.followMode()) printer.setFollowMode(on); });
+        followLabel = A11y.polite(label(follow, "", 13, INK, false));
+
+        LinearLayout camera = card("The printer's own camera");
+        label(camera, "In cloud mode the printer's camera port still answers on your Wi-Fi. If its stream works, the app shows it instead of the cloud video: sharper, less delay, no relay. Away from home the cloud video is used.", 13, MUTED, false);
+        cameraTry = button(camera, "Try the printer's own camera", () -> { if (printer != null) printer.tryLocalCamera(); });
+        cameraTryLabel = A11y.polite(label(camera, "", 13, INK, false));
+        localCameraBox = checkbox(camera, "Use it on this Wi-Fi while watching through the cloud", false);
+        localCameraBox.setOnCheckedChangeListener((view, on) -> { if (printer != null) printer.useLocalCamera(on); });
+
+        LinearLayout folder = card("Your G-code folder");
+        label(folder, "Files sliced elsewhere can reach the live toolpath without downloading from the printer: share a .gcode to Link Workshop, or choose a folder your slicer exports to (synced to this phone, for example with Google Drive or Syncthing). When a print starts whose file is not on this phone, the app looks there by name and checks the size the printer reports.", 13, MUTED, false);
+        LinearLayout folderRow = row(folder);
+        folderButton = rowButton(folderRow, "Choose folder…", () -> {
+            try { startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), GCODE_FOLDER); }
+            catch (Exception none) { message("This phone has no folder picker."); }
+        }, true);
+        folderStop = rowButton(folderRow, "Stop using it", () -> { if (printer != null) printer.setGcodeFolder(null); }, false);
+        folderLabel = A11y.polite(label(folder, "", 13, INK, false));
+
+        LinearLayout tests = card("Experiments (one try each)");
+        label(tests, "Listen for local status: with the pairing PIN from the printer's screen, the app connects to the printer's local broker for 30 seconds and only listens: it sends no requests and registers nothing. It shows whether a printer in cloud mode still reports its status on your Wi-Fi. The PIN is used once and not kept.", 13, MUTED, false);
+        listenButton = button(tests, "Try listening for local status…", this::listenDialog);
+        listenLabel = A11y.polite(label(tests, "", 13, INK, false));
+        currentSection = null;
+    }
+    private void listenDialog() {
+        if (printer == null) return;
+        EditText pin = new EditText(this); pin.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        pin.setHint("Pairing PIN"); pin.setSaveEnabled(false); pin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        LinearLayout box = new LinearLayout(this); box.setPadding(dp(20), dp(8), dp(20), 0); box.addView(pin, new LinearLayout.LayoutParams(-1, -2));
+        new AlertDialog.Builder(this).setTitle("Listen for local status")
+            .setMessage("Enter the pairing PIN the printer shows (Settings on the printer's screen). The app listens for 30 seconds and sends nothing to the printer.")
+            .setView(box)
+            .setPositiveButton("Listen", (d, w) -> printer.tryListen(pin.getText().toString()))
+            .setNegativeButton("Cancel", null).show();
+    }
+    private void renderHybrid() {
+        if (followBox == null) return;
+        boolean bound = printer != null;
+        if (bound && followBox.isChecked() != printer.followMode()) followBox.setChecked(printer.followMode());
+        followLabel.setText(bound && printer.followText != null ? StatusPresentation.clean(printer.followText) : bound && printer.cloudSignedIn ? "Watching for LAN Only." : "Sign in with Elegoo (Settings) to watch through the cloud; follow mode switches between it and your Wi-Fi.");
+        cameraTry.setEnabled(bound && !printer.localCameraTrying);
+        cameraTryLabel.setText(bound && printer.localCameraText != null ? StatusPresentation.clean(printer.localCameraText) : "");
+        cameraTryLabel.setVisibility(cameraTryLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
+        boolean useLocal = getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("localCameraInCloud", false);
+        if (localCameraBox.isChecked() != useLocal) localCameraBox.setChecked(useLocal);
+        boolean hasFolder = bound && printer.hasGcodeFolder();
+        folderButton.setText(hasFolder ? "Choose another…" : "Choose folder…"); folderStop.setEnabled(hasFolder);
+        folderLabel.setText(bound && printer.folderText != null ? StatusPresentation.clean(printer.folderText) : hasFolder ? "Folder chosen." : "No folder chosen.");
+        listenButton.setEnabled(bound && !printer.listening);
+        listenLabel.setText(bound && printer.listenText != null ? StatusPresentation.clean(printer.listenText) : "");
+        listenLabel.setVisibility(listenLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
+    }
+
     // ------------------------------------------------------------------ showcase video
 
     /** What the showcase does, before Android asks to allow the screen recording. */
@@ -2505,7 +2595,7 @@ public final class MainActivity extends Activity {
     }
     /** The Print tab camera button: the local stream here (remembered for next time), or the cloud camera screen when only the cloud reaches the printer. */
     private void monitorCameraTap() {
-        if (printer != null && printer.ready()) {
+        if (printer != null && (printer.ready() || printer.localCamera())) {
             boolean on = cameraPlayer == null;
             settings.edit().putBoolean("monitorCamera", on).apply(); monitorCameraTried = true;
             if (on) toggleCamera(); else stopCamera();

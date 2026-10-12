@@ -303,3 +303,30 @@ first three history entries) and logs field kinds plus each text value's masked 
 kept; hex runs of 16+ as `<hexN>`, digit runs `<numN>`, short words kept, longer `<wordN>`, mixed `<idN>`; links keep only
 query names). The question: does the cloud name stored objects (thumbnails, or G-code that went through the cloud) by a
 key the record gives, such as the file's MD5? Cloud-sent files are stored under the account, serial and MD5.
+
+## Local and cloud together (v0.45.0)
+
+No firmware change; each part uses what the printer already does in cloud mode.
+
+- **Files and history from the cloud's records.** Watched through the cloud and signed in, the Files tab reads
+  `local-file/page` and History reads `device/event-data/page?eventKey=history_task` (as the SDK does), shaped like the
+  printer's 1044/1036 answers (`CloudRecords`). Thumbnails: the record's `thumbnail` names an object the printer stored;
+  the app asks `generate-pre-access-url` for that name only (a full link in the record is followed only on Elegoo hosts),
+  at most 1 MiB. If the cloud call fails, the printer is asked as before.
+- **The printer's own camera alongside the cloud.** "Try the printer's own camera" finds the printer by its cloud serial
+  (UDP 7000) and opens `http://<printer>:8080/?action=stream` for one picture (12 s at most). On success the Print tab,
+  the live toolpath and recording pictures use that stream on this Wi-Fi while status and control stay on the cloud.
+- **G-code from the user.** `.gcode` shared or opened from another app is taken in and kept for the live toolpath; files
+  chosen on the Files tab are kept too. An optional folder (Storage Access Framework, read-only) is searched by name, two
+  levels deep, at most 3000 entries, when a print starts whose file is not on the phone; a size the printer or the cloud
+  record reports must match.
+- **Follow the printer's mode** (on by default). Once a minute while the app is open or watching in the background,
+  read-only discovery: LAN Only with a saved access code (or code protection off) connects locally; cloud mode again closes
+  a connection follow mode made. A connection the user made is never touched; a disconnect by hand pauses following until
+  the printer is next seen in cloud mode.
+- **Experiment: listen-only local status.** With the pairing PIN typed by the user (used once, not kept), connects to the
+  local broker (1883, user `elegoo`), subscribes to `elegoo/<sn>/api_status` and `elegoo/<sn>/#` for 30 s, publishes
+  nothing, and reports topic counts (serial masked) and the first payload's field names.
+
+Not built: having the printer fetch an upload from the phone over Wi-Fi (1057 with a phone address). It needs a small
+file server on the phone, which this build environment's safety checks refused; it waits for the owner's decision.
