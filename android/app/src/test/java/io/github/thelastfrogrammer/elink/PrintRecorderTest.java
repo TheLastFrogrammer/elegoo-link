@@ -149,5 +149,8 @@ public class PrintRecorderTest {
         assertEquals(1.24, used[1][0], 1e-9); assertEquals(1.24, used[1][2], 1e-9);
         assertTrue(Double.isNaN(used[2][0])); assertTrue(Double.isNaN(used[2][2]));
         assertEquals(2.48, used[3][0], 1e-9); assertEquals(0.5, used[3][1], 1e-9); assertEquals(2.98, used[3][2], 1e-9);
+        // The total joins in only once the second filament is used, starting from the reading before.
+        double[] together = RecordingsActivity.sharedTotal(used, 2);
+        assertTrue(Double.isNaN(together[0])); assertEquals(1.24, together[1], 1e-9); assertTrue(Double.isNaN(together[2])); assertEquals(2.98, together[3], 1e-9);
     }
 }

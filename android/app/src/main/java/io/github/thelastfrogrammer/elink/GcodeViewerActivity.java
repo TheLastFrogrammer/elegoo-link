@@ -149,12 +149,22 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         // Scrolls when a short view or large text can't fit the whole column, so no button is ever cut off.
         ScrollView column = new ScrollView(this); column.setVerticalScrollBarEnabled(false); column.addView(overlay);
         stage.addView(column, new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.END));
-        // Details in the bottom-left corner, clear of the button column: the G-code line, the file's time there, the camera's lag and the filament.
-        details = new TextView(this); details.setTextSize(12); details.setTextColor(0xffffffff); details.setLineSpacing(dp(2), 1);
-        details.setPadding(dp(10), dp(8), dp(10), dp(8)); details.setMaxWidth(Math.round(getResources().getDisplayMetrics().widthPixels * 0.66f)); details.setMaxLines(9);
+        // Details over the top-left corner, clear of the button column: one line each for the G-code, the file's time there,
+        // the camera and the filament, with the names in a column.
+        details = new LinearLayout(this); details.setOrientation(LinearLayout.VERTICAL); details.setPadding(dp(10), dp(6), dp(10), dp(6));
         GradientDrawable plate = new GradientDrawable(); plate.setColor(0xb3000000); plate.setCornerRadius(dp(10)); details.setBackground(plate); A11y.polite(details);
-        android.widget.FrameLayout.LayoutParams corner = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.BOTTOM | android.view.Gravity.START);
-        corner.setMargins(dp(8), 0, 0, dp(8)); stage.addView(details, corner); details.setVisibility(View.GONE);
+        int valueWidth = Math.round(getResources().getDisplayMetrics().widthPixels * 0.64f) - dp(84);
+        String[] names = {"G-code", "Print at", "Camera", "Filament"};
+        for (int i = 0; i < names.length; i++) {
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setPadding(0, dp(1), 0, dp(1));
+            TextView name = new TextView(this); name.setText(names[i]); name.setTextSize(11); name.setTextColor(0xffb8c4cc); name.setSingleLine(true);
+            row.addView(name, new LinearLayout.LayoutParams(dp(64), -2));
+            TextView value = new TextView(this); value.setTextSize(11); value.setTextColor(0xffffffff); value.setSingleLine(true); value.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            value.setMaxWidth(valueWidth); if (i == 0) { value.setTypeface(android.graphics.Typeface.MONOSPACE); value.setTextSize(10); }
+            row.addView(value, new LinearLayout.LayoutParams(-2, -2)); details.addView(row); detailValues[i] = value;
+        }
+        android.widget.FrameLayout.LayoutParams corner = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.START);
+        corner.setMargins(dp(8), dp(8), 0, 0); stage.addView(details, corner); details.setVisibility(View.GONE);
         buildOverlay();
         root.addView(stage, new LinearLayout.LayoutParams(-1, 0, 1));
         LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.VERTICAL); panel.setPadding(dp(16), dp(8), dp(16), dp(12)); mainPanel = panel;
@@ -993,7 +1003,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     // ------------------------------------------------------------------ loading
     // ------------------------------------------------------------------ details over the picture
-    private TextView details;
+    private LinearLayout details;
+    /** The G-code, print position, camera and filament values. */
+    private final TextView[] detailValues = new TextView[4];
     private Button detailsButton;
     private GcodeToolpath.LineCursor cursor;
     private int shownSegment = -1, detailedSegment = -2;
@@ -1010,41 +1022,33 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         int line = read.lineOf(segment), tool = read.toolOf(segment); float[] time = read.timeAt(segment);
         String filament = read.filamentText(tool), camera = cameraText();
         String hex = read.filamentColour(tool);
-        String timeText = time == null ? "time not in the file" : minutes(time[0]) + " of " + minutes(time[1]);
-        int labelColour = 0xffb8c4cc, tab = dp(64);
+        String timeText = time == null ? "time not in the file" : clock(time[0]) + " of " + clock(time[1]);
         worker.execute(() -> {
-            String code = lines == null || line <= 0 ? "" : lines.line(line).trim();
-            if (code.length() > 30) code = code.substring(0, 29) + "…";
-            android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder();
-            row(text, "G-code", line > 0 ? code : "not known", labelColour, tab, line > 0);
-            row(text, "Print at", (line > 0 ? String.format(Locale.getDefault(), "line %,d · ", line) : "") + timeText, labelColour, tab, false);
-            row(text, "Camera", camera, labelColour, tab, false);
-            row(text, "Filament", "", labelColour, tab, false);
-            if (hex != null) text.append("● ", new android.text.style.ForegroundColorSpan(Color.parseColor(hex)), 0);
-            text.append(filament.replaceFirst("^Filament ", ""));
-            main.post(() -> { if (!isDestroyed() && detailedSegment == segment) { details.setText(text); details.requestLayout(); } });
+            String code = lines == null || line <= 0 ? "not known" : lines.line(line).trim();
+            String where = timeText + (line > 0 ? String.format(Locale.getDefault(), " · line %,d", line) : "");
+            android.text.SpannableStringBuilder material = new android.text.SpannableStringBuilder();
+            if (hex != null) material.append("● ", new android.text.style.ForegroundColorSpan(Color.parseColor(hex)), 0);
+            material.append(filament.replaceFirst("^Filament ", ""));
+            main.post(() -> {
+                if (isDestroyed() || detailedSegment != segment) return;
+                detailValues[0].setText(code); detailValues[1].setText(where); detailValues[2].setText(camera); detailValues[3].setText(material);
+                details.setContentDescription("G-code " + code + ". Print at " + where + ". Camera " + camera + ". Filament " + material + ".");
+            });
         });
     }
-    /** One "label  value" row: labels in a column, wrapped values kept under their value. */
-    private static void row(android.text.SpannableStringBuilder text, String label, String value, int labelColour, int tab, boolean mono) {
-        if (text.length() > 0) text.append("\n");
-        int start = text.length();
-        text.append(label, new android.text.style.ForegroundColorSpan(labelColour), 0).append("\t");
-        int valueStart = text.length(); text.append(value);
-        if (mono) { text.setSpan(new android.text.style.TypefaceSpan("monospace"), valueStart, text.length(), 0); text.setSpan(new android.text.style.RelativeSizeSpan(0.92f), valueStart, text.length(), 0); }
-        text.setSpan(new android.text.style.TabStopSpan.Standard(tab), start, text.length(), android.text.Spanned.SPAN_PARAGRAPH);
-        text.setSpan(new android.text.style.LeadingMarginSpan.Standard(0, tab), start, text.length(), android.text.Spanned.SPAN_PARAGRAPH);
-    }
-    private static String minutes(float m) { int total = Math.round(m); return total >= 60 ? total / 60 + " h " + total % 60 + " min" : total + " min"; }
+    /** The details as one text (for tests and reading aloud). */
+    String detailsText() { StringBuilder out = new StringBuilder(); for (TextView v : detailValues) out.append(out.length() > 0 ? "\n" : "").append(v.getText()); return out.toString(); }
+    /** Minutes as "1:47" (hours and minutes). */
+    static String clock(float m) { int total = Math.round(m); return String.format(Locale.ROOT, "%d:%02d", total / 60, total % 60); }
     /** What the picture lags by: measured from the cloud video's own frame times, else the delay set by hand, else not known. */
     private String cameraText() {
         long delay = effectiveDelay();
         if (delay <= 0 && cameraStarted && !cameraCloud && frameAt > 0)
-            return "picture arrived " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(frameAt)) + " (the stream has no time of its own)";
+            return new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(frameAt)) + " · arrival (stream has no time)";
         if (delay <= 0) return "delay not known";
         String when = new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(System.currentTimeMillis() - delay));
         boolean measured = viewerPrefs().getBoolean("autoDelay", true) && measuredDelay > 0;
-        return String.format(Locale.getDefault(), "%s · %.1f s behind (%s)", when, delay / 1000.0, measured ? "measured" : "set by hand");
+        return String.format(Locale.getDefault(), "%s · %.1f s behind · %s", when, delay / 1000.0, measured ? "measured" : "manual");
     }
     private void load(File file, String name) {
         if (name.equals(loadingName)) return;

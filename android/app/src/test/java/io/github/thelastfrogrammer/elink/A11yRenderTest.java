@@ -328,9 +328,9 @@ public class A11yRenderTest {
             context().getSharedPreferences("viewer-hints", 0).edit().putBoolean("details", true).commit();
             Method details = GcodeViewerActivity.class.getDeclaredMethod("showDetails", int.class, boolean.class); details.setAccessible(true); details.invoke(activity, 500, true);
             long until = System.currentTimeMillis() + 5_000;
-            TextView panel = (TextView) field(activity, "details");
-            while (panel.getText().length() == 0 && System.currentTimeMillis() < until) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
-            assertTrue(panel.getText().toString(), panel.getText().toString().startsWith("G-code"));
+            TextView code = ((TextView[]) field(activity, "detailValues"))[0];
+            while (code.getText().length() == 0 && System.currentTimeMillis() < until) { org.robolectric.shadows.ShadowLooper.idleMainLooper(); Thread.sleep(20); }
+            assertTrue(activity.detailsText(), code.getText().toString().startsWith("G1"));
             shot(activity.getWindow().getDecorView(), 2340, "viewer-details", scale);
             context().getSharedPreferences("viewer-hints", 0).edit().remove("details").commit();
             invoke(activity, "moreDialog");

@@ -336,6 +336,10 @@ public final class RecordingsActivity extends Activity {
                         int[] same = new int[t.length]; Arrays.fill(same, filamentColour[k]);
                         totals.add(new ChartView.Series(names[k], filamentColour[k], values, false).coloured(same));
                     }
+                    // All of them together, dashed, from where a second filament comes in (before that it is one filament's line).
+                    double[] together = sharedTotal(usedSoFar, tools);
+                    boolean splits = false; for (double v : together) if (!Double.isNaN(v)) { splits = true; break; }
+                    if (splits) totals.add(new ChartView.Series("All filaments", ink, together, true));
                     int last = -1; for (int i = t.length - 1; i >= 0 && last < 0; i--) if (!Double.isNaN(usedSoFar[i][tools])) last = i;
                     double planned = 0; for (int k = 0; k < tools; k++) planned += toolTotals[k] * gramsPerMm3[k];
                     if (last >= 0) {
@@ -362,6 +366,21 @@ public final class RecordingsActivity extends Activity {
                 }
             });
         }, "recording-material").start();
+    }
+
+    /**
+     * The all-filaments total, but only from the reading before a second filament has been used (NaN until then), so it
+     * never lies over a single filament's own line.
+     */
+    static double[] sharedTotal(double[][] used, int tools) {
+        double[] out = new double[used.length]; Arrays.fill(out, Double.NaN);
+        for (int i = 0; i < used.length; i++) {
+            int inUse = 0; for (int k = 0; k < tools; k++) if (used[i][k] > 0.05) inUse++;
+            if (inUse < 2) continue;
+            out[i] = used[i][tools];
+            for (int j = i - 1; j >= 0; j--) if (!Double.isNaN(used[j][tools])) { if (Double.isNaN(out[j])) out[j] = used[j][tools]; break; }
+        }
+        return out;
     }
 
     /**
