@@ -151,16 +151,17 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         stage.addView(column, new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.END));
         // Details over the top-left corner, clear of the button column: one line each for the G-code, the file's time there,
         // the camera and the filament, with the names in a column.
-        details = new LinearLayout(this); details.setOrientation(LinearLayout.VERTICAL); details.setPadding(dp(10), dp(6), dp(10), dp(6));
-        GradientDrawable plate = new GradientDrawable(); plate.setColor(0xb3000000); plate.setCornerRadius(dp(10)); details.setBackground(plate); A11y.polite(details);
-        int valueWidth = Math.round(getResources().getDisplayMetrics().widthPixels * 0.64f) - dp(84);
+        details = new LinearLayout(this); details.setOrientation(LinearLayout.VERTICAL); details.setPadding(dp(6), dp(3), dp(6), dp(3));
+        // A faint plate and shadowed text: readable over the picture while the picture still shows through.
+        GradientDrawable plate = new GradientDrawable(); plate.setColor(0x40000000); plate.setCornerRadius(dp(8)); details.setBackground(plate); A11y.polite(details);
+        int valueWidth = Math.round(getResources().getDisplayMetrics().widthPixels * 0.64f) - dp(68);
         String[] names = {"G-code", "Print at", "Camera", "Filament"};
         for (int i = 0; i < names.length; i++) {
-            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setPadding(0, dp(1), 0, dp(1));
-            TextView name = new TextView(this); name.setText(names[i]); name.setTextSize(11); name.setTextColor(0xffb8c4cc); name.setSingleLine(true);
-            row.addView(name, new LinearLayout.LayoutParams(dp(64), -2));
-            TextView value = new TextView(this); value.setTextSize(11); value.setTextColor(0xffffffff); value.setSingleLine(true); value.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            value.setMaxWidth(valueWidth); if (i == 0) { value.setTypeface(android.graphics.Typeface.MONOSPACE); value.setTextSize(10); }
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setPadding(0, 0, 0, 0);
+            TextView name = new TextView(this); name.setText(names[i]); name.setTextSize(10); name.setTextColor(0xccd0d8de); name.setSingleLine(true); name.setShadowLayer(dp(2), 0, dp(1), 0xff000000);
+            row.addView(name, new LinearLayout.LayoutParams(dp(56), -2));
+            TextView value = new TextView(this); value.setTextSize(10.5f); value.setShadowLayer(dp(2), 0, dp(1), 0xff000000); value.setTextColor(0xffffffff); value.setSingleLine(true); value.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            value.setMaxWidth(valueWidth); if (i == 0) { value.setTypeface(android.graphics.Typeface.MONOSPACE); value.setTextSize(9.5f); }
             row.addView(value, new LinearLayout.LayoutParams(-2, -2)); details.addView(row); detailValues[i] = value;
         }
         android.widget.FrameLayout.LayoutParams corner = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.START);
