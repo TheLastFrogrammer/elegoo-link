@@ -188,6 +188,31 @@ public class CloudApiTest {
         try { CloudApi.https("GET", "http://matrix.elegoo.com/", new HashMap<>(), null); fail(); } catch (IOException expected) { }
     }
 
+    @Test public void storedNamesKeepTheirShapeButNotSerialsIdsOrHashes() throws Exception {
+        assertEquals("thumbnail/<id16>/<hex32>.png", CloudApi.pattern("thumbnail/F01AB2C3D4E5F607/0cc175b9c0f1b6a831c399e269772661.png"));
+        assertEquals("https://elegoo-iot.oss.<word16>.com/gcode/<num6>_<hex32>.gcode?Expires=…&Signature=…",
+            CloudApi.pattern("https://elegoo-iot.oss.accelerateglobal.com/gcode/123456_0cc175b9c0f1b6a831c399e269772661.gcode?Expires=1700000000&Signature=abc%2Fdef"));
+        assertEquals("Benchy_PLA_<num1>.<id3>.gcode", CloudApi.pattern("Benchy_PLA_0.2mm.gcode"));
+        JSONObject record = new JSONObject().put("thumbnail", "a/9f86d081884c7d659a2feaa0c55ad015.png").put("size", 12).put("md5", "9f86d081884c7d659a2feaa0c55ad015");
+        assertEquals("md5=<hex32>, thumbnail=a/<hex32>.png", CloudApi.patterns(record));
+    }
+
+    @Test public void probeOfCloudFilesReadsListRecordThumbnailLinkAndHistoryWithoutValues() throws Exception {
+        FakeCloud fake = new FakeCloud();
+        fake.ok(new JSONObject().put("total", 1).put("list", new JSONArray().put(new JSONObject().put("filename", "cube.gcode").put("thumbnail", "thumb/SN12345678/cube.png"))))
+            .ok(new JSONObject().put("filename", "cube.gcode").put("md5", "0cc175b9c0f1b6a831c399e269772661"))
+            .ok(new JSONObject().put("accessUrl", "https://store.example.com/thumb/x.png?Signature=secret"))
+            .ok(new JSONObject().put("total", 1).put("list", new JSONArray().put(new JSONObject().put("id", "7").put("eventValue", new JSONObject().put("task_name", "cube.gcode").toString()))));
+        CloudApi api = new CloudApi(false, account(inAnHour()), "a", fake);
+        String text = String.join("\n", api.probeFiles("SN12345678"));
+        assertEquals(4, fake.calls.size());
+        assertTrue(text, text.contains("cloud file 1: filename:string, thumbnail:object-name-like · values: filename=cube.gcode, thumbnail=thumb/<id10>/cube.png"));
+        assertTrue(text, text.contains("md5=<hex32>"));
+        assertTrue(text, text.contains("thumbnail link for file 1: issued, https://store.example.com/thumb/x.png?Signature=…"));
+        assertTrue(text, text.contains("cloud print 1: eventValue:string, id:string · eventValue: task_name:string · values: task_name=cube.gcode"));
+        assertFalse(text, text.contains("SN12345678") || text.contains("secret") || text.contains("0cc175b9"));
+    }
+
     @Test public void reportAgeIsReadable() {
         assertEquals("5 s", CloudStatusActivity.age(5_000)); assertEquals("3 min", CloudStatusActivity.age(180_000)); assertEquals("2.0 h", CloudStatusActivity.age(7_200_000));
     }

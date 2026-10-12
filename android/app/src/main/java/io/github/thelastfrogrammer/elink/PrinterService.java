@@ -1056,6 +1056,12 @@ public final class PrinterService extends Service {
             String network;
             try { network = probeNetwork(local, wantedSerial, knownHost, current); }
             catch (Exception error) { network = "printer not found on this network (" + PrinterProbe.clean(error.getMessage() == null ? error.getClass().getSimpleName() : error.getMessage()) + "); ports not checked"; }
+            // What Elegoo's cloud keeps about the printer's files and prints (the SDK reads these there, not from the printer).
+            CloudApi cloud = cloudApi; String cloudPrinter = cloudSerial;
+            if (cloud != null && !cloud.needsSignIn() && !cloudPrinter.isEmpty()) {
+                main.post(() -> { probeText = "Reading what Elegoo's cloud keeps about the printer's files…"; changed(); });
+                for (String line : cloud.probeFiles(cloudPrinter)) Diagnostics.note(Diagnostics.PROBE, line);
+            }
             String found = network;
             main.post(() -> startProbeQueries(found));
         });

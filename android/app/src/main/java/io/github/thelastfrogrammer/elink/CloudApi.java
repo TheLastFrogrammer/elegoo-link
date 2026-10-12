@@ -264,6 +264,107 @@ public final class CloudApi {
         } catch (IOException error) { Diagnostics.note(Diagnostics.FILES, "cloud file list unavailable: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
     }
 
+    /**
+     * For the printer probe: what Elegoo's cloud keeps about the printer's files and prints. The first few file records, one
+     * file's full record, whether the cloud issues a link for a thumbnail the printer stored, and the first few history
+     * entries. Each line has field names and kinds, then the masked pattern of each text value (see {@link #pattern}), so the
+     * naming of stored objects shows without serials, account IDs or hashes. Read-only; failures become lines.
+     */
+    public List<String> probeFiles(String serial) {
+        List<String> lines = new ArrayList<>();
+        String firstName = "", firstThumbnail = "";
+        try {
+            JSONObject data = authorized("GET", "/api/v1/device-management-server/local-file/page?serialNo=" + URLEncoder.encode(serial, "UTF-8") + "&pageNo=1&pageSize=3", null, false).optJSONObject("data");
+            JSONArray list = data == null ? null : data.optJSONArray("list");
+            lines.add("cloud files: " + (data == null ? "no data" : data.optInt("total", -1) + " in total; page fields: " + shape(data)));
+            for (int i = 0; list != null && i < list.length(); i++) {
+                JSONObject item = list.optJSONObject(i);
+                if (item == null) continue;
+                if (i == 0) { firstName = item.optString("filename", ""); firstThumbnail = item.optString("thumbnail", ""); }
+                lines.add("cloud file " + (i + 1) + ": " + shape(item) + " · values: " + patterns(item));
+            }
+        } catch (IOException error) { lines.add("cloud files unavailable: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
+        if (!firstName.isEmpty()) {
+            try {
+                JSONObject record = authorized("GET", "/api/v1/device-management-server/local-file/filename?serialNo=" + URLEncoder.encode(serial, "UTF-8")
+                    + "&filename=" + URLEncoder.encode(firstName, "UTF-8"), null, false).optJSONObject("data");
+                lines.add("cloud file record (file 1): " + (record == null ? "no data" : shape(record) + " · values: " + patterns(record)));
+            } catch (IOException error) { lines.add("cloud file record unavailable: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
+        }
+        if (!firstThumbnail.isEmpty() && !firstThumbnail.contains("://")) {
+            try {
+                JSONObject data = authorized("GET", "/api/v1/device-management-server/oss/generate-pre-access-url?bucketAlias=iot-private&objectName=" + URLEncoder.encode(firstThumbnail, "UTF-8"), null, false).optJSONObject("data");
+                String link = data == null ? "" : data.optString("accessUrl", "");
+                lines.add("thumbnail link for file 1: " + (link.startsWith("https://") ? "issued, " + pattern(link) : "none") + (data == null ? "" : " · answer fields: " + shape(data)));
+            } catch (IOException error) { lines.add("thumbnail link refused: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
+        }
+        try {
+            JSONObject data = authorized("GET", "/api/v1/device-management-server/device/event-data/page?deviceCode=" + URLEncoder.encode(serial, "UTF-8") + "&pageNo=1&pageSize=3&eventKey=history_task&sort=create_time,desc", null, false).optJSONObject("data");
+            JSONArray list = data == null ? null : data.optJSONArray("list");
+            lines.add("cloud print history: " + (data == null ? "no data" : data.optInt("total", -1) + " in total"));
+            for (int i = 0; list != null && i < list.length(); i++) {
+                JSONObject item = list.optJSONObject(i);
+                if (item == null) continue;
+                StringBuilder line = new StringBuilder("cloud print ").append(i + 1).append(": ").append(shape(item));
+                try { JSONObject value = new JSONObject(item.optString("eventValue", "")); line.append(" · eventValue: ").append(shape(value)).append(" · values: ").append(patterns(value)); }
+                catch (org.json.JSONException notJson) { line.append(" · eventValue not JSON"); }
+                lines.add(line.toString());
+            }
+        } catch (IOException error) { lines.add("cloud print history unavailable: " + StatusPresentation.clean(String.valueOf(error.getMessage()))); }
+        return lines;
+    }
+
+    /** "key=pattern" for each text value of an object, sorted by key; values that are not text are left to {@link #shape}. */
+    static String patterns(JSONObject object) {
+        List<String> keys = new ArrayList<>();
+        for (Iterator<String> it = object.keys(); it.hasNext(); ) keys.add(it.next());
+        Collections.sort(keys);
+        StringBuilder text = new StringBuilder();
+        for (String key : keys) {
+            Object value = object.opt(key);
+            if (!(value instanceof String) || ((String) value).isEmpty() || key.length() > 40 || key.matches(".*[0-9a-fA-F]{12,}.*")) continue;
+            if (text.length() > 0) text.append(", ");
+            text.append(key.replaceAll("[^A-Za-z0-9_.-]", "?")).append('=').append(pattern((String) value));
+        }
+        return text.length() == 0 ? "none" : text.toString();
+    }
+
+    /**
+     * A value's structure without its identifying parts. Separators are kept. Each run of letters and digits becomes
+     * &lt;hexN&gt; (16 or more hex characters with a digit, like an MD5), &lt;numN&gt; (digits only), the word itself (letters
+     * only, at most 12), &lt;wordN&gt; (longer letters) or &lt;idN&gt; (letters and digits). A link keeps only its query's
+     * parameter names. At most 160 characters.
+     */
+    static String pattern(String value) {
+        String path = value, query = "";
+        int mark = value.indexOf('?');
+        if (mark >= 0) {
+            path = value.substring(0, mark);
+            StringBuilder names = new StringBuilder();
+            for (String pair : value.substring(mark + 1).split("&")) {
+                String name = pair.contains("=") ? pair.substring(0, pair.indexOf('=')) : pair;
+                if (name.isEmpty()) continue;
+                names.append(names.length() == 0 ? "?" : "&").append(name.length() > 30 ? "<long>" : name.replaceAll("[^A-Za-z0-9_.-]", "?")).append("=…");
+            }
+            query = names.toString();
+        }
+        java.util.regex.Matcher run = TOKEN.matcher(path);
+        StringBuffer out = new StringBuffer();
+        while (run.find()) {
+            String token = run.group();
+            String shown;
+            if (token.length() >= 16 && token.matches("[0-9a-fA-F]+") && token.matches(".*[0-9].*")) shown = "<hex" + token.length() + ">";
+            else if (token.matches("[0-9]+")) shown = "<num" + token.length() + ">";
+            else if (token.matches("[A-Za-z]+")) shown = token.length() <= 12 ? token : "<word" + token.length() + ">";
+            else shown = "<id" + token.length() + ">";
+            run.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(shown));
+        }
+        run.appendTail(out);
+        String result = out.append(query).toString().replaceAll("\\p{Cntrl}", "?");
+        return result.length() > 160 ? result.substring(0, 159) + "…" : result;
+    }
+    private static final Pattern TOKEN = Pattern.compile("[A-Za-z0-9]+");
+
     /** "name:kind" for each field of a JSON object, with kinds string, number, bool, null, object, array, url-like and object-name-like. No values. */
     static String shape(JSONObject object) {
         List<String> keys = new ArrayList<>();

@@ -281,3 +281,25 @@ printing. LAN Only is the printer's local mode that the SDK's LAN path (and its 
 port 80 on this printer is still to be seen. "Download when it opens" now checks every minute on its own (a printer
 switched to LAN Only stops reporting through the cloud), keeps the printer's address once port 80 has answered or refused,
 and logs a line only when the result or the printer's state changes.
+
+## Why cloud mode closes the file server, and what the cloud keeps instead (v0.44.2)
+
+The community firmware project [Neme77/centauri-carbon-2-community](https://github.com/Neme77/centauri-carbon-2-community)
+(commit `5740954`, `builder/current/patches/http-upload/http_upload_v1.json`) has root on the CC2 and patches the stock
+`printer` binary of 02.01.00.00. Its patch notes show the stock design: the printer runs a LanStrategy or a WanStrategy;
+the HTTP file server (port 80) is started only under LanStrategy and stopped in `LanStrategy::stop`, and a direct WAN boot
+never starts it. Their "MQTT LAN/WAN coexistence" build changes those branches in the binary. No request from an app opens
+the server in cloud mode, and Elegoo's printer page (bundled in the slicer) has no method that changes the mode.
+[OrcaSlicer #13934](https://github.com/OrcaSlicer/OrcaSlicer/issues/13934) identifies port 9001 as MQTT over WebSocket.
+
+Probe of the owner's CC2 through the cloud (2026-10-12, idle): status reads (1001–1006, 1048, 1061, 1062, 2005) answer in
+about 0.2 s; file list 1044 and history 1036 get no reply in 10 s. The SDK's cloud service never asks the printer for
+these: file list, file detail and print history come from `local-file/page`, `local-file/filename` and
+`device/event-data/page?eventKey=history_task`. The printer reports each new file there itself (the SDK confirms an upload
+by the record's `createTime` changing), with a thumbnail object in the `iot-private` bucket that the printer stored.
+
+The probe now also reads those (first three files, the first file's full record, a signed link for its thumbnail, the
+first three history entries) and logs field kinds plus each text value's masked pattern (`CloudApi.pattern`: separators
+kept; hex runs of 16+ as `<hexN>`, digit runs `<numN>`, short words kept, longer `<wordN>`, mixed `<idN>`; links keep only
+query names). The question: does the cloud name stored objects (thumbnails, or G-code that went through the cloud) by a
+key the record gives, such as the file's MD5? Cloud-sent files are stored under the account, serial and MD5.
