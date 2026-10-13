@@ -117,7 +117,7 @@ public final class PrinterService extends Service {
             public void error(String message) {
                 finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; synchronized (grabWaiting) { grabWaiting.clear(); }
                 // Alongside the cloud, a failure turns the local camera off rather than retrying (the port can lock up after a few tries).
-                if (!viaLocal) main.post(() -> { workshop().edit().putBoolean("localCameraInCloud", false).apply(); localCameraText = "The printer's own camera stopped answering, so the cloud video is used again."; Diagnostics.note(Diagnostics.HYBRID, "local camera alongside the cloud failed; turned off"); changed(); });
+                if (!viaLocal) main.post(() -> { workshop().edit().putBoolean("localCameraInCloud", false).apply(); localCameraText = "The printer's own camera stopped answering. The cloud video is back."; Diagnostics.note(Diagnostics.HYBRID, "local camera alongside the cloud failed; turned off"); changed(); });
             }
         });
         main.postDelayed(() -> { if (player[0] != null) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; } }, 15_000);   // never left open
@@ -530,7 +530,7 @@ public final class PrinterService extends Service {
             main.post(() -> {
                 directDownloading = false;
                 if (waitingFile != null && waitingFile.equals(filename)) {
-                    if (done != null && problem == null) { stopWaiting(null); if (followed || lanOnlySeen) followText = "Downloaded " + StatusPresentation.clean(filename) + ". LAN Only can go off again; the app goes back to the cloud by itself."; }
+                    if (done != null && problem == null) { stopWaiting(null); if (followed || lanOnlySeen) followText = "Downloaded " + StatusPresentation.clean(filename) + ". You can switch LAN Only off; the app goes back to the cloud by itself."; }
                     else if (refusedAt == null) stopWaiting("Stopped waiting for " + StatusPresentation.clean(filename) + ": " + problem);
                     else { feedback = "Still waiting for the printer to serve " + StatusPresentation.clean(filename) + "."; changed(); return; }
                 }
@@ -714,19 +714,19 @@ public final class PrinterService extends Service {
             if (Boolean.FALSE.equals(found.info.codeProtected)) code = "";
             else try { CredentialStore credentials = new CredentialStore(this); if (credentials.remembers(found.host)) code = credentials.load(found.host); } catch (Exception ignored) { }
             if (code == null) {
-                String text = "The printer is in LAN Only mode, but this phone has no access code saved for it. Connect once in Settings with \u201cRemember access code\u201d on, and the app will switch by itself next time.";
+                String text = "The printer is in LAN Only mode, but no access code is saved for it. Connect once in Settings with \u201cRemember access code\u201d on, and the app will switch by itself next time.";
                 if (!text.equals(followText)) { followText = text; Diagnostics.note(Diagnostics.HYBRID, "follow: LAN Only seen, no saved access code"); changed(); }
                 return;
             }
             Diagnostics.note(Diagnostics.HYBRID, "follow: LAN Only seen, connecting locally");
-            try { connect(found.host, code, found.info.serial); } catch (IllegalArgumentException invalid) { followText = "LAN Only seen, but the local connection could not start: " + invalid.getMessage(); changed(); return; }
+            try { connect(found.host, code, found.info.serial); } catch (IllegalArgumentException invalid) { followText = "The printer is in LAN Only mode, but the local connection could not start: " + invalid.getMessage(); changed(); return; }
             followed = true;
-            followText = "The printer switched to LAN Only: connected on this Wi-Fi (files, camera and controls). Switch LAN Only off to go back to the cloud.";
+            followText = "Connected over this Wi-Fi in LAN Only mode (files, camera and controls). Switch LAN Only off to go back to the cloud.";
             feedback = followText; changed();
         } else if (cloud && wanted && followed) {
             Diagnostics.note(Diagnostics.HYBRID, "follow: cloud mode seen, back to the cloud");
             disconnect(); followPaused = false;
-            followText = "The printer is back in cloud mode: watching through the cloud again.";
+            followText = "Back in cloud mode: watching through the cloud again.";
             feedback = followText; changed();
         }
     }
@@ -745,7 +745,7 @@ public final class PrinterService extends Service {
                 NetworkRoute route = NetworkRoute.local(getApplicationContext());
                 Cc2Discovery.Found found = locate(route);
                 if (found == null) text = "The printer did not answer on this Wi-Fi.";
-                else if (Boolean.TRUE.equals(found.info.lanOnly)) text = "The printer is in LAN Only mode right now; this test is for cloud mode.";
+                else if (Boolean.TRUE.equals(found.info.lanOnly)) text = "The printer is in LAN Only mode now. This test is for cloud mode.";
                 else {
                     main.post(() -> { listenText = "Listening on your Wi-Fi for 30 seconds…"; changed(); });
                     LocalListen.Result result = LocalListen.listen(found.host, found.info.serial, secret, route.sockets(), LocalListen.paho(), 30_000);
@@ -765,7 +765,7 @@ public final class PrinterService extends Service {
     public boolean hasGcodeFolder() { return !workshop().getString("gcodeFolder", "").isEmpty(); }
     public void setGcodeFolder(Uri tree) {
         workshop().edit().putString("gcodeFolder", tree == null ? "" : tree.toString()).apply();
-        folderTried = ""; folderText = tree == null ? null : "Folder chosen. When a print starts whose file is not on this phone, the app looks for it there."; changed();
+        folderTried = ""; folderText = tree == null ? null : "Folder chosen. When a print starts with a file that is not on this phone, the app looks there."; changed();
         if (tree != null) checkFolder(liveStatus());
     }
     /** Looks for `filename` in the folder now, even if it was looked for before (from the live toolpath's button). */
@@ -787,7 +787,7 @@ public final class PrinterService extends Service {
             try {
                 FolderMatch match = FolderMatch.search(getContentResolver(), Uri.parse(tree), base);
                 if (match == null) text = StatusPresentation.clean(base) + " is not in your G-code folder.";
-                else if (expected > 0 && match.size > 0 && match.size != expected) text = "Your G-code folder has a " + StatusPresentation.clean(base) + ", but its size (" + match.size + " bytes) differs from the printer's (" + expected + "), so it was not used.";
+                else if (expected > 0 && match.size > 0 && match.size != expected) text = "Your G-code folder has a " + StatusPresentation.clean(base) + ", but its size (" + match.size + " bytes) differs from the printer's (" + expected + "). It was not used.";
                 else {
                     File copy = File.createTempFile("folder-", ".gcode", getCacheDir());
                     try (InputStream in = getContentResolver().openInputStream(match.uri); OutputStream out = new FileOutputStream(copy)) {
@@ -796,7 +796,7 @@ public final class PrinterService extends Service {
                         while ((n = in.read(buffer)) != -1) { total += n; if (total > GcodeInspector.MAX_BYTES) throw new IOException("too large"); out.write(buffer, 0, n); }
                     }
                     keep(copy, base); copy.delete(); kept = copy;
-                    text = "Found " + StatusPresentation.clean(base) + " in your G-code folder" + (expected > 0 ? " (same size as on the printer)" : "") + ".";
+                    text = "Found " + StatusPresentation.clean(base) + " in your G-code folder" + (expected > 0 ? " (same size as the printer's)" : "") + ".";
                 }
             } catch (SecurityException lost) { text = "The app can no longer read your G-code folder. Choose it again."; }
             catch (Exception error) { text = "Your G-code folder could not be read (" + error.getClass().getSimpleName() + ")."; }
@@ -839,7 +839,7 @@ public final class PrinterService extends Service {
     public void tryLocalCamera() {
         if (localCameraTrying) return;
         // One try per app run in cloud mode: the port has been seen to lock up after a few connections there (see probeNetwork).
-        if (cameraTried && !ready()) { localCameraText = "Already tried once since the app started. In cloud mode the printer's camera port can stop answering after a few tries until the printer is restarted, so the app does not try again."; changed(); return; }
+        if (cameraTried && !ready()) { localCameraText = "Already tried since the app started. In cloud mode the printer's camera port can stop answering after a few tries until the printer restarts, so the app does not try again."; changed(); return; }
         cameraTried = true;
         localCameraTrying = true; localCameraText = "Looking for the printer on this Wi-Fi…"; changed();
         cloudReads.execute(() -> {
@@ -855,7 +855,7 @@ public final class PrinterService extends Service {
                 public void frame(android.graphics.Bitmap image) {
                     synchronized (done) { if (done[0]) return; done[0] = true; }
                     close.run(); localHost = address;
-                    finishCameraTry(true, "The printer's own camera works on this Wi-Fi in " + mode + " (" + image.getWidth() + "×" + image.getHeight() + "). It is used instead of the cloud video while you are on this Wi-Fi; turn it off below to go back.", "picture received, " + image.getWidth() + "x" + image.getHeight() + ", " + mode);
+                    finishCameraTry(true, "The printer's own camera works on this Wi-Fi in " + mode + " (" + image.getWidth() + "×" + image.getHeight() + "). It replaces the cloud video while you are on this Wi-Fi. Untick the box below to go back.", "picture received, " + image.getWidth() + "x" + image.getHeight() + ", " + mode);
                 }
                 public void error(String message) {
                     synchronized (done) { if (done[0]) return; done[0] = true; }

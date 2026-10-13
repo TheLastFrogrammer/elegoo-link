@@ -34,11 +34,11 @@ final class LocalListen {
         }
         /** What it means, in words. */
         String verdict(int seconds) {
-            if (!connected) return failure.contains("authorized") ? "The printer's local broker refused the login (not authorized): the PIN was not the current one, or this firmware no longer accepts a PIN on the local broker. Either way, local status is not available in cloud mode this way."
-                : "The printer's local broker could not be reached (" + failure + "), so local status is not available in cloud mode this way.";
-            if (!subscribed) return "The local broker accepted the PIN but refused to let the app listen to the printer's topics.";
-            if (messages == 0) return "The local broker accepted the PIN and the subscription, but the printer published nothing locally in " + seconds + " seconds. In cloud mode its status goes only to the cloud.";
-            return "The printer published " + messages + " message" + (messages == 1 ? "" : "s") + " on your Wi-Fi in " + seconds + " seconds while in cloud mode. Local status alongside the cloud looks possible; send the diagnostics so the app can use it.";
+            if (!connected) return failure.contains("authorized") ? "The printer did not accept the PIN (not authorized). Either it was not the current PIN, or this firmware no longer accepts a PIN on its local broker. Either way, local status is not available this way in cloud mode."
+                : "The printer's local broker could not be reached (" + failure + "). Local status is not available this way in cloud mode.";
+            if (!subscribed) return "The broker accepted the PIN but would not let the app listen to the printer's topics.";
+            if (messages == 0) return "The PIN and subscription were accepted, but the printer sent nothing locally in " + seconds + " seconds. In cloud mode its status goes only to the cloud.";
+            return "The printer sent " + messages + " message" + (messages == 1 ? "" : "s") + " on your Wi-Fi in " + seconds + " seconds in cloud mode. Local status alongside the cloud looks possible. Send the diagnostics so the app can use it.";
         }
     }
 

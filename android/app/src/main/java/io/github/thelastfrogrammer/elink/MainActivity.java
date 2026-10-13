@@ -2409,20 +2409,22 @@ public final class MainActivity extends Activity {
     private void buildHybrid() {
         currentSection = hybridSection.body;
         LinearLayout follow = card("Follow the printer's mode");
-        label(follow, "In cloud mode the printer keeps its file server closed, so files come down only in LAN Only mode. With this on, the app looks for the printer on this Wi-Fi once a minute: when it reports LAN Only, the app connects locally with your saved access code (files, camera, controls); when it is back in cloud mode, the app goes back to the cloud.", 13, MUTED, false);
+        label(follow, "Turn this on to use your Wi-Fi when the printer is in LAN Only mode, and go back to the cloud when it returns to cloud mode. The app checks once a minute and connects with your saved access code. It leaves a connection you made yourself alone.", 13, MUTED, false);
         followBox = checkbox(follow, "Switch with the printer's mode", true);
         followBox.setOnCheckedChangeListener((view, on) -> { if (printer != null && on != printer.followMode()) printer.setFollowMode(on); });
         followLabel = A11y.polite(label(follow, "", 13, INK, false));
+        label(follow, "In cloud mode the printer closes its file server, so files come down only in LAN Only mode.", 13, MUTED, false);
 
         LinearLayout camera = card("The printer's own camera");
-        label(camera, "If the printer's own stream works on your Wi-Fi in cloud mode, the app shows it instead of the cloud video: sharper, less delay, no relay. Away from home the cloud video is used. Other projects report that stock firmware pauses this stream in cloud mode, and that the camera port can stop answering after a few tries until the printer is restarted, so the app tries once per run.", 13, MUTED, false);
+        label(camera, "Try the printer's own camera on this Wi-Fi. If it works, the app can show it instead of the cloud video: sharper, less delay, no relay. Away from home the cloud video is still used.", 13, MUTED, false);
         cameraTry = button(camera, "Try the printer's own camera", () -> { if (printer != null) printer.tryLocalCamera(); });
         cameraTryLabel = A11y.polite(label(camera, "", 13, INK, false));
         localCameraBox = checkbox(camera, "Use it on this Wi-Fi while watching through the cloud", false);
         localCameraBox.setOnCheckedChangeListener((view, on) -> { if (printer != null) printer.useLocalCamera(on); });
+        label(camera, "The app tries once each time it starts. In cloud mode the camera port can stop answering after a few tries until the printer restarts. Other projects report that stock firmware pauses this stream in cloud mode.", 13, MUTED, false);
 
         LinearLayout folder = card("Your G-code folder");
-        label(folder, "Files sliced elsewhere can reach the live toolpath without downloading from the printer: share a .gcode to Link Workshop, or choose a folder your slicer exports to (synced to this phone, for example with Google Drive or Syncthing). When a print starts whose file is not on this phone, the app looks there by name and checks the size the printer reports.", 13, MUTED, false);
+        label(folder, "Choose the folder your slicer exports to, synced to this phone (for example with Google Drive or Syncthing). When a print starts whose file is not on this phone, the app looks there by name. It only reads the folder, and uses a file only if its size matches the printer's.", 13, MUTED, false);
         LinearLayout folderRow = row(folder);
         folderButton = rowButton(folderRow, "Choose folder…", () -> {
             try { startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION), GCODE_FOLDER); }
@@ -2430,9 +2432,10 @@ public final class MainActivity extends Activity {
         }, true);
         folderStop = rowButton(folderRow, "Stop using it", () -> { if (printer != null) printer.setGcodeFolder(null); }, false);
         folderLabel = A11y.polite(label(folder, "", 13, INK, false));
+        label(folder, "Or share a .gcode file to Link Workshop. Either way, the live toolpath needs no download from the printer.", 13, MUTED, false);
 
-        LinearLayout tests = card("Experiments (one try each)");
-        label(tests, "Listen for local status: with the pairing PIN from the printer's screen, the app connects to the printer's local broker for 30 seconds and only listens: it sends no requests and registers nothing. It shows whether a printer in cloud mode still reports its status on your Wi-Fi (another project saw nothing; this checks your firmware). The PIN is used once and not kept.", 13, MUTED, false);
+        LinearLayout tests = card("Experiment");
+        label(tests, "Check whether a printer in cloud mode still reports its status on your Wi-Fi. Enter the pairing PIN from the printer's screen. The app listens to the printer's local broker for 30 seconds and sends nothing: no requests, no registration. The PIN is used once and not kept. Another project saw nothing here; this checks your firmware.", 13, MUTED, false);
         listenButton = button(tests, "Try listening for local status…", this::listenDialog);
         listenLabel = A11y.polite(label(tests, "", 13, INK, false));
         currentSection = null;
@@ -2443,7 +2446,7 @@ public final class MainActivity extends Activity {
         pin.setHint("Pairing PIN"); pin.setSaveEnabled(false); pin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         LinearLayout box = new LinearLayout(this); box.setPadding(dp(20), dp(8), dp(20), 0); box.addView(pin, new LinearLayout.LayoutParams(-1, -2));
         new AlertDialog.Builder(this).setTitle("Listen for local status")
-            .setMessage("Enter the pairing PIN exactly as the printer shows it (letters and numbers; capitals matter). The app listens for 30 seconds and sends nothing to the printer.")
+            .setMessage("Type the pairing PIN exactly as the printer shows it: letters and numbers, capitals matter. The app listens for 30 seconds and sends nothing to the printer.")
             .setView(box)
             .setPositiveButton("Listen", (d, w) -> printer.tryListen(pin.getText().toString()))
             .setNegativeButton("Cancel", null).show();
@@ -2452,7 +2455,7 @@ public final class MainActivity extends Activity {
         if (followBox == null) return;
         boolean bound = printer != null;
         if (bound && followBox.isChecked() != printer.followMode()) followBox.setChecked(printer.followMode());
-        followLabel.setText(bound && printer.followText != null ? StatusPresentation.clean(printer.followText) : bound && printer.cloudSignedIn ? "Watching for LAN Only." : "Sign in with Elegoo (Settings) to watch through the cloud; follow mode switches between it and your Wi-Fi.");
+        followLabel.setText(bound && printer.followText != null ? StatusPresentation.clean(printer.followText) : bound && printer.cloudSignedIn ? "Checking for LAN Only mode every minute." : "Sign in with Elegoo in Settings to watch through the cloud. Follow mode switches between it and your Wi-Fi.");
         cameraTry.setEnabled(bound && !printer.localCameraTrying && !printer.localCameraTried());
         cameraTryLabel.setText(bound && printer.localCameraText != null ? StatusPresentation.clean(printer.localCameraText) : "");
         cameraTryLabel.setVisibility(cameraTryLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
