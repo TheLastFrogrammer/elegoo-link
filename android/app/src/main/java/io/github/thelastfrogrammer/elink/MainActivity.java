@@ -2415,7 +2415,7 @@ public final class MainActivity extends Activity {
         followLabel = A11y.polite(label(follow, "", 13, INK, false));
 
         LinearLayout camera = card("The printer's own camera");
-        label(camera, "In cloud mode the printer's camera port still answers on your Wi-Fi. If its stream works, the app shows it instead of the cloud video: sharper, less delay, no relay. Away from home the cloud video is used.", 13, MUTED, false);
+        label(camera, "If the printer's own stream works on your Wi-Fi in cloud mode, the app shows it instead of the cloud video: sharper, less delay, no relay. Away from home the cloud video is used. Other projects report that stock firmware pauses this stream in cloud mode, and that the camera port can stop answering after a few tries until the printer is restarted, so the app tries once per run.", 13, MUTED, false);
         cameraTry = button(camera, "Try the printer's own camera", () -> { if (printer != null) printer.tryLocalCamera(); });
         cameraTryLabel = A11y.polite(label(camera, "", 13, INK, false));
         localCameraBox = checkbox(camera, "Use it on this Wi-Fi while watching through the cloud", false);
@@ -2432,7 +2432,7 @@ public final class MainActivity extends Activity {
         folderLabel = A11y.polite(label(folder, "", 13, INK, false));
 
         LinearLayout tests = card("Experiments (one try each)");
-        label(tests, "Listen for local status: with the pairing PIN from the printer's screen, the app connects to the printer's local broker for 30 seconds and only listens: it sends no requests and registers nothing. It shows whether a printer in cloud mode still reports its status on your Wi-Fi. The PIN is used once and not kept.", 13, MUTED, false);
+        label(tests, "Listen for local status: with the pairing PIN from the printer's screen, the app connects to the printer's local broker for 30 seconds and only listens: it sends no requests and registers nothing. It shows whether a printer in cloud mode still reports its status on your Wi-Fi (another project saw nothing; this checks your firmware). The PIN is used once and not kept.", 13, MUTED, false);
         listenButton = button(tests, "Try listening for local status…", this::listenDialog);
         listenLabel = A11y.polite(label(tests, "", 13, INK, false));
         currentSection = null;
@@ -2453,7 +2453,7 @@ public final class MainActivity extends Activity {
         boolean bound = printer != null;
         if (bound && followBox.isChecked() != printer.followMode()) followBox.setChecked(printer.followMode());
         followLabel.setText(bound && printer.followText != null ? StatusPresentation.clean(printer.followText) : bound && printer.cloudSignedIn ? "Watching for LAN Only." : "Sign in with Elegoo (Settings) to watch through the cloud; follow mode switches between it and your Wi-Fi.");
-        cameraTry.setEnabled(bound && !printer.localCameraTrying);
+        cameraTry.setEnabled(bound && !printer.localCameraTrying && !printer.localCameraTried());
         cameraTryLabel.setText(bound && printer.localCameraText != null ? StatusPresentation.clean(printer.localCameraText) : "");
         cameraTryLabel.setVisibility(cameraTryLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
         boolean useLocal = getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("localCameraInCloud", false);

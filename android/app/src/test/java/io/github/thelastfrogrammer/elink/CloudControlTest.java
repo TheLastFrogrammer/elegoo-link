@@ -59,6 +59,18 @@ public class CloudControlTest {
         take(link); assertEquals(1, links.size()); assertEquals(1, credentialRequests);
     }
 
+    @Test public void consecutiveCommandsGoOutAtLeastTheSpacingApart() throws Exception {
+        CloudControl control = control(5000, 60000).spacing(600);
+        Replies first = new Replies(), second = new Replies();
+        control.send("SN818", Cc2Codec.request(1, Cc2Codec.STATUS), first);
+        JSONObject sent = new JSONObject(take(waitForLink())[1]); long firstAt = System.nanoTime();
+        links.get(0).events.message("12345SN818", new JSONObject().put("id", sent.getInt("id")).put("method", Cc2Codec.STATUS).put("result", new JSONObject().put("error_code", 0)).toString());
+        first.take();
+        control.send("SN818", Cc2Codec.request(1, Cc2Codec.STATUS), second);
+        take(links.get(0)); long gapMs = (System.nanoTime() - firstAt) / 1_000_000;
+        assertTrue("second command waited for the spacing: " + gapMs + " ms", gapMs >= 550);
+    }
+
     @Test public void queryResultsAreDelivered() throws Exception {
         CloudControl control = control(5000, 60000);
         BlockingQueue<JSONObject> results = new LinkedBlockingQueue<>();

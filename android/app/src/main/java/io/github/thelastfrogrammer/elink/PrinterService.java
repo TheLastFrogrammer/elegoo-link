@@ -114,7 +114,11 @@ public final class PrinterService extends Service {
                     for (Frame f : waiting) f.take(image);
                 });
             }
-            public void error(String message) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; synchronized (grabWaiting) { grabWaiting.clear(); } }
+            public void error(String message) {
+                finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; synchronized (grabWaiting) { grabWaiting.clear(); }
+                // Alongside the cloud, a failure turns the local camera off rather than retrying (the port can lock up after a few tries).
+                if (!viaLocal) main.post(() -> { workshop().edit().putBoolean("localCameraInCloud", false).apply(); localCameraText = "The printer's own camera stopped answering, so the cloud video is used again."; Diagnostics.note(Diagnostics.HYBRID, "local camera alongside the cloud failed; turned off"); changed(); });
+            }
         });
         main.postDelayed(() -> { if (player[0] != null) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; } }, 15_000);   // never left open
     }
@@ -572,7 +576,8 @@ public final class PrinterService extends Service {
                     e.found = true;
                     if (found != null) { e.lanOnly = found.info.lanOnly; e.codeProtected = found.info.codeProtected; }
                     try { e.savedCode = new CredentialStore(this).remembers(address); } catch (Exception ignored) { }
-                    e.ports.putAll(FileAccess.parse(PrinterHttp.probePorts(route.sockets(), address, FileAccess.PORTS)));
+                    int[] ports = ready() ? FileAccess.PORTS : java.util.Arrays.stream(FileAccess.PORTS).filter(p -> p != 8080).toArray();   // see probeNetwork
+                    e.ports.putAll(FileAccess.parse(PrinterHttp.probePorts(route.sockets(), address, ports)));
                     if (FileAccess.open(e)) refusedAt = null;
                 }
             } catch (IOException noWifi) { e.wifi = false; }
@@ -823,8 +828,13 @@ public final class PrinterService extends Service {
      * Read-only: finds the printer on this Wi-Fi and opens its MJPEG stream (port 8080, as in LAN mode) for one picture, at most
      * 12 seconds, then closes it. On success the local camera can be used alongside the cloud.
      */
+    private boolean cameraTried;
+    public boolean localCameraTried() { return cameraTried && !ready(); }
     public void tryLocalCamera() {
         if (localCameraTrying) return;
+        // One try per app run in cloud mode: the port has been seen to lock up after a few connections there (see probeNetwork).
+        if (cameraTried && !ready()) { localCameraText = "Already tried once since the app started. In cloud mode the printer's camera port can stop answering after a few tries until the printer is restarted, so the app does not try again."; changed(); return; }
+        cameraTried = true;
         localCameraTrying = true; localCameraText = "Looking for the printer on this Wi-Fi…"; changed();
         cloudReads.execute(() -> {
             String host = null; NetworkRoute route = null; Boolean lanOnly = null;
@@ -1323,7 +1333,7 @@ public final class PrinterService extends Service {
         });
     }
     // Read-only printer probe (Settings → Diagnostics): network ports, then Elegoo's "Get…" questions, once each. See PrinterProbe.
-    static final int[] PROBE_PORTS = {80, 443, 554, 1883, 3030, 8080, 8554, 8883, 9001};
+    static final int[] PROBE_PORTS = {21, 22, 23, 80, 443, 554, 1883, 3030, 7125, 8080, 8554, 8883, 9001};
     public boolean probing;
     public String probeText = "";
     private PrinterProbe probe;
@@ -1356,11 +1366,17 @@ public final class PrinterService extends Service {
         }
         if (address == null && wantedSerial.isEmpty() && !knownHost.isEmpty()) address = knownHost;
         if (address == null || address.isEmpty()) return "printer did not answer discovery on this Wi-Fi; ports not checked";
-        main.post(() -> { probeText = "Checking ports " + java.util.Arrays.toString(PROBE_PORTS).replaceAll("[\\[\\]]", "") + "…"; changed(); });
-        String ports = PrinterHttp.probePorts(via.sockets(), address, PROBE_PORTS);
+        main.post(() -> { probeText = "Checking the printer's network ports…"; changed(); });
+        // In cloud mode port 8080 has been seen to stop accepting connections after a few probes until a power cycle
+        // (dnviti/ha-generic-3dprinter-controller docs/protocol-elegoo-cc2.md), so it is left alone there.
+        int[] checked = local ? PROBE_PORTS : java.util.Arrays.stream(PROBE_PORTS).filter(p -> p != 8080).toArray();
+        String ports = PrinterHttp.probePorts(via.sockets(), address, checked) + (local ? "" : ", 8080 not checked in cloud mode");
         StringBuilder text = new StringBuilder(local ? "over the local connection's route" : "over this Wi-Fi").append(" · ports: ").append(ports);
         for (int port : new int[] {80, 8080, 3030})
             if ((", " + ports).contains(", " + port + " open")) text.append(" · HTTP ").append(port).append(": ").append(PrinterHttp.httpHead(via.sockets(), address, port));
+        // Services that greet first (FTP, SSH, Telnet): their greeting only; nothing is sent and no login is tried.
+        for (int port : new int[] {21, 22, 23})
+            if ((", " + ports).contains(", " + port + " open")) text.append(" · greeting ").append(port).append(": ").append(PrinterHttp.greeting(via.sockets(), address, port));
         text.append(" · discovery reply fields: ").append(Cc2Discovery.lastFields.isEmpty() ? "not seen" : Cc2Discovery.lastFields);
         return text.toString();
     }

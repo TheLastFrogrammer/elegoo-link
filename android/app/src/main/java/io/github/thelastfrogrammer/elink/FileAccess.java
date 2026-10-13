@@ -12,8 +12,8 @@ import java.util.regex.Pattern;
  * included — is a GET to the printer's port 80, so the verdict is about that port. Independent of Android.
  */
 final class FileAccess {
-    /** The file server, the camera, local MQTT and two other services the printer is known to run. */
-    static final int[] PORTS = {80, 8080, 1883, 3030, 9001};
+    /** The file server, the camera, local MQTT, two other services the printer is known to run, and 21 (seen open on a CC2 in a community report). */
+    static final int[] PORTS = {80, 8080, 1883, 3030, 9001, 21};
 
     static final class Evidence {
         boolean wifi = true, found, savedCode;

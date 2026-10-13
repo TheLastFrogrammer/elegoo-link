@@ -22,4 +22,22 @@ public class PortProbeTest {
         assertTrue(text, text.contains("ECONNREFUSED"));
         assertFalse(text, text.contains("192.168"));
     }
+
+    @Test public void readsAGreetingWithoutSendingAnything() throws Exception {
+        try (java.net.ServerSocket server = new java.net.ServerSocket(0)) {
+            Thread greeter = new Thread(() -> { try (java.net.Socket client = server.accept()) {
+                client.getOutputStream().write("220 (vsFTPd 3.0.3) at 192.168.1.84\r\n".getBytes(java.nio.charset.StandardCharsets.US_ASCII)); client.getOutputStream().flush();
+                client.setSoTimeout(500); assertEquals("nothing is sent to the service", -1, client.getInputStream().read());
+            } catch (java.net.SocketTimeoutException fine) { } catch (Exception e) { throw new RuntimeException(e); } });
+            greeter.start();
+            assertEquals("\"220 (vsFTPd 3.0.3) at <address>\"", PrinterHttp.greeting(javax.net.SocketFactory.getDefault(), "127.0.0.1", server.getLocalPort()));
+            greeter.join(3000);
+        }
+        try (java.net.ServerSocket quiet = new java.net.ServerSocket(0)) {
+            Thread holder = new Thread(() -> { try (java.net.Socket client = quiet.accept()) { Thread.sleep(2500); } catch (Exception ignored) { } });
+            holder.start();
+            assertEquals("silent", PrinterHttp.greeting(javax.net.SocketFactory.getDefault(), "127.0.0.1", quiet.getLocalPort()));
+            holder.join(4000);
+        }
+    }
 }

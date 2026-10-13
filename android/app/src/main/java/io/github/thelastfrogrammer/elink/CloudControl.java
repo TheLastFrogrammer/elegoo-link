@@ -66,9 +66,19 @@ public final class CloudControl implements AutoCloseable {
 
     private static final class Pending { int id, method; String publisher; Reply reply; ScheduledFuture<?> timeout; }
 
+    /**
+     * Least time between two commands put on the channel. The printer drops replies when three or more requests arrive in
+     * quick succession and stays deaf for about five seconds (pycentauri's PROTOCOL.md, "rate limit"); the local connection
+     * already keeps 2 s apart.
+     */
+    static final long SPACING_MS = 2_000;
+    private long spacingMs, lastPublishAt;
     public CloudControl(Credentials credentials, LinkFactory factory, ScheduledExecutorService worker) {
         this(credentials, factory, worker, REPLY_TIMEOUT_MS, IDLE_CLOSE_MS);
+        spacingMs = SPACING_MS;
     }
+    /** Test hook: spacing between commands (0 in most tests). */
+    CloudControl spacing(long ms) { spacingMs = ms; return this; }
     CloudControl(Credentials credentials, LinkFactory factory, ScheduledExecutorService worker, long replyTimeoutMs, long idleCloseMs) {
         this.credentials = credentials; this.factory = factory; this.worker = worker; this.replyTimeoutMs = replyTimeoutMs; this.idleCloseMs = idleCloseMs;
     }
@@ -156,15 +166,29 @@ public final class CloudControl implements AutoCloseable {
                 ensureConnected();
                 JSONObject message = new JSONObject(request.toString());
                 Pending wait = new Pending();
+                long delay;
                 synchronized (this) {
                     wait.id = nextId++; wait.method = method; wait.publisher = userId + serial; wait.reply = reply;
                     message.put("id", wait.id);
                     pending = wait;
+                    // Kept apart from the previous command (see SPACING_MS); the reply wait starts when it actually goes out.
+                    long now = System.currentTimeMillis();
+                    delay = Math.max(0, lastPublishAt + spacingMs - now); lastPublishAt = now + delay;
                     // Slow commands (filament changes, homing) reply only when finished.
                     long timeout = Cc2Codec.timeoutSeconds(method) > 15 ? Math.max(replyTimeoutMs, Cc2Codec.timeoutSeconds(method) * 1000L) : replyTimeoutMs;
-                    wait.timeout = worker.schedule(() -> finish(wait, false, "No reply through the cloud. Check the printer's status before trying again; the command was not repeated."), timeout, TimeUnit.MILLISECONDS);
+                    wait.timeout = worker.schedule(() -> finish(wait, false, "No reply through the cloud. Check the printer's status before trying again; the command was not repeated."), timeout + delay, TimeUnit.MILLISECONDS);
                 }
-                link.publish(wait.publisher, message.toString());
+                if (delay > 0) {
+                    String text = message.toString();
+                    worker.schedule(() -> {
+                        synchronized (this) { if (pending != wait) return; }   // ended meanwhile (link closed): never sent
+                        try { link.publish(wait.publisher, text); }
+                        catch (Exception error) {
+                            String why = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
+                            finish(wait, false, Cc2Codec.changing(method) ? why + " " + OUTCOME_UNKNOWN : why); closeLink();
+                        }
+                    }, delay, TimeUnit.MILLISECONDS);
+                } else link.publish(wait.publisher, message.toString());
             } catch (Exception error) {
                 Pending failed; synchronized (this) { failed = pending; }
                 String text = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";

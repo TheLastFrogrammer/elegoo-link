@@ -245,6 +245,22 @@ public final class PrinterHttp {
      * One plain "GET /" on a port that accepted a connection, for the read-only probe: the status line and the Server and
      * Content-Type headers only. Nothing else is read or kept; the connection closes after the headers.
      */
+    /**
+     * What a service says first when connected to, without sending anything (FTP, SSH and Telnet greet first): the first line,
+     * printable characters only, at most 80, addresses masked. "silent" when it says nothing within 2 s.
+     */
+    static String greeting(javax.net.SocketFactory sockets, String host, int port) {
+        try (java.net.Socket socket = sockets.createSocket()) {
+            socket.connect(new java.net.InetSocketAddress(host, port), 2000); socket.setSoTimeout(2000);
+            byte[] buffer = new byte[256]; int n;
+            try { n = socket.getInputStream().read(buffer); } catch (java.net.SocketTimeoutException quiet) { return "silent"; }
+            if (n <= 0) return "closed without a word";
+            String line = new String(buffer, 0, n, java.nio.charset.StandardCharsets.ISO_8859_1).split("[\\r\\n]")[0].replaceAll("[^\\x20-\\x7e]", "?");
+            line = line.replaceAll("\\d+\\.\\d+\\.\\d+\\.\\d+", "<address>");
+            return "\"" + (line.length() > 80 ? line.substring(0, 80) + "…" : line) + "\"";
+        } catch (Exception error) { return error.getClass().getSimpleName(); }
+    }
+
     static String httpHead(javax.net.SocketFactory sockets, String host, int port) {
         try (java.net.Socket socket = sockets.createSocket()) {
             socket.connect(new java.net.InetSocketAddress(host, port), 2000); socket.setSoTimeout(3000);

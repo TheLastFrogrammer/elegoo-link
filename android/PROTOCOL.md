@@ -330,3 +330,48 @@ No firmware change; each part uses what the printer already does in cloud mode.
 
 Not built: having the printer fetch an upload from the phone over Wi-Fi (1057 with a phone address). It needs a small
 file server on the phone, which this build environment's safety checks refused; it waits for the owner's decision.
+
+## What stock cloud mode turns off (community firmware notes, 2026-10-13)
+
+From the patch manifests and emulator tests of [Neme77/centauri-carbon-2-community](https://github.com/Neme77/centauri-carbon-2-community)
+(branch `develop`, `3c678c2`), whose baseline is stock 02.01.00.00. Symbols: `communication::NetworkManager::set_mode`,
+`LanStrategy::{start, stop, stop_mqtt_client, report_message}`, `HTTPServer`, `UdsAICameraClient::{stop,resume}_local_video_monitor`,
+`DeviceStatus::post_change_message`.
+
+- **HTTP (port 80)** is started only on the LAN path and stopped in `LanStrategy::stop`; a direct WAN boot never starts it
+  (`builder/current/patches/http-upload/http_upload_v1.json`). Even with it running, the WAN token check differs from the
+  LAN access code (`experimental/firmware-port/http-token-fallback44.S`).
+- **Local MQTT API and status**: stock WAN does not run LanStrategy, so nothing answers `api_register`/`api_request` and
+  status is reported only through the active (cloud) strategy (`mqtt-legacy-audit.json`, `network44-manifest.json`).
+  The broker itself still accepts CONNECT. Their "coexistence" build adds 8 hooks to run LanStrategy beside WanStrategy.
+- **Local camera**: `WanStrategy::start` calls `stop_local_video_monitor`, so port 8080 may listen while the local stream is
+  paused (`builder/current/components/printer/reference.json`: "Keep local webcam monitor active while WanStrategy starts").
+- No stock method switches network mode, starts the HTTP server or sends a file from the printer to a URL. Timelapse
+  rendering is 1051; files and videos come from `/download` on port 80 only.
+- A community issue (#4) reports ports 21 and 80 open on a CC2; port 21's role in stock modes is not documented. The probe
+  now includes 21, 22, 23 and 7125 and records only what 21/22/23 send first (no data sent, no login).
+
+These are a third party's readings of the binary, not Elegoo documentation, and they predict the 0.45.0 experiments: the
+listen-only test should hear nothing in cloud mode, and the printer's own camera may not stream there.
+
+## Public sources on cloud mode (2026-10-13)
+
+- [elegooofficial/CentauriCarbon2](https://github.com/elegooofficial/CentauriCarbon2) publishes the motion/MCU layer
+  (Klipper port, Unix socket `/tmp/elegoo_uds`), not the network service; no mode switch or export code is public.
+- [bjan/pycentauri](https://github.com/bjan/pycentauri) PROTOCOL.md: with LAN Only off the printer "leaves the local HTTP
+  endpoint closed"; three or more rapid requests trigger a cooldown of about five seconds with responses dropped.
+  **The app now keeps cloud commands at least 2 s apart** (`CloudControl.SPACING_MS`), as it already did locally; bursts
+  may explain 1044/1036 getting no reply through the cloud.
+- [dnviti/ha-generic-3dprinter-controller](https://github.com/dnviti/ha-generic-3dprinter-controller) (v0.4.0,
+  docs/protocol-elegoo-cc2.md): in cloud mode the broker accepted connection and subscriptions and nothing answered (a
+  wildcard subscription saw only its own messages); port 80 closed; port 8080 accepted connections, answered no HTTP request,
+  and after four probes stopped accepting connections until a power cycle. **The app no longer touches 8080 in cloud mode**
+  (probe and file-access check skip it), tries the printer's own camera once per app run, and turns that camera off on its
+  first failure.
+- OrcaSlicer: Elegoo staff (#13550): Orca "only supports printer connections when the printer is in LAN mode"; 9001 is the
+  broker over WebSocket (#13934, PR #13878).
+- Elegoo's wiki and community docs describe LAN Only only as a touchscreen setting; no remote switch is documented.
+- Community integrations that work without firmware changes ([runnane/elegoo-web](https://github.com/runnane/elegoo-web),
+  [danielcherubini/elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant)) require LAN Only;
+  [lantern-eight/elegoo-printer-proxy](https://github.com/lantern-eight/elegoo-printer-proxy) keeps G-code by capturing it
+  at upload time, the approach this app takes with its library, shares and G-code folder.
