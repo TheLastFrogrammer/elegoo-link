@@ -375,3 +375,20 @@ listen-only test should hear nothing in cloud mode, and the printer's own camera
   [danielcherubini/elegoo-homeassistant](https://github.com/danielcherubini/elegoo-homeassistant)) require LAN Only;
   [lantern-eight/elegoo-printer-proxy](https://github.com/lantern-eight/elegoo-printer-proxy) keeps G-code by capturing it
   at upload time, the approach this app takes with its library, shares and G-code folder.
+
+## Field results, owner's CC2 in cloud mode (2026-10-12, app 0.45.2)
+
+- Ports 21, 22, 23, 80, 443, 554, 3030, 7125, 8554, 8883 refused; 1883 and 9001 open (8080 not touched). Port 21 is no lead.
+- "Download when it opens" checked port 80 for about 2.5 hours with the printer idle after a print: refused throughout.
+  LAN Only was not switched on during that time, so whether it opens port 80 is still untested on this printer.
+- Listen-only test: the local broker answered CONNECT with "Not authorized" for the PIN entered (in v0.3.3 a PIN CONNECT
+  had been accepted). No local status in cloud mode either way.
+- Cloud probe: 1001–1006 answered (about 1.2–1.7 s); 1036 and 1044 got no reply in 10 s; every later question then failed
+  with Agora's `CHANNEL_RECEIVER_OFFLINE` (the printer's end of the cloud channel had gone offline). On 2026-10-08 the same
+  questions answered, with 10 files and 14 history entries; now there are 17 files and 29 entries. Suspected: large
+  answers break the printer's cloud channel for a while. Through the cloud the probe now skips 1036 (no paging) and asks
+  1044 for three files; the Files and History tabs read the cloud's records and never fall back to 1044/1036 through the
+  cloud channel.
+- Cloud records: thumbnails are stored as `<serial>/thumbnail/<10-digit time>-<file name>.png` and the cloud signs links on
+  `iot.elegoo.com`. Records carry `md5: null`, `fileId: null`, `topViewPath: null`; history entries carry `task_id`,
+  `print_task_id`, `file_create_time`. No G-code reference anywhere.

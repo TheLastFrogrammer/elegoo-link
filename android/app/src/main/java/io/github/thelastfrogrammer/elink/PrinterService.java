@@ -886,7 +886,8 @@ public final class PrinterService extends Service {
                 JSONObject answer = result; String problem = why;
                 main.post(() -> {
                     queryBusy.remove(Cc2Codec.FILES);
-                    if (answer == null) { Diagnostics.note(Diagnostics.FILES, "cloud file records unavailable (" + problem + "); asking the printer"); askFiles(storage, offset); return; }
+                    // Not asked through the cloud channel instead: large file-list answers have taken the printer's cloud link offline.
+                    if (answer == null) { Diagnostics.note(Diagnostics.FILES, "cloud file records unavailable (" + problem + ")"); fileMessage = "Elegoo's cloud did not send the file list (" + problem + "). Refresh to try again."; changed(); return; }
                     filePage = FeatureData.normalizeFiles(answer); this.storage = "local"; fileOffset = offset; filesAt = System.nanoTime();
                     fileMessage = "Files from Elegoo's cloud records (the printer reports each file there).";
                     Diagnostics.note(Diagnostics.FILES, "file list from cloud records: " + filePage.optJSONArray("file_list").length() + " shown, total " + answer.optInt("total", -1));
@@ -925,7 +926,7 @@ public final class PrinterService extends Service {
                 JSONObject answer = result;
                 main.post(() -> {
                     queryBusy.remove(Cc2Codec.HISTORY);
-                    if (answer == null) { askHistory(); return; }
+                    if (answer == null) { historyMessage = "Elegoo's cloud did not send the print history. Refresh to try again."; changed(); return; }
                     history = answer; historyMessage = "History from Elegoo's cloud records."; changed();
                 });
             });

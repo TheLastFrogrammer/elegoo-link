@@ -131,4 +131,12 @@ public class PrinterProbeTest {
             serve.join(2000);
         }
     }
+
+    @Test public void throughTheCloudLargeAnswersAreNotAskedFor() throws Exception {
+        PrinterProbe.Context cloud = new PrinterProbe.Context(); cloud.cloud = true;
+        assertNull("history has no paging: not asked through the cloud", PrinterProbe.request(1036, cloud));
+        assertEquals(3, PrinterProbe.request(1044, cloud).getJSONObject("params").getInt("limit"));
+        PrinterProbe.Context local = new PrinterProbe.Context();
+        assertNotNull(PrinterProbe.request(1036, local)); assertEquals(20, PrinterProbe.request(1044, local).getJSONObject("params").getInt("limit"));
+    }
 }

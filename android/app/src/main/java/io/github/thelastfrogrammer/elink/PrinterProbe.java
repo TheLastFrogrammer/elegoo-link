@@ -53,6 +53,12 @@ final class PrinterProbe {
     /** What the earlier replies gave us to ask the follow-up questions with; the values stay inside the probe. */
     static final class Context {
         String fileName = "", historyTask = "", timelapse = "";
+        /**
+         * Asking through the cloud: a field probe (0.45.2) saw the printer's cloud link go offline right after 1036 and 1044
+         * got no reply, with every later question refused as "receiver offline". Large answers are the suspect, so through
+         * the cloud the history (no paging) is not asked and the file list asks for three files only.
+         */
+        boolean cloud;
     }
 
     private final Transport transport;
@@ -69,6 +75,7 @@ final class PrinterProbe {
     PrinterProbe(Transport transport, ScheduledExecutorService scheduler, Listener listener, long timeoutMs, long spacingMs) {
         this.transport = transport; this.scheduler = scheduler; this.listener = listener; this.timeoutMs = timeoutMs; this.spacingMs = spacingMs;
         for (int read : READS) remaining.add(read);
+        context.cloud = transport != null && transport.name().toLowerCase(java.util.Locale.ROOT).contains("cloud");
     }
 
     void start() { scheduler.execute(this::next); }
@@ -80,7 +87,8 @@ final class PrinterProbe {
         JSONObject params = new JSONObject();
         switch (method) {
             case 1037: if (context.historyTask.isEmpty()) return null; params.put("task_id", context.historyTask); break;
-            case 1044: params.put("storage_media", "local").put("offset", 0).put("limit", 20); break;
+            case 1036: if (context.cloud) return null; break;
+            case 1044: params.put("storage_media", "local").put("offset", 0).put("limit", context.cloud ? 3 : 20); break;
             case 1045: if (context.fileName.isEmpty()) return null; params.put("storage_media", "local").put("file_name", context.fileName); break;
             case 1046: if (context.fileName.isEmpty()) return null; params.put("storage_media", "local").put("filename", context.fileName); break;
             case 1051: if (context.timelapse.isEmpty()) return null; params.put("url", context.timelapse); break;
@@ -121,6 +129,7 @@ final class PrinterProbe {
     }
 
     private static String skipReason(int method) {
+        if (method == 1036) return "not asked through the cloud (a large answer has taken the printer's cloud link offline; the cloud's own history is read instead)";
         if (method == 1037) return "no print history entry to ask about";
         if (method == 1051) return "no timelapse in print history";
         return "no file on the printer to ask about";
