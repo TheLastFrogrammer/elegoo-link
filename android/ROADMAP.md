@@ -36,7 +36,12 @@ Plans, in order. Each round ends with tests, a build and a field check on the ph
    into string resources (translations, and wording changes without touching code). Done: the slicer engine is pinned in
    android/engine/ (slicer/scripts/pin-engine.sh), so CI and release builds ship it; CI runs on every branch push and fails when
    the APK lacks the engine or the pin is older than the engine source; crashes leave a secret-free record in the diagnostics.
-6. Find out why the printer refused a cloud-mode download on port 80 (Elegoo's own cloud page uses the same request).
+6. **Pinned: a helper on the printer's USB port.** Answered: stock cloud mode never opens port 80 (PROTOCOL.md). Next idea,
+   no firmware change: a board posing as a USB drive (Pi 4 or Zero W via USB-C/OTG gadget mode with separate power, or an
+   ESP32-S3 with microSD) that the app fills over Wi-Fi; prints are started through the cloud from "USB drive", so their
+   G-code stays readable in cloud mode, and the board can see which file and part of it the printer reads. First a free
+   test: a plain USB stick, then in cloud mode Files → USB drive and start a print from it. The printer, as USB host, uses
+   only storage, so the port is not a way to query it.
 7. Other printer models (the Centauri Carbon 1 uses a different protocol).
 
 ## Rules that stay
