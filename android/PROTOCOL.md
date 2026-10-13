@@ -405,4 +405,6 @@ listen-only test should hear nothing in cloud mode, and the printer's own camera
   (`GET /` → 404, `Server: libhv/1.3.4`), 8080 served MJPEG (`multipart/x-mixed-replace; boundary=frame`), and over the
   local connection every probe question answered, including 1036 (29 entries) and 1044 (18 files) that got no reply
   through the cloud. 1062 (AI detection settings), which answers through the cloud, was refused locally with error 1100.
-  A download in LAN Only has not been run yet.
+  **Downloads in LAN Only work:** `GET /download?X-Token=…&file_name=…` returned HTTP 200 with the whole file (1,560,527
+  bytes from internal storage) and `GET /download/udisk…` did the same from the USB drive (5,233,019 bytes), both with
+  the saved access code. The file-server question is closed: cloud mode keeps port 80 shut; LAN Only serves files.
