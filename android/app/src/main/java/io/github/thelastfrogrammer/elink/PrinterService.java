@@ -675,7 +675,7 @@ public final class PrinterService extends Service {
     // ------------------------------------------------------------------ following the printer's mode (LAN Only or cloud)
 
     /** The local connection was made by follow mode (not by the user); follow mode is paused after a disconnect by hand. */
-    private boolean followed, followPaused, followChecking; private volatile boolean lanOnlySeen;
+    private boolean followed, followPaused, followChecking; private volatile boolean lanOnlySeen; private String followSeenMode = "";
     /** What follow mode did last, in words (null before anything). */
     public String followText;
     public boolean followMode() { return workshop().getBoolean("followMode", true); }
@@ -701,6 +701,12 @@ public final class PrinterService extends Service {
         if (found == null) return;
         localHost = found.host;
         boolean lan = Boolean.TRUE.equals(found.info.lanOnly), cloud = Boolean.FALSE.equals(found.info.lanOnly);
+        // Each change of the reported mode goes to the diagnostics, with what follow mode will do about it.
+        String mode = lan ? "LAN Only" : cloud ? "cloud mode" : "unknown mode";
+        if (!mode.equals(followSeenMode)) {
+            Diagnostics.note(Diagnostics.HYBRID, "follow: printer reports " + mode + (wanted ? (followed ? "; local connection made by follow mode" : "; a local connection made by hand is left alone") : followPaused ? "; following paused after a disconnect by hand" : ""));
+            followSeenMode = mode;
+        }
         if (cloud) { followPaused = false; lanOnlySeen = false; }
         if (lan) lanOnlySeen = true;
         if (lan && !wanted && !followPaused) {

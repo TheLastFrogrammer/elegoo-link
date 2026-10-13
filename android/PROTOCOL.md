@@ -392,3 +392,17 @@ listen-only test should hear nothing in cloud mode, and the printer's own camera
 - Cloud records: thumbnails are stored as `<serial>/thumbnail/<10-digit time>-<file name>.png` and the cloud signs links on
   `iot.elegoo.com`. Records carry `md5: null`, `fileId: null`, `topViewPath: null`; history entries carry `task_id`,
   `print_task_id`, `file_create_time`. No G-code reference anywhere.
+
+## Field results, owner's CC2 (2026-10-12, app 0.45.4)
+
+- **Listen-only test with the correct PIN (cloud mode):** the local broker accepted the PIN login and the subscriptions
+  to `elegoo/<sn>/api_status` and `elegoo/<sn>/#`, then delivered **0 messages in 30 s**. No local status in cloud mode
+  on this firmware, as the community notes predicted.
+- **Cloud upload** (sliced on the phone, 1.1 MB): storage PUT HTTP 200, 1058 refused with 1025 (nothing to clear), 1057
+  acknowledged, the printer reported `status 0` then `status 1` within 3 s, and the cloud's file records showed the new
+  file at once (17 → 18).
+- **LAN Only switched on:** discovery missed the printer for a few seconds right after the switch, then port 80 opened
+  (`GET /` → 404, `Server: libhv/1.3.4`), 8080 served MJPEG (`multipart/x-mixed-replace; boundary=frame`), and over the
+  local connection every probe question answered, including 1036 (29 entries) and 1044 (18 files) that got no reply
+  through the cloud. 1062 (AI detection settings), which answers through the cloud, was refused locally with error 1100.
+  A download in LAN Only has not been run yet.
