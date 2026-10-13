@@ -103,8 +103,8 @@ public final class MainActivity extends Activity {
     private Button cloudCamera, cameraFix;
     /** First run only: the three ways in. Hidden for good once the phone has connected or a model has been sliced. */
     private LinearLayout getStarted, heroCard;
-    /** Print tab quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Print again and Print recordings. */
-    private LinearLayout quickRow, recordingsRow;
+    /** Print tab quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Layer alert (printing) or Print again (idle) and Print recordings; printExtrasRow the running print's Pictures. */
+    private LinearLayout quickRow, recordingsRow, printExtrasRow;
     private Button quickSlice, quickCamera, quickAgain, picturesNow;
     /** Maintenance starts collapsed; the Emergency stop button stays outside the collapsed part. */
     private CloudAccountStore cloudAccounts;
@@ -287,14 +287,14 @@ public final class MainActivity extends Activity {
         currentSection = fronts[PRINT];
         // Get started: one line on what the app does, then the three ways in, each with one button.
         getStarted = card("Get started");
-        label(getStarted, "Watch and control your Centauri Carbon 2, or slice models on this phone. Pick one way to start.", 14, INK, false);
+        label(getStarted, "Watch or control your Centauri Carbon 2, or slice a model on this phone. Pick one way to start.", 14, INK, false);
         label(getStarted, "1. At home, on Wi-Fi", 14, INK, true);
-        label(getStarted, "Turn the printer on and join this phone's Wi-Fi, then look for it.", 13, MUTED, false);
+        label(getStarted, "Turn on the printer and join this phone to the same Wi-Fi. Then look for it.", 13, MUTED, false);
         rowButton(row(getStarted), "Find my printer on Wi-Fi", () -> { openSettings(false); scanPrinters(); }, true);
         label(getStarted, "2. Away from home", 14, INK, true);
-        label(getStarted, "Use your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
+        label(getStarted, "Sign in to your Elegoo account to watch and control the printer through the cloud.", 13, MUTED, false);
         rowButton(row(getStarted), "Sign in with Elegoo…", this::cloudSignIn, false);
-        label(getStarted, "3. Just want a print", 14, INK, true);
+        label(getStarted, "3. Just want to print a file", 14, INK, true);
         label(getStarted, "Slice a model on this phone, then send the file to the printer.", 13, MUTED, false);
         rowButton(row(getStarted), "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), false);
         LinearLayout hero = card(null); heroCard = hero;
@@ -310,7 +310,7 @@ public final class MainActivity extends Activity {
         monitorImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(monitorImage, "Show the camera full screen");
         // A dark chamber: offer the printer's light (sent only on this tap, like Light on below).
         darkRow = new LinearLayout(this); darkRow.setOrientation(LinearLayout.VERTICAL); monitorCamera.addView(darkRow); darkRow.setVisibility(View.GONE);
-        label(darkRow, "The picture is dark. The printer's light may be off; the phone brightens the picture meanwhile.", 12, MUTED, false);
+        label(darkRow, "The picture is dark. The printer's light may be off. The phone is brightening the picture for now.", 12, MUTED, false);
         LinearLayout darkButtons = row(darkRow);
         rowButton(darkButtons, "Turn the light on", () -> { darkDismissed = true; darkRow.setVisibility(View.GONE); light(true); }, false);
         rowButton(darkButtons, "Not now", () -> { darkDismissed = true; darkRow.setVisibility(View.GONE); }, false);
@@ -331,7 +331,7 @@ public final class MainActivity extends Activity {
         // Pause / Resume and Stop sit with the job they act on; each still asks first.
         printRow = row(hero);
         pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
-        resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume after checking why the printer paused?", Cc2Codec.RESUME), true);
+        resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume the print? Check why the printer paused first.", Cc2Codec.RESUME), true);
         stop = rowButton(printRow, "Stop", () -> confirmCommand("Stop the current print? It cannot be resumed.", Cc2Codec.STOP), false); stop.setTextColor(ERROR);
         faults = A11y.assertive(label(hero, "", 14, ERROR, true));
         // Quick actions: they only navigate or open a screen, never send a printer command. render() shows the ones that fit the state.
@@ -340,11 +340,13 @@ public final class MainActivity extends Activity {
         liveToolpath = rowButton(quickRow, "Live toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)), true);
         quickSlice = rowButton(quickRow, "Slice a model…", () -> startActivityForResult(new Intent(this, SliceActivity.class), SLICE), true);
         quickCamera = rowButton(quickRow, "Camera", () -> openSection(cameraSection), false);
+        // The running print's picture interval on its own row; then Layer alert (printing) or Print again (idle) beside Print recordings.
+        printExtrasRow = row(hero);
+        picturesNow = rowButton(printExtrasRow, "Pictures…", () -> pictureDialog(false), false);
         recordingsRow = row(hero);
-        picturesNow = rowButton(recordingsRow, "Pictures…", () -> pictureDialog(false), false);
-        layerAlert = button(hero, "Layer alert…", this::layerAlertDialog);
+        layerAlert = rowButton(recordingsRow, "Layer alert…", this::layerAlertDialog, false);
         quickAgain = rowButton(recordingsRow, "Print again…", () -> selectPage(HISTORY), false);
-        quickAgain.setContentDescription("Print again: opens the History tab, where the latest print can be printed again");
+        quickAgain.setContentDescription("Print again: opens the History tab, where you can print the latest file again");
         graphs = rowButton(recordingsRow, "Print recordings", () -> {
             PrintRecorder.Recording current = printer == null || printer.recorder == null ? null : printer.recorder.current();
             Intent intent = new Intent(this, RecordingsActivity.class);
@@ -366,7 +368,7 @@ public final class MainActivity extends Activity {
         // One colour bar per tray, the active one outlined; tapping it opens the full tray list.
         trayStrip = new LinearLayout(this); trayStrip.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayStrip);
         trayList = new LinearLayout(this); trayList.setOrientation(LinearLayout.VERTICAL); canvas.addView(trayList); trayList.setVisibility(View.GONE);
-        trays = label(canvas, "Connect to see reported trays, materials, colours and the active tray.", 14, MUTED, false);
+        trays = label(canvas, "Connect to see the trays, materials, colours and the active tray.", 14, MUTED, false);
         refill = button(canvas, "Automatic refill", this::confirmRefill);
         // Printer: what can be done now and Emergency stop on its front page, then one section per kind of control.
         currentSection = fronts[PRINTER];
@@ -1245,7 +1247,7 @@ public final class MainActivity extends Activity {
         JSONObject print = snapshot.optJSONObject("print_status"); if (print == null) return;
         int total = print.optInt("total_layer", 0), now = print.optInt("current_layer", 0); String key = printKey(snapshot);
         LinearLayout body = dialogBody();
-        label(body, "A notification when this print reaches a layer, for example to check it or to swap filament by hand. Now at layer " + now + " of " + total + ".", 14, INK, false);
+        label(body, "Get a notification when this print reaches a layer, for example to check it or to swap filament by hand. Now at layer " + now + " of " + total + ".", 14, INK, false);
         EditText at = input(body, "Layer (" + (now + 1) + "–" + total + ")", false); at.setInputType(InputType.TYPE_CLASS_NUMBER);
         int saved = key.equals(settings.getString("alertLayerKey", "")) ? settings.getInt("alertLayer", 0) : 0; at.setText(String.valueOf(saved > 0 ? saved : Math.min(total, now + 10)));
         AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle("Layer alert").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set alert", (d, w) -> {
@@ -1307,7 +1309,7 @@ public final class MainActivity extends Activity {
     private SpoolStore spools() { return SpoolStore.at(new File(getFilesDir(), "spools.json")); }
     /** Emergency stop: asks first, and is sent once per confirmation like every other printer command. */
     private void emergencyButton(LinearLayout parent) {
-        Button stop = button(parent, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Halts the printer immediately, like the printer's emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
+        Button stop = button(parent, "Emergency stop…", () -> confirmRequest("Emergency stop?", "Stops the printer right away, like the printer's own emergency stop. A running print cannot be resumed.", () -> Cc2Codec.maintenanceRequest(0, Cc2Codec.URGENT_STOP)));
         stop.setTextColor(ERROR); emergencyStops.add(stop);
     }
     /** Spaces the visible buttons of a quick-action row: a gap only between buttons that sit side by side. */
@@ -1609,7 +1611,7 @@ public final class MainActivity extends Activity {
         }
         // Each filament: sliced for → tray, with what to check.
         LinearLayout filamentCard = reviewCard(body, count == 1 ? "Filament" : count + " filaments");
-        if (rows.isEmpty()) label(filamentCard, "The printer's own mapping: it uses the trays the file was sliced for. Choose trays in the setup to set them yourself.", 14, INK, false);
+        if (rows.isEmpty()) label(filamentCard, "The printer uses the trays the file was sliced for. To choose trays yourself, use Change settings.", 14, INK, false);
         for (int i = 0; i < rows.size(); i++) {
             ReviewRow row = rows.get(i);
             if (i > 0) { View rule = new View(this); rule.setBackgroundColor(TRACK); LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1))); l.topMargin = dp(8); l.bottomMargin = dp(8); filamentCard.addView(rule, l); }
@@ -2053,7 +2055,7 @@ public final class MainActivity extends Activity {
         boolean printing = machine != null && machine.optInt("status", -1) == 2;
         int percent = machine == null ? 0 : Math.max(0, Math.min(100, machine.optInt("progress", 0)));
         String stateText = snapshot.length() == 0 ? (printer == null ? "Starting…" : connecting ? "Connecting…" : cloud ? "Waiting for printer" : "Not connected") : StatusPresentation.state(snapshot);
-        if (snapshot.length() > 0 && !live) stateText += " · stale";
+        if (snapshot.length() > 0 && !live) stateText += " · out of date";
         if (!stateText.contentEquals(state.getText())) state.setText(stateText);
         // Job: the file's preview, a large percentage, layer and time left, and a bar; while idle the title stands alone.
         boolean inJobNow = machine != null && machine.optInt("status", -1) == 2;
@@ -2072,11 +2074,11 @@ public final class MainActivity extends Activity {
             int layers = print.optInt("total_layer", 0);
             job.setText(StatusPresentation.clean(print.optString("filename", "Current print")).replaceFirst("(?i)\\.gcode$", ""));
             String layerText = layers > 0 ? "Layer " + print.optInt("current_layer", 0) + "/" + layers : "";
-            String timeText = remaining < 0 ? "Time remaining unavailable" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left · done ≈ "
+            String timeText = remaining < 0 ? "Time left unknown" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left · done ≈ "
                 + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault());
-            detail.setText(StatusPresentation.joinParts(layerText, timeText) + (live ? "" : " · stale"));
+            detail.setText(StatusPresentation.joinParts(layerText, timeText) + (live ? "" : " · out of date"));
         } else {
-            job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in with Elegoo to watch through the cloud.") : "No active print.");
+            job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in to Elegoo to watch through the cloud.") : "No active print.");
             detail.setText("");
         }
         // Camera on top while printing. It starts by itself only after the user started it here once, and only while this tab is on screen.
@@ -2112,7 +2114,8 @@ public final class MainActivity extends Activity {
         quickCamera.setVisibility(inJobNow || idleOnline ? View.VISIBLE : View.GONE); quickCamera.setText(showCamera ? "Camera tools…" : "Camera");
         quickRow.setVisibility(liveToolpath.getVisibility() == View.VISIBLE || quickSlice.getVisibility() == View.VISIBLE || quickCamera.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         quickAgain.setVisibility(idleOnline && hasHistory ? View.VISIBLE : View.GONE);
-        spaceActions(quickRow); spaceActions(recordingsRow);
+        spaceActions(quickRow); spaceActions(recordingsRow); spaceActions(printExtrasRow);
+        printExtrasRow.setVisibility(picturesNow.getVisibility());
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
         String faultText = codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen."; if (!faultText.contentEquals(faults.getText())) faults.setText(faultText);
