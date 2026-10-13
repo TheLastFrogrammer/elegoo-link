@@ -2439,11 +2439,11 @@ public final class MainActivity extends Activity {
     }
     private void listenDialog() {
         if (printer == null) return;
-        EditText pin = new EditText(this); pin.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD);
+        EditText pin = new EditText(this); pin.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD | android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         pin.setHint("Pairing PIN"); pin.setSaveEnabled(false); pin.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         LinearLayout box = new LinearLayout(this); box.setPadding(dp(20), dp(8), dp(20), 0); box.addView(pin, new LinearLayout.LayoutParams(-1, -2));
         new AlertDialog.Builder(this).setTitle("Listen for local status")
-            .setMessage("Enter the pairing PIN the printer shows (Settings on the printer's screen). The app listens for 30 seconds and sends nothing to the printer.")
+            .setMessage("Enter the pairing PIN exactly as the printer shows it (letters and numbers; capitals matter). The app listens for 30 seconds and sends nothing to the printer.")
             .setView(box)
             .setPositiveButton("Listen", (d, w) -> printer.tryListen(pin.getText().toString()))
             .setNegativeButton("Cancel", null).show();

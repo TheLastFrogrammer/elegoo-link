@@ -381,8 +381,8 @@ listen-only test should hear nothing in cloud mode, and the printer's own camera
 - Ports 21, 22, 23, 80, 443, 554, 3030, 7125, 8554, 8883 refused; 1883 and 9001 open (8080 not touched). Port 21 is no lead.
 - "Download when it opens" checked port 80 for about 2.5 hours with the printer idle after a print: refused throughout.
   LAN Only was not switched on during that time, so whether it opens port 80 is still untested on this printer.
-- Listen-only test: the local broker answered CONNECT with "Not authorized" for the PIN entered (in v0.3.3 a PIN CONNECT
-  had been accepted). No local status in cloud mode either way.
+- Listen-only test: the local broker answered CONNECT with "Not authorized". Not a valid result: the app's PIN box took
+  digits only (fixed in 0.45.4) and the printer's PIN has letters, so the PIN entered could not have been right.
 - Cloud probe: 1001–1006 answered (about 1.2–1.7 s); 1036 and 1044 got no reply in 10 s; every later question then failed
   with Agora's `CHANNEL_RECEIVER_OFFLINE` (the printer's end of the cloud channel had gone offline). On 2026-10-08 the same
   questions answered, with 10 files and 14 history entries; now there are 17 files and 29 entries. Suspected: large
