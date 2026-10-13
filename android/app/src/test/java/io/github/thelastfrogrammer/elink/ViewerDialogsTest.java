@@ -90,11 +90,11 @@ public class ViewerDialogsTest {
         ((Button) get("more")).performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : PlateDialogsTest.buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Filter by line type (walls, infill, support…)…", "Show travel moves (blue)", "Step through this layer…", "Layers, transparency and nozzle dot…", "Lock rotation (drag moves the view)", "What am I seeing?", "Close"), names);
+        assertEquals(Arrays.asList("Show or hide line types (walls, infill, support)…", "Show travel moves (blue)", "Step through this layer…", "Layers, transparency and nozzle dot…", "Lock rotation (drag moves the view)", "What am I seeing?", "Close"), names);
         PlateDialogsTest.button(d, "Show travel moves (blue)").performClick(); idle();
         assertTrue(lastScript().contains("\"showTravel\":true"));
         ((Button) get("more")).performClick(); idle();
-        PlateDialogsTest.button(dialog(), "Filter by line type (walls, infill, support…)…").performClick(); idle();
+        PlateDialogsTest.button(dialog(), "Show or hide line types (walls, infill, support)…").performClick(); idle();
         List<View> all = new ArrayList<>(); PlateDialogsTest.collect(dialog().getWindow().getDecorView(), all);
         List<CheckBox> boxes = new ArrayList<>(); for (View v : all) if (v instanceof CheckBox) boxes.add((CheckBox) v);
         assertTrue(boxes.size() >= 5);

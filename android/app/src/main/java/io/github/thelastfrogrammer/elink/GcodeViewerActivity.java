@@ -234,9 +234,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
         // One hint line under the chips: how to hide a type, and how the view works (live view always; gestures the first few times).
         int shown = hintsShown();
-        String tip = "Tap a line type to hide it; hold it to show only that type.";
-        String how = followMode ? " Live: the file up to the nozzle. Grey = still to print on this layer."
-            : shown < 3 ? " Drag to turn · two fingers to move and zoom · double-tap to reset." : "";
+        String tip = "Tap a line type to hide it. Hold it to show only that type.";
+        String how = followMode ? " Live: the file up to the nozzle. Grey: still to print on this layer."
+            : shown < 3 ? " Drag to turn. Two fingers to move and zoom. Double-tap to reset." : "";
         hint = label(panel, tip + how, 12, muted, false);
         // The hint describes a drawn toolpath; it hides while there is no file to draw.
         missingCard = new LinearLayout(this); missingCard.setOrientation(LinearLayout.VERTICAL); missingCard.setVisibility(View.GONE); panel.addView(missingCard);
@@ -316,7 +316,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if ("true".equals(looking)) js("viewer.resetCamera()"); else js("viewer.setView('printer')");
             main.postDelayed(this::syncOverlay, 100); }); });
         liveButton = chipButton("Back to live", () -> { if (follow != null) follow.performClick(); });
-        chipButton("Line types", this::featureDialog).setContentDescription("Filter by line type");
+        chipButton("Line types", this::featureDialog).setContentDescription("Show or hide line types");
         headButton = chipButton("Head", () -> {
             String next = "off".equals(headLook()) ? "mask" : "mask".equals(headLook()) ? "outline" : "off";
             viewerPrefs().edit().putString("headLook", next).apply(); pushView(); syncOverlay();
@@ -488,7 +488,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             boolean alongside = !printer.ready();
             String host = alongside ? printer.localHost : printer.host(), url;
             try { url = alongside ? printer.localCameraUrl() : FeatureData.cameraUrl(host, printer.cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : printer.cameraUrl); }
-            catch (Exception invalid) { cameraMessage("The camera address is not on the printer, so it was not opened."); return; }
+            catch (Exception invalid) { cameraMessage("The camera address is not on the printer. It was not opened."); return; }
             NetworkRoute route;
             try { route = alongside ? NetworkRoute.local(this) : NetworkRoute.select(this, printer.remote()); } catch (IOException unavailable) { cameraMessage(unavailable.getMessage()); return; }
             cameraStarted = true; cameraCloud = false;
@@ -499,7 +499,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             cameraMessage(alongside ? "Camera: the printer's own stream on this Wi-Fi, alongside the cloud." : "Camera: the printer's own stream on this network.");
         } else if (printer.usingCloud() && !printer.cloudSerial.isEmpty()) {
             if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false)) {
-                cameraMessage("The camera through Elegoo's cloud needs cloud control turned on: Print > Camera explains it. The camera model is shown without a picture."); return;
+                cameraMessage("The cloud camera needs cloud control turned on. Print > Camera explains how. The camera model is shown without a picture."); return;
             }
             cameraStarted = true; cameraCloud = true;
             String serial = printer.cloudSerial;
@@ -525,7 +525,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                         + JSONObject.quote(credential.rtcToken) + "," + JSONObject.quote(credential.rtcUserId) + ")", null);
                 });
             });
-        } else cameraMessage("No camera picture: connect to the printer, or watch it through the Elegoo cloud.");
+        } else cameraMessage("No camera picture. Connect to the printer, or watch it through the Elegoo cloud.");
     }
     private void stopCamera() {
         CameraFrames frames = cameraFrames; cameraFrames = null; if (frames != null) frames.close();
@@ -1151,8 +1151,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void updateLabels() {
         if (path == null) return;
         if (legendLayer != layer && legend != null) buildLegend();
-        layerLabel.setText(String.format(Locale.getDefault(), "%sLayer %d of %d · %.2f mm high", following ? "● LIVE · " : "", layer + 1, path.layerCount, path.layerZ(layer)));
-        moveLabel.setText(String.format(Locale.getDefault(), "Drawn so far in this layer: %,d of %,d lines", move, layerSize(layer)));
+        layerLabel.setText(String.format(Locale.getDefault(), "%sLayer %d of %d · %.2f mm high", following ? "● Live · " : "", layer + 1, path.layerCount, path.layerZ(layer)));
+        moveLabel.setText(String.format(Locale.getDefault(), "Lines drawn in this layer: %,d of %,d", move, layerSize(layer)));
         A11y.state(layerBar, String.format(Locale.getDefault(), "Layer %d of %d", layer + 1, path.layerCount));
         A11y.state(moveBar, String.format(Locale.getDefault(), "%,d of %,d lines", move, layerSize(layer)));
     }
@@ -1254,7 +1254,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         main.removeCallbacksAndMessages(delayToken);
         if (following) {
             following = false; if (follow != null) follow.setEnabled(true); sendLockstep(); syncOverlay();
-            status.setText("Not live any more: you are looking at the file. Tap “Back to live” to jump to the printer's position.");
+            status.setText("Not live now: you are viewing the file. Tap “Back to live” to jump to the printer's position.");
         }
     }
 
@@ -1264,7 +1264,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         stopFollowing(); setPlaying(false);
         layer = 0; move = layerSize(0); syncBars(); pushView();
         if (web != null && pageReady) web.evaluateJavascript("viewer.setView('top')", null);
-        status.setText("First layer, from above. It should be solid, even lines touching edge to edge, with no gaps. Drag the Layer bar to go up.");
+        status.setText("First layer, from above. It should be solid: even lines touching edge to edge, with no gaps. Drag the Layer bar up to see higher layers.");
     }
 
     private int hintsShown() {
@@ -1279,7 +1279,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         AlertDialog[] dialog = new AlertDialog[1];
         groupHeading(body, "What to show");
-        moreButton(body, dialog, "Filter by line type (walls, infill, support…)…", this::featureDialog);
+        moreButton(body, dialog, "Show or hide line types (walls, infill, support)…", this::featureDialog);
         moreButton(body, dialog, showTravel ? "Hide travel moves (blue)" : "Show travel moves (blue)", () -> { showTravel = !showTravel; pushView(); });
         moreButton(body, dialog, moveBar.getVisibility() == View.VISIBLE ? "Hide the step-through bar" : "Step through this layer…",
             () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); });
@@ -1417,7 +1417,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             option.setOnCheckedChangeListener((v, on) -> { if (on) { viewerPrefs().edit().putString("headLook", choice[0]).apply(); pushView(); } });
         }
         body.addView(looks);
-        label(body, "A simple printhead rides on the nozzle and hides the lines behind it, as the real one does in the camera picture.", 12, muted, false);
+        label(body, "A simple printhead sits on the nozzle and hides the lines behind it, as the real one does in the camera picture.", 12, muted, false);
         if (followMode) {
             Button size = rowButton(body, "Printhead size…", () -> { if (dialogs[0] != null) dialogs[0].dismiss(); headSizeDialog(); });
             ((LinearLayout.LayoutParams) size.getLayoutParams()).width = -1; ((LinearLayout.LayoutParams) size.getLayoutParams()).weight = 0; ((LinearLayout.LayoutParams) size.getLayoutParams()).leftMargin = 0;
@@ -1453,7 +1453,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 @Override public void onStopTrackingTouch(SeekBar b) { }
             });
             body.addView(row);
-            label(body, "If the real printhead in the picture trails the drawing, raise this until they move together (often 2–5 s through the cloud).", 12, muted, false);
+            label(body, "If the printhead in the picture trails the drawing, raise this until they move together. Often 2–5 s through the cloud.", 12, muted, false);
             android.widget.CheckBox auto = new android.widget.CheckBox(this); auto.setTextColor(ink); auto.setMinHeight(dp(48));
             auto.setText("Use the cloud camera's measured delay"); auto.setChecked(viewerPrefs().getBoolean("autoDelay", true));
             auto.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("autoDelay", on).apply(); delayNote.setText(delayText()); sendLockstep(); });
@@ -1463,7 +1463,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             step.setText("Move in step with the camera's pictures"); step.setChecked(viewerPrefs().getBoolean("lockstep", false));
             step.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("lockstep", on).apply(); main.removeCallbacksAndMessages(delayToken); sendLockstep(); });
             body.addView(step);
-            label(body, "Each picture shows the toolpath where the printer was when that picture was taken, so the two keep together and recover at once after the app was away. Turn off if it looks jumpy.", 12, muted, false);
+            label(body, "Each picture shows the toolpath where the printer was when that picture was taken. The two stay together, and catch up at once after the app was away. Turn off if it looks jumpy.", 12, muted, false);
         }
         dialogs[0] = new AlertDialog.Builder(this).setTitle("Layers, transparency and nozzle dot").setView(scroll).setPositiveButton("Done", null).show();
         dialogs[0].setOnDismissListener(d -> delayNote = null);
@@ -1518,7 +1518,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             .append("Pale grey: layers below the one you are looking at, and, in the current layer, what is still to print.\n")
             .append("Blue lines (Travel moves): the nozzle moving without printing.\n")
             .append("Teal dot: the nozzle.\n\n")
-            .append("Gestures: drag to turn the view, two fingers to move and zoom, double-tap to reset.\n\nTap a colour chip to hide that type; hold it to see only that type (the quickest way to find supports or the prime tower). More… > Filter by line type does the same from a list.");
+            .append("Gestures: drag to turn the view, two fingers to move and zoom, double-tap to reset.\n\nTap a colour chip to hide that type; hold it to see only that type (the quickest way to find supports or the prime tower). More… > Show or hide line types does the same from a list.");
         if (followMode) text.append("\n\nCamera (More…): a dark camera shape with a faint cone shows where the printer's camera is and what it sees; the screen in front of it plays the camera's live picture. The position is an estimate: choose the spot that matches your printer under More… > Camera position.");
         if (followMode) text.append("\n\nLive: the 3D lines are this G-code file, not a camera. The printer reports its current layer and nozzle position, and the viewer shows the file printed up to there. Scrubbing the bars leaves live mode; “Back to live” returns.");
         new AlertDialog.Builder(this).setTitle("What am I seeing?").setMessage(text).setPositiveButton("Got it", null).show();
@@ -1589,7 +1589,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         int progress = live.optJSONObject("machine_status").optInt("progress", -1);
         logFollow(print, position, hasPosition, currentLayer, located);
         status.setText(String.format(Locale.getDefault(), "Live · printing layer %d of %d%s%s", currentLayer, path.layerCount,
-            progress >= 0 ? " · " + progress + "%" : "", hasPosition ? "" : " · nozzle position not reported, showing the layer start"));
+            progress >= 0 ? " · " + progress + "%" : "", hasPosition ? "" : " · no nozzle position reported, so showing the layer start"));
     }
 
     /**
@@ -1779,7 +1779,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         double[] lengths = path.featureLengths();
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
         TextView tip = new TextView(this); tip.setTextSize(13); tip.setTextColor(muted);
-        tip.setText("Untick a type to hide it. On the main screen, tap a type's chip to hide it, or hold it to show only that type.");
+        tip.setText("Untick a line type to hide it. On the main screen, tap its chip to hide it, or hold the chip to show only that type.");
         body.addView(tip);
         java.util.List<CheckBox> boxes = new java.util.ArrayList<>();
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(LinearLayout.HORIZONTAL); body.addView(quick);
@@ -1796,7 +1796,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             body.addView(box); boxes.add(box);
         }
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
-        new AlertDialog.Builder(this).setTitle("Filter by line type").setView(scroll).setPositiveButton("Done", null).show();
+        new AlertDialog.Builder(this).setTitle("Show or hide line types").setView(scroll).setPositiveButton("Done", null).show();
     }
 
     // ------------------------------------------------------------------ helpers
