@@ -16,6 +16,8 @@ public class CloudControlTest {
     private static final class FakeLink implements CloudControl.Link {
         final List<String> calls = new CopyOnWriteArrayList<>();
         final BlockingQueue<String[]> published = new LinkedBlockingQueue<>();
+        /** When each publish happened (System.nanoTime), so spacing is measured at the link, not after the test thread wakes. */
+        final java.util.List<Long> publishedAt = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
         volatile Events events; volatile boolean failLogin, closed;
         public void login(String appId, String rtmUserId, String token, Events events) throws IOException {
             calls.add("login " + appId + " " + rtmUserId + " " + token);
@@ -23,7 +25,7 @@ public class CloudControlTest {
             this.events = events;
         }
         public void subscribe(String channel) { calls.add("subscribe " + channel); }
-        public void publish(String channel, String text) { calls.add("publish " + channel); published.add(new String[] {channel, text}); }
+        public void publish(String channel, String text) { publishedAt.add(System.nanoTime()); calls.add("publish " + channel); published.add(new String[] {channel, text}); }
         public void close() { closed = true; calls.add("close"); }
     }
     private static final class Replies implements CloudControl.Reply {
@@ -63,12 +65,12 @@ public class CloudControlTest {
         CloudControl control = control(5000, 60000).spacing(600);
         Replies first = new Replies(), second = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.STATUS), first);
-        JSONObject sent = new JSONObject(take(waitForLink())[1]); long firstAt = System.nanoTime();
+        JSONObject sent = new JSONObject(take(waitForLink())[1]);
         links.get(0).events.message("12345SN818", new JSONObject().put("id", sent.getInt("id")).put("method", Cc2Codec.STATUS).put("result", new JSONObject().put("error_code", 0)).toString());
         first.take();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.STATUS), second);
-        take(links.get(0)); long gapMs = (System.nanoTime() - firstAt) / 1_000_000;
-        assertTrue("second command waited for the spacing: " + gapMs + " ms", gapMs >= 550);
+        take(links.get(0)); java.util.List<Long> at = links.get(0).publishedAt; long gapMs = (at.get(at.size() - 1) - at.get(at.size() - 2)) / 1_000_000;
+        assertTrue("second command waited for the spacing: " + gapMs + " ms", gapMs >= 590);
     }
 
     @Test public void queryResultsAreDelivered() throws Exception {

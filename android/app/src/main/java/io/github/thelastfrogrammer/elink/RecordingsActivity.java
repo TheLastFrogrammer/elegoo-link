@@ -55,7 +55,7 @@ public final class RecordingsActivity extends Activity {
             .then(4600, () -> { View chart = chart(2); if (chart != null) { Showcase.glideTo(scroll, chart, 2000); Showcase.caption(this, "Temperatures, fans, progress and layers over time"); } })
             .then(4800, () -> { View trays = Showcase.find(content, "Filament over time"); if (trays != null) { Showcase.glideTo(scroll, trays, 1800); Showcase.caption(this, "Which filament was loaded, and when"); } })
             .then(4400, () -> { View rate = chart(4); if (rate != null) { Showcase.glideTo(scroll, rate, 1800); Showcase.caption(this, "How fast each filament was laid down"); } })
-            .then(4600, () -> { View used = chart(5); if (used != null) { Showcase.glideTo(scroll, used, 1800); Showcase.caption(this, "And how much was used, filament by filament"); } })
+            .then(4600, () -> { View used = chart(5); if (used != null) { Showcase.glideTo(scroll, used, 1800); Showcase.caption(this, "How much of each filament was used"); } })
             .then(5000, () -> Showcase.caption(this, null))
             .then(500, () -> { Showcase.stage = Showcase.END; finish(); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out); });
         script.run(null);
@@ -150,7 +150,10 @@ public final class RecordingsActivity extends Activity {
         shown = recording;
         // Opened from the Print tab during a print: the other recordings are one tap away.
         LinearLayout back = new LinearLayout(this); back.setOrientation(LinearLayout.HORIZONTAL); content.addView(back);
-        action(back, "All recordings", () -> startActivity(new Intent(this, RecordingsActivity.class)));
+        // A back link, as on the main screen's sections, rather than a full-width button.
+        TextView allLink = new TextView(this); allLink.setText("‹ All recordings"); allLink.setTextSize(15); allLink.setTextColor(dark ? 0xff5fd4c4 : 0xff00796b);
+        allLink.setGravity(android.view.Gravity.CENTER_VERTICAL); allLink.setMinHeight(dp(48)); allLink.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class)));
+        allLink.setContentDescription("All recordings"); back.addView(allLink, new LinearLayout.LayoutParams(-2, -2));
         heading(StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")));
         String details = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + (Showcase.running() ? "" : " · " + StatusPresentation.clean(recording.printer));
         if (recording.layers > 0) details += " · " + recording.layers + " layers";
@@ -162,7 +165,7 @@ public final class RecordingsActivity extends Activity {
         tile(tiles, "Result", outcome(recording.outcome), dp(8));
         tile(tiles, "Ended", ended > 0 ? when(ended, Locale.getDefault(), TimeZone.getDefault()) : "—", dp(8));
         String last = lastReading(rows);
-        if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, last, 13, muted, false); }
+        if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, readingLines(last), 13, muted, false); }
         double[] t = column(rows, "elapsed_s");
         pictures(recording);   // the quickest look at how the print went, before the charts
         chart("Progress", " %", t, Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)), 0, 100);
@@ -287,7 +290,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout chartBox = new LinearLayout(this); chartBox.setOrientation(LinearLayout.VERTICAL); card.addView(chartBox);
         LinearLayout byColour = new LinearLayout(this); byColour.setOrientation(LinearLayout.VERTICAL); card.addView(byColour);
         File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
-        if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download it from the Files tab, or slice it here, to see material per layer and per colour."); return; }
+        if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download the file from the Files tab, or slice it here, to see material per layer and per colour."); return; }
         new Thread(() -> {
             double[] volumes = null; double[][] laidDown = null; double[] perTool = null; SlicedMaterials materials = null;
             double[] progress = column(rows, "progress"), fractions = new double[progress.length];
@@ -301,7 +304,7 @@ public final class RecordingsActivity extends Activity {
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 note.setText(perLayer == null || cumulative == null ? "The print's file could not be read."
-                    : "How fast each filament was laid down (grams per hour) and how much was used in all, from the print's progress and the sliced file.");
+                    : "How fast each filament was laid down (grams per hour), and how much was used in total, worked out from the print's progress and its sliced file.");
                 if (perLayer != null && cumulative != null && toolTotals != null) {
                     int tools = toolTotals.length;
                     int[] filamentColour = new int[tools]; Arrays.fill(filamentColour, blue);
@@ -475,7 +478,7 @@ public final class RecordingsActivity extends Activity {
                 if (output == null) throw new IOException();
                 byte[] buffer = new byte[65536]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
                 Toast.makeText(this, "Timelapse saved.", Toast.LENGTH_SHORT).show();
-            } catch (IOException error) { Toast.makeText(this, "Saving failed. Check that you chose a place you can write to.", Toast.LENGTH_SHORT).show(); }
+            } catch (IOException error) { Toast.makeText(this, "Saving failed. Try choosing a different place to save.", Toast.LENGTH_SHORT).show(); }
             video.delete(); return;
         }
         if (request != EXPORT || result != RESULT_OK || data == null || data.getData() == null || shown == null) return;
@@ -484,7 +487,7 @@ public final class RecordingsActivity extends Activity {
             if (output == null) throw new IOException();
             byte[] buffer = new byte[8192]; int count; while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
             Toast.makeText(this, "CSV exported.", Toast.LENGTH_SHORT).show();
-        } catch (IOException error) { Toast.makeText(this, "Export failed. Check that you chose a place you can write to.", Toast.LENGTH_SHORT).show(); }
+        } catch (IOException error) { Toast.makeText(this, "Export failed. Try choosing a different place to save.", Toast.LENGTH_SHORT).show(); }
     }
 
     @Override protected void onResume() { super.onResume(); if (getIntent().getStringExtra(EXTRA_META) == null) showList(); }
@@ -524,8 +527,22 @@ public final class RecordingsActivity extends Activity {
         label(tile, caption, 12, muted, false); TextView text = label(tile, value, 16, ink, true); text.setMaxLines(2);
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -1, 1); layout.leftMargin = gap; layout.topMargin = dp(8); row.addView(tile, layout);
     }
+    /** "Last reading 10:53 · progress 100 % · …" as one capitalised reading a line, each unit kept with its number. */
+    static String readingLines(String reading) {
+        StringBuilder out = new StringBuilder();
+        for (String part : reading.split(" · ")) {
+            if (part.isEmpty()) continue;
+            if (out.length() > 0) out.append('\n');
+            out.append(Character.toUpperCase(part.charAt(0))).append(part.substring(1).replace(" °C", "\u00a0°C").replace(" %", "\u00a0%"));
+        }
+        return out.toString();
+    }
+    /** A button in the app's style: accent text on a soft rounded tile, equal width in its row. */
     private void action(LinearLayout row, String text, Runnable run) {
         Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setOnClickListener(v -> run.run());
+        int accent = dark ? 0xff5fd4c4 : 0xff00796b; button.setTextColor(accent); button.setPadding(dp(10), dp(8), dp(10), dp(8));
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setColor(dark ? 0xff21343a : 0xffe2efed); shape.setCornerRadius(dp(12));
+        button.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(8); if (row.getChildCount() > 0) layout.leftMargin = dp(8); row.addView(button, layout);
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }

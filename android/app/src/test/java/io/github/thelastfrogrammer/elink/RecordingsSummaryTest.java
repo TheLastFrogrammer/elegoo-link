@@ -59,4 +59,9 @@ public class RecordingsSummaryTest {
         row[PrintRecorder.column("bed_c")] = bed; row[PrintRecorder.column("bed_target_c")] = bedTarget;
         return row;
     }
+    @Test public void readingLinesPutOneCapitalisedReadingOnEachLine() {
+        assertEquals("Last reading 22:55\nProgress 41\u00a0%\nNozzle 84\u00a0°C (target 220\u00a0°C)",
+            RecordingsActivity.readingLines("Last reading 22:55 · progress 41 % · nozzle 84 °C (target 220 °C)"));
+        assertEquals("", RecordingsActivity.readingLines(""));
+    }
 }
