@@ -55,4 +55,19 @@ public class StatusPresentationTest {
         assertEquals("The printer's own camera checks: spaghetti detection on (how often: high, when found: pause); objects left on the bed off. Change them on the printer's screen.", MainActivity.aiText(ai));
         assertEquals("", MainActivity.aiText(null)); assertEquals("", MainActivity.aiText(new org.json.JSONObject()));
     }
+    @Test public void stat_tiles_show_hours_and_minutes() {
+        assertEquals("1h 15m", StatusPresentation.span(4520));
+        assertEquals("2h 05m", StatusPresentation.span(2 * 3600 + 5 * 60 + 59));
+        assertEquals("45m", StatusPresentation.span(45 * 60));
+        assertEquals("0m", StatusPresentation.span(0));
+        assertEquals("\u2014", StatusPresentation.span(-1));
+    }
+    @Test public void segment_bar_fills_from_the_left_with_a_partial_last_segment() {
+        assertEquals(0f, SegmentBar.filled(0, 0, 24), 0f);
+        assertEquals(1f, SegmentBar.filled(100, 23, 24), 0f);
+        assertEquals(1f, SegmentBar.filled(50, 11, 24), 1e-4f);
+        assertEquals(0f, SegmentBar.filled(50, 12, 24), 1e-4f);
+        assertEquals(0.84f, SegmentBar.filled(41, 9, 24), 1e-3f);   // 41 % of 24 = 9.84 segments
+        assertEquals(1f, SegmentBar.filled(150, 23, 24), 0f);
+    }
 }

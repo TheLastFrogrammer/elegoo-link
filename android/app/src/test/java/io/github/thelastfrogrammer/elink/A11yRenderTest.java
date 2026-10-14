@@ -10,6 +10,7 @@ import android.widget.*;
 import org.json.JSONObject;
 import org.junit.Assume;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -153,7 +154,8 @@ public class A11yRenderTest {
             .put("print_status", new JSONObject().put("filename", "Benchy_PLA_0.2mm.gcode").put("current_layer", 87).put("total_layer", 212).put("remaining_time_sec", 4520))
             .put("extruder", new JSONObject().put("temperature", 219.6).put("target", 220))
             .put("heater_bed", new JSONObject().put("temperature", 59.8).put("target", 60))
-            .put("ztemperature_sensor", new JSONObject().put("temperature", 31.0));
+            .put("ztemperature_sensor", new JSONObject().put("temperature", 31.0))
+            .put("led", new JSONObject().put("status", 0));
     }
     private static JSONObject idle() throws Exception {
         return new JSONObject().put("machine_status", new JSONObject().put("status", 1).put("sub_status", 0).put("progress", 0))
@@ -213,6 +215,24 @@ public class A11yRenderTest {
             for (int i = 0; i < names.length; i++) {
                 page.invoke(activity, i); render.invoke(activity);
                 shot(activity.getWindow().getDecorView(), 4200, "main-" + names[i], scale);
+            }
+            // The dashboard hero: finish time beside the percentage, Elapsed / Remaining / Layer tiles, Light beside Pause and Stop,
+            // and the camera picture with its badge and overlay buttons.
+            if (scale == 1f) {
+                Method close = MainActivity.class.getDeclaredMethod("closeSection", int.class); close.setAccessible(true);
+                page.invoke(activity, 0); close.invoke(activity, 0); render.invoke(activity);
+                assertTrue(((TextView) field(activity, "doneText")).getText().toString().startsWith("Done at "));
+                assertEquals("87 / 212", ((TextView) field(activity, "statLayer")).getText().toString());
+                assertEquals("1h 15m", ((TextView) field(activity, "statRemaining")).getText().toString());
+                android.widget.Button light = (android.widget.Button) field(activity, "printLight");
+                assertEquals(android.view.View.VISIBLE, light.getVisibility()); assertEquals("Light on", light.getText().toString());
+                assertEquals("the light switch is not shown twice", android.view.View.GONE, ((android.view.View) field(activity, "lightRow")).getVisibility());
+                android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(64, 36, android.graphics.Bitmap.Config.ARGB_8888); frame.eraseColor(0xff334048);
+                Field last = MainActivity.class.getDeclaredField("lastFrame"); last.setAccessible(true); last.set(activity, frame);
+                android.widget.ImageView monitor = (android.widget.ImageView) field(activity, "monitorImage"); monitor.setImageBitmap(frame); render.invoke(activity);
+                assertEquals(android.view.View.VISIBLE, ((android.view.View) monitor.getParent()).getVisibility());
+                shot(activity.getWindow().getDecorView(), 2600, "main-print-hero-camera", scale);
+                last.set(activity, null); render.invoke(activity);
             }
             // The showcase tour: a caption over the screen, the title card, and no printer address in the header while it records.
             if (scale == 1f) {

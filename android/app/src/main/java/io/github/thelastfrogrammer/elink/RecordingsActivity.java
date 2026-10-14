@@ -501,7 +501,7 @@ public final class RecordingsActivity extends Activity {
         card.addView(view, new LinearLayout.LayoutParams(-1, dp(240)));
     }
 
-    private static double[] column(List<double[]> rows, String name) {
+    static double[] column(List<double[]> rows, String name) {
         int index = PrintRecorder.column(name); double[] values = new double[rows.size()];
         for (int i = 0; i < values.length; i++) values[i] = rows.get(i)[index];
         return values;

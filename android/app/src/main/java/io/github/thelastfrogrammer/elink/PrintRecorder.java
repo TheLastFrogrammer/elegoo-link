@@ -61,6 +61,8 @@ public final class PrintRecorder {
 
     public PrintRecorder(File directory) { this.directory = directory; }
     public synchronized Recording current() { return current; }
+    /** Seconds the running print has been going, on the monotonic clock `mono` (as passed to update), or -1 with no print. */
+    public synchronized long elapsedSeconds(long mono) { return current == null ? -1 : Math.max(0, mono - current.monoStart) / 1000; }
     /** The latest CANVAS report, for the active tray and its colour in each sample. */
     public synchronized void setCanvas(JSONObject value) { canvas = value; }
     public synchronized void setDefaultPictureMinutes(int minutes) { defaultPictureMinutes = Math.max(0, Math.min(120, minutes)); }

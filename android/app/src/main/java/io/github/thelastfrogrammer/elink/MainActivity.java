@@ -131,8 +131,14 @@ public final class MainActivity extends Activity {
     private LinearLayout monitorCamera, trayStrip;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
-    private Button monitorCameraStart, monitorCameraSize, trayDetails;
-    private ProgressBar jobBar;
+    private Button monitorCameraStart, trayDetails;
+    private SegmentBar jobBar;
+    /** Dashboard pieces of the hero: "Done at" beside the percentage, the Elapsed / Remaining / Layer tiles, Light beside Pause and Stop, the camera's badge. */
+    private TextView doneText, statElapsed, statRemaining, statLayer, monitorBadge;
+    private LinearLayout statsRow;
+    private Button printLight;
+    /** "This print so far": the running print's temperatures from its recording, redrawn at most once a minute. */
+    private LinearLayout telemetryCard; private ChartView telemetryChart; private long telemetryAt; private String telemetryFor = "";
     private boolean monitorCameraTried, traysOpen;
     private String jobThumbAsked = "", jobThumbKey = "";
     private TextView title, detail, controlSource, tileNozzle, tileBed, tileChamber;
@@ -301,12 +307,19 @@ public final class MainActivity extends Activity {
         // Live camera on top while printing: the printer's own stream on this network, started by the user (then remembered),
         // and stopped whenever this tab or the app is out of sight. Through the cloud the button opens the cloud camera.
         monitorCamera = new LinearLayout(this); monitorCamera.setOrientation(LinearLayout.VERTICAL); hero.addView(monitorCamera);
-        monitorImage = new ImageView(this); monitorImage.setContentDescription("Live printer camera"); monitorImage.setScaleType(ImageView.ScaleType.FIT_CENTER); monitorImage.setBackgroundColor(Color.BLACK);
-        monitorImage.setVisibility(View.GONE); monitorCamera.addView(monitorImage, new LinearLayout.LayoutParams(-1, dp(200)));
+        // The picture sits in a frame with a small badge (where it comes from) and two overlay buttons; the frame shows and hides with it.
+        FrameLayout monitorFrame = new FrameLayout(this); monitorCamera.addView(monitorFrame, new LinearLayout.LayoutParams(-1, dp(200))); monitorFrame.setVisibility(View.GONE);
+        monitorImage = new ImageView(this) { @Override public void setVisibility(int visibility) { super.setVisibility(visibility); monitorFrame.setVisibility(visibility); } };
+        monitorImage.setContentDescription("Live printer camera"); monitorImage.setScaleType(ImageView.ScaleType.FIT_CENTER); monitorImage.setBackgroundColor(Color.BLACK);
+        monitorFrame.addView(monitorImage, new FrameLayout.LayoutParams(-1, -1)); monitorImage.setVisibility(View.GONE);
+        monitorBadge = overlayChip(monitorFrame, "● Live", Gravity.TOP | Gravity.START, null); monitorBadge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout overlayButtons = new LinearLayout(this); overlayButtons.setOrientation(LinearLayout.HORIZONTAL);
+        monitorFrame.addView(overlayButtons, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END));
+        overlayChip(overlayButtons, "Snapshot", 0, this::saveSnapshot).setContentDescription("Save a snapshot of the camera to the phone");
+        overlayChip(overlayButtons, "Full screen", 0, this::cameraFullScreen).setContentDescription("Show the camera full screen");
         monitorCameraInfo = label(monitorCamera, "", 12, MUTED, false);
         LinearLayout cameraButtons = row(monitorCamera);
         monitorCameraStart = rowButton(cameraButtons, "Watch camera", this::monitorCameraTap, false);
-        monitorCameraSize = rowButton(cameraButtons, "Full screen", this::cameraFullScreen, false);
         monitorImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(monitorImage, "Show the camera full screen");
         // A dark chamber: offer the printer's light (sent only on this tap, like Light on below).
         darkRow = new LinearLayout(this); darkRow.setOrientation(LinearLayout.VERTICAL); monitorCamera.addView(darkRow); darkRow.setVisibility(View.GONE);
@@ -323,16 +336,25 @@ public final class MainActivity extends Activity {
         LinearLayout heroText = new LinearLayout(this); heroText.setOrientation(LinearLayout.VERTICAL); heroRow.addView(heroText, new LinearLayout.LayoutParams(0, -2, 1));
         state = A11y.polite(label(heroText, "Waiting for printer", 20, INK, true));
         job = label(heroText, "", 14, INK, false); job.setMaxLines(2); job.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        percentText = label(heroText, "", 34, INK, true); percentText.setVisibility(View.GONE);
+        // The percentage large, with the finish time on the clock beside it.
+        LinearLayout percentRow = new LinearLayout(this); percentRow.setOrientation(LinearLayout.HORIZONTAL); percentRow.setGravity(Gravity.BOTTOM); heroText.addView(percentRow);
+        percentText = label(percentRow, "", 34, INK, true); percentText.setLayoutParams(new LinearLayout.LayoutParams(0, -2, 1));
+        doneText = label(percentRow, "", 14, MUTED, false); doneText.setLayoutParams(new LinearLayout.LayoutParams(-2, -2)); doneText.setGravity(Gravity.END); doneText.setPadding(dp(8), 0, 0, dp(12));
+        percentRow.setVisibility(View.GONE);
         detail = label(heroText, "", 13, MUTED, false);
-        jobBar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); jobBar.setMax(100); jobBar.setProgressTintList(tint(TEAL)); jobBar.setProgressBackgroundTintList(tint(TRACK));
-        jobBar.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); // the percentage above says it
-        LinearLayout.LayoutParams barLayout = new LinearLayout.LayoutParams(-1, dp(8)); barLayout.topMargin = dp(12); hero.addView(jobBar, barLayout); jobBar.setVisibility(View.GONE);
+        jobBar = new SegmentBar(this, TEAL, TRACK); // the percentage above says it
+        LinearLayout.LayoutParams barLayout = new LinearLayout.LayoutParams(-1, dp(10)); barLayout.topMargin = dp(12); hero.addView(jobBar, barLayout); jobBar.setVisibility(View.GONE);
+        // Elapsed, remaining and layer as three small tiles under the bar.
+        statsRow = new LinearLayout(this); statsRow.setOrientation(getResources().getConfiguration().fontScale >= 1.5f ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams statsLayout = new LinearLayout.LayoutParams(-1, -2); statsLayout.topMargin = dp(12); hero.addView(statsRow, statsLayout); statsRow.setVisibility(View.GONE);
+        statElapsed = stat(statsRow, "Elapsed", 0); statRemaining = stat(statsRow, "Remaining", dp(8)); statLayer = stat(statsRow, "Layer", dp(8));
         // Pause / Resume and Stop sit with the job they act on; each still asks first.
-        printRow = row(hero);
+        printRow = row(hero); ((LinearLayout.LayoutParams) printRow.getLayoutParams()).topMargin = dp(8);
         pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
         resume = rowButton(printRow, "Resume", () -> confirmCommand("Resume the print? Check why the printer paused first.", Cc2Codec.RESUME), true);
         stop = rowButton(printRow, "Stop", () -> confirmCommand("Stop the current print? It cannot be resumed.", Cc2Codec.STOP), false); stop.setTextColor(ERROR);
+        // The chamber light beside them while a print runs, when the printer reports it: one tap sends one command, as Light on/off below.
+        printLight = rowButton(printRow, "Light on", () -> light(!lightIsOn), false); printLight.setVisibility(View.GONE);
         faults = A11y.assertive(label(hero, "", 14, ERROR, true));
         // Quick actions: they only navigate or open a screen, never send a printer command. render() shows the ones that fit the state.
         // Row 1 while printing: Live toolpath and Camera. Idle and connected: Slice a model and Camera. Row 2: Print again (idle, with history) and Print recordings.
@@ -356,6 +378,11 @@ public final class MainActivity extends Activity {
         LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(getResources().getConfiguration().fontScale >= 1.5f ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL); tilesRow = tiles;
         LinearLayout.LayoutParams tilesLayout = new LinearLayout.LayoutParams(-1, -2); tilesLayout.topMargin = dp(12); currentSection.addView(tiles, tilesLayout);
         tileNozzle = tile(tiles, "Nozzle", 0); tileBed = tile(tiles, "Bed", dp(8)); tileChamber = tile(tiles, "Chamber", dp(8));
+        // This print so far: its temperatures from the recording, as on the recording's own page (touch to read values).
+        telemetryCard = card(null);
+        cardHeader(telemetryCard, "This print so far", "All charts ›", () -> graphs.performClick());
+        telemetryChart = new ChartView(this, INK, MUTED, TRACK, SURFACE); telemetryCard.addView(telemetryChart, new LinearLayout.LayoutParams(-1, -2));
+        telemetryCard.setVisibility(View.GONE);
         LinearLayout controls = card("Controls"); controlsCard = controls;
         controlSource = label(controls, "", 13, MUTED, false);
         controlFix = rowButton(row(controls), "", this::fixControl, true); ((View) controlFix.getParent()).setVisibility(View.GONE);
@@ -1716,10 +1743,7 @@ public final class MainActivity extends Activity {
         // The picture's size toggles between the normal and the large height; the button names the size it switches to.
         button(card, "Full screen (zoom and brighten)", this::cameraFullScreen);
         cameraImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(cameraImage, "Show the camera full screen");
-        cameraSnapshot = button(card, "Save snapshot to phone…", () -> {
-            if (lastFrame == null) return; pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
-        });
+        cameraSnapshot = button(card, "Save snapshot to phone…", this::saveSnapshot);
         // Setup details sit behind one collapsed header; the header speaks its state.
         Button settingsToggle = button(card, "", () -> { });
         LinearLayout settings = new LinearLayout(this); settings.setOrientation(LinearLayout.VERTICAL); settings.setVisibility(View.GONE);
@@ -2010,6 +2034,12 @@ public final class MainActivity extends Activity {
         heroCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
         canvasCard.setVisibility(noData && !(connecting && renderedCanvas != null) ? View.GONE : View.VISIBLE); tilesRow.setVisibility(noData ? View.GONE : View.VISIBLE);
         printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData || !canControl ? View.GONE : View.VISIBLE);
+        // While a print runs and the printer reports its light, the switch sits with Pause and Stop instead of under Controls.
+        boolean lightInRow = inJob && canControl && lightKnown;
+        printLight.setVisibility(lightInRow ? View.VISIBLE : View.GONE); printLight.setEnabled(lightInRow);
+        printLight.setText(lightIsOn ? "Light off" : "Light on"); printLight.setContentDescription(lightIsOn ? "Light off. The light is on now" : "Light on. The light is off now");
+        if (lightInRow) lightRow.setVisibility(View.GONE);
+        spaceActions(printRow);
         cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
         transferRow.setVisibility(cancelUpload.getVisibility() == View.VISIBLE || cancelDownload.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
@@ -2065,8 +2095,9 @@ public final class MainActivity extends Activity {
         boolean inJobNow = machine != null && machine.optInt("status", -1) == 2;
         String printFile = print == null ? "" : print.optString("filename", "");
         percentText.setText(inJobNow ? percent + "%" : ""); percentText.setContentDescription(percent + " percent complete");
-        percentText.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
+        ((View) percentText.getParent()).setVisibility(inJobNow ? View.VISIBLE : View.GONE);
         jobBar.setProgress(percent); jobBar.setVisibility(inJobNow ? View.VISIBLE : View.GONE);
+        statsRow.setVisibility(inJobNow && print != null ? View.VISIBLE : View.GONE);
         // The preview is a read, asked once per file; the printer keeps it under the file's name on its own storage.
         if (inJobNow && !printFile.isEmpty() && !printFile.equals(jobThumbAsked) && printer.canQuery() && !printer.busy(Cc2Codec.THUMBNAIL)) { jobThumbAsked = printFile; printer.thumbnail("local", printFile); }
         String thumbData = inJobNow && printer != null ? printer.thumbnails.get("local/" + printFile) : null;
@@ -2077,12 +2108,19 @@ public final class MainActivity extends Activity {
             long remaining = print.optLong("remaining_time_sec", -1);
             int layers = print.optInt("total_layer", 0);
             job.setText(StatusPresentation.clean(print.optString("filename", "Current print")).replaceFirst("(?i)\\.gcode$", ""));
-            String layerText = layers > 0 ? "Layer " + print.optInt("current_layer", 0) + "/" + layers : "";
-            String timeText = remaining < 0 ? "Time left unknown" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left · done ≈ "
-                + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault());
-            detail.setText(StatusPresentation.joinParts(layerText, timeText) + (live ? "" : " · out of date"));
+            // Layer and times in the tiles under the bar; the finish time on the clock beside the percentage.
+            long elapsed = printer == null || printer.recorder == null ? -1 : printer.recorder.elapsedSeconds(android.os.SystemClock.elapsedRealtime());
+            // Elapsed comes from this phone's recording of the print; without one the tile steps aside rather than show a dash.
+            setTile(statElapsed, StatusPresentation.span(elapsed)); ((View) statElapsed.getParent()).setVisibility(elapsed < 0 ? View.GONE : View.VISIBLE);
+            View remainingTile = (View) statRemaining.getParent(); ((LinearLayout.LayoutParams) remainingTile.getLayoutParams()).leftMargin = elapsed < 0 || statsRow.getOrientation() == LinearLayout.VERTICAL ? 0 : dp(8);
+            setTile(statRemaining, StatusPresentation.span(remaining));
+            setTile(statLayer, layers > 0 ? print.optInt("current_layer", 0) + " / " + layers : "—");
+            String done = remaining < 0 ? "" : "Done at " + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault());
+            doneText.setText(done); doneText.setContentDescription(done.isEmpty() ? null : done + (live ? "" : ", out of date"));
+            detail.setText(live ? "" : "Out of date: the printer has not reported for a while.");
         } else {
             job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in to Elegoo to watch through the cloud.") : "No active print.");
+            doneText.setText("");
             detail.setText("");
         }
         // Camera on top while printing. It starts by itself only after the user started it here once, and only while this tab is on screen.
@@ -2096,12 +2134,13 @@ public final class MainActivity extends Activity {
         monitorImage.setVisibility(showCamera && ownCamera && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
         if (!ready) monitorCameraStart.setText("Watch through the Elegoo cloud");
         else if (cameraPlayer == null && monitorCameraStart.getText().toString().startsWith("Watch through")) monitorCameraStart.setText("Watch camera");
-        monitorCameraSize.setVisibility(ready && monitorImage.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
+        monitorBadge.setText(cameraPlayer != null ? "● Live" : "Last picture");
         if (monitorCameraInfo.getText().length() == 0) monitorCameraInfo.setVisibility(View.GONE);
         spaceActions((LinearLayout) monitorCameraStart.getParent());
         graphs.setText("Print recordings");
         PrintRecorder.Recording recordingNow = printer == null || printer.recorder == null ? null : printer.recorder.current();
         picturesNow.setVisibility(inJobNow && recordingNow != null ? View.VISIBLE : View.GONE);
+        renderTelemetry(inJobNow ? recordingNow : null);
         // One alert at a chosen layer of this print (navigation-only notification; the printer is never told anything).
         int total = snapshot.optJSONObject("print_status") == null ? 0 : snapshot.optJSONObject("print_status").optInt("total_layer", 0);
         layerAlert.setVisibility(inJobNow && total > 1 ? View.VISIBLE : View.GONE);
@@ -2681,6 +2720,54 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(6);
         if (row.getChildCount() > 0) layout.leftMargin = dp(8);
         row.addView(button, layout); return button;
+    }
+    /** The running print's temperatures, read from its recording off the main thread, at most once a minute (or when the print changes). */
+    private void renderTelemetry(PrintRecorder.Recording recording) {
+        if (recording == null) { telemetryCard.setVisibility(View.GONE); telemetryFor = ""; return; }
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (recording.id.equals(telemetryFor) && now - telemetryAt < 60_000) return;
+        telemetryFor = recording.id; telemetryAt = now;
+        boolean darkChart = dark;
+        checks.execute(() -> {
+            List<double[]> rows; try { rows = PrintRecorder.samples(recording); } catch (Exception unreadable) { rows = java.util.Collections.emptyList(); }
+            List<double[]> read = rows;
+            main.post(() -> {
+                if (isDestroyed() || !recording.id.equals(telemetryFor)) return;
+                if (read.size() < 2) { telemetryCard.setVisibility(View.GONE); return; }
+                // The recording page's palette (validated for both themes): nozzle blue, bed orange, chamber aqua; dashed lines are targets.
+                int blue = darkChart ? 0xff3987e5 : 0xff2a78d6, orange = darkChart ? 0xffd95926 : 0xffeb6834, aqua = darkChart ? 0xff199e70 : 0xff149a69;
+                double[] t = RecordingsActivity.column(read, "elapsed_s");
+                telemetryChart.set("Temperatures", " °C", t, java.util.Arrays.asList(
+                    new ChartView.Series("Nozzle", blue, RecordingsActivity.column(read, "nozzle_c"), false), new ChartView.Series("Nozzle target", blue, RecordingsActivity.column(read, "nozzle_target_c"), true),
+                    new ChartView.Series("Bed", orange, RecordingsActivity.column(read, "bed_c"), false), new ChartView.Series("Bed target", orange, RecordingsActivity.column(read, "bed_target_c"), true),
+                    new ChartView.Series("Chamber", aqua, RecordingsActivity.column(read, "chamber_c"), false)), Double.NaN, Double.NaN);
+                if (recording.start > 0) telemetryChart.clock(recording.start);
+                telemetryCard.setVisibility(View.VISIBLE);
+            });
+        });
+    }
+    /** Asks where to save the camera's latest picture, then saves it (onActivityResult). */
+    private void saveSnapshot() {
+        if (lastFrame == null) { message("No camera picture yet. Start the camera first."); return; }
+        pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
+    }
+    /** A small white label on a dark plate over the camera picture; tappable (at least 48dp) when it has an action. */
+    private TextView overlayChip(ViewGroup parent, String text, int gravity, Runnable action) {
+        TextView chip = new TextView(this); chip.setText(text); chip.setTextSize(12); chip.setTextColor(Color.WHITE); chip.setTypeface(Typeface.DEFAULT_BOLD); chip.setGravity(Gravity.CENTER);
+        GradientDrawable plate = new GradientDrawable(); plate.setColor(0xb3000000); plate.setCornerRadius(dp(14));
+        if (action != null) { chip.setMinHeight(dp(48)); chip.setMinWidth(dp(48)); chip.setBackground(new RippleDrawable(ColorStateList.valueOf(0x55ffffff), new android.graphics.drawable.InsetDrawable(plate, 0, dp(8), 0, dp(8)), null)); chip.setOnClickListener(v -> action.run()); }   // a slim pill on a full-size touch target
+        else chip.setBackground(plate);
+        chip.setPadding(dp(12), dp(4), dp(12), dp(4));   // after the background, which brings its own padding
+        if (parent instanceof FrameLayout) { FrameLayout.LayoutParams at = new FrameLayout.LayoutParams(-2, -2, gravity); at.setMargins(dp(8), dp(8), dp(8), dp(8)); parent.addView(chip, at); }
+        else { LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-2, -2); at.setMargins(0, dp(8), dp(8), dp(8)); parent.addView(chip, at); }
+        return chip;
+    }
+    /** A small stat tile in the hero (Elapsed, Remaining, Layer): the temperature tile, smaller, on the tile colour. */
+    private TextView stat(LinearLayout row, String caption, int gap) {
+        TextView value = tile(row, caption, gap); value.setTextSize(17);
+        GradientDrawable background = new GradientDrawable(); background.setColor(TILE); background.setCornerRadius(dp(12)); ((View) value.getParent()).setBackground(background);
+        return value;
     }
     /** Temperature tile: small caption, large current value, target on a second line. */
     private TextView tile(LinearLayout row, String caption, int gap) {

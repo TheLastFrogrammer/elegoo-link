@@ -149,6 +149,13 @@ public final class StatusPresentation {
         return parts.isEmpty() ? "Printing" : String.join(" · ", parts);
     }
 
+    /** "2h 05m", "45m" or "0m" for a stat tile; "—" when unknown (negative). */
+    static String span(long seconds) {
+        if (seconds < 0) return "\u2014";
+        long h = seconds / 3600, m = (seconds % 3600) / 60;
+        return h > 0 ? h + "h " + String.format(Locale.ROOT, "%02d", m) + "m" : m + "m";
+    }
+
     /** "14:30" for a finish today, "Tue 14:30" on another day, from the printer's remaining seconds and the phone's clock. */
     static String doneAt(long nowMs, long remainingSec, Locale locale, TimeZone zone) {
         long end = nowMs + remainingSec * 1000;

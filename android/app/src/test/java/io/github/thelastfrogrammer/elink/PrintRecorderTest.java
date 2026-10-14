@@ -153,4 +153,13 @@ public class PrintRecorderTest {
         double[] together = RecordingsActivity.sharedTotal(used, 2);
         assertTrue(Double.isNaN(together[0])); assertEquals(1.24, together[1], 1e-9); assertTrue(Double.isNaN(together[2])); assertEquals(2.98, together[3], 1e-9);
     }
+    @Test public void elapsedTimeCountsFromTheFirstSampleOnTheMonotonicClock() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        assertEquals(-1, recorder.elapsedSeconds(5_000));
+        assertTrue(recorder.update(1_000_000, 10_000, status(2075, "a.gcode", 1, 1), "local", "CC2"));
+        assertEquals(0, recorder.elapsedSeconds(10_000));
+        assertEquals(125, recorder.elapsedSeconds(135_000));
+        recorder.update(2_000_000, 140_000, idle(), "local", "CC2");
+        assertEquals("no print, no elapsed time", -1, recorder.elapsedSeconds(150_000));
+    }
 }
