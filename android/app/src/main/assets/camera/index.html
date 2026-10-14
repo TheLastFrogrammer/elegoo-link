@@ -55,12 +55,14 @@ async function start(appId, channel, token, uid) {
   }
 }
 async function stop() { try { if (client) await client.leave(); } catch (e) {} client = null; remote = null; }
-function snapshot() {
-  if (!remote || !remote.videoTrack) { send({ type: 'snapshot', data: '' }); return; }
+// forRecording: a picture for the running print's recording (smaller, kept by the app without asking) rather than one to save.
+function snapshot(forRecording) {
+  const type = forRecording ? 'picture' : 'snapshot';
+  if (!remote || !remote.videoTrack) { send({ type: type, data: '' }); return; }
   const frame = remote.videoTrack.getCurrentFrameData();
   const canvas = document.createElement('canvas'); canvas.width = frame.width; canvas.height = frame.height;
   canvas.getContext('2d').putImageData(frame, 0, 0);
-  send({ type: 'snapshot', data: canvas.toDataURL('image/jpeg', 0.92) });
+  send({ type: type, data: canvas.toDataURL('image/jpeg', forRecording ? 0.85 : 0.92) });
 }
 send({ type: 'ready' });
 </script>

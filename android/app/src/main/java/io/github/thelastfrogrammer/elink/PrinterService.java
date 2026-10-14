@@ -80,7 +80,12 @@ public final class PrinterService extends Service {
         recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5));
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name);
-        if (recorder.pictureDue(mono)) grab(null);
+        if (recorder.pictureDue(mono)) {
+            // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
+            PrintRecorder.Recording running = recorder.current();
+            if (!ready() && !localCamera() && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.FOLLOW, "pictures: due, but in cloud mode they come only while a cloud video is open"); }
+            grab(null);
+        }
     }
     /**
      * The printer's camera, for pictures: one connection at a time (the printer's own stream may serve only one), opened for a
@@ -122,7 +127,7 @@ public final class PrinterService extends Service {
         });
         main.postDelayed(() -> { if (player[0] != null) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; } }, 15_000);   // never left open
     }
-    private long offeredAt;
+    private long offeredAt; private String noPictureNoted = "";
     /** A camera frame from anywhere in the app: kept as the print's picture when one is due, and shown in the progress notification. */
     public void offerFrame(android.graphics.Bitmap image) {
         if (image == null) return;

@@ -42,6 +42,17 @@ public final class CloudCameraActivity extends Activity {
     private static final int PROBLEM = 0xffffb4ab, NORMAL = 0xffe6eef1;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** While the video plays, the running print's recording takes its camera pictures from it (in cloud mode nothing else can). */
+    private PrinterService printer; private boolean bound, playing;
+    private final android.content.ServiceConnection connection = new android.content.ServiceConnection() {
+        @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder binder) { printer = ((PrinterService.LocalBinder) binder).service(); }
+        @Override public void onServiceDisconnected(android.content.ComponentName name) { printer = null; }
+    };
+    private final Runnable pictureTick = new Runnable() { public void run() {
+        long mono = android.os.SystemClock.elapsedRealtime();
+        if (web != null && playing && printer != null && printer.recorder != null && printer.recorder.pictureDue(mono)) web.evaluateJavascript("snapshot(true)", null);
+        main.postDelayed(this, 15_000);
+    } };
     private WebView web;
     private TextView title, status;
     private Button snapshot, retry;
@@ -65,6 +76,7 @@ public final class CloudCameraActivity extends Activity {
             setContentView(root); return;
         }
         web = new WebView(this); web.setBackgroundColor(Color.BLACK);
+        bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         WebSettings settings = web.getSettings();
         settings.setJavaScriptEnabled(true); settings.setDomStorageEnabled(true); settings.setMediaPlaybackRequiresUserGesture(false);
         settings.setAllowFileAccess(false); settings.setAllowContentAccess(false);
@@ -124,7 +136,7 @@ public final class CloudCameraActivity extends Activity {
     /** Starts over: reloads the camera page and asks Elegoo for credentials again. */
     private void retry(String serial) {
         if (web == null) return;
-        started = false; pageReady = false; credential = null; retry.setVisibility(View.GONE); snapshot.setEnabled(false);
+        started = false; pageReady = false; credential = null; retry.setVisibility(View.GONE); snapshot.setEnabled(false); playing = false; main.removeCallbacks(pictureTick);
         web.evaluateJavascript("stop()", null);
         web.loadUrl(ORIGIN + "/assets/camera/index.html");
         connect(serial);
@@ -136,7 +148,9 @@ public final class CloudCameraActivity extends Activity {
             switch (message.optString("type")) {
                 case "ready": pageReady = true; startIfReady(getIntent().getStringExtra(EXTRA_SERIAL)); break;
                 case "status": showPageStatus(message.optString("text")); break;
-                case "playing": showNormal("Live. Video from the printer through Elegoo's cloud."); snapshot.setEnabled(true); break;
+                case "playing": showNormal("Live. Video from the printer through Elegoo's cloud."); snapshot.setEnabled(true);
+                    if (!playing) { playing = true; main.postDelayed(pictureTick, 3_000); } break;
+                case "picture": keepPicture(message.optString("data")); break;
                 case "snapshot": saveSnapshot(message.optString("data")); break;
                 default: break;
             }
@@ -200,6 +214,12 @@ public final class CloudCameraActivity extends Activity {
             + JSONObject.quote(credential.rtcToken) + "," + JSONObject.quote(credential.rtcUserId) + ")", null);
     }
 
+    private void keepPicture(String dataUrl) {
+        String prefix = "data:image/jpeg;base64,";
+        if (!dataUrl.startsWith(prefix) || printer == null || printer.recorder == null) return;
+        try { printer.recorder.savePicture(Base64.decode(dataUrl.substring(prefix.length()), Base64.DEFAULT), android.os.SystemClock.elapsedRealtime()); }
+        catch (IllegalArgumentException unreadable) { }
+    }
     private void saveSnapshot(String dataUrl) {
         String prefix = "data:image/jpeg;base64,";
         if (!dataUrl.startsWith(prefix)) { showNormal("There is no picture to save yet. Wait for the video to appear, then try again."); return; }
@@ -233,6 +253,7 @@ public final class CloudCameraActivity extends Activity {
     }
     @Override protected void onDestroy() {
         worker.shutdownNow(); main.removeCallbacksAndMessages(null);
+        if (bound) { unbindService(connection); bound = false; }
         if (web != null) { web.evaluateJavascript("stop()", null); ((ViewGroup) web.getParent()).removeView(web); web.destroy(); web = null; }
         super.onDestroy();
     }

@@ -284,6 +284,23 @@ public final class RecordingsActivity extends Activity {
      * From the print's own G-code, when it is on this phone: material per layer over the print's time, and each filament's
      * use with its colour. Read in the background.
      */
+    /**
+     * Per tool, the colour (0xRRGGBB) of the CANVAS tray that was active most while that tool laid filament down, from the
+     * recording's tray_rgb column; -1 when the printer never reported a tray colour then.
+     */
+    static int[] printedColours(double[] trayRgb, double[][] rate, int tools) {
+        int[] out = new int[tools]; Arrays.fill(out, -1);
+        List<Map<Integer, Integer>> seen = new ArrayList<>(); for (int k = 0; k < tools; k++) seen.add(new HashMap<>());
+        for (int i = 0; i < Math.min(trayRgb.length, rate.length); i++) {
+            if (Double.isNaN(trayRgb[i]) || trayRgb[i] < 0) continue;
+            int lead = -1; double best = 0;
+            for (int k = 0; k < tools && k < rate[i].length; k++) if (!Double.isNaN(rate[i][k]) && rate[i][k] > best) { best = rate[i][k]; lead = k; }
+            if (lead < 0 && tools == 1) lead = 0;   // one filament: any reading while printing counts, even before it starts laying down
+            if (lead >= 0) seen.get(lead).merge((int) trayRgb[i] & 0xffffff, 1, Integer::sum);
+        }
+        for (int k = 0; k < tools; k++) { int most = 0; for (Map.Entry<Integer, Integer> e : seen.get(k).entrySet()) if (e.getValue() > most) { most = e.getValue(); out[k] = e.getKey(); } }
+        return out;
+    }
     private void material(PrintRecorder.Recording recording, List<double[]> rows, double[] t) {
         LinearLayout card = card(); label(card, "Material used", 15, ink, true);
         TextView note = label(card, "Reading the print's file…", 13, muted, false);
@@ -305,6 +322,7 @@ public final class RecordingsActivity extends Activity {
                 if (isDestroyed()) return;
                 note.setText(perLayer == null || cumulative == null ? "The print's file could not be read."
                     : "How fast each filament was laid down (grams per hour), and how much was used in total, worked out from the print's progress and its sliced file.");
+                int[] printed = null;   // per tool, the colour of the tray that actually printed it (0xRRGGBB), or -1
                 if (perLayer != null && cumulative != null && toolTotals != null) {
                     int tools = toolTotals.length;
                     int[] filamentColour = new int[tools]; Arrays.fill(filamentColour, blue);
@@ -318,6 +336,13 @@ public final class RecordingsActivity extends Activity {
                         if (entry.massG != null && entry.massG > 0 && toolTotals[entry.index] > 0) gramsPerMm3[entry.index] = entry.massG / toolTotals[entry.index];
                     }
                     double[][] rate = depositionRates(t, cumulative, gramsPerMm3);
+                    // The colour shown is the tray's that printed it (as the printer reported during the print), not the sliced file's.
+                    printed = printedColours(column(rows, "tray_rgb"), rate, tools);
+                    for (int k = 0; k < tools; k++) if (printed[k] >= 0) {
+                        filamentColour[k] = 0xff000000 | printed[k];
+                        String word = WorkshopUi.colourName(String.format(Locale.ROOT, "#%06X", printed[k]));
+                        names[k] = "Filament " + (k + 1) + (word == null ? "" : " · " + word);
+                    }
                     List<ChartView.Series> lines = new ArrayList<>();
                     for (int k = 0; k < tools; k++) {
                         if (toolTotals[k] <= 0) continue;
@@ -385,11 +410,13 @@ public final class RecordingsActivity extends Activity {
                 if (used != null) for (SlicedMaterials.Entry entry : used.entries) {
                     if (entry.lengthMm == null && entry.massG == null) continue;
                     LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL); byColour.addView(row);
-                    String hex = TrayPlan.colour(entry.color);
+                    String hex = TrayPlan.colour(entry.color), sliced = hex == null ? null : WorkshopUi.colourName(hex);
+                    if (printed != null && entry.index < printed.length && printed[entry.index] >= 0) hex = String.format(Locale.ROOT, "#%06X", printed[entry.index]);
                     if (hex != null) { View dot = new View(this); GradientDrawable shape = new GradientDrawable(); shape.setShape(GradientDrawable.OVAL); shape.setColor(Color.parseColor(hex)); shape.setStroke(dp(1), muted); dot.setBackground(shape);
                         LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(18), dp(18)); size.rightMargin = dp(10); row.addView(dot, size); }
                     String colour = hex == null ? null : WorkshopUi.colourName(hex);
-                    label(row, "Filament " + (entry.index + 1) + (entry.type == null ? "" : " · " + entry.type) + (colour == null ? "" : " · " + colour)
+                    boolean differs = sliced != null && colour != null && !sliced.equals(colour);
+                    label(row, "Filament " + (entry.index + 1) + (entry.type == null ? "" : " · " + entry.type) + (colour == null ? "" : " · " + colour) + (differs ? " (sliced as " + sliced + ")" : "")
                         + (entry.massG == null ? "" : String.format(Locale.getDefault(), " · %.1f g", entry.massG))
                         + (entry.lengthMm == null ? "" : String.format(Locale.getDefault(), " · %.2f m", entry.lengthMm / 1000)), 13, ink, false);
                 }

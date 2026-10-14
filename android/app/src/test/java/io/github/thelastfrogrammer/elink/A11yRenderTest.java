@@ -235,6 +235,15 @@ public class A11yRenderTest {
                 android.widget.ImageView monitor = (android.widget.ImageView) field(activity, "monitorImage"); monitor.setImageBitmap(frame); render.invoke(activity);
                 assertEquals(android.view.View.VISIBLE, ((android.view.View) monitor.getParent()).getVisibility());
                 shot(activity.getWindow().getDecorView(), 2600, "main-print-hero-camera", scale);
+                // Hide camera folds it to one Show camera button, and Show camera brings it back.
+                Method hide = MainActivity.class.getDeclaredMethod("hideMonitorCamera", boolean.class); hide.setAccessible(true);
+                hide.invoke(activity, true);
+                assertEquals(android.view.View.GONE, ((android.view.View) field(activity, "monitorBody")).getVisibility());
+                assertEquals(android.view.View.VISIBLE, ((android.view.View) ((android.view.View) field(activity, "monitorShow")).getParent()).getVisibility());
+                hide.invoke(activity, false);
+                assertEquals(android.view.View.VISIBLE, ((android.view.View) field(activity, "monitorBody")).getVisibility());
+                android.view.View stopButton = (android.view.View) field(activity, "stop");
+                assertEquals("Stop stays beside Pause and the light", android.view.View.VISIBLE, stopButton.getVisibility());
                 last.set(activity, null); render.invoke(activity);
             }
             // The showcase tour: a caption over the screen, the title card, and no printer address in the header while it records.

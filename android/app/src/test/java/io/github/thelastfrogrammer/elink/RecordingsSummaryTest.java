@@ -64,4 +64,17 @@ public class RecordingsSummaryTest {
             RecordingsActivity.readingLines("Last reading 22:55 · progress 41 % · nozzle 84 °C (target 220 °C)"));
         assertEquals("", RecordingsActivity.readingLines(""));
     }
+    @Test public void filamentColourIsTheTrayThatPrintedItNotTheSlicedOne() {
+        double nan = Double.NaN, black = 0x101010, white = 0xF0F0F0;
+        // One filament: the black tray was active the whole print (even before filament was laid down).
+        double[][] one = {{0}, {0}, {12}, {30}, {28}};
+        int[] single = RecordingsActivity.printedColours(new double[] {black, black, black, black, black}, one, 1);
+        assertEquals(0x101010, single[0]);
+        // Two filaments: tool 0 laid down while white was active, tool 1 while black was; no reading leaves it unknown.
+        double[][] two = {{20, 0}, {22, 0}, {0, 18}, {0, 19}};
+        int[] pair = RecordingsActivity.printedColours(new double[] {white, white, black, black}, two, 2);
+        assertEquals(0xF0F0F0, pair[0]); assertEquals(0x101010, pair[1]);
+        int[] unknown = RecordingsActivity.printedColours(new double[] {nan, nan}, new double[][] {{5}, {6}}, 1);
+        assertEquals(-1, unknown[0]);
+    }
 }

@@ -128,7 +128,9 @@ public final class MainActivity extends Activity {
     private TextView connection, state, job, feedback, selected, faults, trays, identity, diagnostics;
     private Button connect, pause, stop, refresh, upload, pick, refill, check, forget, recentSlices;
     /** The Print tab while printing: the live camera on top (local stream, only while this tab is on screen), then the job with its thumbnail. */
-    private LinearLayout monitorCamera, trayStrip;
+    private LinearLayout monitorCamera, monitorBody, trayStrip;
+    /** Show camera: the one button left when the Print tab's camera is hidden. */
+    private Button monitorShow;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
     private Button monitorCameraStart, trayDetails;
@@ -308,9 +310,11 @@ public final class MainActivity extends Activity {
         LinearLayout hero = card(null); heroCard = hero;
         // Live camera on top while printing: the printer's own stream on this network, started by the user (then remembered),
         // and stopped whenever this tab or the app is out of sight. Through the cloud the button opens the cloud camera.
-        monitorCamera = new LinearLayout(this); monitorCamera.setOrientation(LinearLayout.VERTICAL); hero.addView(monitorCamera);
+        // Built here, placed under the progress bar and stat tiles below. Hide camera folds it to one Show camera button (remembered).
+        monitorCamera = new LinearLayout(this); monitorCamera.setOrientation(LinearLayout.VERTICAL);
+        monitorBody = new LinearLayout(this); monitorBody.setOrientation(LinearLayout.VERTICAL); monitorCamera.addView(monitorBody);
         // The picture sits in a frame with a small badge (where it comes from) and two overlay buttons; the frame shows and hides with it.
-        FrameLayout monitorFrame = new FrameLayout(this); monitorCamera.addView(monitorFrame, new LinearLayout.LayoutParams(-1, dp(200))); monitorFrame.setVisibility(View.GONE);
+        FrameLayout monitorFrame = new FrameLayout(this); monitorBody.addView(monitorFrame, new LinearLayout.LayoutParams(-1, dp(200))); monitorFrame.setVisibility(View.GONE);
         monitorImage = new ImageView(this) { @Override public void setVisibility(int visibility) { super.setVisibility(visibility); monitorFrame.setVisibility(visibility); } };
         monitorImage.setContentDescription("Live printer camera"); monitorImage.setScaleType(ImageView.ScaleType.FIT_CENTER); monitorImage.setBackgroundColor(Color.BLACK);
         monitorFrame.addView(monitorImage, new FrameLayout.LayoutParams(-1, -1)); monitorImage.setVisibility(View.GONE);
@@ -319,17 +323,18 @@ public final class MainActivity extends Activity {
         monitorFrame.addView(overlayButtons, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END));
         overlayChip(overlayButtons, "Snapshot", 0, this::saveSnapshot).setContentDescription("Save a snapshot of the camera to the phone");
         overlayChip(overlayButtons, "Full screen", 0, this::cameraFullScreen).setContentDescription("Show the camera full screen");
-        monitorCameraInfo = label(monitorCamera, "", 12, MUTED, false);
-        LinearLayout cameraButtons = row(monitorCamera);
+        monitorCameraInfo = label(monitorBody, "", 12, MUTED, false);
+        LinearLayout cameraButtons = row(monitorBody);
         monitorCameraStart = rowButton(cameraButtons, "Watch camera", this::monitorCameraTap, false);
+        rowButton(cameraButtons, "Hide camera", () -> hideMonitorCamera(true), false);
+        monitorShow = rowButton(row(monitorCamera), "Show camera", () -> hideMonitorCamera(false), false);
         monitorImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(monitorImage, "Show the camera full screen");
         // A dark chamber: offer the printer's light (sent only on this tap, like Light on below).
-        darkRow = new LinearLayout(this); darkRow.setOrientation(LinearLayout.VERTICAL); monitorCamera.addView(darkRow); darkRow.setVisibility(View.GONE);
+        darkRow = new LinearLayout(this); darkRow.setOrientation(LinearLayout.VERTICAL); monitorBody.addView(darkRow); darkRow.setVisibility(View.GONE);
         label(darkRow, "The picture is dark. The printer's light may be off. The phone is brightening the picture for now.", 12, MUTED, false);
         LinearLayout darkButtons = row(darkRow);
         rowButton(darkButtons, "Turn the light on", () -> { darkDismissed = true; darkRow.setVisibility(View.GONE); light(true); }, false);
         rowButton(darkButtons, "Not now", () -> { darkDismissed = true; darkRow.setVisibility(View.GONE); }, false);
-        View cameraGap = new View(this); monitorCamera.addView(cameraGap, new LinearLayout.LayoutParams(-1, dp(12)));
         LinearLayout heroRow = new LinearLayout(this); heroRow.setOrientation(LinearLayout.HORIZONTAL); heroRow.setGravity(Gravity.CENTER_VERTICAL); hero.addView(heroRow);
         // The file's own preview (from the printer), beside the job, as on the printer's screen.
         jobThumb = new ImageView(this); jobThumb.setScaleType(ImageView.ScaleType.FIT_CENTER); jobThumb.setContentDescription("Preview of the file being printed");
@@ -350,6 +355,7 @@ public final class MainActivity extends Activity {
         statsRow = new LinearLayout(this); statsRow.setOrientation(getResources().getConfiguration().fontScale >= 1.5f ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams statsLayout = new LinearLayout.LayoutParams(-1, -2); statsLayout.topMargin = dp(12); hero.addView(statsRow, statsLayout); statsRow.setVisibility(View.GONE);
         statElapsed = stat(statsRow, "Elapsed", 0); statRemaining = stat(statsRow, "Remaining", dp(8)); statLayer = stat(statsRow, "Layer", dp(8));
+        LinearLayout.LayoutParams cameraAt = new LinearLayout.LayoutParams(-1, -2); cameraAt.topMargin = dp(12); hero.addView(monitorCamera, cameraAt);
         // Pause / Resume and Stop sit with the job they act on; each still asks first.
         printRow = row(hero); ((LinearLayout.LayoutParams) printRow.getLayoutParams()).topMargin = dp(8);
         pause = rowButton(printRow, "Pause", () -> confirmCommand("Pause the current print?", Cc2Codec.PAUSE), true);
@@ -2054,10 +2060,16 @@ public final class MainActivity extends Activity {
         printRow.setVisibility(inJob ? View.VISIBLE : View.GONE); lightRow.setVisibility(noData || !canControl ? View.GONE : View.VISIBLE);
         // While a print runs and the printer reports its light, the switch sits with Pause and Stop instead of under Controls.
         boolean lightInRow = inJob && canControl && lightKnown;
-        printLight.setVisibility(lightInRow ? View.VISIBLE : View.GONE); printLight.setEnabled(lightInRow);
-        printLight.setText(lightIsOn ? "Light off" : "Light on"); printLight.setContentDescription(lightIsOn ? "Light off. The light is on now" : "Light on. The light is off now");
+        // Stop always stays in the row. When the light button comes, goes or changes its words, the row is measured again so
+        // each button's text is centred for its new width (a phone kept the old centring after the light was switched).
+        String lightText = lightIsOn ? "Light off" : "Light on"; int lightShown = lightInRow ? View.VISIBLE : View.GONE;
+        boolean rowChanged = printLight.getVisibility() != lightShown || !lightText.contentEquals(printLight.getText()) || stop.getVisibility() != View.VISIBLE;
+        stop.setVisibility(View.VISIBLE); printLight.setVisibility(lightShown); printLight.setEnabled(lightInRow);
+        if (!lightText.contentEquals(printLight.getText())) printLight.setText(lightText);
+        printLight.setContentDescription(lightIsOn ? "Light off. The light is on now" : "Light on. The light is off now");
         if (lightInRow) lightRow.setVisibility(View.GONE);
         spaceActions(printRow);
+        if (rowChanged) { for (int i = 0; i < printRow.getChildCount(); i++) printRow.getChildAt(i).requestLayout(); printRow.requestLayout(); printRow.invalidate(); }
         cancelUpload.setVisibility(busy ? View.VISIBLE : View.GONE); cancelDownload.setVisibility(printer != null && printer.downloading() ? View.VISIBLE : View.GONE);
         transferRow.setVisibility(cancelUpload.getVisibility() == View.VISIBLE || cancelDownload.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         renderFeatures(printer != null && printer.canQuery() && (ready || cloudOk), ready);
@@ -2148,7 +2160,9 @@ public final class MainActivity extends Activity {
         boolean cameraSectionOpen = opened[PRINT] == cameraSection;   // its own Start camera keeps the stream when nothing prints
         if (page == PRINT && cameraPlayer != null && !showCamera && !cameraSectionOpen) stopCamera();
         boolean ownCamera = ready || printer != null && printer.localCamera();   // the printer's own stream, locally or alongside the cloud
-        if (page == PRINT && active && showCamera && ownCamera && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
+        boolean cameraHidden = settings.getBoolean("printCameraHidden", false);
+        monitorBody.setVisibility(cameraHidden ? View.GONE : View.VISIBLE); ((View) monitorShow.getParent()).setVisibility(cameraHidden ? View.VISIBLE : View.GONE);
+        if (page == PRINT && active && showCamera && ownCamera && !cameraHidden && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
         monitorImage.setVisibility(showCamera && ownCamera && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
         if (!ready) monitorCameraStart.setText("Watch through the Elegoo cloud");
         else if (cameraPlayer == null && monitorCameraStart.getText().toString().startsWith("Watch through")) monitorCameraStart.setText("Watch camera");
@@ -2665,6 +2679,13 @@ public final class MainActivity extends Activity {
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
         button.setOnClickListener(view -> action.run()); row.addView(button, new LinearLayout.LayoutParams(-2, -2));
         return button;
+    }
+    /** Hide camera folds the Print tab's camera away (and stops its stream unless the Camera section uses it); Show camera brings it back. */
+    private void hideMonitorCamera(boolean hide) {
+        settings.edit().putBoolean("printCameraHidden", hide).apply();
+        if (hide && cameraPlayer != null && opened[PRINT] != cameraSection) stopCamera();
+        if (!hide) monitorCameraTried = false;   // a stream the user had on starts again
+        render();
     }
     /** The Print tab camera button: the local stream here (remembered for next time), or the cloud camera screen when only the cloud reaches the printer. */
     private void monitorCameraTap() {
