@@ -155,7 +155,8 @@ public class A11yRenderTest {
             .put("extruder", new JSONObject().put("temperature", 219.6).put("target", 220))
             .put("heater_bed", new JSONObject().put("temperature", 59.8).put("target", 60))
             .put("ztemperature_sensor", new JSONObject().put("temperature", 31.0))
-            .put("led", new JSONObject().put("status", 0));
+            .put("led", new JSONObject().put("status", 0))
+            .put("fans", new JSONObject().put("fan", new JSONObject().put("speed", 173)).put("aux_fan", new JSONObject().put("speed", 0)).put("box_fan", new JSONObject().put("speed", 77)));
     }
     private static JSONObject idle() throws Exception {
         return new JSONObject().put("machine_status", new JSONObject().put("status", 1).put("sub_status", 0).put("progress", 0))
@@ -226,6 +227,8 @@ public class A11yRenderTest {
                 assertEquals("1h 15m", ((TextView) field(activity, "statRemaining")).getText().toString());
                 android.widget.Button light = (android.widget.Button) field(activity, "printLight");
                 assertEquals(android.view.View.VISIBLE, light.getVisibility()); assertEquals("Light on", light.getText().toString());
+                assertEquals("68\u00a0%", ((TextView) field(activity, "tunePartFan")).getText().toString());
+                assertEquals("off", ((TextView) field(activity, "tuneAuxFan")).getText().toString());
                 assertEquals("the light switch is not shown twice", android.view.View.GONE, ((android.view.View) field(activity, "lightRow")).getVisibility());
                 android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(64, 36, android.graphics.Bitmap.Config.ARGB_8888); frame.eraseColor(0xff334048);
                 Field last = MainActivity.class.getDeclaredField("lastFrame"); last.setAccessible(true); last.set(activity, frame);

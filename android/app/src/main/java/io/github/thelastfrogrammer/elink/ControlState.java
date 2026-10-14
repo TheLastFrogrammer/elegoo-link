@@ -20,15 +20,15 @@ final class ControlState {
 
     /** Empty when maintenance can be started (idle, no faults); otherwise the reason. Only meaningful once controls are available. */
     static String upkeepReason(JSONObject snapshot) {
-        if (!StatusPresentation.faultCodes(snapshot).isEmpty()) return "The printer reports a fault. Clear it on the printer before maintenance.";
-        if (!Cc2Codec.idle(snapshot)) return "Maintenance needs an idle printer: wait for the print to finish, or stop it.";
+        if (!StatusPresentation.faultCodes(snapshot).isEmpty()) return "The printer reports a fault. Clear it on the printer before running maintenance.";
+        if (!Cc2Codec.idle(snapshot)) return "Maintenance needs an idle printer. Wait for the print to finish, or stop it.";
         return "";
     }
 
     /** One line saying which print settings apply in the current state. */
     static String tuningNote(JSONObject snapshot) {
         if (Cc2Codec.idle(snapshot)) return "Speed modes apply during a print.";
-        if (Cc2Codec.heatersAdjustable(snapshot)) return "Heater targets change the running print straight away; the sliced file is not changed.";
-        return "Heater temperatures and speed wait until the printer finishes what it is doing.";
+        if (Cc2Codec.heatersAdjustable(snapshot)) return "Heater targets change the running print right away. The sliced file stays the same.";
+        return "Heater temperatures and speed wait until the printer finishes its current task.";
     }
 }

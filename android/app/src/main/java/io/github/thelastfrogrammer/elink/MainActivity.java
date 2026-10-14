@@ -134,6 +134,8 @@ public final class MainActivity extends Activity {
     private Button monitorCameraStart, trayDetails;
     private SegmentBar jobBar;
     /** Dashboard pieces of the hero: "Done at" beside the percentage, the Elapsed / Remaining / Layer tiles, Light beside Pause and Stop, the camera's badge. */
+    /** Temperatures, fans & speed: what the heaters and fans are doing now, above the controls that change them. */
+    private TextView tuneNozzle, tuneBed, tunePartFan, tuneAuxFan, tuneChamberFan; private LinearLayout tuneReadout;
     private TextView doneText, statElapsed, statRemaining, statLayer, monitorBadge;
     private LinearLayout statsRow;
     private Button printLight;
@@ -406,10 +408,17 @@ public final class MainActivity extends Activity {
         emergencyButton(status);
         tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and print speed");
         filamentSection = section(PRINTER, "Filament", "Load or unload filament and CANVAS trays");
-        motionSection = section(PRINTER, "Move & calibrate", "Home, move axes, level the bed, vibration test and full self-check");
-        hybridSection = section(PRINTER, "Local and cloud together", "Your Wi-Fi alongside the Elegoo cloud: camera, files, LAN Only switching and tests");
+        motionSection = section(PRINTER, "Move & calibrate", "Home, move axes, level the bed, run a vibration test and a full self-check");
+        hybridSection = section(PRINTER, "Local and cloud together", "Your Wi-Fi and the Elegoo cloud: camera, files, LAN Only switching and tests");
         currentSection = tuningSection.body;
         LinearLayout tuning = card(null); tuningCard = tuning;
+        tuneReadout = new LinearLayout(this); tuneReadout.setOrientation(LinearLayout.VERTICAL); tuning.addView(tuneReadout);
+        boolean stackTiles = getResources().getConfiguration().fontScale >= 1.5f;
+        LinearLayout heatRow = new LinearLayout(this); heatRow.setOrientation(stackTiles ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL); tuneReadout.addView(heatRow);
+        tuneNozzle = stat(heatRow, "Nozzle", 0); tuneBed = stat(heatRow, "Bed", dp(8));
+        LinearLayout fanRow = new LinearLayout(this); fanRow.setOrientation(heatRow.getOrientation());
+        LinearLayout.LayoutParams fanRowAt = new LinearLayout.LayoutParams(-1, -2); fanRowAt.topMargin = dp(8); tuneReadout.addView(fanRow, fanRowAt);
+        tunePartFan = stat(fanRow, "Part fan", 0); tuneAuxFan = stat(fanRow, "Aux fan", dp(8)); tuneChamberFan = stat(fanRow, "Chamber fan", dp(8));
         tuningHint = label(tuning, "", 13, MUTED, false);
         heater = button(tuning, "Set heater temperatures now…", this::temperatureDialog);
         for (TextView t : new TextView[] {tileNozzle, tileBed}) { View tile = (View) t.getParent(); tile.setOnClickListener(v -> temperatureDialog()); tile.setClickable(false); A11y.clickLabel(tile, "Change heater targets"); }
@@ -426,7 +435,7 @@ public final class MainActivity extends Activity {
         emergencyButton(filament);
         // Spools: filament left per tray, estimated on this phone.
         LinearLayout spoolCard = card("Spools");
-        label(spoolCard, "About how much filament is left on each spool. Prints started from this app take their use off when they end. Tap a tray to set its spool.", 13, MUTED, false);
+        label(spoolCard, "About how much filament is left on each spool. Prints started from this app subtract their use when they finish. Tap a tray to set its spool.", 13, MUTED, false);
         spoolList = new LinearLayout(this); spoolList.setOrientation(LinearLayout.VERTICAL); spoolCard.addView(spoolList);
         currentSection = motionSection.body;
         LinearLayout upkeep = card(null); upkeepCard = upkeep;
@@ -436,9 +445,9 @@ public final class MainActivity extends Activity {
         homeAll = rowButton(motionRow, "Home all axes", () -> confirmRequest("Home all axes?", "The print head and bed move to their home positions. Keep the printer clear.", () -> Cc2Codec.homeRequest(0, "xyz")), false);
         jog = rowButton(motionRow, "Move axes…", this::jogDialog, false);
         LinearLayout calibrationRow = row(group);
-        autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Run auto bed leveling?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
-        vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration optimization?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
-        selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "Vibration optimization, heater (PID) check and bed leveling, as in Elegoo's app. This takes several minutes; keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
+        autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Level the bed automatically?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
+        vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration test?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
+        selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "The printer runs a vibration test, a heater (PID) check and bed leveling, as the official app does. This takes several minutes. Keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
         emergencyButton(upkeep);
         buildHybrid();
         currentSection = fronts[FILES];
@@ -856,7 +865,7 @@ public final class MainActivity extends Activity {
         if (printer == null || !printer.canvasFresh() || !printer.canvas.has("auto_refill")) return;
         boolean enabled = !printer.canvas.optBoolean("auto_refill");
         new AlertDialog.Builder(this).setTitle((enabled ? "Enable" : "Disable") + " automatic refill?")
-            .setMessage("This changes the printer's CANVAS automatic-refill setting. Tray selection and filament loading remain controlled by the printer.")
+            .setMessage("This changes the CANVAS automatic refill setting. The printer still controls tray selection and filament loading.")
             .setNegativeButton("Cancel", null).setPositiveButton(enabled ? "Enable" : "Disable", (dialog, which) -> { if (printer != null) printer.autoRefill(enabled); }).show();
     }
     /** Opens the tab another screen asked for (EXTRA_PAGE), once. */
@@ -1692,14 +1701,14 @@ public final class MainActivity extends Activity {
     private void temperatureDialog() {
         if (!Cc2Codec.heatersAdjustable(snapshot) || block != ControlState.Block.NONE) return;
         boolean during = !Cc2Codec.idle(snapshot);
-        LinearLayout body = dialogBody(); label(body, (during ? "This changes the running print's heaters straight away. A wrong temperature can spoil the print or the build plate's grip. " : "")
-            + "Nozzle 0–300°C, bed 0–100°C. Zero turns that heater off. It does not change the sliced file: set that in the filament's Settings… on the Slice screen. "
-            + "The chamber has a temperature sensor only, so there is no chamber target to set; the chamber fan is under Fan setting….", 14, INK, false);
+        LinearLayout body = dialogBody(); label(body, (during ? "This changes the heaters of the running print right away. A wrong temperature can spoil the print or weaken how it sticks to the bed. " : "")
+            + "Nozzle 0–300°C, bed 0–100°C. Enter 0 to turn that heater off. This does not change the sliced file; set that in the filament's Settings… on the Slice screen. "
+            + "The chamber has only a temperature sensor, so it has no target to set. Set the chamber fan under Fan setting….", 14, INK, false);
         EditText nozzle = input(body, "Nozzle target °C", false), bed = input(body, "Bed target °C", false); nozzle.setInputType(InputType.TYPE_CLASS_NUMBER); bed.setInputType(InputType.TYPE_CLASS_NUMBER);
         JSONObject n = snapshot.optJSONObject("extruder"), b = snapshot.optJSONObject("heater_bed"); nozzle.setText(String.valueOf(n == null ? 0 : n.optInt("target"))); bed.setText(String.valueOf(b == null ? 0 : b.optInt("target")));
         // Presets from the loaded CANVAS materials (and common ones): a tap fills both fields; nothing is sent until Set heaters.
         int presetsAt = body.indexOfChild(nozzle) - 1;   // above the nozzle field's caption
-        TextView presetsLabel = label(body, "Presets fill in both fields:", 13, MUTED, false); body.removeView(presetsLabel); body.addView(presetsLabel, presetsAt);
+        TextView presetsLabel = label(body, "Tap a preset to fill in both fields:", 13, MUTED, false); body.removeView(presetsLabel); body.addView(presetsLabel, presetsAt);
         HorizontalScrollView presetScroll = new HorizontalScrollView(this); presetScroll.setHorizontalScrollBarEnabled(false);
         LinearLayout presets = new LinearLayout(this); presets.setOrientation(LinearLayout.HORIZONTAL); presetScroll.addView(presets);
         for (TemperaturePresets.Preset preset : TemperaturePresets.from(printer == null ? null : printer.canvas)) {
@@ -1717,10 +1726,16 @@ public final class MainActivity extends Activity {
         LinearLayout body = dialogBody(); Spinner kind = spinner(body, new String[] {"Part cooling", "Auxiliary", "Chamber"}); A11y.name(kind, "Fan");
         TextView value = label(body, "Fan: 0%", 15, INK, false); SeekBar amount = new SeekBar(this); amount.setMax(100); body.addView(amount); A11y.labelFor(value, amount);
         amount.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { public void onProgressChanged(SeekBar bar, int progress, boolean user) { value.setText("Fan: " + progress + "%"); } public void onStartTrackingTouch(SeekBar bar) { } public void onStopTrackingTouch(SeekBar bar) { } });
+        // The slider starts at the chosen fan's current speed (as reported), so Set fan without moving it changes nothing.
+        String[] keys = {"fan", "aux_fan", "box_fan"};
+        kind.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { amount.setProgress(Math.max(0, fanPercent(keys[position]))); value.setText("Fan: " + amount.getProgress() + "%"); }
+            public void onNothingSelected(AdapterView<?> parent) { } });
+        amount.setProgress(Math.max(0, fanPercent(keys[0])));
         new AlertDialog.Builder(this).setTitle("Fan setting").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set fan", (dialog, which) -> { if (printer != null) printer.fan(new String[] {"fan", "aux_fan", "box_fan"}[kind.getSelectedItemPosition()], amount.getProgress()); }).show();
     }
     private void speedDialog() { new AlertDialog.Builder(this).setTitle("Print speed mode").setItems(new String[] {"Silent", "Balanced", "Sport", "Ludicrous"}, (dialog, which) -> {
-        new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the current print's speed mode. Filament changes may reset the mode on some firmware.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
+        new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the speed mode of the current print. On some firmware, a filament change can reset it.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
     }).setNegativeButton("Cancel", null).show(); }
     private void buildCamera() {
         // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
@@ -2021,13 +2036,16 @@ public final class MainActivity extends Activity {
         // The temperature tiles open the same dialog when the heaters can be changed (as on the printer's own screen).
         for (TextView t : new TextView[] {tileNozzle, tileBed}) ((View) t.getParent()).setClickable(canControl && heatersOk); speed.setVisibility(pausable ? View.VISIBLE : View.GONE);
         tuningHint.setText(ControlState.tuningNote(snapshot));
+        setTile(tuneNozzle, temperature("extruder")); setTile(tuneBed, temperature("heater_bed"));
+        setTile(tunePartFan, fanText("fan")); setTile(tuneAuxFan, fanText("aux_fan")); setTile(tuneChamberFan, fanText("box_fan"));
+        tuneReadout.setVisibility(snapshot.length() == 0 ? View.GONE : View.VISIBLE);
         String upkeepReason = ControlState.upkeepReason(snapshot);
         boolean upkeepOk = canControl && upkeepReason.isEmpty();
         for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
         trayFilament.setEnabled(upkeepOk && printer.canvas != null);
         for (Button stop : emergencyStops) { stop.setEnabled(canControl); stop.setVisibility(canControl ? View.VISIBLE : View.GONE); }
         upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE); filamentButtons.setVisibility(upkeepButtons.getVisibility());
-        upkeepHint.setText(upkeepOk ? "Follows Elegoo's own printer page. Never repeated automatically." : upkeepReason + " Emergency stop stays available.");
+        upkeepHint.setText(upkeepOk ? "Each tap sends one command. Nothing here is repeated automatically." : upkeepReason + " Emergency stop stays available.");
         // On a new install the Get started card already offers Find, Sign in and Slice, so the empty Controls card waits.
         controlsCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
         // On first run the Get started card already says how to connect; the "Not connected" summary would repeat it.
@@ -2357,6 +2375,12 @@ public final class MainActivity extends Activity {
         styled.setSpan(new android.text.style.RelativeSizeSpan(0.62f), split, text.length(), 0);
         styled.setSpan(new android.text.style.ForegroundColorSpan(MUTED), split, text.length(), 0);
         view.setText(styled);
+    }
+    /** A fan's speed as the printer reports it (0-255), in percent: "68 %", "off" or "—" when not reported. */
+    private String fanText(String key) { int percent = fanPercent(key); return percent < 0 ? "—" : percent == 0 ? "off" : percent + "\u00a0%"; }
+    private int fanPercent(String key) {
+        JSONObject fans = snapshot.optJSONObject("fans"), fan = fans == null ? null : fans.optJSONObject(key);
+        return fan == null || !fan.has("speed") ? -1 : (int) Math.round(fan.optDouble("speed", 0) * 100 / 255);
     }
     /** "219°" over "↑ heating to 220°", "↓ cooling to 60°", "at 220°" or "off". */
     private String temperature(String key) {
