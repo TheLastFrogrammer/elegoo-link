@@ -131,6 +131,8 @@ public final class MainActivity extends Activity {
     private LinearLayout monitorCamera, monitorBody, trayStrip;
     /** Show camera: the one button left when the Print tab's camera is hidden. */
     private Button monitorShow;
+    /** The cloud video playing inside the Print tab's camera block (cloud mode), or null; and the frame that holds the picture. */
+    private CloudVideo cloudVideo; private FrameLayout monitorFrame; private boolean pendingCloudSnapshot;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
     private Button monitorCameraStart, trayDetails;
@@ -314,7 +316,7 @@ public final class MainActivity extends Activity {
         monitorCamera = new LinearLayout(this); monitorCamera.setOrientation(LinearLayout.VERTICAL);
         monitorBody = new LinearLayout(this); monitorBody.setOrientation(LinearLayout.VERTICAL); monitorCamera.addView(monitorBody);
         // The picture sits in a frame with a small badge (where it comes from) and two overlay buttons; the frame shows and hides with it.
-        FrameLayout monitorFrame = new FrameLayout(this); monitorBody.addView(monitorFrame, new LinearLayout.LayoutParams(-1, dp(200))); monitorFrame.setVisibility(View.GONE);
+        monitorFrame = new FrameLayout(this); monitorBody.addView(monitorFrame, new LinearLayout.LayoutParams(-1, dp(200))); monitorFrame.setVisibility(View.GONE);
         monitorImage = new ImageView(this) { @Override public void setVisibility(int visibility) { super.setVisibility(visibility); monitorFrame.setVisibility(visibility); } };
         monitorImage.setContentDescription("Live printer camera"); monitorImage.setScaleType(ImageView.ScaleType.FIT_CENTER); monitorImage.setBackgroundColor(Color.BLACK);
         monitorFrame.addView(monitorImage, new FrameLayout.LayoutParams(-1, -1)); monitorImage.setVisibility(View.GONE);
@@ -1827,6 +1829,7 @@ public final class MainActivity extends Activity {
     }
     /** The camera full screen: pinch or double tap to zoom, drag to move, and buttons for the same and for brightening. */
     private void cameraFullScreen() {
+        if (cloudVideo != null) { cloudCamera.performClick(); return; }   // the cloud camera's own full screen (this one stops first)
         if (lastFrame == null) return;
         android.app.Dialog dialog = new android.app.Dialog(this, android.R.style.Theme_Black_NoTitleBar_Fullscreen);
         android.widget.FrameLayout stage = new android.widget.FrameLayout(this); stage.setBackgroundColor(Color.BLACK);
@@ -1852,7 +1855,34 @@ public final class MainActivity extends Activity {
         bar.addView(b, new LinearLayout.LayoutParams(0, -2, 1)); return b;
     }
     private void stopCamera() {
-        android.app.Dialog full = fullDialog; fullDialog = null; fullView = null; if (full != null && full.isShowing()) full.dismiss(); AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); }
+        android.app.Dialog full = fullDialog; fullDialog = null; fullView = null; if (full != null && full.isShowing()) full.dismiss(); AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); stopCloudVideo(); }
+    private void stopCloudVideo() { CloudVideo video = cloudVideo; cloudVideo = null; if (video != null) video.stop(); }
+    /** Cloud mode: plays the printer's camera through the Elegoo cloud right here under the progress bar (after the one-time cloud agreement). */
+    private void startCloudVideo() {
+        if (printer == null || printer.cloudSerial.isEmpty() || cloudVideo != null) return;
+        if (!CloudVideo.supported()) { monitorCameraInfo.setText("The camera needs a newer Android System WebView. Update it from the Play Store."); monitorCameraInfo.setVisibility(View.VISIBLE); return; }
+        String serialNumber = printer.cloudSerial;
+        cloudGate(true, () -> {
+            stopCamera();
+            CloudVideo[] self = new CloudVideo[1];
+            self[0] = new CloudVideo(this, serialNumber, () -> printer, new CloudVideo.Listener() {
+                public void status(String text, boolean problem) {
+                    if (cloudVideo != self[0] || isDestroyed()) return;
+                    monitorCameraInfo.setText(text); monitorCameraInfo.setTextColor(problem ? ERROR : MUTED); monitorCameraInfo.setVisibility(View.VISIBLE);
+                    if (problem) { stopCloudVideo(); render(); }
+                }
+                public void playing() { if (cloudVideo != self[0] || isDestroyed()) return; monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE); render(); }
+                public void snapshot(byte[] jpeg) {
+                    Bitmap picture = jpeg == null ? null : android.graphics.BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
+                    if (picture == null) { pendingCloudSnapshot = false; message("No camera picture yet. Wait for the video to appear, then try again."); return; }
+                    lastFrame = picture; saveSnapshot();
+                }
+            });
+            cloudVideo = self[0];
+            monitorFrame.addView(cloudVideo.view(), 1, new FrameLayout.LayoutParams(-1, -1));   // over the last picture, under the badge and buttons
+            cloudVideo.start(); render();
+        });
+    }
     /** Recording pictures: the default interval (Settings) or the running print's own (Print tab). 0 = none. */
     private Button pictureDefault;
     private static final int[] PICTURE_MINUTES = {0, 1, 2, 5, 10, 15, 30, 60};
@@ -2158,15 +2188,15 @@ public final class MainActivity extends Activity {
         boolean showCamera = inJobNow && (ready || cloudCameraOk);
         monitorCamera.setVisibility(showCamera ? View.VISIBLE : View.GONE);
         boolean cameraSectionOpen = opened[PRINT] == cameraSection;   // its own Start camera keeps the stream when nothing prints
-        if (page == PRINT && cameraPlayer != null && !showCamera && !cameraSectionOpen) stopCamera();
+        if (page == PRINT && (cameraPlayer != null || cloudVideo != null) && !showCamera && !cameraSectionOpen) stopCamera();
         boolean ownCamera = ready || printer != null && printer.localCamera();   // the printer's own stream, locally or alongside the cloud
         boolean cameraHidden = settings.getBoolean("printCameraHidden", false);
         monitorBody.setVisibility(cameraHidden ? View.GONE : View.VISIBLE); ((View) monitorShow.getParent()).setVisibility(cameraHidden ? View.VISIBLE : View.GONE);
         if (page == PRINT && active && showCamera && ownCamera && !cameraHidden && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
-        monitorImage.setVisibility(showCamera && ownCamera && (cameraPlayer != null || lastFrame != null) ? View.VISIBLE : View.GONE);
-        if (!ready) monitorCameraStart.setText("Watch through the Elegoo cloud");
-        else if (cameraPlayer == null && monitorCameraStart.getText().toString().startsWith("Watch through")) monitorCameraStart.setText("Watch camera");
-        monitorBadge.setText(cameraPlayer != null ? "● Live" : "Last picture");
+        if (page == PRINT && active && showCamera && !ownCamera && !cameraHidden && cloudVideo == null && !monitorCameraTried && cloudOk && settings.getBoolean("monitorCloudCamera", false)) { monitorCameraTried = true; startCloudVideo(); }
+        monitorImage.setVisibility(showCamera && (ownCamera ? cameraPlayer != null || lastFrame != null : cloudVideo != null) ? View.VISIBLE : View.GONE);
+        monitorCameraStart.setText(cameraPlayer != null || cloudVideo != null ? "Stop camera" : "Watch camera");
+        monitorBadge.setText(cloudVideo != null ? (cloudVideo.playing() ? "● Live · cloud" : "Connecting…") : cameraPlayer != null ? "● Live" : "Last picture");
         if (monitorCameraInfo.getText().length() == 0) monitorCameraInfo.setVisibility(View.GONE);
         spaceActions((LinearLayout) monitorCameraStart.getParent());
         graphs.setText("Print recordings");
@@ -2683,7 +2713,7 @@ public final class MainActivity extends Activity {
     /** Hide camera folds the Print tab's camera away (and stops its stream unless the Camera section uses it); Show camera brings it back. */
     private void hideMonitorCamera(boolean hide) {
         settings.edit().putBoolean("printCameraHidden", hide).apply();
-        if (hide && cameraPlayer != null && opened[PRINT] != cameraSection) stopCamera();
+        if (hide && (cameraPlayer != null || cloudVideo != null) && opened[PRINT] != cameraSection) stopCamera();
         if (!hide) monitorCameraTried = false;   // a stream the user had on starts again
         render();
     }
@@ -2694,7 +2724,12 @@ public final class MainActivity extends Activity {
             settings.edit().putBoolean("monitorCamera", on).apply(); monitorCameraTried = true;
             if (on) toggleCamera(); else stopCamera();
             render();
-        } else cloudCamera.performClick();
+        } else {
+            // Through the cloud the video plays here too; remembered like the local one, so it comes back when this tab shows a print.
+            boolean on = cloudVideo == null;
+            settings.edit().putBoolean("monitorCloudCamera", on).apply(); monitorCameraTried = true;
+            if (on) startCloudVideo(); else { stopCamera(); render(); }
+        }
     }
     /** Header printer name: pick another saved printer. Connecting is a read; nothing is sent to either printer, and a running print carries on. */
     private void switchPrinter() {
@@ -2793,6 +2828,8 @@ public final class MainActivity extends Activity {
     }
     /** Asks where to save the camera's latest picture, then saves it (onActivityResult). */
     private void saveSnapshot() {
+        if (cloudVideo != null && pendingCloudSnapshot) { pendingCloudSnapshot = false; }
+        else if (cloudVideo != null) { pendingCloudSnapshot = true; cloudVideo.snapshot(); return; }
         if (lastFrame == null) { message("No camera picture yet. Start the camera first."); return; }
         pendingSnapshot = lastFrame.copy(Bitmap.Config.ARGB_8888, false);
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("image/jpeg").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, "CC2-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".jpg"); startActivityForResult(intent, PICK_SNAPSHOT);
