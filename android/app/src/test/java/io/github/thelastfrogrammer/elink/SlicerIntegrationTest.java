@@ -89,6 +89,8 @@ public class SlicerIntegrationTest {
         assertTrue(gcode.contains("; thumbnail begin 144x144 "));
         GcodeInspector.Report report = GcodeInspector.inspect(output);
         assertNotNull(report.thumbnail);
+        assertTrue("the CC2 start loads filament from the trays", report.loadsFilament);
+        assertEquals("a CC2 slice raises no printer warning", "", report.compatibilityWarning());
         android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
         assertNotNull(preview);
         assertEquals(144, preview.getWidth());

@@ -36,14 +36,34 @@ public final class GcodeInspector {
         public final EmbeddedThumbnail thumbnail;
         public final String thumbnailNote;
         public final SlicedMaterials materials;
-        private Report(long bytes, long lines, String hash, boolean binary, boolean longLines, SortedSet<Integer> tools, Map<String, String> metadata, EmbeddedThumbnail thumbnail, String thumbnailNote, SlicedMaterials materials) {
+        /** The file loads filament itself: an M6211 (Elegoo's CC2 load-from-tray step in its start G-code) was seen. */
+        public final boolean loadsFilament;
+        private Report(long bytes, long lines, String hash, boolean binary, boolean longLines, SortedSet<Integer> tools, Map<String, String> metadata, EmbeddedThumbnail thumbnail, String thumbnailNote, SlicedMaterials materials, boolean loadsFilament) {
+            this.loadsFilament = loadsFilament;
             this.bytes = bytes; this.lines = lines; sha256 = hash; this.binary = binary; this.longLines = longLines;
             this.tools = Collections.unmodifiableSortedSet(new TreeSet<>(tools));
             this.metadata = Collections.unmodifiableMap(new LinkedHashMap<>(metadata));
             this.thumbnail = thumbnail; this.thumbnailNote = thumbnailNote; this.materials = materials;
         }
+        /**
+         * A plain warning when the file looks made for another printer, or never loads filament: a CC2 start (Elegoo's CC2
+         * profile) loads the tray's filament into the toolhead with M6211 and selects it with T0; a file without either can
+         * print its purge line from what is left in the nozzle and then stop extruding. "" when nothing looks wrong.
+         */
+        public String compatibilityWarning() {
+            if (binary) return "";
+            String model = metadata.getOrDefault("Configured printer model", "");
+            String lower = model.toLowerCase(Locale.ROOT);
+            boolean otherPrinter = !model.isEmpty() && !(lower.contains("carbon 2") || lower.contains("cc2"));
+            boolean noLoad = !loadsFilament && tools.isEmpty();
+            if (otherPrinter) return "Sliced for " + model + ", not the Centauri Carbon 2." + (noLoad ? " It never loads filament from the trays, so the print may extrude its purge line and then stop." : "")
+                + " Re-slice it with a Centauri Carbon 2 printer profile.";
+            if (noLoad) return "This file never loads filament from the trays (no tool selection), so the print may extrude its purge line and then stop. Re-slice it with a Centauri Carbon 2 printer profile.";
+            return "";
+        }
         public String text() {
             StringBuilder s = new StringBuilder("Offline G-code inspection\n" + FeatureData.size(bytes) + " · " + lines + " line(s)\nSHA-256: " + sha256);
+            String warning = compatibilityWarning(); if (!warning.isEmpty()) s.append("\nWarning: ").append(warning);
             if (binary) s.append("\nBinary/non-text bytes detected. Text metadata and tool selections are unavailable; use plain-text G-code.");
             else {
                 s.append("\n").append(thumbnailNote);
@@ -62,7 +82,7 @@ public final class GcodeInspector {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         Map<String, String> metadata = new LinkedHashMap<>(), rawMaterials = new LinkedHashMap<>(); EmbeddedThumbnail.Parser thumbnails = new EmbeddedThumbnail.Parser(); SortedSet<Integer> tools = new TreeSet<>();
         byte[] buffer = new byte[65536]; ByteArrayOutputStream line = new ByteArrayOutputStream();
-        long bytes = 0, lines = 0; boolean binary = false, longLines = false, skip = false, pending = false;
+        long bytes = 0, lines = 0; boolean binary = false, longLines = false, skip = false, pending = false; boolean[] loads = {false};
         try (InputStream input = new BufferedInputStream(new FileInputStream(file))) {
             int count;
             while ((count = input.read(buffer)) != -1) {
@@ -72,7 +92,7 @@ public final class GcodeInspector {
                     int c = buffer[i] & 255;
                     if (c < 32 && c != 9 && c != 10 && c != 13) binary = true;
                     if (c == 10) {
-                        lines++; if (!skip && !binary) accept(new String(line.toByteArray(), StandardCharsets.UTF_8), metadata, tools, rawMaterials, thumbnails);
+                        lines++; if (!skip && !binary) accept(new String(line.toByteArray(), StandardCharsets.UTF_8), metadata, tools, rawMaterials, thumbnails, loads);
                         line.reset(); skip = false; pending = false;
                     } else {
                         pending = true;
@@ -81,13 +101,13 @@ public final class GcodeInspector {
                 }
             }
         }
-        if (pending) { lines++; if (!skip && !binary) accept(new String(line.toByteArray(), StandardCharsets.UTF_8), metadata, tools, rawMaterials, thumbnails); }
+        if (pending) { lines++; if (!skip && !binary) accept(new String(line.toByteArray(), StandardCharsets.UTF_8), metadata, tools, rawMaterials, thumbnails, loads); }
         thumbnails.finish();
         if (binary) { metadata.clear(); tools.clear(); rawMaterials.clear(); }
         StringBuilder hash = new StringBuilder(); for (byte b : digest.digest()) hash.append(String.format(Locale.ROOT, "%02x", b & 255));
-        return new Report(bytes, lines, hash.toString(), binary, longLines, tools, metadata, binary ? null : thumbnails.best(), binary ? "Text analysis unavailable." : thumbnails.note(), SlicedMaterials.from(rawMaterials, longLines || binary));
+        return new Report(bytes, lines, hash.toString(), binary, longLines, tools, metadata, binary ? null : thumbnails.best(), binary ? "Text analysis unavailable." : thumbnails.note(), SlicedMaterials.from(rawMaterials, longLines || binary), !binary && loads[0]);
     }
-    private static void accept(String supplied, Map<String, String> metadata, SortedSet<Integer> tools, Map<String,String> rawMaterials, EmbeddedThumbnail.Parser thumbnails) {
+    private static void accept(String supplied, Map<String, String> metadata, SortedSet<Integer> tools, Map<String,String> rawMaterials, EmbeddedThumbnail.Parser thumbnails, boolean[] loads) {
         String line = supplied.trim(); if (line.startsWith("\uFEFF")) line = line.substring(1).trim();
         if (thumbnails.accept(line)) return;
         if (line.startsWith(";")) {
@@ -100,6 +120,7 @@ public final class GcodeInspector {
             return;
         }
         int semicolon = line.indexOf(';'); if (semicolon >= 0) line = line.substring(0, semicolon).trim();
+        if (line.regionMatches(true, 0, "M6211", 0, 5) && (line.length() == 5 || line.charAt(5) == ' ')) loads[0] = true;
         // Ignore parenthetical text: a T command inside a comment is not an observed selection.
         if (line.indexOf('(') >= 0) line = line.replaceAll("\\([^)]*\\)", "").trim();
         if (line.isEmpty() || "TtNn".indexOf(line.charAt(0)) < 0) return;

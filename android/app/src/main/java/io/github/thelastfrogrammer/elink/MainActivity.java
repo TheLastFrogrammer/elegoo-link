@@ -26,7 +26,7 @@ public final class MainActivity extends Activity {
     private android.net.Uri pendingExportUri;
     private TextView inspection;
     private ImageView filePreview;
-    private TextView previewInfo;
+    private TextView previewInfo, previewWarning;
     private LinearLayout timelapseList;
     private String saveAfterDownload, pendingPrintSetup;
     /** Intent extra: the tab to open (FeatureIndex.PRINT … SETTINGS), from another screen's hint. Settings opens on its connection section. */
@@ -431,11 +431,13 @@ public final class MainActivity extends Activity {
         filePreview = new ImageView(this); filePreview.setContentDescription("Embedded slicer preview of selected G-code"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
         LinearLayout.LayoutParams previewLayout = new LinearLayout.LayoutParams(-1, dp(180)); previewLayout.topMargin = dp(10); fileDetails.addView(filePreview, previewLayout); filePreview.setVisibility(View.GONE);
         previewInfo = label(fileDetails, "", 12, MUTED, false);
+        previewWarning = A11y.polite(label(fileDetails, "", 14, ERROR, true)); previewWarning.setVisibility(View.GONE);
         LinearLayout uploadRow = row(fileDetails);
         upload = rowButton(uploadRow, "Upload", () -> {
             if (printer == null || printer.selectedName == null) return;
+            String warning = printer.selectedReport == null ? "" : printer.selectedReport.compatibilityWarning();
             new AlertDialog.Builder(this).setTitle("Upload " + printer.selectedName + "?")
-                .setMessage("This only sends the file. " + (printer.nameOnPrinter(printer.selectedName) ? "A file with this name is already on the printer, so uploading replaces it. " : "Any file with the same name is replaced. ") + "Refresh the file list after uploading, then choose Print setup to start it.")
+                .setMessage((warning.isEmpty() ? "" : "Warning: " + warning + "\n\n") + "This only sends the file. " + (printer.nameOnPrinter(printer.selectedName) ? "A file with this name is already on the printer, so uploading replaces it. " : "Any file with the same name is replaced. ") + "Refresh the file list after uploading, then choose Print setup to start it.")
                 .setNegativeButton("Cancel", null).setPositiveButton("Upload", (dialog, which) -> { if (printer != null) printer.upload(); }).show();
         }, true);
         LinearLayout viewRow = row(fileDetails);
@@ -2026,6 +2028,8 @@ public final class MainActivity extends Activity {
         fileDetails.setVisibility(printer != null && (printer.selectedFile != null || printer.importing) ? View.VISIBLE : View.GONE);
         if (!hasReport && printer != null && printer.importing) inspection.setText("Importing and inspecting G-code…");
         filePreview.setImageBitmap(hasReport ? printer.selectedThumbnail : null); filePreview.setVisibility(hasReport && printer.selectedThumbnail != null ? View.VISIBLE : View.GONE);
+        String fileWarning = hasReport ? report.compatibilityWarning() : "";
+        previewWarning.setText(fileWarning); previewWarning.setVisibility(fileWarning.isEmpty() ? View.GONE : View.VISIBLE);
         previewInfo.setText(!hasReport ? "" : report.thumbnail == null ? report.thumbnailNote : printer.selectedThumbnail == null ? "Embedded image found but Android could not decode it. File inspection remains available." : report.thumbnailNote + " · slicer image, not a live camera or motion simulation");
         materialDetails.setEnabled(hasReport && !report.materials.entries.isEmpty());
         previewToolpath.setEnabled(printer != null && printer.selectedFile != null && !printer.importing);
