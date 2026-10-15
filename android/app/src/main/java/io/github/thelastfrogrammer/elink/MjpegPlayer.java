@@ -37,7 +37,11 @@ public final class MjpegPlayer implements AutoCloseable {
                         Thread.sleep(200);
                     }
                 }
-            } catch (Exception error) { if (!closed) main.post(() -> { if (!closed) listener.error("Camera unavailable. Check its current URL, selected connection route, and camera port. Stop and retry to reconnect."); }); }
+            } catch (Exception error) {
+                // The kind of failure (refused, timed out, no route, …) says whether the port is closed or the printer is unreachable.
+                String kind = error.getClass().getSimpleName() + (error.getMessage() == null ? "" : ": " + error.getMessage().replaceAll("\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?", "<printer>"));
+                if (!closed) main.post(() -> { if (!closed) listener.error("Camera unavailable (" + kind + "). Check its current URL, selected connection route, and camera port. Stop and retry to reconnect."); });
+            }
             finally { HttpURLConnection stream = connection; if (stream != null) stream.disconnect(); connection = null; }
         });
     }

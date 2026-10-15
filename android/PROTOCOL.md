@@ -432,3 +432,6 @@ so 1042 is not what starts the cloud video. Whether the 8080 stream answers righ
 (0.47.2 offers the one-per-run Wi-Fi try from the answer dialog and logs how long after the question it ran).
 A second join with the same account while another view still held the channel ended with Agora `UID_BANNED`; the Print
 tab now waits for the cloud camera screen to let go, and the full screen waits for the Print tab's video to leave.
+Result (2026-10-14, 0.47.2): the one Wi-Fi try of the 8080 stream, 11 s after a successful 1042 answer through the cloud,
+failed in cloud mode, and the cloud channel stayed empty again. On this firmware in cloud mode neither the cloud video nor
+the local stream reached the app. 0.47.3 logs the network error kind of a failed stream (refused, timeout, …).

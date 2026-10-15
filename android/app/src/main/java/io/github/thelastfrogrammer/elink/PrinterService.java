@@ -876,7 +876,7 @@ public final class PrinterService extends Service {
                 }
                 public void error(String message) {
                     synchronized (done) { if (done[0]) return; done[0] = true; }
-                    close.run(); finishCameraTry(false, "The printer's camera stream did not open in " + mode + ": " + StatusPresentation.clean(message) + " The cloud camera stays in use.", "failed in " + mode);
+                    close.run(); finishCameraTry(false, "The printer's camera stream did not open in " + mode + ": " + StatusPresentation.clean(message) + " The cloud camera stays in use.", "failed in " + mode + ": " + Diagnostics.scrub(StatusPresentation.clean(message)));
                 }
             });
             main.postDelayed(() -> {
