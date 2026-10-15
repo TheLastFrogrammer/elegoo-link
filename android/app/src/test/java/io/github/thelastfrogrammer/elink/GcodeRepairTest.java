@@ -39,4 +39,9 @@ public class GcodeRepairTest {
         GcodeRepair.Result result = GcodeRepair.addFilamentLoad(write("G28\nG92 E0\nG1 E5 F300\n"), out, 0, 220);
         assertEquals(3, result.line); assertEquals(220, result.temperature);
     }
+    @Test public void theTrayChoiceNamesWhatIsLoaded() throws Exception {
+        org.json.JSONObject canvas = new org.json.JSONObject("{\"canvas_list\":[{\"canvas_id\":0,\"tray_list\":[{\"tray_id\":1,\"filament_type\":\"PLA\",\"filament_color\":\"#D02828\"}]}]}");
+        assertTrue(TrayPlan.trayWords(canvas, 1), TrayPlan.trayWords(canvas, 1).startsWith(" · PLA, "));
+        assertEquals("", TrayPlan.trayWords(canvas, 0)); assertEquals("", TrayPlan.trayWords(null, 0));
+    }
 }

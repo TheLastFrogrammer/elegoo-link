@@ -181,4 +181,17 @@ final class TrayPlan {
         for (String preset : presets) if ((" " + preset.toLowerCase(Locale.ROOT) + " ").contains(type)) return preset;
         return fallback;
     }
+    /** " · PLA, red" for tray `tray` (0-3) of the first CANVAS unit when the printer reported it, else "". */
+    static String trayWords(org.json.JSONObject canvas, int tray) {
+        org.json.JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
+        org.json.JSONObject unit = units == null ? null : units.optJSONObject(0);
+        org.json.JSONArray list = unit == null ? null : unit.optJSONArray("tray_list");
+        for (int i = 0; list != null && i < list.length(); i++) {
+            org.json.JSONObject t = list.optJSONObject(i); if (t == null || t.optInt("tray_id", -1) != tray) continue;
+            String type = StatusPresentation.clean(t.optString("filament_type", "")), hex = colour(t.optString("filament_color"));
+            String name = hex == null ? null : WorkshopUi.colourName(hex);
+            return type.isEmpty() && name == null ? "" : " · " + type + (name == null ? "" : (type.isEmpty() ? "" : ", ") + name);
+        }
+        return "";
+    }
 }
