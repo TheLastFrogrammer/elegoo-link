@@ -426,3 +426,9 @@ Five more joins (0.47.0) all found the channel empty. Camera check now has "Try:
 Elegoo's read-only 1042 (GetLivingVideoUrl) once through the cloud, only when tapped and confirmed, and logs the answer's
 fields and the kind of address (never the address). 1042 stays off the general cloud route (`CloudControl.allowed`); only
 `askCamera` sends it. The question is whether the printer joins its video channel after it.
+Result (2026-10-14): in cloud mode 1042 through the cloud answered `error_code 0` with `url` = http on the printer's
+private address, port 8080, path `/`. The printer still did not join its video channel afterwards (0 members for 20 s),
+so 1042 is not what starts the cloud video. Whether the 8080 stream answers right after the question is the next test
+(0.47.2 offers the one-per-run Wi-Fi try from the answer dialog and logs how long after the question it ran).
+A second join with the same account while another view still held the channel ended with Agora `UID_BANNED`; the Print
+tab now waits for the cloud camera screen to let go, and the full screen waits for the Print tab's video to leave.

@@ -850,6 +850,8 @@ public final class PrinterService extends Service {
      * 12 seconds, then closes it. On success the local camera can be used alongside the cloud.
      */
     private boolean cameraTried;
+    /** When the cloud camera question (1042) was last answered, for the camera log of the Wi-Fi try after it. */
+    private volatile long cameraQuestionAt;
     public boolean localCameraTried() { return cameraTried && !ready(); }
     public void tryLocalCamera() {
         if (localCameraTrying) return;
@@ -885,6 +887,8 @@ public final class PrinterService extends Service {
     }
     private void finishCameraTry(boolean ok, String text, String note) {
         Diagnostics.note(Diagnostics.HYBRID, "try local camera: " + note);
+        long sinceQuestion = cameraQuestionAt == 0 ? -1 : (SystemClock.elapsedRealtime() - cameraQuestionAt) / 1000;
+        Diagnostics.note(Diagnostics.CAMERA, "printer's own camera on Wi-Fi (one try this app run): " + note + (sinceQuestion >= 0 && sinceQuestion < 600 ? ", " + sinceQuestion + " s after the camera question" : ""));
         main.post(() -> { localCameraTrying = false; localCameraText = text; if (ok) workshop().edit().putBoolean("localCameraInCloud", true).apply(); changed(); });
     }
 
@@ -1345,6 +1349,7 @@ public final class PrinterService extends Service {
             public void done(boolean acknowledged, String text) { done(acknowledged, text, new JSONObject()); }
             public void done(boolean acknowledged, String text, JSONObject result) {
                 String summary = CloudControl.describeCameraAnswer(acknowledged, text, result);
+                if (acknowledged) cameraQuestionAt = SystemClock.elapsedRealtime();
                 Diagnostics.note(Diagnostics.CAMERA, "camera question answer: " + summary);
                 main.post(() -> done.accept(summary));
             }

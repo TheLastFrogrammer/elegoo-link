@@ -1764,7 +1764,12 @@ public final class MainActivity extends Activity {
         cloudCamera = button(cloudCard, "Watch through the Elegoo cloud", () -> {
             if (printer == null || printer.cloudSerial.isEmpty()) return;
             String serialNumber = printer.cloudSerial, printerName = printer.cloudName;
-            cloudGate(true, () -> { stopCamera(); startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName)); });
+            cloudGate(true, () -> {
+                // The Print tab's video leaves the channel first (one join per account), then the full screen joins.
+                boolean leaving = cloudVideo != null; stopCamera();
+                Runnable open = () -> startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName));
+                if (leaving) main.postDelayed(open, 1_500); else open.run();
+            });
         });
         cameraLocalCard = card("Local camera");
         localToggle = button(cameraLocalCard, "", () -> { localCameraOpen = !localCameraOpen; render(); });
@@ -1957,8 +1962,12 @@ public final class MainActivity extends Activity {
                     if (isDestroyed()) return;
                     cameraAskButton.setEnabled(true);
                     cameraCheckText.setText("Camera question: " + answer + "\n\nNext: open the cloud camera now. The camera log then shows whether the printer joined its video channel (\u201cother members\u201d).");
-                    new AlertDialog.Builder(this).setTitle("The printer answered").setMessage(answer + "\n\nOpen the cloud camera now to see whether the printer joined its video channel?")
-                        .setNegativeButton("Not now", null).setPositiveButton("Open camera", (d2, w2) -> cloudCamera.performClick()).show();
+                    new AlertDialog.Builder(this).setTitle("The printer answered").setMessage(answer + "\n\nOpen the cloud camera to see whether the printer joined its video channel, or try the printer's own camera on this Wi-Fi now (one try per app run; asking first may have started it).")
+                        .setNegativeButton("Not now", null).setPositiveButton("Open camera", (d2, w2) -> cloudCamera.performClick())
+                        .setNeutralButton("Try its Wi-Fi camera", (d2, w2) -> {
+                            printer.tryLocalCamera(); cameraCheckText.setText("Trying the printer's own camera on this Wi-Fi…");
+                            main.postDelayed(() -> { if (!isDestroyed() && printer != null && printer.localCameraText != null) cameraCheckText.setText("Printer's own camera on Wi-Fi: " + printer.localCameraText); }, 14_000);
+                        }).show();
                 });
                 if (!sent) { cameraAskButton.setEnabled(true); cameraCheckText.setText("Not sent: this needs the printer watched through the Elegoo cloud with fresh status, and no other cloud command in progress."); }
             })).show();
@@ -1967,6 +1976,8 @@ public final class MainActivity extends Activity {
     /** Cloud mode: plays the printer's camera through the Elegoo cloud right here under the progress bar (after the one-time cloud agreement). */
     private void startCloudVideo() {
         if (printer == null || printer.cloudSerial.isEmpty() || cloudVideo != null) return;
+        // The cloud camera screen may still hold the channel (one join per account); start once it has let go.
+        if (CloudCameraActivity.holdsChannel()) { main.postDelayed(() -> { if (active && page == PRINT && cloudVideo == null) startCloudVideo(); }, 3_000); return; }
         if (!CloudVideo.supported()) { monitorCameraInfo.setText("The camera needs a newer Android System WebView. Update it from the Play Store."); monitorCameraInfo.setVisibility(View.VISIBLE); return; }
         String serialNumber = printer.cloudSerial;
         cloudGate(true, () -> {

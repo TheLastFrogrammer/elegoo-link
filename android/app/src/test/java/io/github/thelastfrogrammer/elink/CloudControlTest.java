@@ -196,4 +196,7 @@ public class CloudControlTest {
         assertTrue(CloudControl.describeCameraAnswer(false, "No reply from the printer through the cloud.", new JSONObject()).startsWith("no answer"));
         assertTrue(CloudControl.describeCameraAnswer(true, "", new JSONObject().put("error_code", 0)).contains("fields error_code"));
     }
+    @Test public void aDoubleJoinIsExplained() {
+        assertTrue(CloudCameraActivity.explain("Disconnected from the camera service (UID_BANNED).").contains("twice at once"));
+    }
 }

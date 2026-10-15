@@ -44,6 +44,12 @@ public final class CloudCameraActivity extends Activity {
     private final Handler main = new Handler(Looper.getMainLooper());
     /** While the video plays, the running print's recording takes its camera pictures from it (in cloud mode nothing else can). */
     private PrinterService printer; private boolean bound, playing; private String lastPageLine = "";
+    /**
+     * Whether this screen holds (or only just left) the printer's video channel. One account may be in the channel once:
+     * a second join with the same identity makes the service ban one of them (UID_BANNED), so the Print tab waits.
+     */
+    private static volatile boolean showing; private static volatile long leftAt;
+    static boolean holdsChannel() { return showing || android.os.SystemClock.elapsedRealtime() - leftAt < 3_000; }
     private final android.content.ServiceConnection connection = new android.content.ServiceConnection() {
         @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder binder) { printer = ((PrinterService.LocalBinder) binder).service(); }
         @Override public void onServiceDisconnected(android.content.ComponentName name) { printer = null; }
@@ -62,6 +68,7 @@ public final class CloudCameraActivity extends Activity {
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
+        showing = true;
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         String serial = getIntent().getStringExtra(EXTRA_SERIAL), name = getIntent().getStringExtra(EXTRA_NAME);
         int pad = Math.round(12 * getResources().getDisplayMetrics().density), touch = Math.round(48 * getResources().getDisplayMetrics().density);
@@ -195,6 +202,7 @@ public final class CloudCameraActivity extends Activity {
         if (m.startsWith("The printer is not sending")) return "No video from the printer. It may be off, offline, or its camera may be turned off. Check that the printer is on and connected to the internet, then tap Try again.";
         if (m.startsWith("The printer stopped")) return "The printer stopped sending video. Check that it is still on and connected to the internet, then tap Try again.";
         if (m.startsWith("The printer left")) return "The printer left the camera connection. Check that it is still on and connected to the internet, then tap Try again.";
+        if (m.contains("UID_BANNED")) return "This account was in the camera twice at once (another camera view was still open), so the camera service closed one. Close the other view, then tap Try again.";
         if (m.startsWith("Disconnected from")) return "Lost the connection to Elegoo's camera service " + detail(m) + ". Check the phone's internet connection, then tap Try again.";
         if (m.startsWith("The camera could not start")) return "The camera could not start " + detail(m) + ". Check the phone's internet connection, then tap Try again.";
         if (m.startsWith("Sign in with Elegoo")) return "Not signed in. Close this screen, go to Settings, and tap Sign in with Elegoo.";
@@ -249,11 +257,12 @@ public final class CloudCameraActivity extends Activity {
     }
 
     @Override protected void onStop() {
-        super.onStop();
+        super.onStop(); leftAt = android.os.SystemClock.elapsedRealtime();
         // Leave the video channel when hidden, like the local camera; reopening the screen starts again.
         if (web != null && started && !choosingFile) { web.evaluateJavascript("stop()", null); finish(); }
     }
     @Override protected void onDestroy() {
+        showing = false; leftAt = android.os.SystemClock.elapsedRealtime();
         worker.shutdownNow(); main.removeCallbacksAndMessages(null);
         if (bound) { unbindService(connection); bound = false; }
         if (web != null) { web.evaluateJavascript("stop()", null); ((ViewGroup) web.getParent()).removeView(web); web.destroy(); web = null; }
