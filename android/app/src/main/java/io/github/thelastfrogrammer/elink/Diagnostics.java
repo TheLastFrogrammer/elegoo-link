@@ -12,8 +12,9 @@ import java.util.*;
  * being closed. Holds no access codes, PINs, addresses or serial numbers. Independent of Android.
  */
 final class Diagnostics {
-    static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan", FILES = "Printer file downloads", PROBE = "Printer probe", SITES = "Model sites", HYBRID = "Local and cloud", CAMERA = "Camera";
-    static final int KEEP_PER_AREA = 40;
+    static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan", FILES = "Printer file downloads", PROBE = "Printer probe", SITES = "Model sites", HYBRID = "Local and cloud", CAMERA = "Camera",
+        CONNECTION = "Connection", COMMANDS = "Printer commands", MESSAGES = "Messages shown";
+    static final int KEEP_PER_AREA = 100;
     private static final String SEPARATOR = "\u001f";
     private static final Map<String, Deque<String>> entries = new LinkedHashMap<>();
     private static File file;
@@ -43,6 +44,11 @@ final class Diagnostics {
     }
 
     static synchronized void clear() { entries.clear(); save(); }
+
+    /** The areas with entries, in the order they first appeared. */
+    static synchronized List<String> areas() { return new ArrayList<>(entries.keySet()); }
+    /** Every entry of an area, oldest first. */
+    static synchronized List<String> entries(String area) { Deque<String> list = entries.get(area); return list == null ? Collections.emptyList() : new ArrayList<>(list); }
 
     /** The newest `count` entries of an area, oldest first. */
     static synchronized List<String> recent(String area, int count) {

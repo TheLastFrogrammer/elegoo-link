@@ -408,3 +408,14 @@ listen-only test should hear nothing in cloud mode, and the printer's own camera
   **Downloads in LAN Only work:** `GET /download?X-Token=…&file_name=…` returned HTTP 200 with the whole file (1,560,527
   bytes from internal storage) and `GET /download/udisk…` did the same from the USB drive (5,233,019 bytes), both with
   the saved access code. The file-server question is closed: cloud mode keeps port 80 shut; LAN Only serves files.
+
+## Cloud camera field result (v0.46.6)
+
+With camera access issued (about 200 ms) the app joins the printer's Agora channel (named by its serial) and connects, but
+the channel stays empty: "0 other members, 0 sending video" for 20 s and after a second join. The printer is not in the
+channel, so nothing can be received. ElegooSlicer 1.5.3.5's printer page has the same join code (`startWatching`: join,
+wait 6 s for members, 10 s for a video track; nothing is sent to the printer first), but its RTC playback is switched off
+in that build (`"false"==="true"`); its LAN video uses 1042 (GetLivingVideoUrl). Its texts include "Failed to set video
+stream" (startVideoStreamFailed, unused there), which suggests a request that asks the printer to push video; no such
+request has been seen, so none is sent. Next test: open the camera in Elegoo's phone app, then the app's camera, and read
+the member count in the camera log.

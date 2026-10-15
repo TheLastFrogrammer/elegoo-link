@@ -565,6 +565,7 @@ public final class MainActivity extends Activity {
         ScrollView probeArea = new ScrollView(this); probeArea.addView(probeResult);
         help.addView(probeArea, new LinearLayout.LayoutParams(-1, dp(200))); probeArea.setVisibility(View.GONE);
         button(help, "Field check…", () -> startActivity(new Intent(this, FieldCheckActivity.class)));
+        button(help, "View logs…", () -> startActivity(new Intent(this, LogsActivity.class)));
         button(help, "Share diagnostics…", this::shareDiagnostics);
         currentSection = aboutSection.body;
         LinearLayout about = card("Link Workshop " + appVersion());
@@ -1751,6 +1752,7 @@ public final class MainActivity extends Activity {
         LinearLayout checkCard = card("Camera check");
         label(checkCard, "Checks what each camera needs and tries it once: camera access from Elegoo, and the printer's camera on this network when connected locally. Sends nothing to the printer.", 13, MUTED, false);
         cameraCheckButton = button(checkCard, "Run camera check", this::cameraCheck);
+        button(checkCard, "Camera log…", () -> startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.CAMERA)));
         cameraCheckText = label(checkCard, "", 12, INK, false); cameraCheckText.setTextIsSelectable(true); cameraCheckText.setTypeface(Typeface.MONOSPACE); cameraCheckText.setVisibility(View.GONE);
         // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
@@ -1936,7 +1938,7 @@ public final class MainActivity extends Activity {
                 StringBuilder text = new StringBuilder(String.join("\n", out)).append("\n\nRecent camera events:");
                 List<String> recent = Diagnostics.recent(Diagnostics.CAMERA, 12);
                 for (String line : recent) if (!line.contains("camera check:")) text.append("\n").append(line);
-                text.append("\n\nThis is also in Settings › Help & diagnostics › share diagnostics.");
+                text.append("\n\nThe full camera log: Camera log below, or Settings › Help & diagnostics › View logs.");
                 cameraCheckText.setText(text); cameraCheckButton.setEnabled(true);
             });
         });

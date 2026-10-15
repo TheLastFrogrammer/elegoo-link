@@ -262,6 +262,7 @@ public final class Cc2Session implements AutoCloseable {
             return;
         }
         queued.add(method);
+        if (changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " queued");
         // Stop takes the next available slot ahead of reads; all requests retain the firmware spacing.
         if (method == Cc2Codec.STOP) requestQueue.addFirst(message); else requestQueue.addLast(message);
         scheduleDispatch();
@@ -273,8 +274,9 @@ public final class Cc2Session implements AutoCloseable {
             if (!ready() || requestQueue.isEmpty()) return;
             JSONObject message = requestQueue.removeFirst(); int method = message.optInt("method");
             if (!probes.containsKey(message.optInt("id"))) queued.remove(method);
+            if (!allowed(message)) { if (changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " not sent: printer state does not allow it"); }
             if (!allowed(message)) emitResult("Control unavailable. Refresh status and check the printer state before trying again.");
-            else { nextRequestAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2); transmit(message.optInt("id"), method, message); }
+            else { nextRequestAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2); if (changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " sent"); transmit(message.optInt("id"), method, message); }
             scheduleDispatch();
         }, Math.max(0, nextRequestAt - System.nanoTime()), TimeUnit.NANOSECONDS);
     }

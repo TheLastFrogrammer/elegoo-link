@@ -162,6 +162,18 @@ public final class Cc2Codec {
         if (method == THUMBNAIL) return result.opt("thumbnail") instanceof String;
         return false;
     }
+    /** A method's name for logs and messages ("Pause", "Set temperature", "File list", …). */
+    public static String name(int method) {
+        switch (method) {
+            case START: return "Start print"; case PAUSE: return "Pause"; case STOP: return "Stop"; case RESUME: return "Resume";
+            case TEMPERATURE: return "Set temperature"; case LIGHT: return "Light"; case FAN: return "Set fan"; case SPEED: return "Print speed";
+            case DELETE: return "Delete file"; case AUTO_REFILL: return "Automatic refill"; case URGENT_STOP: return "Emergency stop";
+            case FEED: return "Load filament"; case RETREAT: return "Unload filament"; case HOME: return "Home axes"; case MOVE: return "Move axis";
+            case AUTO_LEVEL: return "Auto-level bed"; case VIBRATION: return "Vibration test"; case SELF_CHECK: return "Full self-check";
+            case CANVAS_LOAD: return "Load CANVAS tray"; case CANVAS_UNLOAD: return "Unload CANVAS tray";
+            default: return PrinterProbe.name(method);
+        }
+    }
     public static boolean changing(int method) {
         return method == START || method == PAUSE || method == STOP || method == RESUME || method == DELETE || method == AUTO_REFILL
             || method == LIGHT || method == TEMPERATURE || method == FAN || method == SPEED || maintenance(method);

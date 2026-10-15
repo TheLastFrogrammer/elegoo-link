@@ -50,4 +50,16 @@ public class DiagnosticsTest {
         assertTrue(Diagnostics.recent(Diagnostics.CAMERA, 1).get(0).endsWith("picture from the Print tab's cloud video not kept: no print is being recorded"));
         assertEquals(-1, recorder.secondsSincePicture(1_000));
     }
+    @Test public void logViewerShowsAllAreasNewestFirstAndFilters() {
+        java.util.Map<String, java.util.List<String>> log = new java.util.LinkedHashMap<>();
+        log.put("Camera", java.util.Arrays.asList("2026-10-15 10:00:01  stream opening", "2026-10-15 10:00:05  first picture"));
+        log.put("Connection", java.util.Arrays.asList("2026-10-15 10:00:03  Connected to <address>"));
+        java.util.List<String> areas = new java.util.ArrayList<>(log.keySet());
+        java.util.List<String> all = LogsActivity.select(areas, log::get, "All", "");
+        assertEquals(java.util.Arrays.asList("2026-10-15 10:00:05  [Camera] first picture", "2026-10-15 10:00:03  [Connection] Connected to <address>", "2026-10-15 10:00:01  [Camera] stream opening"), all);
+        assertEquals(java.util.Arrays.asList("2026-10-15 10:00:03  Connected to <address>"), LogsActivity.select(areas, log::get, "Connection", ""));
+        assertEquals(1, LogsActivity.select(areas, log::get, "All", "picture").size());
+        assertTrue(LogsActivity.select(areas, log::get, "Camera", "connected").isEmpty());
+        assertEquals("Pause", Cc2Codec.name(Cc2Codec.PAUSE)); assertEquals("File list", Cc2Codec.name(Cc2Codec.FILES)); assertEquals("Method 9999", Cc2Codec.name(9999));
+    }
 }

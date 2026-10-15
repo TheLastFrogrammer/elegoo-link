@@ -1190,8 +1190,13 @@ public final class PrinterService extends Service {
             String done = text; main.post(() -> { if (!destroyed) { exporting = false; feedback = done; changed(); } });
         });
     }
+    private String loggedConnection = "", loggedFeedback = ""; private int loggedOnline = -2;
     private void changed() {
         if (destroyed) return;
+        // The log keeps every change of the connection line, the cloud's online state and each message shown to the user.
+        if (!connection.equals(loggedConnection)) { loggedConnection = connection; Diagnostics.note(Diagnostics.CONNECTION, Diagnostics.scrub(connection)); }
+        if (cloudOnline != loggedOnline && usingCloud()) { loggedOnline = cloudOnline; Diagnostics.note(Diagnostics.CONNECTION, "Elegoo cloud says the printer is " + (cloudOnline == 1 ? "online" : cloudOnline == 0 ? "offline" : "of unknown state")); }
+        if (feedback != null && !feedback.isEmpty() && !feedback.equals(loggedFeedback)) { loggedFeedback = feedback; Diagnostics.note(Diagnostics.MESSAGES, Diagnostics.scrub(feedback)); }
         if (observer != null) observer.changed();
         for (Observer watcher : new ArrayList<>(watchers)) watcher.changed();
     }
@@ -1337,13 +1342,14 @@ public final class PrinterService extends Service {
             return;
         }
         ensureCloudControl();
-        if (!query) feedback = "Sending through the Elegoo cloud…";
+        if (!query) { feedback = "Sending through the Elegoo cloud…"; Diagnostics.note(Diagnostics.COMMANDS, "Elegoo cloud: " + Cc2Codec.name(method) + " sent"); }
         JSONObject params = request.optJSONObject("params") == null ? new JSONObject() : request.optJSONObject("params");
         cloudControl.send(cloudSerial, request, new CloudControl.Reply() {
             public void done(boolean acknowledged, String text) { done(acknowledged, text, new JSONObject()); }
             public void done(boolean acknowledged, String text, JSONObject result) {
                 main.post(() -> {
                     if (query) { if (acknowledged) handleQuery(method, params, result); else handleQueryError(method, text); changed(); return; }
+                    Diagnostics.note(Diagnostics.COMMANDS, "Elegoo cloud: " + Cc2Codec.name(method) + (acknowledged ? " acknowledged" : " not acknowledged") + ": " + Diagnostics.scrub(text));
                     feedback = text; changed();
                     if (method == Cc2Codec.DELETE && acknowledged) handleQuery(method, params, result);
                     if (acknowledged) cloudAckAt = System.currentTimeMillis();
