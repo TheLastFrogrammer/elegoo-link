@@ -133,7 +133,7 @@ public final class MainActivity extends Activity {
     private Button monitorShow;
     /** The cloud video playing inside the Print tab's camera block (cloud mode), or null; and the frame that holds the picture. */
     private CloudVideo cloudVideo; private FrameLayout monitorFrame; private boolean pendingCloudSnapshot;
-    private Button cameraCheckButton; private TextView cameraCheckText; private boolean cameraChecking;
+    private Button cameraCheckButton, cameraAskButton; private TextView cameraCheckText; private boolean cameraChecking;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
     private Button monitorCameraStart, trayDetails;
@@ -1753,6 +1753,8 @@ public final class MainActivity extends Activity {
         label(checkCard, "Checks what each camera needs and tries it once: camera access from Elegoo, and the printer's camera on this network when connected locally. Sends nothing to the printer.", 13, MUTED, false);
         cameraCheckButton = button(checkCard, "Run camera check", this::cameraCheck);
         button(checkCard, "Camera log…", () -> startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.CAMERA)));
+        // Cloud mode only: the printer has not joined its video channel on its own; Elegoo's camera question may be what starts it.
+        cameraAskButton = button(checkCard, "Try: ask the printer for its camera…", this::askCloudCamera);
         cameraCheckText = label(checkCard, "", 12, INK, false); cameraCheckText.setTextIsSelectable(true); cameraCheckText.setTypeface(Typeface.MONOSPACE); cameraCheckText.setVisibility(View.GONE);
         // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
@@ -1943,6 +1945,24 @@ public final class MainActivity extends Activity {
             });
         });
     }
+    /** Sends Elegoo's read-only camera question (1042) once through the cloud, shows the answer, then offers the cloud camera. */
+    private void askCloudCamera() {
+        if (printer == null) return;
+        new AlertDialog.Builder(this).setTitle("Ask the printer for its camera?")
+            .setMessage("Sends the printer one question through the Elegoo cloud: \u201cwhere is your camera video?\u201d (the same read-only question Elegoo's printer page asks on Wi-Fi). It changes no setting. "
+                + "The printer has not joined its video channel on its own; this checks whether the question makes it start. It is sent once and never repeated by itself.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Ask", (d, w) -> cloudGate(true, () -> {
+                cameraAskButton.setEnabled(false); cameraCheckText.setVisibility(View.VISIBLE); cameraCheckText.setText("Asking the printer through the Elegoo cloud…");
+                boolean sent = printer.askCloudCamera(answer -> {
+                    if (isDestroyed()) return;
+                    cameraAskButton.setEnabled(true);
+                    cameraCheckText.setText("Camera question: " + answer + "\n\nNext: open the cloud camera now. The camera log then shows whether the printer joined its video channel (\u201cother members\u201d).");
+                    new AlertDialog.Builder(this).setTitle("The printer answered").setMessage(answer + "\n\nOpen the cloud camera now to see whether the printer joined its video channel?")
+                        .setNegativeButton("Not now", null).setPositiveButton("Open camera", (d2, w2) -> cloudCamera.performClick()).show();
+                });
+                if (!sent) { cameraAskButton.setEnabled(true); cameraCheckText.setText("Not sent: this needs the printer watched through the Elegoo cloud with fresh status, and no other cloud command in progress."); }
+            })).show();
+    }
     private void stopCloudVideo() { CloudVideo video = cloudVideo; cloudVideo = null; if (video != null) video.stop(); }
     /** Cloud mode: plays the printer's camera through the Elegoo cloud right here under the progress bar (after the one-time cloud agreement). */
     private void startCloudVideo() {
@@ -2101,6 +2121,7 @@ public final class MainActivity extends Activity {
         localToggle.setVisibility(local ? View.GONE : View.VISIBLE);
         localToggle.setText(localCameraOpen ? "Hide local camera" : "Use the printer's own camera on this network…");
         cameraFix.setVisibility(!ready && !signedIn ? View.VISIBLE : View.GONE);
+        cameraAskButton.setVisibility(cloud && signedIn ? View.VISIBLE : View.GONE);
         if (ready != cameraLocalFirst) { cameraLocalFirst = ready; cameraSection.body.removeView(cameraLocalCard); cameraSection.body.addView(cameraLocalCard, ready ? 1 : 2); }
     }
     private void render() {

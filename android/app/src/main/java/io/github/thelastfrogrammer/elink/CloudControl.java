@@ -110,7 +110,33 @@ public final class CloudControl implements AutoCloseable {
     public synchronized boolean connected() { return link != null; }
 
     /** Sends one request built by the caller (Cc2Codec envelope); its id is replaced. Reply arrives on the worker thread. */
-    public void send(String serial, JSONObject request, Reply reply) {
+    public void send(String serial, JSONObject request, Reply reply) { dispatch(serial, request, reply, false); }
+    /**
+     * Elegoo's read-only "GetLivingVideoUrl" question (1042), asked once through the cloud when the user taps it: in cloud mode
+     * the printer may need it before it joins its video channel. The only way 1042 leaves the phone through the cloud.
+     */
+    /** "answered: fields error_code, url; url is http on a private address, port 8080" (no address), or why it failed. */
+    static String describeCameraAnswer(boolean acknowledged, String text, JSONObject result) {
+        if (!acknowledged) return "no answer: " + Diagnostics.scrub(StatusPresentation.clean(text));
+        StringBuilder out = new StringBuilder("answered" + (result.has("error_code") ? " (error_code " + result.optInt("error_code") + ")" : "") + ": fields " + CloudApi.shape(result));
+        String url = result.optString("url", "");
+        if (!url.isEmpty()) {
+            try {
+                java.net.URI uri = new java.net.URI(url);
+                String host = uri.getHost() == null ? "" : uri.getHost();
+                boolean privateIp = host.matches("^(10|127)\\..*|^192\\.168\\..*|^172\\.(1[6-9]|2\\d|3[01])\\..*");
+                out.append("; url is ").append(uri.getScheme() == null ? "without a scheme" : uri.getScheme()).append(" on ")
+                    .append(host.isEmpty() ? "no host" : privateIp ? "a private address" : host.matches("[\\d.]+") ? "a public address" : "a named host")
+                    .append(uri.getPort() > 0 ? ", port " + uri.getPort() : "").append(uri.getPath() == null || uri.getPath().isEmpty() ? "" : ", path " + Diagnostics.scrub(uri.getPath()));
+            } catch (Exception unreadable) { out.append("; url not readable (").append(url.length()).append(" characters)"); }
+        }
+        return out.toString();
+    }
+    public void askCamera(String serial, Reply reply) {
+        try { dispatch(serial, Cc2Codec.request(0, Cc2Codec.CAMERA), reply, true); }
+        catch (org.json.JSONException impossible) { reply.done(false, "Could not prepare the question."); }
+    }
+    private void dispatch(String serial, JSONObject request, Reply reply, boolean cameraQuestion) {
         inFlight.incrementAndGet();
         Reply counted = new Reply() {
             public void done(boolean acknowledged, String message) { inFlight.decrementAndGet(); reply.done(acknowledged, message); }
@@ -118,7 +144,7 @@ public final class CloudControl implements AutoCloseable {
         };
         worker.execute(() -> {
             int method = request.optInt("method", -1);
-            if (!allowed(method)) { counted.done(false, "This command is not available through the cloud."); return; }
+            if (!allowed(method) && !(cameraQuestion && method == Cc2Codec.CAMERA)) { counted.done(false, "This command is not available through the cloud."); return; }
             if (!Cc2Discovery.validSerial(serial)) { counted.done(false, "Unknown printer serial."); return; }
             synchronized (this) {
                 if (pending != null || !waiting.isEmpty()) {

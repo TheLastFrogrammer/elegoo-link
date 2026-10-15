@@ -419,3 +419,10 @@ in that build (`"false"==="true"`); its LAN video uses 1042 (GetLivingVideoUrl).
 stream" (startVideoStreamFailed, unused there), which suggests a request that asks the printer to push video; no such
 request has been seen, so none is sent. Next test: open the camera in Elegoo's phone app, then the app's camera, and read
 the member count in the camera log.
+
+### Camera question through the cloud (v0.47.1)
+
+Five more joins (0.47.0) all found the channel empty. Camera check now has "Try: ask the printer for its camera…": it sends
+Elegoo's read-only 1042 (GetLivingVideoUrl) once through the cloud, only when tapped and confirmed, and logs the answer's
+fields and the kind of address (never the address). 1042 stays off the general cloud route (`CloudControl.allowed`); only
+`askCamera` sends it. The question is whether the printer joins its video channel after it.

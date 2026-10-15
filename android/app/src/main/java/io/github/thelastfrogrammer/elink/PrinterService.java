@@ -1331,6 +1331,26 @@ public final class PrinterService extends Service {
     }
 
     /** Sends one request through the cloud. Only requests CloudControl allows, with fresh cloud status; queries feed handleQuery. */
+    /**
+     * Camera check's "Ask the printer for its camera": Elegoo's read-only 1042 question, once, through the cloud. The answer is
+     * described (fields, and the kind of address without the address itself) and logged; nothing is opened from it.
+     */
+    public boolean askCloudCamera(java.util.function.Consumer<String> done) {
+        CloudApi api = cloudApi;
+        if (!usingCloud() || !cloudFresh() || api == null || cloudSerial.isEmpty()) return false;
+        if (cloudCommandBusy()) return false;
+        ensureCloudControl();
+        Diagnostics.note(Diagnostics.CAMERA, "asked the printer for its camera (1042) through the cloud");
+        cloudControl.askCamera(cloudSerial, new CloudControl.Reply() {
+            public void done(boolean acknowledged, String text) { done(acknowledged, text, new JSONObject()); }
+            public void done(boolean acknowledged, String text, JSONObject result) {
+                String summary = CloudControl.describeCameraAnswer(acknowledged, text, result);
+                Diagnostics.note(Diagnostics.CAMERA, "camera question answer: " + summary);
+                main.post(() -> done.accept(summary));
+            }
+        });
+        return true;
+    }
     public void cloudCommand(JSONObject request) {
         int method = request.optInt("method", -1);
         boolean query = Cc2Codec.isQuery(method) || method == Cc2Codec.CANVAS;

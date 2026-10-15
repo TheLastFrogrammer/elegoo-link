@@ -179,4 +179,21 @@ public class CloudControlTest {
         for (int i = 0; i < 100 && !condition.met(); i++) Thread.sleep(50);
         assertTrue("Condition not met in time", condition.met());
     }
+    @Test public void theCameraQuestionGoesOnlyThroughItsOwnButton() throws Exception {
+        assertFalse("1042 stays off the general cloud route", CloudControl.allowed(Cc2Codec.CAMERA));
+        CloudControl control = control(5000, 60000);
+        Replies refused = new Replies();
+        control.send("SN818", Cc2Codec.request(1, Cc2Codec.CAMERA), refused);
+        assertTrue(refused.take().contains("not available through the cloud"));
+        Replies asked = new Replies();
+        control.askCamera("SN818", asked);
+        JSONObject sent = new JSONObject(take(waitForLink())[1]);
+        assertEquals(Cc2Codec.CAMERA, sent.getInt("method"));
+    }
+    @Test public void theCameraAnswerIsDescribedWithoutTheAddress() throws Exception {
+        String text = CloudControl.describeCameraAnswer(true, "", new JSONObject().put("error_code", 0).put("url", "http://192.168.1.50:8080/?action=stream"));
+        assertTrue(text, text.contains("http on a private address, port 8080")); assertFalse(text, text.contains("192.168"));
+        assertTrue(CloudControl.describeCameraAnswer(false, "No reply from the printer through the cloud.", new JSONObject()).startsWith("no answer"));
+        assertTrue(CloudControl.describeCameraAnswer(true, "", new JSONObject().put("error_code", 0)).contains("fields error_code"));
+    }
 }
