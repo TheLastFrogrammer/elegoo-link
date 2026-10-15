@@ -21,6 +21,12 @@
 // token and numeric uid issued by Elegoo, client role "host", then plays the printer's video track.
 let client = null, remote = null;
 function send(message) { try { Android.postMessage(JSON.stringify(message)); } catch (e) {} }
+// What happens in the channel, for the app's camera log (counts and states only; no ids).
+function event(text) { send({ type: 'event', text: text }); }
+function channelState() {
+  const users = client ? client.remoteUsers : [];
+  return users.length + ' other member' + (users.length === 1 ? '' : 's') + ' in the channel, ' + users.filter(u => u.hasVideo).length + ' sending video';
+}
 function status(text) { document.getElementById('status').textContent = text; send({ type: 'status', text: text }); }
 function show(user) {
   remote = user;
@@ -33,13 +39,16 @@ async function start(appId, channel, token, uid) {
     AgoraRTC.setLogLevel(3);
     try { AgoraRTC.disableLogUpload(); } catch (e) {}
     client = AgoraRTC.createClient({ mode: 'live', codec: 'vp8' });
+    client.on('user-joined', () => event('a member joined the channel (' + channelState() + ')'));
     client.on('user-published', async (user, type) => {
+      event('a member started sending ' + type);
       if (type !== 'video') return;
-      await client.subscribe(user, 'video'); show(user);
+      try { await client.subscribe(user, 'video'); show(user); } catch (e) { event('subscribing to the video failed (' + ((e && (e.code || e.message)) || e) + ')'); }
     });
     client.on('user-unpublished', (user, type) => { if (type === 'video' && remote === user) { remote = null; status('The printer stopped its camera stream.'); } });
     client.on('user-left', (user) => { if (remote === user) { remote = null; status('The printer left the camera channel.'); } });
     client.on('connection-state-change', (current, previous, reason) => {
+      event('connection ' + previous + ' -> ' + current + (reason ? ' (' + reason + ')' : ''));
       if (current === 'DISCONNECTED' && reason && reason !== 'LEAVE') status('Disconnected from the camera service (' + reason + ').');
     });
     status('Connecting to the camera…');
@@ -48,8 +57,16 @@ async function start(appId, channel, token, uid) {
     for (const user of client.remoteUsers) {
       if (user.hasVideo) { await client.subscribe(user, 'video'); show(user); break; }
     }
+    event('joined (' + channelState() + ')');
     if (!remote) status('Connected. Waiting for the printer to send video…');
-    setTimeout(() => { if (!remote) status('The printer is not sending video. It may be off, offline, or its camera may be disabled.'); }, 15000);
+    // Elegoo's page waits for the printer to appear, then for its video; a member already sending is subscribed right away.
+    let checks = 0;
+    const poll = setInterval(async () => {
+      if (!client || remote) { clearInterval(poll); return; }
+      checks++;
+      for (const user of client.remoteUsers) if (user.hasVideo) { try { await client.subscribe(user, 'video'); show(user); } catch (e) {} clearInterval(poll); return; }
+      if (checks === 20) { clearInterval(poll); event('after 20 s: ' + channelState()); status('The printer is not sending video. It may be off, offline, or its camera may be disabled.'); }
+    }, 1000);
   } catch (e) {
     status('The camera could not start (' + ((e && (e.code || e.message)) || e) + ').');
   }

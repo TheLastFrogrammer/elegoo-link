@@ -148,6 +148,7 @@ public final class CloudCameraActivity extends Activity {
             JSONObject message = new JSONObject(raw);
             switch (message.optString("type")) {
                 case "ready": pageReady = true; startIfReady(getIntent().getStringExtra(EXTRA_SERIAL)); break;
+                case "event": Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: channel: " + Diagnostics.scrub(message.optString("text"))); break;
                 case "status": { String text = message.optString("text"); if (!text.isEmpty() && !text.equals(lastPageLine)) { lastPageLine = text; Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: page: " + Diagnostics.scrub(text)); } showPageStatus(text); break; }
                 case "playing": showNormal("Live. Video from the printer through Elegoo's cloud."); snapshot.setEnabled(true);
                     if (!playing) { playing = true; Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: video playing"); main.postDelayed(pictureTick, 3_000); } break;

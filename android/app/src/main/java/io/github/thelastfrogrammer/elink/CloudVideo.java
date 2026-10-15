@@ -39,7 +39,7 @@ final class CloudVideo {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private WebView web;
-    private boolean pageReady, started, playing, stopped;
+    private boolean pageReady, started, playing, stopped, retried;
     private CloudApi.AgoraCredential credential;
     /** When start() ran (monotonic ms), and the last page line logged, so the camera log shows each step once with its timing. */
     private long startedAt; private String lastLogged = "";
@@ -130,7 +130,18 @@ final class CloudVideo {
             JSONObject message = new JSONObject(raw);
             switch (message.optString("type")) {
                 case "ready": pageReady = true; log("video page ready after " + since() + " ms"); startIfReady(); break;
-                case "status": { String text = message.optString("text"); if (!text.isEmpty()) { log("page: " + text + " (" + since() + " ms)"); listener.status(CloudCameraActivity.explain(text), CloudCameraActivity.isProblem(text)); } break; }
+                case "event": log("channel: " + message.optString("text") + " (" + since() + " ms)"); break;
+                case "status": {
+                    String text = message.optString("text"); if (text.isEmpty()) break;
+                    log("page: " + text + " (" + since() + " ms)");
+                    // Like Elegoo's page, one more try when no video came: leave the channel and join again with the same access.
+                    if (text.startsWith("The printer is not sending") && !retried && web != null) {
+                        retried = true; started = false; log("no video; leaving and joining once more");
+                        listener.status("No video yet. Trying once more…", false);
+                        web.evaluateJavascript("stop()", null); main.postDelayed(this::startIfReady, 1500); break;
+                    }
+                    listener.status(CloudCameraActivity.explain(text), CloudCameraActivity.isProblem(text)); break;
+                }
                 case "playing": if (!playing) { playing = true; log("video playing after " + since() + " ms"); main.postDelayed(pictureTick, 3_000); } listener.playing(); break;
                 case "picture": keep(message.optString("data")); break;
                 case "snapshot": listener.snapshot(decode(message.optString("data"))); break;
