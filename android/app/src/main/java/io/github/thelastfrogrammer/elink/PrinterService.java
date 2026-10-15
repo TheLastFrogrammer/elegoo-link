@@ -70,7 +70,12 @@ public final class PrinterService extends Service {
     public PrintRecorder recorder;
     /** Spools and their filament left (see SpoolStore): follows fresh tray reports, and takes a finished print's use off. */
     public SpoolStore spools() { return SpoolStore.at(new java.io.File(getFilesDir(), "spools.json")); }
+    private int loggedSpeedMode = Integer.MIN_VALUE; private int loggedMachineState = Integer.MIN_VALUE;
     private void record(JSONObject value, String source, String name) {
+        // The log notes the printer's state and speed-mode number when they change (the speed names are not confirmed yet).
+        JSONObject move = value.optJSONObject("gcode_move_inf"), machine = value.optJSONObject("machine_status");
+        if (move != null && move.has("speed_mode") && move.optInt("speed_mode") != loggedSpeedMode) { loggedSpeedMode = move.optInt("speed_mode"); Diagnostics.note(Diagnostics.STATUS, "speed mode number now " + loggedSpeedMode + " (" + source + ")"); }
+        if (machine != null && machine.has("status") && machine.optInt("status") != loggedMachineState) { loggedMachineState = machine.optInt("status"); Diagnostics.note(Diagnostics.STATUS, "state now " + StatusPresentation.state(value) + " (status " + loggedMachineState + ", sub_status " + machine.optInt("sub_status", -1) + ", " + source + ")"); }
         checkWaiting(value); checkFolder(value);
         SpoolStore spools = spools(); long now = System.currentTimeMillis();
         if (canvasFresh() && canvas != null) spools.sync(canvas, now);
@@ -1146,6 +1151,29 @@ public final class PrinterService extends Service {
         });
     }
     /** Takes G-code sliced on this phone into the workspace, as select() does for a chosen file. */
+    /**
+     * The chosen file with the CC2 filament load added for CANVAS `tray` (0-3), as a new phone copy named "…-load.gcode"; the
+     * original stays as it was. Nothing is sent to the printer.
+     */
+    public void addFilamentLoad(int tray) {
+        if (selectedFile == null || selectedName == null || fileBusy()) return;
+        File source = selectedFile; String name = selectedName.replaceFirst("(?i)\\.gcode$", "") + "-load.gcode";
+        importing = true; feedback = "Adding the filament load…"; changed();
+        files.execute(() -> {
+            String text; File repaired = new File(getCacheDir(), "repaired.gcode");
+            try {
+                GcodeRepair.Result result = GcodeRepair.addFilamentLoad(source, repaired, tray, 220);
+                if (result == null) text = "This file already loads filament or never extrudes; nothing was added.";
+                else {
+                    Diagnostics.note(Diagnostics.FILES, "filament load added: tray " + (tray + 1) + ", " + result.temperature + " °C, before line " + result.line);
+                    main.post(() -> { importing = false; selectSliced(repaired, name, "Filament load added for tray " + (tray + 1) + " at " + result.temperature + " °C, before line " + result.line
+                        + ". This is a new copy; check it in Preview, and keep an eye on the first layer.", false); });
+                    return;
+                }
+            } catch (Exception error) { text = "The filament load could not be added (" + error.getClass().getSimpleName() + ")."; }
+            String done = text; main.post(() -> { importing = false; feedback = done; changed(); });
+        });
+    }
     public void selectSliced(File source, String name) { selectSliced(source, name, "Sliced on this phone. Uploading does not start a print.", false); }
     private void selectSliced(File source, String name, String doneText, boolean afterFailure) {
         if (afterFailure ? importing || exporting : fileBusy()) return;
@@ -1512,6 +1540,7 @@ public final class PrinterService extends Service {
             .setContentTitle("Link Workshop · " + StatusPresentation.clean(title)).setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true)
             .setOnlyAlertOnce(true);
         manager.notify(id, builder.build());
+        Diagnostics.note(Diagnostics.NOTIFICATIONS, Diagnostics.scrub(text));
         // Then, on the local connection, the same alert again with a picture from the printer's camera (it alerts only once).
         if (getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alertPictures", true))
             grab(image -> {

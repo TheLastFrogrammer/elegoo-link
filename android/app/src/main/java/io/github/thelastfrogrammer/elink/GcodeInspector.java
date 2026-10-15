@@ -50,6 +50,8 @@ public final class GcodeInspector {
          * profile) loads the tray's filament into the toolhead with M6211 and selects it with T0; a file without either can
          * print its purge line from what is left in the nozzle and then stop extruding. "" when nothing looks wrong.
          */
+        /** True when the file never loads filament from the trays (no M6211, no tool select): GcodeRepair can add the load. */
+        public boolean needsFilamentLoad() { return !binary && !loadsFilament && tools.isEmpty(); }
         public String compatibilityWarning() {
             if (binary) return "";
             String model = metadata.getOrDefault("Configured printer model", "");

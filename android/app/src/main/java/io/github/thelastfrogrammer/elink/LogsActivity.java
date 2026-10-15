@@ -35,6 +35,7 @@ public final class LogsActivity extends Activity {
     /** Intent extra: open on this area. */
     public static final String EXTRA_AREA = "area";
     private static final String ALL = "All";
+    private static final int SAVE = 1;
     private boolean dark;
     private int ink, muted, surface, accent, chipOff;
     private String area = ALL, query = "";
@@ -74,6 +75,8 @@ public final class LogsActivity extends Activity {
         });
         action(actions, "Share…", () -> startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain")
             .putExtra(Intent.EXTRA_SUBJECT, "Link Workshop log").putExtra(Intent.EXTRA_TEXT, header() + "\n\n" + shownText()), "Share the log")));
+        action(actions, "Save…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/plain").addCategory(Intent.CATEGORY_OPENABLE)
+            .putExtra(Intent.EXTRA_TITLE, "link-workshop-log-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmm", Locale.ROOT).format(new java.util.Date()) + ".txt"), SAVE));
         action(actions, "Clear…", () -> new AlertDialog.Builder(this).setTitle("Clear the whole log?").setMessage("Every section is emptied. This cannot be undone.")
             .setNegativeButton("Cancel", null).setPositiveButton("Clear", (d, w) -> { Diagnostics.clear(); area = ALL; show(); }).show());
 
@@ -102,6 +105,17 @@ public final class LogsActivity extends Activity {
             if (query.isEmpty() || shown.toLowerCase(Locale.ROOT).contains(query)) out.add(shown);
         }
         return out;
+    }
+
+    @Override protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request != SAVE || result != RESULT_OK || data == null || data.getData() == null) return;
+        String text = header() + "\n\n" + shownText();
+        try (java.io.OutputStream out = getContentResolver().openOutputStream(data.getData())) {
+            if (out == null) throw new java.io.IOException();
+            out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            android.widget.Toast.makeText(this, "Log saved.", android.widget.Toast.LENGTH_SHORT).show();
+        } catch (Exception failed) { android.widget.Toast.makeText(this, "The log could not be saved there. Try another place.", android.widget.Toast.LENGTH_SHORT).show(); }
     }
 
     private void show() {

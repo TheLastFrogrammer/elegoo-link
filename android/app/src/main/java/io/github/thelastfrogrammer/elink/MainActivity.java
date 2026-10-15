@@ -133,6 +133,8 @@ public final class MainActivity extends Activity {
     private Button monitorShow;
     /** The cloud video playing inside the Print tab's camera block (cloud mode), or null; and the frame that holds the picture. */
     private CloudVideo cloudVideo; private FrameLayout monitorFrame; private boolean pendingCloudSnapshot;
+    /** Cloud picture visit: a short, unseen join of the printer's video channel that keeps one print picture when one is due. */
+    private CloudVideo pictureVisit; private FrameLayout pictureVisitBox;
     private Button cameraCheckButton, cameraAskButton; private TextView cameraCheckText; private boolean cameraChecking;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
@@ -477,6 +479,7 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams previewLayout = new LinearLayout.LayoutParams(-1, dp(180)); previewLayout.topMargin = dp(10); fileDetails.addView(filePreview, previewLayout); filePreview.setVisibility(View.GONE);
         previewInfo = label(fileDetails, "", 12, MUTED, false);
         previewWarning = A11y.polite(label(fileDetails, "", 14, ERROR, true)); previewWarning.setVisibility(View.GONE);
+        addLoad = button(fileDetails, "Add the filament load…", this::addLoadDialog); addLoad.setVisibility(View.GONE);
         LinearLayout uploadRow = row(fileDetails);
         upload = rowButton(uploadRow, "Upload", () -> {
             if (printer == null || printer.selectedName == null) return;
@@ -545,7 +548,9 @@ public final class MainActivity extends Activity {
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         Button pictures = button(preferences, "", () -> pictureDialog(true));
         pictureDefault = pictures; showPictureDefault();
-        label(preferences, "Camera pictures are saved with each print's recording: from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath. Each print can set its own interval (Pictures… on the Print tab while it prints).", 12, MUTED, false);
+        CheckBox visits = checkbox(preferences, "Take print pictures through the cloud while the app is open", settings.getBoolean("cloudPictureVisits", true));
+        visits.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean("cloudPictureVisits", enabled).apply(); if (!enabled) stopPictureVisit(); });
+        label(preferences, "Camera pictures are saved with each print's recording: from the printer's camera on this network, or through the cloud. In cloud mode, while this app is open, it looks in on the printer's video for a few seconds whenever a picture is due (a little mobile data each time); an open camera view takes them too. Each print can set its own interval (Pictures… on the Print tab while it prints).", 12, MUTED, false);
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         CheckBox firstLayer = checkbox(preferences, "Also when the first layer is done", settings.getBoolean("alertFirstLayer", false));
@@ -1766,7 +1771,7 @@ public final class MainActivity extends Activity {
             String serialNumber = printer.cloudSerial, printerName = printer.cloudName;
             cloudGate(true, () -> {
                 // The Print tab's video leaves the channel first (one join per account), then the full screen joins.
-                boolean leaving = cloudVideo != null; stopCamera();
+                boolean leaving = cloudVideo != null || pictureVisit != null; stopCamera(); stopPictureVisit();
                 Runnable open = () -> startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName));
                 if (leaving) main.postDelayed(open, 1_500); else open.run();
             });
@@ -1901,6 +1906,8 @@ public final class MainActivity extends Activity {
         out.add("Picture source now: " + (ready ? "the printer's camera on this network" : cloud && printer.localCamera() ? "the printer's camera alongside the cloud"
             : cloud ? (cloudVideo != null && cloudVideo.playing() ? "the Print tab's cloud video" : "none: in cloud mode only an open cloud video gives pictures") : "none: not connected"));
         boolean signedIn = printer.cloudSignedIn, chosen = !printer.cloudSerial.isEmpty();
+        if (CloudVideo.emptyStreak() > 0) out.add("Cloud video: the printer did not join its channel " + CloudVideo.emptyStreak() + " time(s) in a row" + (CloudVideo.emptyStreak() >= 2 ? "; restart the printer" : ""));
+        out.add("Cloud picture visits: " + (settings.getBoolean("cloudPictureVisits", true) ? "on" : "off") + (pictureVisit != null ? ", one running now" : ""));
         out.add("Elegoo cloud: " + (signedIn ? "signed in" : "not signed in") + ", printer " + (chosen ? "chosen" : "not chosen") + ", "
             + (printer.cloudOnline == 1 ? "online" : printer.cloudOnline == 0 ? "offline" : "online state unknown") + ", cloud agreement " + (settings.getBoolean("cloudControlUnderstood", false) ? "accepted" : "not accepted yet"));
         boolean streamOpen = cameraPlayer != null;
@@ -1972,10 +1979,72 @@ public final class MainActivity extends Activity {
                 if (!sent) { cameraAskButton.setEnabled(true); cameraCheckText.setText("Not sent: this needs the printer watched through the Elegoo cloud with fresh status, and no other cloud command in progress."); }
             })).show();
     }
+    /**
+     * Every 30 s while the app is open: in cloud mode, when the running print's picture is due and no camera view is open,
+     * joins the printer's video channel unseen, keeps one picture and leaves (at most 35 s). Nothing is sent to the printer;
+     * it joins its channel on its own when a viewer does. After two empty channels in a row it waits 30 minutes.
+     */
+    private final Runnable pictureVisitTick = new Runnable() { public void run() {
+        main.postDelayed(this, 30_000);
+        if (!active || printer == null || pictureVisit != null || cloudVideo != null || !settings.getBoolean("cloudPictureVisits", true)) return;
+        if (printer.ready() || !printer.usingCloud() || !printer.cloudFresh() || printer.localCamera() || printer.cloudSerial.isEmpty() || printer.cloudOnline != 1) return;
+        if (!settings.getBoolean("cloudControlUnderstood", false) || !CloudVideo.supported() || CloudCameraActivity.holdsChannel()) return;
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (CloudVideo.emptyStreak() >= 2 && now - CloudVideo.emptyAt() < 30 * 60_000L) return;
+        if (printer.recorder == null || !printer.recorder.pictureDue(now)) return;
+        startPictureVisit();
+    } };
+    private void startPictureVisit() {
+        if (pictureVisitBox == null) {
+            // A 2 dp spot in the corner: the video must be in the window to decode, but nobody needs to see it.
+            pictureVisitBox = new FrameLayout(this); pictureVisitBox.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+            ((FrameLayout) findViewById(android.R.id.content)).addView(pictureVisitBox, new FrameLayout.LayoutParams(dp(2), dp(2), Gravity.BOTTOM | Gravity.START));
+        }
+        CloudVideo[] self = new CloudVideo[1];
+        self[0] = new CloudVideo(this, printer.cloudSerial, () -> printer, new CloudVideo.Listener() {
+            public void status(String text, boolean problem) { if (problem && pictureVisit == self[0]) stopPictureVisit(); }
+            public void playing() { }
+            public void snapshot(byte[] jpeg) { }
+        }).oneShot("cloud picture visit", () -> { if (pictureVisit == self[0]) stopPictureVisit(); });
+        pictureVisit = self[0];
+        pictureVisitBox.addView(pictureVisit.view(), new FrameLayout.LayoutParams(-1, -1));
+        pictureVisit.start();
+        main.postDelayed(() -> { if (pictureVisit == self[0]) { Diagnostics.note(Diagnostics.CAMERA, "cloud picture visit: no picture within 35 s; left"); stopPictureVisit(); } }, 35_000);
+    }
+    private void stopPictureVisit() { CloudVideo visit = pictureVisit; pictureVisit = null; if (visit != null) visit.stop(); }
+    private Button addLoad;
+    /** Picks the CANVAS tray to load from (with its reported filament when known), then makes the repaired copy. */
+    private void addLoadDialog() {
+        if (printer == null || printer.selectedFile == null) return;
+        String[] trays = new String[4];
+        for (int i = 0; i < 4; i++) trays[i] = "Tray " + (i + 1) + trayWords(i);
+        new AlertDialog.Builder(this).setTitle("Load filament from which tray?")
+            .setItems(trays, (d, which) -> new AlertDialog.Builder(this).setTitle("Add the filament load?")
+                .setMessage("Makes a new copy of this file with the Centauri Carbon 2's filament load added before its purge line: heat the nozzle, load from tray " + (which + 1)
+                    + " (M6211) and select it (T" + which + "), as the printer's own profile does. The original file is not changed. Re-slicing with a Centauri Carbon 2 profile is still the better fix.")
+                .setNegativeButton("Cancel", null).setPositiveButton("Add", (d2, w2) -> printer.addFilamentLoad(which)).show())
+            .setNegativeButton("Cancel", null).show();
+    }
+    /** " · PLA, red" for a tray of the first CANVAS unit when the printer reported it, else "". */
+    private String trayWords(int tray) {
+        JSONObject canvas = printer == null ? null : printer.canvas;
+        org.json.JSONArray units = canvas == null ? null : canvas.optJSONArray("canvas_list");
+        JSONObject unit = units == null ? null : units.optJSONObject(0);
+        org.json.JSONArray list = unit == null ? null : unit.optJSONArray("tray_list");
+        for (int i = 0; list != null && i < list.length(); i++) {
+            JSONObject t = list.optJSONObject(i); if (t == null || t.optInt("tray_id", -1) != tray) continue;
+            String type = StatusPresentation.clean(t.optString("filament_type", "")), hex = TrayPlan.colour(t.optString("filament_color"));
+            String colour = hex == null ? null : WorkshopUi.colourName(hex);
+            return type.isEmpty() && colour == null ? "" : " · " + type + (colour == null ? "" : (type.isEmpty() ? "" : ", ") + colour);
+        }
+        return "";
+    }
     private void stopCloudVideo() { CloudVideo video = cloudVideo; cloudVideo = null; if (video != null) video.stop(); }
     /** Cloud mode: plays the printer's camera through the Elegoo cloud right here under the progress bar (after the one-time cloud agreement). */
     private void startCloudVideo() {
         if (printer == null || printer.cloudSerial.isEmpty() || cloudVideo != null) return;
+        // A picture visit holds the channel (one join per account): end it, then start once it has left.
+        if (pictureVisit != null) { stopPictureVisit(); main.postDelayed(this::startCloudVideo, 1_500); return; }
         // The cloud camera screen may still hold the channel (one join per account); start once it has let go.
         if (CloudCameraActivity.holdsChannel()) { main.postDelayed(() -> { if (active && page == PRINT && cloudVideo == null) startCloudVideo(); }, 3_000); return; }
         if (!CloudVideo.supported()) { monitorCameraInfo.setText("The camera needs a newer Android System WebView. Update it from the Play Store."); monitorCameraInfo.setVisibility(View.VISIBLE); return; }
@@ -2190,7 +2259,9 @@ public final class MainActivity extends Activity {
         heater.setVisibility(heatersOk ? View.VISIBLE : View.GONE);
         // The temperature tiles open the same dialog when the heaters can be changed (as on the printer's own screen).
         for (TextView t : new TextView[] {tileNozzle, tileBed}) ((View) t.getParent()).setClickable(canControl && heatersOk); speed.setVisibility(pausable ? View.VISIBLE : View.GONE);
-        tuningHint.setText(ControlState.tuningNote(snapshot));
+        // The printer's own speed-mode number, until its names are confirmed (set a mode on the printer and compare).
+        JSONObject moveInfo = snapshot.optJSONObject("gcode_move_inf");
+        tuningHint.setText(ControlState.tuningNote(snapshot) + (moveInfo != null && moveInfo.has("speed_mode") ? " The printer reports speed mode number " + moveInfo.optInt("speed_mode") + "." : ""));
         setTile(tuneNozzle, temperature("extruder")); setTile(tuneBed, temperature("heater_bed"));
         setTile(tunePartFan, fanText("fan")); setTile(tuneAuxFan, fanText("aux_fan")); setTile(tuneChamberFan, fanText("box_fan"));
         tuneReadout.setVisibility(snapshot.length() == 0 ? View.GONE : View.VISIBLE);
@@ -2239,6 +2310,7 @@ public final class MainActivity extends Activity {
         filePreview.setImageBitmap(hasReport ? printer.selectedThumbnail : null); filePreview.setVisibility(hasReport && printer.selectedThumbnail != null ? View.VISIBLE : View.GONE);
         String fileWarning = hasReport ? report.compatibilityWarning() : "";
         previewWarning.setText(fileWarning); previewWarning.setVisibility(fileWarning.isEmpty() ? View.GONE : View.VISIBLE);
+        addLoad.setVisibility(hasReport && report.needsFilamentLoad() ? View.VISIBLE : View.GONE); addLoad.setEnabled(!fileBusy);
         previewInfo.setText(!hasReport ? "" : report.thumbnail == null ? report.thumbnailNote : printer.selectedThumbnail == null ? "Embedded image found but Android could not decode it. File inspection remains available." : report.thumbnailNote + " · slicer image, not a live camera or motion simulation");
         materialDetails.setEnabled(hasReport && !report.materials.entries.isEmpty());
         previewToolpath.setEnabled(printer != null && printer.selectedFile != null && !printer.importing);
@@ -2316,6 +2388,11 @@ public final class MainActivity extends Activity {
         monitorImage.setVisibility(showCamera && (ownCamera ? cameraPlayer != null || lastFrame != null : cloudVideo != null) ? View.VISIBLE : View.GONE);
         monitorCameraStart.setText(cameraPlayer != null || cloudVideo != null ? "Stop camera" : "Watch camera");
         monitorBadge.setText(cloudVideo != null ? (cloudVideo.playing() ? "● Live · cloud" : "Connecting…") : cameraPlayer != null ? "● Live" : "Last picture");
+        // Two empty channels in a row: the printer's camera service is probably stuck; say so before the next 20 s wait.
+        if (!ready && cloudVideo == null && CloudVideo.emptyStreak() >= 2) {
+            monitorCameraInfo.setText("The printer's camera has not answered " + CloudVideo.emptyStreak() + " times in a row. Its camera service is probably stuck: restart the printer, then tap Watch camera.");
+            monitorCameraInfo.setTextColor(ERROR); monitorCameraInfo.setVisibility(View.VISIBLE);
+        } else if (CloudVideo.emptyStreak() < 2 && monitorCameraInfo.getText().toString().startsWith("The printer's camera has not answered")) monitorCameraInfo.setText("");
         if (monitorCameraInfo.getText().length() == 0) monitorCameraInfo.setVisibility(View.GONE);
         spaceActions((LinearLayout) monitorCameraStart.getParent());
         graphs.setText("Print recordings");
@@ -2626,9 +2703,10 @@ public final class MainActivity extends Activity {
         // Background cloud watching runs as a started foreground service; start it while the app is visible.
         if (settings.getBoolean("cloudBackground", false) && cloudBackground != null && cloudBackground.isEnabled()) try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { }
         if (printer != null) { printer.observe(this::render); printer.cloudVisible(true); } main.post(clock);
+        main.removeCallbacks(pictureVisitTick); main.postDelayed(pictureVisitTick, 10_000);
         if (Showcase.stage == Showcase.END) main.postDelayed(this::showcaseEnd, 400);
     }
-    @Override protected void onStop() { active = false; stopCamera(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
+    @Override protected void onStop() { active = false; stopCamera(); main.removeCallbacks(pictureVisitTick); stopPictureVisit(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
     @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); if (ShowcaseService.listener == showcaseListener && !isChangingConfigurations()) ShowcaseService.listener = null; if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }
