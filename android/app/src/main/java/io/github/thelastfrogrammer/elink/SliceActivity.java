@@ -154,7 +154,7 @@ public final class SliceActivity extends Activity {
         current = this;
         if (!NativeSlicer.available(this)) {
             LinearLayout card = card("Slicer not included");
-            label(card, "This build of Link Workshop was made without the slicer library. Builds that include it are made with slicer/scripts/install-into-app.sh before building the app.", 14, ink, false);
+            label(card, "This build of Link Workshop does not include the slicer. To add it, run slicer/scripts/install-into-app.sh before building the app.", 14, ink, false);
             return;
         }
         build();
@@ -1226,7 +1226,7 @@ public final class SliceActivity extends Activity {
     /** How automatic arranging (and Arrange all in the layout) places models: turning them, shrinking them all to fit, the gap. */
     private void arrangeDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(24), dp(8), dp(24), 0);
-        label(body, "Used when the app arranges models for you: on slicing without your own layout, and by Arrange all in the layout.", 13, muted, false);
+        label(body, "Used when the app arranges models for you: when you slice without your own layout, and by Arrange all.", 13, muted, false);
         CheckBox rotate = new CheckBox(this); rotate.setText("Turn models to fit more on the bed"); rotate.setTextColor(ink); rotate.setButtonTintList(ColorStateList.valueOf(teal)); rotate.setMinHeight(dp(48));
         rotate.setChecked(settings.getBoolean("arrangeRotate", false)); body.addView(rotate);
         CheckBox shrink = new CheckBox(this); shrink.setText("Shrink all models together until they fit"); shrink.setTextColor(ink); shrink.setButtonTintList(ColorStateList.valueOf(teal)); shrink.setMinHeight(dp(48));
@@ -1494,12 +1494,12 @@ public final class SliceActivity extends Activity {
         EditText hex = new EditText(this); hex.setSingleLine(true); hex.setHint("#RRGGBB"); hex.setText(slot.colour == null ? "" : slot.colour);
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0); body.addView(hex);
         new AlertDialog.Builder(this).setTitle("Filament " + (slots.indexOf(slot) + 1) + " colour")
-            .setMessage("Used for the preview image, the G-code's filament colours and the flushing volumes between colours.").setView(body)
+            .setMessage("Used for the preview image, the filament colours in the G-code, and the flushing between colours.").setView(body)
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Filament profile colour", (d, w) -> { slot.colour = null; showSwatch(slot); showModels(); })
             .setPositiveButton("Use", (d, w) -> {
                 String colour = TrayPlan.colour(hex.getText().toString());
-                if (colour == null) { status.setText("Colours are six hex digits, like #D02828."); status.setTextColor(error); return; }
+                if (colour == null) { status.setText("Enter a colour as six hex digits, like #D02828."); status.setTextColor(error); return; }
                 slot.colour = colour; showSwatch(slot); showModels();
             }).show();
     }

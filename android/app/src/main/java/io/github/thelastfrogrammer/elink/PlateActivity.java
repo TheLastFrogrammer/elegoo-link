@@ -148,7 +148,7 @@ public final class PlateActivity extends Activity {
                     int unfit = layout.optInt("unfit");
                     status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, open More…, choose Scale…, then tap Fit to the bed; or turn on shrinking in Arrange options on the Slice screen."
                         : layout.optDouble("shrunk", 1) < 0.999 ? "Every model was shrunk to " + Math.round(layout.optDouble("shrunk") * 100) + " % so all of them fit (Arrange options on the Slice screen)."
-                        : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
+                        : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; use two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
                     status.setTextColor(unfit > 0 ? ui.error : ui.muted);
                     load();
                 });
@@ -345,7 +345,7 @@ public final class PlateActivity extends Activity {
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
             b.setEnabled(i == 0 ? placements.length() > 0 : i == names.length - 1 || on);
         }
-        if (!on) ui.label(body, "Pick a model first: tap it in the layout, or use Select a model…", 13, ui.muted, false);
+        if (!on) ui.label(body, "Pick a model first: tap it on the plate, or use Select a model…", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
     }
@@ -408,7 +408,7 @@ public final class PlateActivity extends Activity {
     private void filamentDialog() {
         if (selected < 0 || selected >= placements.length()) return;
         String[] colours = getIntent().getStringArrayExtra(EXTRA_COLOURS); int count = colours == null ? 0 : colours.length;
-        if (count < 2) { status.setText("Add a second filament on the Slice screen first; then each model can have its own."); status.setTextColor(ui.muted); return; }
+        if (count < 2) { status.setText("Add a second filament on the Slice screen first, so each model can have its own."); status.setTextColor(ui.muted); return; }
         JSONObject chosen = placements.optJSONObject(selected); int file = chosen.optInt("file"), object = chosen.optInt("object"), now = chosen.optInt("slot", 0);
         String[] items = new String[count + 1]; items[0] = "As set on the Slice screen";
         for (int i = 1; i <= count; i++) items[i] = "Filament " + i + (WorkshopUi.colourName(colours[i - 1]) == null ? "" : " · " + WorkshopUi.colourName(colours[i - 1]));

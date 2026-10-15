@@ -73,7 +73,7 @@ public final class ModelSearchActivity extends Activity {
         TextView title = label(header, "Find models", 20, ink, true); A11y.heading(title);
         ((LinearLayout.LayoutParams) title.getLayoutParams()).weight = 1; title.getLayoutParams().width = 0;
 
-        query = new EditText(this); query.setHint("What to print, e.g. cable clip"); query.setSingleLine(true); query.setTextColor(ink); query.setHintTextColor(muted);
+        query = new EditText(this); query.setHint("Search for models, e.g. cable clip"); query.setSingleLine(true); query.setTextColor(ink); query.setHintTextColor(muted);
         query.setInputType(InputType.TYPE_CLASS_TEXT); query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         query.setOnEditorActionListener((v, action, event) -> { if (action == EditorInfo.IME_ACTION_SEARCH) { search(1); return true; } return false; });
         content.addView(query, new LinearLayout.LayoutParams(-1, dp(56)));

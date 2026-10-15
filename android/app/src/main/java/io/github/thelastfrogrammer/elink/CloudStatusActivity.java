@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
 public final class CloudStatusActivity extends Activity {
     private static final long POLL_MS = 15_000;
     private static final String NOT_SIGNED_IN = "You are not signed in to Elegoo on this phone.\n\n"
-        + "1. Go to Settings.\n2. Tap Sign in with Elegoo.\n3. Sign in on Elegoo's page. Then come back here.";
+        + "1. Go to Settings.\n2. Tap Sign in with Elegoo.\n3. Sign in on Elegoo's page, then come back here.";
     private static final String REMOVE_HINT = "\n\nTo remove this account from this phone, go to Settings and tap Sign out on this phone.";
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
@@ -101,7 +101,7 @@ public final class CloudStatusActivity extends Activity {
     private void confirmRenewal() {
         if (api == null || busy) return;
         new android.app.AlertDialog.Builder(this).setTitle("Test sign-in renewal?")
-            .setMessage("Asks Elegoo for new tokens now, the way Elegoo's account page does. If Elegoo refuses, this sign-in may stop working and you will need to sign in again.")
+            .setMessage("Asks Elegoo for new tokens now, the same way Elegoo's account page does. If Elegoo refuses, this sign-in may stop working and you will need to sign in again.")
             .setNegativeButton("Cancel", null).setPositiveButton("Renew now", (dialog, which) -> renewNow()).show();
     }
     private void renewNow() {

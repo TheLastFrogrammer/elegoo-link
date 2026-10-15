@@ -54,7 +54,7 @@ public final class LogsActivity extends Activity {
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(dark ? 0xff0e1417 : 0xfff2f5f6); scroll.setFitsSystemWindows(true);
         LinearLayout content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
         TextView title = text(content, "Logs", 24, ink, true); A11y.heading(title);
-        text(content, "What the app noted while it worked, newest first. No access codes, PINs, addresses or serial numbers are kept. Share it when asking for help.", 13, muted, false);
+        text(content, "What the app noted while it worked, newest first. No access codes, PINs, addresses or serial numbers are kept. Share it when you ask for help.", 13, muted, false);
 
         HorizontalScrollView chipScroll = new HorizontalScrollView(this); chipScroll.setHorizontalScrollBarEnabled(false);
         chips = new LinearLayout(this); chips.setOrientation(LinearLayout.HORIZONTAL); chipScroll.addView(chips);
@@ -115,7 +115,7 @@ public final class LogsActivity extends Activity {
             if (out == null) throw new java.io.IOException();
             out.write(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             android.widget.Toast.makeText(this, "Log saved.", android.widget.Toast.LENGTH_SHORT).show();
-        } catch (Exception failed) { android.widget.Toast.makeText(this, "The log could not be saved there. Try another place.", android.widget.Toast.LENGTH_SHORT).show(); }
+        } catch (Exception failed) { android.widget.Toast.makeText(this, "Could not save the log there. Try another place.", android.widget.Toast.LENGTH_SHORT).show(); }
     }
 
     private void show() {

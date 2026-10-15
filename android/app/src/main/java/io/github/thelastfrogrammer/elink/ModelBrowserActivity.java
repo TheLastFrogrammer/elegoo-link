@@ -184,7 +184,7 @@ public final class ModelBrowserActivity extends Activity {
     }
 
     private void moreMenu() {
-        String[] items = {"Reload", "Open this page in the phone's browser…", "Sign out of all sites…"};
+        String[] items = {"Reload", "Open this page in another browser…", "Sign out of all sites…"};
         new AlertDialog.Builder(this).setTitle("Browser options").setItems(items, (d, which) -> {
             if (which == 0) web.reload();
             else if (which == 1) {
@@ -206,10 +206,10 @@ public final class ModelBrowserActivity extends Activity {
         if (downloading) { toast("One download at a time: wait for this one to finish."); return; }
         String scheme = url == null ? "" : Uri.parse(url).getScheme();
         boolean blob = "blob".equalsIgnoreCase(scheme), data = "data".equalsIgnoreCase(scheme);
-        if (!blob && !data && !"https".equalsIgnoreCase(scheme)) { explain("Download not taken", "The site offered this file over an address that is not secure, so it was not downloaded."); return; }
+        if (!blob && !data && !"https".equalsIgnoreCase(scheme)) { explain("Download blocked", "The site offered this file over an address that is not secure, so it was not downloaded."); return; }
         String name = ModelSites.fileNameFor(blob || data ? null : url, disposition, mimeType);
         if (!ModelSites.browserTakes(name)) {
-            explain("Not a model file", "\"" + name + "\" is not a model the app can open. It takes STL, 3MF, OBJ, STEP and AMF files, and ZIPs of them.");
+            explain("Not a model file", "\"" + name + "\" is not a model the app can open. It works with STL, 3MF, OBJ, STEP and AMF files, and ZIPs of them.");
             return;
         }
         if (length > ModelSites.MAX_DOWNLOAD || blob && length > MAX_BLOB) { explain("File too large", "The file is larger than " + (blob ? "50" : "200") + " MB, so it was not downloaded."); return; }

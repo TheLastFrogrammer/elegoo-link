@@ -41,9 +41,9 @@ public final class CloudLoginActivity extends Activity implements CloudLogin.Hos
         // What signing in means, in plain words. Shown whatever the WebView state.
         LinearLayout intro = new LinearLayout(this); intro.setOrientation(LinearLayout.VERTICAL); intro.setPadding(pad, pad, pad, 0);
         text(intro, "Sign in to Elegoo", 18, ink, true);
-        text(intro, "1. Enter your Elegoo email and password on Elegoo's page below.\n2. Link Workshop never sees your password. It only receives the sign-in tokens that Elegoo's page hands over, and keeps them encrypted on this phone.", 13, muted, false);
+        text(intro, "1. Enter your Elegoo email and password on Elegoo's page below.\n2. Link Workshop never sees your password. It only gets the sign-in tokens that Elegoo's page passes on, and keeps them encrypted on this phone.", 13, muted, false);
         text(intro, "With this account the app can show your printers' status through the Elegoo cloud and watch the camera away from home. Once you turn on cloud control (the app asks first), it can also pause, stop, send files and start prints without a local connection. It does not change your password or account details.", 13, muted, false);
-        text(intro, "To remove the account from this phone later, use Settings, then Sign out on this phone.", 13, muted, false);
+        text(intro, "To remove the account from this phone later, go to Settings and tap Sign out on this phone.", 13, muted, false);
         root.addView(intro, new LinearLayout.LayoutParams(-1, -2));
         status = text(root, "", 14, muted, false); status.setPadding(pad, pad / 2, pad, pad / 2);
 

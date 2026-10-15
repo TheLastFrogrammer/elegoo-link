@@ -138,7 +138,7 @@ public final class SliceSettingsActivity extends Activity {
         content = object != null ? ui.page("Settings for " + objectLabel,
                 "Only " + objectLabel + " and its copies use these changes; the other models keep the print settings.")
             : slot >= 0 ? ui.page("Filament " + (slot + 1) + " settings", "Changes apply to this filament on top of its filament profile. \u201cPrinter\u2019s value\u201d means the printer preset decides.")
-            : ui.page("Print settings", "Changes apply to this slice on top of the print profile. The print profile's value is shown under each setting.");
+            : ui.page("Print settings", "Changes apply to this slice on top of the print profile. Each setting shows the profile's value underneath.");
         if (saved != null && saved.getStringArrayList(EXPANDED) != null) expanded = new HashSet<>(saved.getStringArrayList(EXPANDED));
         try {
             selection = new JSONObject(getIntent().getStringExtra(EXTRA_SELECTION));
@@ -221,7 +221,7 @@ public final class SliceSettingsActivity extends Activity {
                 JSONObject read = slot >= 0 ? forSlot(described, slot) : object != null ? forObject(described) : described;
                 main.post(() -> { if (!isDestroyed()) { definitions = read; build(); } });
             } catch (Exception failure) {
-                main.post(() -> { if (!isDestroyed()) { summary.setText("Settings could not be read: " + failure.getMessage()); summary.setTextColor(ui.error); } });
+                main.post(() -> { if (!isDestroyed()) { summary.setText("Couldn't read settings: " + failure.getMessage()); summary.setTextColor(ui.error); } });
             }
         });
     }
@@ -506,7 +506,7 @@ public final class SliceSettingsActivity extends Activity {
         if (overrides.isEmpty()) { Toast.makeText(this, "Change a setting first.", Toast.LENGTH_SHORT).show(); return; }
         EditText name = new EditText(this); name.setSingleLine(true); name.setHint("Name, e.g. Strong parts");
         LinearLayout body = new LinearLayout(this); body.setPadding(ui.dp(20), ui.dp(8), ui.dp(20), 0); body.addView(name, new LinearLayout.LayoutParams(-1, -2));
-        new AlertDialog.Builder(this).setTitle("Save changes").setMessage("Saved on this phone. They can be used with any print profile.").setView(body)
+        new AlertDialog.Builder(this).setTitle("Save changes").setMessage("Saved on this phone. You can use them with any print profile.").setView(body)
             .setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
                 String title = name.getText().toString().trim();
                 if (title.isEmpty()) return;
