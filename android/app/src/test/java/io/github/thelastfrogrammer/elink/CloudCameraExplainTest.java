@@ -9,6 +9,7 @@ public class CloudCameraExplainTest {
         String text = CloudCameraActivity.explain("The printer is not sending video. It may be off, offline, or its camera may be disabled.");
         assertTrue(text, text.startsWith("No video from the printer."));
         assertTrue(text, text.endsWith("then tap Try again."));
+        assertTrue("a restart fixed a stuck camera service on a real printer", text.contains("restart the printer"));
         assertTrue(CloudCameraActivity.isProblem("The printer is not sending video. It may be off, offline, or its camera may be disabled."));
     }
 

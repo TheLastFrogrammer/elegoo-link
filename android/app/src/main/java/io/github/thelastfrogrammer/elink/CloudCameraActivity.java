@@ -199,7 +199,7 @@ public final class CloudCameraActivity extends Activity {
         if (m.isEmpty()) return "";
         if (m.startsWith("Connecting to the camera")) return "Connecting to the printer's camera through Elegoo's cloud. This usually takes under 20 seconds.";
         if (m.startsWith("Connected. Waiting")) return "Connected. Waiting for the printer to send video. If nothing appears within about 15 seconds, the printer's camera may be turned off.";
-        if (m.startsWith("The printer is not sending")) return "No video from the printer. It may be off, offline, or its camera may be turned off. Check that the printer is on and connected to the internet, then tap Try again.";
+        if (m.startsWith("The printer is not sending")) return "No video from the printer. It did not join its camera channel. If it is on and online, its camera service may be stuck: restart the printer, then tap Try again.";
         if (m.startsWith("The printer stopped")) return "The printer stopped sending video. Check that it is still on and connected to the internet, then tap Try again.";
         if (m.startsWith("The printer left")) return "The printer left the camera connection. Check that it is still on and connected to the internet, then tap Try again.";
         if (m.contains("UID_BANNED")) return "This account was in the camera twice at once (another camera view was still open), so the camera service closed one. Close the other view, then tap Try again.";

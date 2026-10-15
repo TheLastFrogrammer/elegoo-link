@@ -435,3 +435,7 @@ tab now waits for the cloud camera screen to let go, and the full screen waits f
 Result (2026-10-14, 0.47.2): the one Wi-Fi try of the 8080 stream, 11 s after a successful 1042 answer through the cloud,
 failed in cloud mode, and the cloud channel stayed empty again. On this firmware in cloud mode neither the cloud video nor
 the local stream reached the app. 0.47.3 logs the network error kind of a failed stream (refused, timeout, …).
+Resolution (2026-10-15): a printer restart fixed it. Afterwards the printer joined the channel about one second after the
+app did ("a member joined", then "started sending video") with no request sent first: in cloud mode the printer joins its
+video channel on its own when a viewer joins. Before the restart its camera service was stuck and never joined. The
+no-video message now suggests restarting the printer.
