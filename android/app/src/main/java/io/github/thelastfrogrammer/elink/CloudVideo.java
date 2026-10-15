@@ -41,6 +41,10 @@ final class CloudVideo {
     private WebView web;
     private boolean pageReady, started, playing, stopped;
     private CloudApi.AgoraCredential credential;
+    /** When start() ran (monotonic ms), and the last page line logged, so the camera log shows each step once with its timing. */
+    private long startedAt; private String lastLogged = "";
+    private long since() { return android.os.SystemClock.elapsedRealtime() - startedAt; }
+    private void log(String text) { if (text.equals(lastLogged)) return; lastLogged = text; Diagnostics.note(Diagnostics.CAMERA, "Print tab cloud video: " + Diagnostics.scrub(text)); }
     private final Runnable pictureTick = new Runnable() { public void run() {
         PrinterService p = printer.get();
         if (web != null && playing && p != null && p.recorder != null && p.recorder.pictureDue(android.os.SystemClock.elapsedRealtime())) web.evaluateJavascript("snapshot(true)", null);
@@ -72,6 +76,8 @@ final class CloudVideo {
     }
 
     void start() {
+        startedAt = android.os.SystemClock.elapsedRealtime();
+        log("started; asking for camera access");
         view().loadUrl(ORIGIN + "/assets/camera/index.html");
         listener.status("Getting camera access from Elegoo…", false);
         worker.execute(() -> {
@@ -90,7 +96,8 @@ final class CloudVideo {
             String text = error; CloudApi.AgoraCredential result = issued;
             main.post(() -> {
                 if (stopped) return;
-                if (text != null) { listener.status(CloudCameraActivity.explain(text), true); return; }
+                if (text != null) { log("camera access refused after " + since() + " ms: " + text); listener.status(CloudCameraActivity.explain(text), true); return; }
+                log("camera access issued after " + since() + " ms" + (pageReady ? "" : "; waiting for the video page"));
                 credential = result; startIfReady();
             });
         });
@@ -100,6 +107,7 @@ final class CloudVideo {
 
     /** Leaves the video channel and frees the view. */
     void stop() {
+        if (!stopped && startedAt > 0) log("stopped after " + since() / 1000 + " s" + (playing ? "" : ", video never started"));
         stopped = true; playing = false; main.removeCallbacksAndMessages(null); worker.shutdownNow();
         if (web != null) {
             web.evaluateJavascript("stop()", null);
@@ -111,7 +119,7 @@ final class CloudVideo {
 
     private void startIfReady() {
         if (started || !pageReady || credential == null || web == null) return;
-        started = true;
+        started = true; log("joining the printer's video channel");
         web.evaluateJavascript("start(" + JSONObject.quote(CloudControl.AGORA_APP_ID) + "," + JSONObject.quote(serial) + ","
             + JSONObject.quote(credential.rtcToken) + "," + JSONObject.quote(credential.rtcUserId) + ")", null);
     }
@@ -121,9 +129,9 @@ final class CloudVideo {
         try {
             JSONObject message = new JSONObject(raw);
             switch (message.optString("type")) {
-                case "ready": pageReady = true; startIfReady(); break;
-                case "status": { String text = message.optString("text"); if (!text.isEmpty()) listener.status(CloudCameraActivity.explain(text), CloudCameraActivity.isProblem(text)); break; }
-                case "playing": if (!playing) { playing = true; main.postDelayed(pictureTick, 3_000); } listener.playing(); break;
+                case "ready": pageReady = true; log("video page ready after " + since() + " ms"); startIfReady(); break;
+                case "status": { String text = message.optString("text"); if (!text.isEmpty()) { log("page: " + text + " (" + since() + " ms)"); listener.status(CloudCameraActivity.explain(text), CloudCameraActivity.isProblem(text)); } break; }
+                case "playing": if (!playing) { playing = true; log("video playing after " + since() + " ms"); main.postDelayed(pictureTick, 3_000); } listener.playing(); break;
                 case "picture": keep(message.optString("data")); break;
                 case "snapshot": listener.snapshot(decode(message.optString("data"))); break;
                 default: break;
@@ -133,7 +141,7 @@ final class CloudVideo {
 
     private void keep(String dataUrl) {
         byte[] jpeg = decode(dataUrl); PrinterService p = printer.get();
-        if (jpeg != null && p != null && p.recorder != null) p.recorder.savePicture(jpeg, android.os.SystemClock.elapsedRealtime());
+        if (p != null && p.recorder != null) p.recorder.savePicture(jpeg, android.os.SystemClock.elapsedRealtime(), "the Print tab's cloud video");
     }
     private static byte[] decode(String dataUrl) {
         String prefix = "data:image/jpeg;base64,";

@@ -1236,7 +1236,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 Object text = new org.json.JSONTokener(value).nextValue();
                 String url = text instanceof String ? (String) text : "";
                 if (url.startsWith("data:image/jpeg;base64,") && printer != null && printer.recorder != null)
-                    printer.recorder.savePicture(android.util.Base64.decode(url.substring(23), android.util.Base64.DEFAULT), mono);
+                    printer.recorder.savePicture(android.util.Base64.decode(url.substring(23), android.util.Base64.DEFAULT), mono, "Live toolpath's cloud video");
             } catch (Exception ignored) { }
         });
     }
@@ -1244,7 +1244,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void keepLocalPicture() {
         if (printer == null || printer.recorder == null || cameraFrames == null) return;
         long mono = android.os.SystemClock.elapsedRealtime();
-        if (printer.recorder.pictureDue(mono)) printer.recorder.savePicture(cameraFrames.latest(), mono);
+        if (printer.recorder.pictureDue(mono)) printer.recorder.savePicture(cameraFrames.latest(), mono, "Live toolpath's camera stream");
     }
     private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
     private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }

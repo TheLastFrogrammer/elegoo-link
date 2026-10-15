@@ -71,14 +71,21 @@ public final class PrintRecorder {
     /** Whether a camera picture is due for the running print (`mono`: the monotonic clock). */
     public synchronized boolean pictureDue(long mono) { return current != null && current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L; }
     /** Keeps a JPEG camera picture with the running print, named by its elapsed time; false when there is no print to keep it with. */
-    public synchronized boolean savePicture(byte[] jpeg, long mono) {
-        if (current == null || jpeg == null || jpeg.length < 100) return false;
+    public synchronized boolean savePicture(byte[] jpeg, long mono) { return savePicture(jpeg, mono, "camera"); }
+    /** As above, naming where the picture came from for the camera log (the first picture of a print, every tenth, and every failure). */
+    public synchronized boolean savePicture(byte[] jpeg, long mono, String source) {
+        if (current == null) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: no print is being recorded"); return false; }
+        if (jpeg == null || jpeg.length < 100) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: empty picture (" + (jpeg == null ? 0 : jpeg.length) + " bytes)"); return false; }
         File folder = current.pictureFolder(); folder.mkdirs();
         long elapsed = Math.max(0, mono - current.monoStart) / 1000;
         try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
-        catch (IOException failed) { return false; }
-        picturedMono = mono; current.pictures++; save(current); return true;
+        catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
+        picturedMono = mono; current.pictures++; save(current);
+        if (current.pictures == 1 || current.pictures % 10 == 0) Diagnostics.note(Diagnostics.CAMERA, "picture " + current.pictures + " of this print kept from " + source + " (" + jpeg.length / 1024 + " KB)");
+        return true;
     }
+    /** Seconds since the running print's last picture (monotonic `mono`), or -1 when none yet / no print. */
+    public synchronized long secondsSincePicture(long mono) { return current == null || current.pictures == 0 || picturedMono < 0 ? -1 : Math.max(0, mono - picturedMono) / 1000; }
     /** A recording's pictures, oldest first, each with its elapsed seconds. */
     public static List<File> pictures(Recording recording) {
         File[] files = recording.pictureFolder().listFiles((dir, name) -> name.matches("\\d+\\.jpg"));

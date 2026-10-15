@@ -12,7 +12,7 @@ import java.util.*;
  * being closed. Holds no access codes, PINs, addresses or serial numbers. Independent of Android.
  */
 final class Diagnostics {
-    static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan", FILES = "Printer file downloads", PROBE = "Printer probe", SITES = "Model sites", HYBRID = "Local and cloud";
+    static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan", FILES = "Printer file downloads", PROBE = "Printer probe", SITES = "Model sites", HYBRID = "Local and cloud", CAMERA = "Camera";
     static final int KEEP_PER_AREA = 40;
     private static final String SEPARATOR = "\u001f";
     private static final Map<String, Deque<String>> entries = new LinkedHashMap<>();
@@ -43,6 +43,21 @@ final class Diagnostics {
     }
 
     static synchronized void clear() { entries.clear(); save(); }
+
+    /** The newest `count` entries of an area, oldest first. */
+    static synchronized List<String> recent(String area, int count) {
+        Deque<String> list = entries.get(area);
+        if (list == null) return Collections.emptyList();
+        List<String> all = new ArrayList<>(list);
+        return all.subList(Math.max(0, all.size() - count), all.size());
+    }
+
+    /** Text from a network error or a page, safe for the log: addresses and serial-like ids replaced. */
+    static String scrub(String text) {
+        if (text == null) return "";
+        return text.replaceAll("\\b\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?\\b", "<address>")
+            .replaceAll("\\b(?=[A-Za-z0-9]*\\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{12,}\\b", "<id>");
+    }
 
     static synchronized boolean isEmpty() { return entries.isEmpty(); }
 

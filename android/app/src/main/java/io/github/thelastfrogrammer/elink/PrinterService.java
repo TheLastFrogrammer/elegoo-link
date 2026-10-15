@@ -83,7 +83,7 @@ public final class PrinterService extends Service {
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();
-            if (!ready() && !localCamera() && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.FOLLOW, "pictures: due, but in cloud mode they come only while a cloud video is open"); }
+            if (!ready() && !localCamera() && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due, but in cloud mode pictures come only while a cloud video is open (Print tab, cloud camera or Live toolpath)"); }
             grab(null);
         }
     }
@@ -99,7 +99,12 @@ public final class PrinterService extends Service {
         if (then != null) synchronized (grabWaiting) { grabWaiting.add(then); }
         long now = SystemClock.elapsedRealtime();
         boolean viaLocal = ready();
-        if (grabbing || !(viaLocal ? route != null : localCamera()) || now < grabRetryAt) { if (!grabbing) synchronized (grabWaiting) { grabWaiting.clear(); } return; }
+        if (grabbing || !(viaLocal ? route != null : localCamera()) || now < grabRetryAt) {
+            String why = grabbing ? "" : !(viaLocal ? route != null : localCamera()) ? (viaLocal ? "no network route to the printer" : "no local camera in cloud mode") : "waiting " + (grabRetryAt - now) / 1000 + " s after a failure";
+            if (!why.isEmpty() && !why.startsWith("waiting") && !why.equals(grabSkipNoted)) { grabSkipNoted = why; Diagnostics.note(Diagnostics.CAMERA, "single picture skipped: " + why); }
+            if (!grabbing) synchronized (grabWaiting) { grabWaiting.clear(); } return;
+        }
+        grabSkipNoted = ""; long grabStart = now;
         String url; PrinterHttp.ConnectionFactory http;
         try {
             if (viaLocal) { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); http = route.http(); }
@@ -112,29 +117,34 @@ public final class PrinterService extends Service {
             public void frame(android.graphics.Bitmap image) {
                 if (player[0] == null) return;
                 finish.run();
+                if (!grabOk) { grabOk = true; Diagnostics.note(Diagnostics.CAMERA, "single picture from the printer's camera: OK after " + (SystemClock.elapsedRealtime() - grabStart) + " ms, " + image.getWidth() + "x" + image.getHeight() + (viaLocal ? "" : " (alongside the cloud)")); }
                 main.post(() -> {
                     if (destroyed) return;
-                    offerFrame(image);
+                    offerFrame(image, "a single picture from the printer's camera" + (viaLocal ? "" : " (alongside the cloud)"));
                     List<Frame> waiting; synchronized (grabWaiting) { waiting = new ArrayList<>(grabWaiting); grabWaiting.clear(); }
                     for (Frame f : waiting) f.take(image);
                 });
             }
             public void error(String message) {
                 finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; synchronized (grabWaiting) { grabWaiting.clear(); }
+                grabOk = false; Diagnostics.note(Diagnostics.CAMERA, "single picture from the printer's camera failed after " + (SystemClock.elapsedRealtime() - grabStart) + " ms: " + Diagnostics.scrub(message) + "; next try in 30 s");
                 // Alongside the cloud, a failure turns the local camera off rather than retrying (the port can lock up after a few tries).
                 if (!viaLocal) main.post(() -> { workshop().edit().putBoolean("localCameraInCloud", false).apply(); localCameraText = "The printer's own camera stopped answering. The cloud video is back."; Diagnostics.note(Diagnostics.HYBRID, "local camera alongside the cloud failed; turned off"); changed(); });
             }
         });
-        main.postDelayed(() -> { if (player[0] != null) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; } }, 15_000);   // never left open
+        main.postDelayed(() -> { if (player[0] != null) { finish.run(); grabRetryAt = SystemClock.elapsedRealtime() + 30_000; grabOk = false; Diagnostics.note(Diagnostics.CAMERA, "single picture from the printer's camera: no picture within 15 s; next try in 30 s"); } }, 15_000);   // never left open
     }
     private long offeredAt; private String noPictureNoted = "";
+    /** Camera log: the last skip reason noted (each noted once until a grab runs), and whether the last grab worked (success is noted once per run of successes). */
+    private String grabSkipNoted = ""; private boolean grabOk;
     /** A camera frame from anywhere in the app: kept as the print's picture when one is due, and shown in the progress notification. */
-    public void offerFrame(android.graphics.Bitmap image) {
+    public void offerFrame(android.graphics.Bitmap image) { offerFrame(image, "the camera stream on screen"); }
+    void offerFrame(android.graphics.Bitmap image, String source) {
         if (image == null) return;
         long mono = SystemClock.elapsedRealtime();
         if (recorder != null && recorder.pictureDue(mono)) {
             java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg);
-            recorder.savePicture(jpeg.toByteArray(), mono);
+            recorder.savePicture(jpeg.toByteArray(), mono, source);
         }
         if (offeredAt == 0 || mono - offeredAt > 30_000) { offeredAt = mono; progressPicture = scaled(image, 640); progressPictureKey = "live"; progressGrabAt = mono; }
     }

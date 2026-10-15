@@ -43,7 +43,7 @@ public final class CloudCameraActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     /** While the video plays, the running print's recording takes its camera pictures from it (in cloud mode nothing else can). */
-    private PrinterService printer; private boolean bound, playing;
+    private PrinterService printer; private boolean bound, playing; private String lastPageLine = "";
     private final android.content.ServiceConnection connection = new android.content.ServiceConnection() {
         @Override public void onServiceConnected(android.content.ComponentName name, android.os.IBinder binder) { printer = ((PrinterService.LocalBinder) binder).service(); }
         @Override public void onServiceDisconnected(android.content.ComponentName name) { printer = null; }
@@ -127,7 +127,8 @@ public final class CloudCameraActivity extends Activity {
             String text = error; CloudApi.AgoraCredential result = issued;
             main.post(() -> {
                 if (isDestroyed()) return;
-                if (text != null) { showProblem(explain(text)); return; }
+                if (text != null) { Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: camera access refused: " + Diagnostics.scrub(text)); showProblem(explain(text)); return; }
+                Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: camera access issued");
                 credential = result; startIfReady(serial);
             });
         });
@@ -147,9 +148,9 @@ public final class CloudCameraActivity extends Activity {
             JSONObject message = new JSONObject(raw);
             switch (message.optString("type")) {
                 case "ready": pageReady = true; startIfReady(getIntent().getStringExtra(EXTRA_SERIAL)); break;
-                case "status": showPageStatus(message.optString("text")); break;
+                case "status": { String text = message.optString("text"); if (!text.isEmpty() && !text.equals(lastPageLine)) { lastPageLine = text; Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: page: " + Diagnostics.scrub(text)); } showPageStatus(text); break; }
                 case "playing": showNormal("Live. Video from the printer through Elegoo's cloud."); snapshot.setEnabled(true);
-                    if (!playing) { playing = true; main.postDelayed(pictureTick, 3_000); } break;
+                    if (!playing) { playing = true; Diagnostics.note(Diagnostics.CAMERA, "cloud camera screen: video playing"); main.postDelayed(pictureTick, 3_000); } break;
                 case "picture": keepPicture(message.optString("data")); break;
                 case "snapshot": saveSnapshot(message.optString("data")); break;
                 default: break;
@@ -217,7 +218,7 @@ public final class CloudCameraActivity extends Activity {
     private void keepPicture(String dataUrl) {
         String prefix = "data:image/jpeg;base64,";
         if (!dataUrl.startsWith(prefix) || printer == null || printer.recorder == null) return;
-        try { printer.recorder.savePicture(Base64.decode(dataUrl.substring(prefix.length()), Base64.DEFAULT), android.os.SystemClock.elapsedRealtime()); }
+        try { printer.recorder.savePicture(Base64.decode(dataUrl.substring(prefix.length()), Base64.DEFAULT), android.os.SystemClock.elapsedRealtime(), "the cloud camera screen"); }
         catch (IllegalArgumentException unreadable) { }
     }
     private void saveSnapshot(String dataUrl) {

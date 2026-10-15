@@ -34,4 +34,20 @@ public class DiagnosticsTest {
         if (!new File("/proc/self/status").isFile()) return;
         assertTrue(Diagnostics.memory(), Diagnostics.memory().matches("peak RSS \\d+ kB, now \\d+ kB"));
     }
+    @Test public void cameraLogHoldsNoAddressesOrSerialsAndListsRecentEvents() throws Exception {
+        assertEquals("failed to connect to <address> (port 8080)", Diagnostics.scrub("failed to connect to 192.168.1.50:8080 (port 8080)"));
+        assertEquals("channel <id> left", Diagnostics.scrub("channel F01PLX9A3K2B7Q left"));
+        assertEquals("Connected. Waiting for video", Diagnostics.scrub("Connected. Waiting for video"));
+        assertEquals("", Diagnostics.scrub(null));
+        Diagnostics.init(Files.createTempDirectory("camera").toFile()); Diagnostics.clear();
+        for (int i = 0; i < 5; i++) Diagnostics.note(Diagnostics.CAMERA, "event " + i);
+        java.util.List<String> recent = Diagnostics.recent(Diagnostics.CAMERA, 3);
+        assertEquals(3, recent.size()); assertTrue(recent.get(0).endsWith("event 2")); assertTrue(recent.get(2).endsWith("event 4"));
+        assertTrue(Diagnostics.recent("Nothing here", 3).isEmpty());
+        // A picture names its source in the log; one without a print says why it was not kept.
+        PrintRecorder recorder = new PrintRecorder(Files.createTempDirectory("recordings").toFile());
+        assertFalse(recorder.savePicture(new byte[200], 1_000, "the Print tab's cloud video"));
+        assertTrue(Diagnostics.recent(Diagnostics.CAMERA, 1).get(0).endsWith("picture from the Print tab's cloud video not kept: no print is being recorded"));
+        assertEquals(-1, recorder.secondsSincePicture(1_000));
+    }
 }

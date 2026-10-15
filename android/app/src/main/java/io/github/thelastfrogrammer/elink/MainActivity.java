@@ -133,6 +133,7 @@ public final class MainActivity extends Activity {
     private Button monitorShow;
     /** The cloud video playing inside the Print tab's camera block (cloud mode), or null; and the frame that holds the picture. */
     private CloudVideo cloudVideo; private FrameLayout monitorFrame; private boolean pendingCloudSnapshot;
+    private Button cameraCheckButton; private TextView cameraCheckText; private boolean cameraChecking;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
     private Button monitorCameraStart, trayDetails;
@@ -1746,6 +1747,11 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the speed mode of the current print. On some firmware, a filament change can reset it.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
     }).setNegativeButton("Cancel", null).show(); }
     private void buildCamera() {
+        // Camera check: read-only, on the Camera screen's own card; its result also goes into the diagnostics report.
+        LinearLayout checkCard = card("Camera check");
+        label(checkCard, "Checks what each camera needs and tries it once: camera access from Elegoo, and the printer's camera on this network when connected locally. Sends nothing to the printer.", 13, MUTED, false);
+        cameraCheckButton = button(checkCard, "Run camera check", this::cameraCheck);
+        cameraCheckText = label(checkCard, "", 12, INK, false); cameraCheckText.setTextIsSelectable(true); cameraCheckText.setTypeface(Typeface.MONOSPACE); cameraCheckText.setVisibility(View.GONE);
         // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
         cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
@@ -1796,14 +1802,17 @@ public final class MainActivity extends Activity {
             String address = host.getText().toString().trim(), url = alongsideCloud ? printer.localCameraUrl() : FeatureData.cameraUrl(address, cameraAddress.getText().toString().trim());
             NetworkRoute route = alongsideCloud ? NetworkRoute.local(this) : NetworkRoute.select(this, remoteMode()); cameraInfo.setText("Opening camera…"); cameraRoute = route;
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
+            long openedAt = android.os.SystemClock.elapsedRealtime(); boolean[] first = {true};
+            Diagnostics.note(Diagnostics.CAMERA, "camera stream opening " + (alongsideCloud ? "on Wi-Fi alongside the cloud" : remoteMode() ? "through the home VPN" : "on the local network"));
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
-                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image; cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
+                public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image;
+                    if (first[0]) { first[0] = false; Diagnostics.note(Diagnostics.CAMERA, "camera stream: first picture after " + (android.os.SystemClock.elapsedRealtime() - openedAt) + " ms, " + image.getWidth() + "x" + image.getHeight()); } cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
                     monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE);
                     if (fullView != null) fullView.setImageBitmap(image);
                     tone(image);
                     // While this stream is open the printer may not serve another: the print's pictures come from it.
                     if (printer != null) printer.offerFrame(image); }
-                public void error(String text) { stopCamera(); cameraInfo.setText(text); monitorCameraInfo.setText(text); monitorCameraInfo.setVisibility(View.VISIBLE); }
+                public void error(String text) { Diagnostics.note(Diagnostics.CAMERA, "camera stream failed after " + (android.os.SystemClock.elapsedRealtime() - openedAt) + " ms" + (first[0] ? ", before any picture" : "") + ": " + Diagnostics.scrub(text)); stopCamera(); cameraInfo.setText(text); monitorCameraInfo.setText(text); monitorCameraInfo.setVisibility(View.VISIBLE); }
             }); cameraStart.setText("Stop camera"); monitorCameraStart.setText("Stop camera");
         } catch (Exception error) { stopCamera(); cameraInfo.setText(remoteMode() ? "Enable your home VPN, then use the camera address for the home printer. The VPN route must allow the camera port." : "Enter the camera address for the selected printer, and connect the phone to the same Wi-Fi network as the printer."); monitorCameraInfo.setText(cameraInfo.getText() + " (Camera tab, then Camera settings.)"); monitorCameraInfo.setVisibility(View.VISIBLE); }
     }
@@ -1856,6 +1865,82 @@ public final class MainActivity extends Activity {
     }
     private void stopCamera() {
         android.app.Dialog full = fullDialog; fullDialog = null; fullView = null; if (full != null && full.isShowing()) full.dismiss(); AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); stopCloudVideo(); }
+    /**
+     * Camera check: the facts on this phone, then one camera-access request to Elegoo (signed in) and one picture from the
+     * printer's camera stream (local connection only; in cloud mode the printer's camera port is off and left alone).
+     * Nothing is sent to the printer. The result is shown and noted in the diagnostics report, without codes or addresses.
+     */
+    private void cameraCheck() {
+        if (cameraChecking || printer == null) return;
+        cameraChecking = true; cameraCheckButton.setEnabled(false); cameraCheckText.setVisibility(View.VISIBLE); cameraCheckText.setText("Checking…");
+        List<String> out = new ArrayList<>();
+        boolean ready = printer.ready(), cloud = !ready && printer.usingCloud();
+        String version = ""; try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+        out.add("App " + version + " · Android " + android.os.Build.VERSION.RELEASE);
+        out.add("Connection: " + (ready ? "local network" : cloud ? "Elegoo cloud" : printer.connecting() ? "connecting" : "not connected"));
+        android.content.pm.PackageInfo webView = androidx.webkit.WebViewCompat.getCurrentWebViewPackage(this);
+        out.add("WebView: " + (webView == null ? "not found" : webView.versionName) + (CloudVideo.supported() ? "" : " (too old for the cloud camera)"));
+        out.add("Print tab camera: " + (settings.getBoolean("printCameraHidden", false) ? "hidden" : "shown") + "; starts by itself: local " + (settings.getBoolean("monitorCamera", false) ? "yes" : "no")
+            + ", cloud " + (settings.getBoolean("monitorCloudCamera", false) ? "yes" : "no") + "; playing now: "
+            + (cameraPlayer != null ? "local stream" : cloudVideo != null ? (cloudVideo.playing() ? "cloud video" : "cloud video, connecting") : "nothing"));
+        PrintRecorder.Recording recording = printer.recorder == null ? null : printer.recorder.current();
+        long mono = android.os.SystemClock.elapsedRealtime();
+        if (recording == null) out.add("Pictures: no print is being recorded" + (settings.getBoolean("recordPrints", true) ? "" : " (recording prints is off in Settings)"));
+        else { long since = printer.recorder.secondsSincePicture(mono);
+            out.add("Pictures: " + (recording.pictureMinutes == 0 ? "off for this print" : "every " + recording.pictureMinutes + " min") + "; " + recording.pictures + " so far; last "
+                + (since < 0 ? "none this app run" : since / 60 + " min ago") + (printer.recorder.pictureDue(mono) ? "; one is due now" : "")); }
+        out.add("Picture source now: " + (ready ? "the printer's camera on this network" : cloud && printer.localCamera() ? "the printer's camera alongside the cloud"
+            : cloud ? (cloudVideo != null && cloudVideo.playing() ? "the Print tab's cloud video" : "none: in cloud mode only an open cloud video gives pictures") : "none: not connected"));
+        boolean signedIn = printer.cloudSignedIn, chosen = !printer.cloudSerial.isEmpty();
+        out.add("Elegoo cloud: " + (signedIn ? "signed in" : "not signed in") + ", printer " + (chosen ? "chosen" : "not chosen") + ", "
+            + (printer.cloudOnline == 1 ? "online" : printer.cloudOnline == 0 ? "offline" : "online state unknown") + ", cloud agreement " + (settings.getBoolean("cloudControlUnderstood", false) ? "accepted" : "not accepted yet"));
+        boolean streamOpen = cameraPlayer != null;
+        String url = null; NetworkRoute route = null; String routeProblem = "";
+        if (ready) try { url = FeatureData.cameraUrl(printer.host(), cameraAddress.getText().toString().trim()); route = NetworkRoute.select(this, remoteMode()); }
+            catch (Exception invalid) { routeProblem = Diagnostics.scrub(invalid.getMessage() == null ? invalid.getClass().getSimpleName() : invalid.getMessage()); url = null; }
+        String cameraUrl = url, problem = routeProblem; NetworkRoute checkRoute = route;
+        boolean alongside = printer.localCamera();
+        checks.execute(() -> {
+            if (signedIn) {
+                long start = android.os.SystemClock.elapsedRealtime();
+                try {
+                    CloudAccountStore store = new CloudAccountStore(this); CloudLogin.Account account = store.load();
+                    if (account == null) out.add("Camera access from Elegoo: no saved account; sign in again in Settings");
+                    else {
+                        CloudApi api = new CloudApi(store.china(), account, CloudApi.agent(this), CloudApi::https);
+                        CloudApi.AgoraCredential issued = api.agoraCredential(); if (api.account() != account) store.save(api.account());
+                        long took = android.os.SystemClock.elapsedRealtime() - start;
+                        out.add("Camera access from Elegoo: " + (issued.rtcToken.isEmpty() || issued.rtcUserId.isEmpty() ? "answered after " + took + " ms but gave no access" : "issued in " + took + " ms"));
+                    }
+                } catch (Exception failed) { out.add("Camera access from Elegoo: failed after " + (android.os.SystemClock.elapsedRealtime() - start) + " ms: " + Diagnostics.scrub(failed.getMessage() == null ? failed.getClass().getSimpleName() : failed.getMessage())); }
+            } else out.add("Camera access from Elegoo: skipped (not signed in)");
+            if (ready && streamOpen) out.add("Printer's camera on this network: a stream is already open on this phone, so the test is skipped (the printer serves one stream at a time)");
+            else if (ready && cameraUrl == null) out.add("Printer's camera on this network: the camera address or route is not usable (" + problem + "); check Camera settings");
+            else if (ready) {
+                java.util.concurrent.CountDownLatch done = new java.util.concurrent.CountDownLatch(1); String[] result = {null}; long start = android.os.SystemClock.elapsedRealtime();
+                MjpegPlayer[] test = new MjpegPlayer[1];
+                try {
+                    test[0] = new MjpegPlayer(cameraUrl, checkRoute.http(), new MjpegPlayer.Listener() {
+                        public void frame(Bitmap image) { if (result[0] == null) result[0] = "first picture after " + (android.os.SystemClock.elapsedRealtime() - start) + " ms, " + image.getWidth() + "x" + image.getHeight(); done.countDown(); }
+                        public void error(String text) { if (result[0] == null) result[0] = "failed after " + (android.os.SystemClock.elapsedRealtime() - start) + " ms: " + Diagnostics.scrub(text); done.countDown(); }
+                    });
+                    if (!done.await(12, java.util.concurrent.TimeUnit.SECONDS)) result[0] = "no picture within 12 s";
+                } catch (Exception failed) { result[0] = "could not start: " + Diagnostics.scrub(String.valueOf(failed.getMessage())); }
+                finally { if (test[0] != null) test[0].close(); }
+                out.add("Printer's camera on this network: " + result[0]);
+            } else if (cloud) out.add("Printer's camera on this network: skipped; in cloud mode the printer turns its camera port off" + (alongside ? " (the local camera alongside the cloud is on and was tried once this app run)" : ""));
+            else out.add("Printer's camera on this network: skipped (not connected locally)");
+            main.post(() -> {
+                cameraChecking = false; if (isDestroyed()) return;
+                Diagnostics.note(Diagnostics.CAMERA, "camera check: " + String.join(" | ", out));
+                StringBuilder text = new StringBuilder(String.join("\n", out)).append("\n\nRecent camera events:");
+                List<String> recent = Diagnostics.recent(Diagnostics.CAMERA, 12);
+                for (String line : recent) if (!line.contains("camera check:")) text.append("\n").append(line);
+                text.append("\n\nThis is also in Settings › Help & diagnostics › share diagnostics.");
+                cameraCheckText.setText(text); cameraCheckButton.setEnabled(true);
+            });
+        });
+    }
     private void stopCloudVideo() { CloudVideo video = cloudVideo; cloudVideo = null; if (video != null) video.stop(); }
     /** Cloud mode: plays the printer's camera through the Elegoo cloud right here under the progress bar (after the one-time cloud agreement). */
     private void startCloudVideo() {
