@@ -91,6 +91,8 @@ public final class PrinterService extends Service {
             Diagnostics.note(Diagnostics.STATUS, "printer AI detection (device_assistant) now " + Diagnostics.scrub(loggedAssistant) + " · " + StatusPresentation.state(value)
                 + (print != null && print.has("current_layer") ? " · layer " + print.optInt("current_layer") : "") + " (" + source + ")");
         }
+        JSONObject machineNow = value.optJSONObject("machine_status");
+        if (guardian != null && machineNow != null && machineNow.optInt("status", -1) == 1) guardian.release();
         checkWaiting(value); checkFolder(value);
         if (automations != null) automations.status("cloud".equals(source) ? automations.cloud : automations.local, value, name);
         SpoolStore spools = spools(); long now = System.currentTimeMillis();
@@ -1793,10 +1795,14 @@ public final class PrinterService extends Service {
             if (shown == null) return null;
             java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); shown.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg); return jpeg.toByteArray();
         }
-        public byte[] chart() {
+        public List<double[]> chartRows() {
             PrintRecorder.Recording running = recorder == null ? null : recorder.current();
             if (running == null) return null;
-            try { return PrintChart.png(PrinterService.this, running, PrintRecorder.samples(running)); } catch (Exception failed) { return null; }
+            try { return PrintRecorder.samples(running); } catch (Exception unreadable) { return null; }
+        }
+        public byte[] chartPng(List<double[]> rows) {
+            PrintRecorder.Recording running = recorder == null ? null : recorder.current();
+            try { return PrintChart.png(PrinterService.this, running, rows); } catch (Exception failed) { return null; }
         }
         public void notifyPerson(int id, String title, String text, android.graphics.Bitmap picture) {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;

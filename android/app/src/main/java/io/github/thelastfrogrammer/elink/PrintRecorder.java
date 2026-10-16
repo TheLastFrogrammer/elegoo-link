@@ -300,11 +300,20 @@ public final class PrintRecorder {
         java.util.Collections.sort(ratios);
         int n = ratios.size(); return n % 2 == 1 ? ratios.get(n / 2) : (ratios.get(n / 2 - 1) + ratios.get(n / 2)) / 2;
     }
-    private double learned = Double.NaN; private boolean learnedRead;
-    public synchronized double learnedRatio() { if (!learnedRead) { learned = learnedRatio(list()); learnedRead = true; } return learned; }
+    private volatile double learned = Double.NaN; private boolean learnedRead, learning;
+    /** The learned ratio; the first call (and the first after a print ends) starts reading the recordings in the background and answers NaN until then. */
+    public double learnedRatio() {
+        synchronized (this) { if (learnedRead || learning) return learned; learning = true; }
+        Thread reader = new Thread(() -> { double q = learnedRatio(list()); synchronized (PrintRecorder.this) { learned = q; learnedRead = true; learning = false; } }, "recordings-learn");
+        reader.setDaemon(true); reader.start();
+        return learned;
+    }
+    /** For tests and callers already off the main thread: reads now. */
+    synchronized double learnedRatioNow() { learned = learnedRatio(list()); learnedRead = true; return learned; }
     /** Seconds left for the running print by what past prints took against the printer's estimate, or -1 when not known yet. */
     public synchronized long learnedRemaining(long mono) {
-        double q = learnedRatio();
+        double q = learned;
+        if (!learnedRead) learnedRatio();
         if (current == null || current.estimate <= 0 || Double.isNaN(q)) return -1;
         long ran = ranSeconds(current, mono);
         return ran < 0 ? -1 : Math.max(0, Math.round(current.estimate * q) - ran);

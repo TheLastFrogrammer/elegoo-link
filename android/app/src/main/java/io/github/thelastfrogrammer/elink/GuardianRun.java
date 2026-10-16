@@ -19,7 +19,7 @@ final class GuardianRun {
     private final Context context;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private String printId = "", pathFor = "";
-    private GcodeToolpath path;
+    private volatile GcodeToolpath path;
     private PrintGuardian.Watch watch = new PrintGuardian.Watch();
     /** The latest check: picture with the expected print in teal and filament-coloured pixels off the print in red. */
     volatile Bitmap overlay;
@@ -47,7 +47,18 @@ final class GuardianRun {
             return;
         }
         String key = file.getPath() + ":" + file.lastModified();
-        if (!key.equals(pathFor)) { path = GcodeToolpath.read(file); pathFor = key; }
+        if (!key.equals(pathFor)) {
+            path = null; pathFor = "";
+            // The toolpath takes about three times the file's size in memory while the print runs: skip files that would crowd the app.
+            Runtime runtime = Runtime.getRuntime();
+            long free = runtime.maxMemory() - (runtime.totalMemory() - runtime.freeMemory());
+            if (file.length() * 3 > free / 2) {
+                if (!verdict.startsWith("This print's G-code is too big")) Diagnostics.note(Diagnostics.GUARDIAN, "G-code of " + file.length() / (1024 * 1024) + " MB too big to keep in memory; not checking");
+                verdict = "This print's G-code is too big for the guardian to keep in memory, so it is not checked.";
+                return;
+            }
+            path = GcodeToolpath.read(file); pathFor = key;
+        }
         if (path.layerCount == 0 || layer < 1) { verdict = "Waiting for the first layer."; return; }
         int at = total > 0 ? (int) Math.round(layer / (double) total * path.layerCount) - 1 : layer - 1;
         at = Math.max(0, Math.min(path.layerCount - 1, at));
@@ -94,6 +105,8 @@ final class GuardianRun {
         });
     }
 
+    /** Lets go of the toolpath once nothing prints. */
+    void release() { if (path != null) worker.execute(() -> { path = null; pathFor = ""; }); }
     void shutdown() { worker.shutdownNow(); }
 
     static Bitmap overlay(int[] rgb, PrintGuardian.Result r) {

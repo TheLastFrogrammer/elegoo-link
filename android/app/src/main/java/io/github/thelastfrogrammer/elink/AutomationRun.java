@@ -43,8 +43,10 @@ final class AutomationRun {
         String homeAssistantEvent(JSONObject event, byte[] chart);
         /** The running print's newest camera picture as JPEG, or null. */
         byte[] latestPicture();
-        /** A chart of the running print (temperatures and progress) as PNG, or null when there is no recording yet. Main thread. */
-        byte[] chart();
+        /** The running print's recorded samples for a chart, or null when there is no recording yet. Reads the disk: not on the main thread. */
+        List<double[]> chartRows();
+        /** Those samples drawn as a PNG chart, or null with too few. Main thread. */
+        byte[] chartPng(List<double[]> rows);
     }
 
     private final Context context;
@@ -136,7 +138,16 @@ final class AutomationRun {
         for (Map.Entry<String, String> e : event.values(System.currentTimeMillis(), java.util.TimeZone.getDefault()).entrySet()) if (!e.getValue().isEmpty() || !values.containsKey(e.getKey())) values.put(e.getKey(), e.getValue());
         String label = "\"" + rule.name + "\"" + (test ? " (test)" : "");
         boolean wantPicture = false, wantChart = false; for (Automation.Action a : rule.actions) { wantPicture |= a.picture; wantChart |= a.chart; }
-        byte[] picture = wantPicture ? host.latestPicture() : null, chart = wantChart ? host.chart() : null;
+        if (!wantPicture && !wantChart) { actions(rule, event, values, label, null, null, false, false); return; }
+        // Pictures and recordings are read off the main thread; the chart is drawn back on it, then the actions run.
+        boolean picturesWanted = wantPicture, chartWanted = wantChart;
+        web.execute(() -> {
+            byte[] picture = picturesWanted ? host.latestPicture() : null;
+            List<double[]> rows = chartWanted ? host.chartRows() : null;
+            main.post(() -> actions(rule, event, values, label, picture, rows == null ? null : host.chartPng(rows), picturesWanted, chartWanted));
+        });
+    }
+    private void actions(Automation.Rule rule, Automation.Event event, Map<String, String> values, String label, byte[] picture, byte[] chart, boolean wantPicture, boolean wantChart) {
         if (wantPicture && picture == null) Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": no camera picture of this print yet; sent without it");
         if (wantChart && chart == null) Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": no recording to chart yet; sent without it");
         for (Automation.Action a : rule.actions) {

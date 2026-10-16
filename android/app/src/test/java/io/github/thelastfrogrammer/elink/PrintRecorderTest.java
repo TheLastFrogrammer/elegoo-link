@@ -204,7 +204,7 @@ public class PrintRecorderTest {
             recorder.update(t0 + 100_000, ten, "local", "CC2");   // estimate at 10 %: 100 + 900 = 1000 s
             recorder.update(t0 + 1_200_000, status(2077, file, 100, 100), "local", "CC2");   // took 1200 s: 20 % over
         }
-        assertEquals(1.2, recorder.learnedRatio(), 0.01);
+        assertEquals(1.2, recorder.learnedRatioNow(), 0.01);
         List<PrintRecorder.Recording> all = recorder.list();
         assertEquals(1.2, PrintRecorder.ratio(all.get(0)), 0.01);
         // A new print: at 10 % the printer says 900 s left after 100 s; by experience 1200 s in all, so 1100 s left.
