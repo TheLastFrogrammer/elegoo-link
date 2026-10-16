@@ -1737,18 +1737,41 @@ public final class PrinterService extends Service {
         }
         public void light(boolean on) { if (ready() && fresh()) PrinterService.this.light(on); else cloudLight(on); }
         public JSONObject liveStatus() { return PrinterService.this.liveStatus(); }
-        public void notifyPerson(int id, String title, String text) {
+        public JSONObject canvas() { return canvas; }
+        public java.util.Map<String, String> appValues() {
+            java.util.Map<String, String> v = new java.util.LinkedHashMap<>();
+            PrintRecorder.Recording running = recorder == null ? null : recorder.current();
+            if (running != null) v.put("pictures", String.valueOf(running.pictures));
+            if (guardian != null && !guardian.verdict.isEmpty()) v.put("guardian", guardian.verdict);
+            return v;
+        }
+        public byte[] latestPicture() {
+            PrintRecorder.Recording running = recorder == null ? null : recorder.current();
+            List<java.io.File> pictures = running == null ? null : PrintRecorder.pictures(running);
+            if (pictures != null && !pictures.isEmpty()) try { return java.nio.file.Files.readAllBytes(pictures.get(pictures.size() - 1).toPath()); } catch (Exception unreadable) { }
+            android.graphics.Bitmap shown = progressPicture;
+            if (shown == null) return null;
+            java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); shown.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg); return jpeg.toByteArray();
+        }
+        public byte[] chart() {
+            PrintRecorder.Recording running = recorder == null ? null : recorder.current();
+            if (running == null) return null;
+            try { return PrintChart.png(PrinterService.this, running, PrintRecorder.samples(running)); } catch (Exception failed) { return null; }
+        }
+        public void notifyPerson(int id, String title, String text, android.graphics.Bitmap picture) {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
             NotificationManager manager = getSystemService(NotificationManager.class);
             manager.createNotificationChannel(new NotificationChannel("automations", "Automations", NotificationManager.IMPORTANCE_DEFAULT));
             PendingIntent open = PendingIntent.getActivity(PrinterService.this, 0, new Intent(PrinterService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            manager.notify(id, new Notification.Builder(PrinterService.this, "automations").setSmallIcon(R.drawable.ic_launcher).setContentTitle(StatusPresentation.clean(title))
-                .setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
+            Notification.Builder builder = new Notification.Builder(PrinterService.this, "automations").setSmallIcon(R.drawable.ic_launcher).setContentTitle(StatusPresentation.clean(title))
+                .setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true);
+            if (picture != null) builder.setLargeIcon(scaled(picture, 128)).setStyle(new Notification.BigPictureStyle().bigPicture(scaled(picture, 720)).setSummaryText(text));
+            manager.notify(id, builder.build());
         }
-        public String homeAssistantEvent(JSONObject event) {
+        public String homeAssistantEvent(JSONObject event, byte[] chart) {
             if (!workshop().getBoolean("haEnabled", false)) return "link is off; skipped";
             String node = haNode; if (node == null) return "not connected yet; event not sent";
-            haWorker.execute(() -> Diagnostics.note(Diagnostics.AUTOMATIONS, "Home Assistant: " + ha.event(node, event)));
+            haWorker.execute(() -> Diagnostics.note(Diagnostics.AUTOMATIONS, "Home Assistant: " + ha.event(node, event, chart)));
             return "event handed to the Home Assistant link";
         }
     };

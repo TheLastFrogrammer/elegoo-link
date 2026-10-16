@@ -23,14 +23,16 @@ import java.util.UUID;
  */
 final class Automation {
     static final String ANY = "any", STARTED = "print_started", FIRST_LAYER = "first_layer", LAYER = "layer_reached", PAUSED = "paused", RESUMED = "resumed",
-        FINISHED = "print_finished", STOPPED = "print_stopped", FAULT = "fault", GUARDIAN = "guardian_alarm", WATCH = "print_watch", LOST = "contact_lost";
+        FINISHED = "print_finished", STOPPED = "print_stopped", FAULT = "fault", GUARDIAN = "guardian_alarm", WATCH = "print_watch", LOST = "contact_lost",
+        VALUE = "value_crossed", CHANGE = "value_changed";
     /** Event ids and what the workshop calls them, in the order offered. */
     static final Map<String, String> EVENTS = new LinkedHashMap<>();
     static {
         EVENTS.put(STARTED, "A print starts"); EVENTS.put(FIRST_LAYER, "The first layer is done"); EVENTS.put(LAYER, "A print reaches a layer");
         EVENTS.put(PAUSED, "A print pauses"); EVENTS.put(RESUMED, "A print resumes"); EVENTS.put(FINISHED, "A print finishes");
         EVENTS.put(STOPPED, "A print is stopped"); EVENTS.put(FAULT, "The printer reports a new fault"); EVENTS.put(GUARDIAN, "The print guardian sees a problem");
-        EVENTS.put(WATCH, "The print watch sees a stall or heater drift"); EVENTS.put(LOST, "Contact with the printer is lost during a print"); EVENTS.put(ANY, "Any of these");
+        EVENTS.put(WATCH, "The print watch sees a stall or heater drift"); EVENTS.put(LOST, "Contact with the printer is lost during a print");
+        EVENTS.put(VALUE, "A value crosses a limit"); EVENTS.put(CHANGE, "A value changes"); EVENTS.put(ANY, "Any print milestone");
     }
     static final String NOTIFY = "notify", LIGHT = "light", WEBHOOK = "webhook", HA_EVENT = "ha_event", BROADCAST = "broadcast";
     static final Map<String, String> ACTIONS = new LinkedHashMap<>();
@@ -38,15 +40,14 @@ final class Automation {
         ACTIONS.put(NOTIFY, "Show a notification"); ACTIONS.put(LIGHT, "Turn the printer's light on or off"); ACTIONS.put(WEBHOOK, "Call a webhook");
         ACTIONS.put(HA_EVENT, "Tell Home Assistant"); ACTIONS.put(BROADCAST, "Tell another app (Tasker, Automate)");
     }
-    /** What a template can fill in, with an example each. */
-    static final String[][] VARIABLES = {{"event", "print_finished"}, {"event_name", "A print finishes"}, {"printer", "Centauri Carbon 2"}, {"file", "benchy.gcode"},
-        {"layer", "212"}, {"total_layers", "212"}, {"progress", "100"}, {"remaining", "0 min"}, {"detail", ""}, {"time", "18:42"}, {"date", "2026-10-16"}};
     static final String FORMAT = "linkWorkshopAutomation";
 
     static final class Event {
         final String type; String printer = "", file = "", key = "", detail = ""; int layer = -1, total = -1, progress = -1; long remaining = -1;
         /** For layer events: the layers crossed, from (exclusive) to (inclusive). */
         int fromLayer = -1;
+        /** For value events: the one rule it is for. */
+        String ruleId = "";
         Event(String type) { this.type = type; }
         Map<String, String> values(long nowMs, java.util.TimeZone zone) {
             Map<String, String> v = new LinkedHashMap<>();
@@ -66,13 +67,18 @@ final class Automation {
         boolean on;
         /** notify: title and text; webhook: url, body (blank = a JSON summary), header name (its value is a secret kept on the phone). */
         String title = "", text = "", url = "", body = "", header = "";
+        /** Attach the latest camera picture and/or a chart of this print (notification: one picture, the camera first). */
+        boolean picture, chart;
+        /** webhook with an attachment: send one picture as the whole body (ntfy and similar), the text in the header named by `messageHeader`, instead of a multipart form. */
+        boolean rawImage; String messageHeader = "Message";
         /** Where the secret header value is kept (CredentialStore); never exported. */
         String secretId = UUID.randomUUID().toString();
         JSONObject toJson(boolean sharing) throws JSONException {
             JSONObject o = new JSONObject().put("kind", kind);
             if (kind.equals(LIGHT)) o.put("on", on);
             if (kind.equals(NOTIFY)) o.put("title", title).put("text", text);
-            if (kind.equals(WEBHOOK)) { o.put("url", url).put("body", body).put("header", header); if (!sharing) o.put("secretId", secretId); }
+            if (kind.equals(WEBHOOK)) { o.put("url", url).put("body", body).put("header", header); if (!sharing) o.put("secretId", secretId); if (rawImage) o.put("rawImage", true).put("messageHeader", messageHeader); }
+            if (picture) o.put("picture", true); if (chart) o.put("chart", true);
             return o;
         }
         static Action fromJson(JSONObject o) throws JSONException {
@@ -80,10 +86,13 @@ final class Automation {
             if (!ACTIONS.containsKey(a.kind)) throw new JSONException("unknown action " + a.kind);
             a.on = o.optBoolean("on"); a.title = o.optString("title"); a.text = o.optString("text"); a.url = o.optString("url"); a.body = o.optString("body"); a.header = o.optString("header");
             if (o.has("secretId")) a.secretId = o.getString("secretId");
+            a.picture = o.optBoolean("picture"); a.chart = o.optBoolean("chart"); a.rawImage = o.optBoolean("rawImage"); a.messageHeader = o.optString("messageHeader", "Message");
+            if (!a.messageHeader.matches("[A-Za-z0-9-]{1,40}")) a.messageHeader = "Message";
             if (a.kind.equals(WEBHOOK) && !webhookUrlOk(a.url)) throw new JSONException("webhook address must start with https:// or http://");
             return a;
         }
-        String describe() {
+        String describe() { String with = picture && chart ? " + picture and chart" : picture ? " + picture" : chart ? " + chart" : ""; return base() + with; }
+        private String base() {
             switch (kind) {
                 case LIGHT: return "Turn the light " + (on ? "on" : "off");
                 case NOTIFY: return "Notify: " + (title.isEmpty() ? text : title);
@@ -105,6 +114,10 @@ final class Automation {
         boolean lastPrintOnly;
         /** Wait this long after the event (the app must still be running). */
         int delayMinutes;
+        /** value_crossed / value_changed: the value watched; crossed: reaching or going above `limit` (above) or going below it. */
+        String field = ""; boolean above = true; double limit;
+        /** Optional extra condition on any event: only while value `ifField` is at or above (ifAbove) / below `ifLimit`. */
+        String ifField = ""; boolean ifAbove = true; double ifLimit;
         final List<Action> actions = new ArrayList<>();
         /** From the built-in set (not shared, not deletable, only turned on or off and copied). */
         boolean builtIn;
@@ -113,6 +126,8 @@ final class Automation {
         JSONObject toJson(boolean sharing) throws JSONException {
             JSONObject o = new JSONObject().put("name", name).put("event", event).put("layer", layer).put("from", fromMinute).put("to", toMinute)
                 .put("lastPrintOnly", lastPrintOnly).put("delay", delayMinutes);
+            if (!field.isEmpty()) o.put("field", field).put("above", above).put("limit", limit);
+            if (!ifField.isEmpty()) o.put("ifField", ifField).put("ifAbove", ifAbove).put("ifLimit", ifLimit);
             JSONArray list = new JSONArray(); for (Action a : actions) list.put(a.toJson(sharing)); o.put("actions", list);
             if (!sharing) o.put("id", id).put("enabled", enabled).put("builtIn", builtIn);
             return o;
@@ -123,6 +138,11 @@ final class Automation {
             if (!EVENTS.containsKey(r.event)) throw new JSONException("unknown event " + r.event);
             r.layer = Math.max(0, o.optInt("layer")); r.fromMinute = minute(o.optInt("from", -1)); r.toMinute = minute(o.optInt("to", -1));
             r.lastPrintOnly = o.optBoolean("lastPrintOnly"); r.delayMinutes = Math.max(0, Math.min(240, o.optInt("delay")));
+            r.field = o.optString("field", ""); r.above = o.optBoolean("above", true); r.limit = o.optDouble("limit", 0);
+            r.ifField = o.optString("ifField", ""); r.ifAbove = o.optBoolean("ifAbove", true); r.ifLimit = o.optDouble("ifLimit", 0);
+            if (!r.field.isEmpty() && !validField(r.field) || !r.ifField.isEmpty() && !validField(r.ifField)) throw new JSONException("unknown value " + r.field + r.ifField);
+            if ((r.event.equals(VALUE) || r.event.equals(CHANGE)) && r.field.isEmpty()) throw new JSONException("a value rule needs the value it watches");
+            if (Double.isNaN(r.limit) || Double.isInfinite(r.limit) || Double.isNaN(r.ifLimit) || Double.isInfinite(r.ifLimit)) throw new JSONException("limits must be numbers");
             JSONArray list = o.optJSONArray("actions");
             for (int i = 0; list != null && i < list.length(); i++) r.actions.add(Action.fromJson(list.getJSONObject(i)));
             if (r.actions.isEmpty()) throw new JSONException("a rule needs at least one action");
@@ -134,7 +154,10 @@ final class Automation {
         Rule copy() throws JSONException { Rule r = fromJson(toJson(true)); r.builtIn = false; return r; }
         /** One line for the rule list: "A print finishes · after 18:00 · wait 10 min → Turn the light off". */
         String summary() {
-            StringBuilder s = new StringBuilder(event.equals(LAYER) ? "Layer " + layer + " reached" : EVENTS.get(event));
+            StringBuilder s = new StringBuilder(event.equals(LAYER) ? "Layer " + layer + " reached"
+                : event.equals(VALUE) ? "{" + field + "} " + (above ? "reaches " : "goes below ") + number(limit)
+                : event.equals(CHANGE) ? "{" + field + "} changes" : EVENTS.get(event));
+            if (!ifField.isEmpty()) s.append(" · while {").append(ifField).append("} ").append(ifAbove ? "≥ " : "< ").append(number(ifLimit));
             if (fromMinute >= 0 || toMinute >= 0) s.append(" · ").append(window(fromMinute, toMinute));
             if (lastPrintOnly) s.append(" · last print of the day");
             if (delayMinutes > 0) s.append(" · wait ").append(delayMinutes).append(" min");
@@ -157,11 +180,17 @@ final class Automation {
         ThisPrint forPrint(String printKey) { if (printKey.equals(key)) return this; ThisPrint fresh = new ThisPrint(); fresh.key = printKey; return fresh; }
     }
 
-    /** Whether `rule` runs for `event` at `minuteOfDay`, given the print's own choices. */
-    static boolean matches(Rule rule, Event event, int minuteOfDay, ThisPrint print) {
+    static boolean matches(Rule rule, Event event, int minuteOfDay, ThisPrint print) { return matches(rule, event, minuteOfDay, print, null); }
+    /** Whether `rule` runs for `event` at `minuteOfDay`, given the print's own choices and the values now (for its extra condition). */
+    static boolean matches(Rule rule, Event event, int minuteOfDay, ThisPrint print, Map<String, String> values) {
         if (!rule.enabled) return false;
         if (!rule.event.equals(ANY) && !rule.event.equals(event.type)) return false;
-        if (rule.event.equals(ANY) && event.type.equals(LAYER)) return false;   // "any" means the milestones, not every layer
+        if (rule.event.equals(ANY) && (event.type.equals(LAYER) || event.type.equals(VALUE) || event.type.equals(CHANGE))) return false;   // "any" means the milestones
+        if ((event.type.equals(VALUE) || event.type.equals(CHANGE)) && !rule.id.equals(event.ruleId)) return false;
+        if (!rule.ifField.isEmpty()) {
+            double v = AutomationValues.number(values, rule.ifField);
+            if (Double.isNaN(v) || (rule.ifAbove ? v < rule.ifLimit : v >= rule.ifLimit)) return false;
+        }
         if (rule.event.equals(LAYER) && !(rule.layer > 0 && event.fromLayer < rule.layer && event.layer >= rule.layer)) return false;
         if (!inWindow(minuteOfDay, rule.fromMinute, rule.toMinute)) return false;
         ThisPrint p = print == null ? new ThisPrint() : print.forPrint(event.key);
@@ -177,6 +206,48 @@ final class Automation {
     static String window(int from, int to) {
         if (from >= 0 && to >= 0) return clock(from) + "–" + clock(to);
         return from >= 0 ? "after " + clock(from) : "before " + clock(to);
+    }
+    static boolean validField(String key) { return AutomationValues.find(key) != null || key.matches("status(\\.[A-Za-z0-9_]+){1,8}"); }
+    static String number(double v) { return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v); }
+
+    /**
+     * Value rules: "crosses a limit" fires when the value goes from the safe side to the limit (reaching it, for "reaches"),
+     * then waits until it is back on the safe side by a margin (2 % of the limit, at least 1) before it can fire again; the
+     * first value seen only sets the side, so connecting while already past a limit does not fire. "Changes" fires when the
+     * value differs from the last one seen, at most once a minute.
+     */
+    static final class Watcher {
+        private final Map<String, Boolean> armed = new java.util.HashMap<>();
+        private final Map<String, String> last = new java.util.HashMap<>();
+        private final Map<String, Long> firedAt = new java.util.HashMap<>();
+        List<Event> check(List<Rule> rules, Map<String, String> values, long nowMs, Event template) {
+            List<Event> out = new ArrayList<>();
+            for (Rule r : rules) {
+                if (!r.enabled || r.field.isEmpty()) continue;
+                String text = values.get(r.field);
+                if (r.event.equals(CHANGE)) {
+                    if (text == null) continue;
+                    String before = last.put(r.id, text);
+                    Long at = firedAt.get(r.id);
+                    if (before != null && !before.equals(text) && (at == null || nowMs - at >= 60_000)) { firedAt.put(r.id, nowMs); out.add(valueEvent(r, template, "{" + r.field + "} " + before + " → " + text)); }
+                } else if (r.event.equals(VALUE)) {
+                    double v = AutomationValues.number(values, r.field); if (Double.isNaN(v)) continue;
+                    boolean past = r.above ? v >= r.limit : v < r.limit;
+                    double margin = Math.max(1, Math.abs(r.limit) * 0.02);
+                    boolean safe = r.above ? v < r.limit - margin : v >= r.limit + margin;
+                    Boolean was = armed.get(r.id);
+                    if (was == null) { armed.put(r.id, !past); continue; }
+                    if (was && past) { armed.put(r.id, false); out.add(valueEvent(r, template, "{" + r.field + "} " + text + (r.above ? ", reached " : ", below ") + number(r.limit))); }
+                    else if (!was && safe) armed.put(r.id, true);
+                }
+            }
+            return out;
+        }
+        private static Event valueEvent(Rule r, Event template, String detail) {
+            Event e = new Event(r.event); e.ruleId = r.id; e.detail = detail;
+            if (template != null) { e.printer = template.printer; e.file = template.file; e.key = template.key; e.layer = template.layer; e.total = template.total; e.progress = template.progress; e.remaining = template.remaining; }
+            return e;
+        }
     }
     static String clock(int minute) { return String.format(Locale.ROOT, "%02d:%02d", minute / 60, minute % 60); }
     private static int minute(int m) { return m < 0 || m >= 24 * 60 ? -1 : m; }
@@ -196,7 +267,7 @@ final class Automation {
     static String escape(String v) { String quoted = JSONObject.quote(v == null ? "" : v); return quoted.substring(1, quoted.length() - 1); }
     /** The webhook body: the filled template, or a JSON object of every value when the template is blank. */
     static String body(Action action, Map<String, String> values) {
-        if (action.body.trim().isEmpty()) { JSONObject o = new JSONObject(); for (Map.Entry<String, String> e : values.entrySet()) try { o.put(e.getKey(), e.getValue()); } catch (JSONException impossible) { } o.remove("event_name"); return o.toString(); }
+        if (action.body.trim().isEmpty()) { JSONObject o = new JSONObject(); for (Map.Entry<String, String> e : values.entrySet()) if (!e.getKey().startsWith("status.")) try { o.put(e.getKey(), e.getValue()); } catch (JSONException impossible) { } o.remove("event_name"); return o.toString(); }
         return fill(action.body, values, looksLikeJson(action.body));
     }
     static boolean looksLikeJson(String body) { String t = body.trim(); return t.startsWith("{") || t.startsWith("["); }
@@ -266,8 +337,22 @@ final class Automation {
         Action haHook = action(WEBHOOK); haHook.url = "http://homeassistant.local:8123/api/webhook/your-webhook-id";
         out.add(template("Home Assistant webhook when a print stops or faults", ANY, 0, haHook));
         out.add(template("Tasker or Automate: every milestone", ANY, 0, action(BROADCAST)));
-        Action first = action(NOTIFY); first.title = "First layer done"; first.text = "Have a look at {file}'s first layer.";
-        out.add(template("Remind me to check the first layer", FIRST_LAYER, 0, first));
+        Action first = action(NOTIFY); first.title = "First layer done"; first.text = "Have a look at {file}'s first layer."; first.picture = true;
+        out.add(template("Remind me to check the first layer (with a picture)", FIRST_LAYER, 0, first));
+        Action shot = action(WEBHOOK); shot.url = "https://discord.com/api/webhooks/your-id/your-token"; shot.picture = true; shot.chart = true;
+        shot.body = "{\"content\": \"{printer}: {file} finished in {elapsed} · nozzle {nozzle} °C · bed {bed} °C · chamber max {chamber_max} °C\"}";
+        out.add(template("Post the last picture and the print's chart to Discord", FINISHED, 0, shot));
+        Action ntfyPicture = action(WEBHOOK); ntfyPicture.url = "https://ntfy.sh/your-topic"; ntfyPicture.picture = true; ntfyPicture.rawImage = true; ntfyPicture.body = "{event_name}: {file}, layer {layer}/{total_layers}";
+        out.add(template("ntfy with the camera picture at each milestone", ANY, 0, ntfyPicture));
+        Action warm = action(NOTIFY); warm.title = "Chamber is warm"; warm.text = "The chamber reached {chamber} °C."; Rule chamber = template("Chamber reached 40 °C (ready for ABS/ASA)", VALUE, 0, warm);
+        chamber.field = "chamber"; chamber.above = true; chamber.limit = 40; out.add(chamber);
+        Action fanNote = action(NOTIFY); fanNote.title = "Heatsink fan stopped?"; fanNote.text = "The hotend heatsink fan reports {heatsink_fan_rpm} rpm with the nozzle at {nozzle} °C. Check it before the hotend clogs."; fanNote.picture = true;
+        Rule fan = template("Heatsink fan stopped while the nozzle is hot", VALUE, 0, fanNote); fan.field = "heatsink_fan_rpm"; fan.above = false; fan.limit = 500;
+        fan.ifField = "nozzle"; fan.ifAbove = true; fan.ifLimit = 150; out.add(fan);
+        Action half = action(NOTIFY); half.title = "Halfway"; half.text = "{file} is at {progress} %, done ≈ {done_at}."; half.chart = true;
+        Rule halfway = template("Halfway there (with the chart)", VALUE, 0, half); halfway.field = "progress"; halfway.limit = 50; out.add(halfway);
+        Action spool = action(NOTIFY); spool.title = "Filament changed"; spool.text = "Now printing from tray {tray}: {filament_type} {filament_colour}.";
+        Rule tray = template("Tell me when the active filament tray changes", CHANGE, 0, spool); tray.field = "tray"; out.add(tray);
         return out;
     }
     private static Rule template(String name, String event, int delay, Action action) { Rule r = new Rule(); r.name = name; r.event = event; r.delayMinutes = delay; r.actions.add(action); return r; }

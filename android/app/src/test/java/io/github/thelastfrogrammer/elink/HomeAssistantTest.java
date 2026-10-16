@@ -15,7 +15,8 @@ public class HomeAssistantTest {
     }
     @Test public void discoveryAnnouncesEverySensorAndACameraUnderOneDevice() throws Exception {
         List<String[]> messages = HomeAssistant.discovery("cc2_12345678", "Bedroom");
-        assertEquals(HomeAssistant.ENTITIES.size() + 2, messages.size());
+        assertEquals(HomeAssistant.ENTITIES.size() + 3, messages.size());
+        assertTrue(messages.stream().anyMatch(m -> m[0].equals("homeassistant/camera/cc2_12345678/chart/config")));
         String[] progress = messages.stream().filter(m -> m[0].equals("homeassistant/sensor/cc2_12345678/progress/config")).findFirst().get();
         JSONObject c = new JSONObject(progress[1]);
         assertEquals("linkworkshop/cc2_12345678/state", c.getString("state_topic"));

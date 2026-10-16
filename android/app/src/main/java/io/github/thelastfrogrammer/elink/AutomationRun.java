@@ -34,9 +34,17 @@ final class AutomationRun {
         String lightBlocked();
         void light(boolean on);
         JSONObject liveStatus();
-        void notifyPerson(int id, String title, String text);
-        /** Tells Home Assistant (no-op when the link is off); returns what happened for the log. */
-        String homeAssistantEvent(JSONObject event);
+        /** The active CANVAS trays as last reported, or null. */
+        JSONObject canvas();
+        /** The app's own values (pictures kept, guardian verdict). */
+        Map<String, String> appValues();
+        void notifyPerson(int id, String title, String text, android.graphics.Bitmap picture);
+        /** Tells Home Assistant (no-op when the link is off), with a chart PNG for its chart camera when given; returns what happened for the log. */
+        String homeAssistantEvent(JSONObject event, byte[] chart);
+        /** The running print's newest camera picture as JPEG, or null. */
+        byte[] latestPicture();
+        /** A chart of the running print (temperatures and progress) as PNG, or null when there is no recording yet. Main thread. */
+        byte[] chart();
     }
 
     private final Context context;
@@ -44,6 +52,7 @@ final class AutomationRun {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ExecutorService web = Executors.newSingleThreadExecutor();
     final Automation.Detector local = new Automation.Detector(), cloud = new Automation.Detector();
+    private final Automation.Watcher watcher = new Automation.Watcher();
     private List<Automation.Rule> rules;
     private long rulesRead = -1;
 
@@ -88,6 +97,16 @@ final class AutomationRun {
     void status(Automation.Detector detector, JSONObject status, String printer) {
         if (Looper.myLooper() != Looper.getMainLooper()) { main.post(() -> status(detector, status, printer)); return; }
         for (Automation.Event e : detector.update(status, printer)) fire(e);
+        List<Automation.Rule> valueRules = new ArrayList<>();
+        for (Automation.Rule r : current()) if (r.enabled && (r.event.equals(Automation.VALUE) || r.event.equals(Automation.CHANGE))) valueRules.add(r);
+        if (valueRules.isEmpty()) return;
+        Map<String, String> values = values(status);
+        for (Automation.Event e : watcher.check(valueRules, values, System.currentTimeMillis(), detector.outside(Automation.VALUE, "", status, printer))) fire(e);
+    }
+    /** Every value now: the named ones and the raw fields. */
+    Map<String, String> values(JSONObject status) {
+        Map<String, String> v = AutomationValues.from(status, host.canvas(), host.appValues(), System.currentTimeMillis(), java.util.Locale.getDefault(), java.util.TimeZone.getDefault());
+        v.putAll(AutomationValues.raw(status)); return v;
     }
     /** An event the service noticed itself (guardian, print watch, lost contact). */
     void outside(Automation.Detector detector, String type, String detail, JSONObject status, String printer) {
@@ -99,8 +118,10 @@ final class AutomationRun {
         java.util.Calendar now = java.util.Calendar.getInstance();
         int minute = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE);
         Automation.ThisPrint print = thisPrint(context);
+        Map<String, String> valuesNow = null;
         for (Automation.Rule rule : current()) {
-            if (!Automation.matches(rule, event, minute, print)) continue;
+            if (!rule.ifField.isEmpty() && valuesNow == null) valuesNow = values(host.liveStatus());
+            if (!Automation.matches(rule, event, minute, print, valuesNow)) continue;
             if (rule.delayMinutes > 0) {
                 Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" runs in " + rule.delayMinutes + " min (" + event.type + ")");
                 main.postDelayed(() -> run(rule, event, false), rule.delayMinutes * 60_000L);
@@ -110,24 +131,32 @@ final class AutomationRun {
 
     /** Runs a rule's actions once (main thread). `test`: from the workshop's Test button, with a sample event. */
     void run(Automation.Rule rule, Automation.Event event, boolean test) {
-        Map<String, String> values = event.values(System.currentTimeMillis(), java.util.TimeZone.getDefault());
+        // The status values now, with the event's own on top (its file and layer are those of the moment it happened).
+        Map<String, String> values = values(host.liveStatus());
+        for (Map.Entry<String, String> e : event.values(System.currentTimeMillis(), java.util.TimeZone.getDefault()).entrySet()) if (!e.getValue().isEmpty() || !values.containsKey(e.getKey())) values.put(e.getKey(), e.getValue());
         String label = "\"" + rule.name + "\"" + (test ? " (test)" : "");
+        boolean wantPicture = false, wantChart = false; for (Automation.Action a : rule.actions) { wantPicture |= a.picture; wantChart |= a.chart; }
+        byte[] picture = wantPicture ? host.latestPicture() : null, chart = wantChart ? host.chart() : null;
+        if (wantPicture && picture == null) Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": no camera picture of this print yet; sent without it");
+        if (wantChart && chart == null) Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": no recording to chart yet; sent without it");
         for (Automation.Action a : rule.actions) {
             try {
                 switch (a.kind) {
                     case Automation.NOTIFY:
-                        host.notifyPerson(100 + Math.abs(rule.id.hashCode() % 1000), Automation.fill(a.title.isEmpty() ? "{event_name}" : a.title, values, false), Automation.fill(a.text.isEmpty() ? "{file}" : a.text, values, false));
+                        byte[] shown = a.picture && picture != null ? picture : a.chart ? chart : null;
+                        host.notifyPerson(100 + Math.abs(rule.id.hashCode() % 1000), Automation.fill(a.title.isEmpty() ? "{event_name}" : a.title, values, false), Automation.fill(a.text.isEmpty() ? "{file}" : a.text, values, false),
+                            shown == null ? null : android.graphics.BitmapFactory.decodeByteArray(shown, 0, shown.length));
                         Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": notification shown"); break;
                     case Automation.LIGHT: light(label, a.on); break;
-                    case Automation.WEBHOOK: webhook(label, a, values, true); break;
+                    case Automation.WEBHOOK: webhook(label, a, values, a.picture ? picture : null, a.chart ? chart : null, true); break;
                     case Automation.HA_EVENT: {
                         JSONObject o = new JSONObject().put("event_type", event.type);
-                        for (Map.Entry<String, String> v : values.entrySet()) if (!v.getKey().equals("event")) o.put(v.getKey(), v.getValue());
-                        Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": Home Assistant " + host.homeAssistantEvent(o)); break;
+                        for (Map.Entry<String, String> v : values.entrySet()) if (!v.getKey().equals("event") && !v.getKey().startsWith("status.")) o.put(v.getKey(), v.getValue());
+                        Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": Home Assistant " + host.homeAssistantEvent(o, a.chart ? chart : null)); break;
                     }
                     case Automation.BROADCAST: {
                         Intent intent = new Intent(BROADCAST_ACTION);
-                        for (Map.Entry<String, String> v : values.entrySet()) intent.putExtra(v.getKey(), v.getValue());
+                        for (Map.Entry<String, String> v : values.entrySet()) if (!v.getKey().startsWith("status.")) intent.putExtra(v.getKey(), v.getValue());
                         context.sendBroadcast(intent);
                         Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": broadcast " + BROADCAST_ACTION + " sent"); break;
                     }
@@ -154,29 +183,63 @@ final class AutomationRun {
         }, 15_000);
     }
 
-    private void webhook(String label, Automation.Action a, Map<String, String> values, boolean first) {
+    private void webhook(String label, Automation.Action a, Map<String, String> values, byte[] picture, byte[] chart, boolean first) {
         String body = Automation.body(a, values);
         web.execute(() -> {
             String result;
             try {
                 HttpURLConnection http = (HttpURLConnection) new URL(a.url.trim()).openConnection();
-                http.setConnectTimeout(10_000); http.setReadTimeout(10_000); http.setRequestMethod("POST"); http.setDoOutput(true); http.setInstanceFollowRedirects(false);
-                http.setRequestProperty("Content-Type", Automation.looksLikeJson(body) ? "application/json; charset=utf-8" : "text/plain; charset=utf-8");
+                http.setConnectTimeout(10_000); http.setReadTimeout(20_000); http.setRequestMethod("POST"); http.setDoOutput(true); http.setInstanceFollowRedirects(false);
                 http.setRequestProperty("User-Agent", "LinkWorkshop-Automation");
                 if (!a.header.trim().isEmpty()) {
                     String secret = ""; try { CredentialStore store = new CredentialStore(context); if (store.remembers("automation:" + a.secretId)) secret = store.load("automation:" + a.secretId); } catch (Exception unreadable) { }
                     http.setRequestProperty(a.header.trim(), secret);
                 }
-                try (OutputStream out = http.getOutputStream()) { out.write(body.getBytes(StandardCharsets.UTF_8)); }
+                byte[] payload; String sent;
+                byte[] image = picture != null ? picture : chart;
+                if (image != null && a.rawImage) {
+                    // One picture as the whole body; the text goes in a header (ntfy: Message, with a file name).
+                    http.setRequestProperty("Content-Type", picture != null ? "image/jpeg" : "image/png");
+                    http.setRequestProperty(a.messageHeader, body.replaceAll("[\\r\\n]+", " "));
+                    http.setRequestProperty("Filename", picture != null ? "picture.jpg" : "chart.png");
+                    payload = image; sent = picture != null ? "picture" : "chart";
+                } else if (picture != null || chart != null) {
+                    String boundary = "linkworkshop" + Long.toHexString(System.nanoTime());
+                    http.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
+                    payload = Multipart.build(boundary, body, Automation.looksLikeJson(body), picture, chart);
+                    sent = "multipart" + (picture != null ? " + picture" : "") + (chart != null ? " + chart" : "");
+                } else {
+                    http.setRequestProperty("Content-Type", Automation.looksLikeJson(body) ? "application/json; charset=utf-8" : "text/plain; charset=utf-8");
+                    payload = body.getBytes(StandardCharsets.UTF_8); sent = "text";
+                }
+                http.setFixedLengthStreamingMode(payload.length);
+                try (OutputStream out = http.getOutputStream()) { out.write(payload); }
                 int code = http.getResponseCode(); http.disconnect();
-                result = "HTTP " + code;
-                if (code >= 500 && first) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook to " + Automation.shortUrl(a.url) + ": " + result + "; trying once more in 30 s"); main.postDelayed(() -> webhook(label, a, values, false), 30_000); return; }
+                result = "HTTP " + code + " (" + sent + ", " + Math.max(1, payload.length / 1024) + " KB)";
+                if (code >= 500 && first) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook to " + Automation.shortUrl(a.url) + ": " + result + "; trying once more in 30 s"); main.postDelayed(() -> webhook(label, a, values, picture, chart, false), 30_000); return; }
             } catch (Exception failed) {
                 result = failed.getClass().getSimpleName();
-                if (first) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook to " + Automation.shortUrl(a.url) + " failed (" + result + "); trying once more in 30 s"); main.postDelayed(() -> webhook(label, a, values, false), 30_000); return; }
+                if (first) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook to " + Automation.shortUrl(a.url) + " failed (" + result + "); trying once more in 30 s"); main.postDelayed(() -> webhook(label, a, values, picture, chart, false), 30_000); return; }
             }
             Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook to " + Automation.shortUrl(a.url) + ": " + result + (first ? "" : " (second try; not tried again)"));
         });
+    }
+
+    /** A multipart form as Discord and most services take it: the text as payload_json (JSON) or content (text), then files[0], files[1]. */
+    static final class Multipart {
+        static byte[] build(String boundary, String body, boolean json, byte[] picture, byte[] chart) throws IOException {
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            String field = json ? "payload_json" : "content";
+            part(out, boundary, "Content-Disposition: form-data; name=\"" + field + "\"\r\nContent-Type: " + (json ? "application/json" : "text/plain") + "; charset=utf-8", body.getBytes(StandardCharsets.UTF_8));
+            int n = 0;
+            if (picture != null) part(out, boundary, "Content-Disposition: form-data; name=\"files[" + n++ + "]\"; filename=\"picture.jpg\"\r\nContent-Type: image/jpeg", picture);
+            if (chart != null) part(out, boundary, "Content-Disposition: form-data; name=\"files[" + n + "]\"; filename=\"chart.png\"\r\nContent-Type: image/png", chart);
+            out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
+            return out.toByteArray();
+        }
+        private static void part(java.io.ByteArrayOutputStream out, String boundary, String headers, byte[] content) throws IOException {
+            out.write(("--" + boundary + "\r\n" + headers + "\r\n\r\n").getBytes(StandardCharsets.UTF_8)); out.write(content); out.write("\r\n".getBytes(StandardCharsets.UTF_8));
+        }
     }
 
     /** A sample event for the Test button: the running print's values when there is one. */

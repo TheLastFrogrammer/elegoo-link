@@ -83,6 +83,20 @@ public class MoreScreensRenderTest {
         AutomationActivity workshop = Robolectric.buildActivity(AutomationActivity.class).setup().get();
         show(workshop, "automation-" + theme + ".png", 2600);
     }
+    @Test public void renderPrintChart() throws Exception {
+        java.util.List<double[]> rows = new java.util.ArrayList<>();
+        for (int i = 0; i <= 60; i++) {
+            double[] r = new double[PrintRecorder.COLUMNS.length]; java.util.Arrays.fill(r, Double.NaN);
+            java.util.List<String> c = java.util.Arrays.asList(PrintRecorder.COLUMNS);
+            r[c.indexOf("elapsed_s")] = i * 60; r[c.indexOf("progress")] = i * 100 / 60.0;
+            r[c.indexOf("nozzle_c")] = Math.min(220, 25 + i * 40); r[c.indexOf("nozzle_target_c")] = 220;
+            r[c.indexOf("bed_c")] = Math.min(60, 25 + i * 8); r[c.indexOf("bed_target_c")] = 60; r[c.indexOf("chamber_c")] = 25 + 15 * (1 - Math.exp(-i / 15.0));
+            rows.add(r);
+        }
+        android.graphics.Bitmap chart = PrintChart.bitmap(org.robolectric.RuntimeEnvironment.getApplication(), null, rows);
+        File file = new File(out(), "automation-chart.png"); file.getParentFile().mkdirs();
+        try (FileOutputStream stream = new FileOutputStream(file)) { chart.compress(Bitmap.CompressFormat.PNG, 100, stream); }
+    }
     @Test public void renderAutomationLight() throws Exception { automationScreen("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderAutomationDark() throws Exception { automationScreen("dark"); }
     @Test public void renderCloudStatusLight() throws Exception { statusScreen("light"); }

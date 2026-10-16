@@ -79,6 +79,7 @@ public final class AutomationActivity extends Activity {
         LinearLayout more = row(content);
         action(more, "Import…", this::importDialog);
         action(more, "Share all…", () -> share(rules, "Link Workshop automations"));
+        action(more, "Values…", this::valuesDialog);
         action(more, "Log", () -> startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.AUTOMATIONS)));
 
         A11y.heading(text(content, "Your rules", 17, ink, true)).setPadding(0, dp(16), 0, dp(4));
@@ -89,7 +90,7 @@ public final class AutomationActivity extends Activity {
         A11y.heading(text(content, "My templates", 17, ink, true)).setPadding(0, dp(16), 0, dp(4));
         text(content, mine.isEmpty() ? "Save a rule as a template to reuse or share it, or import one someone shared with you." : "Your own templates and imported ones. Use makes a rule from one; Share hands it on as text.", 13, muted, false);
         for (Automation.Rule t : mine) templateCard(t, mine);
-        text(content, "Fill-ins for notification texts and webhook bodies: " + variables() + ". Webhook header values (tokens) stay on this phone and are never shared.", 12, muted, false).setPadding(0, dp(16), 0, 0);
+        text(content, "Values… lists everything a rule can send or watch, with what the printer reports now. Notifications and webhooks can also attach the latest camera picture and a chart of the print. Webhook header values (tokens) stay on this phone and are never shared.", 12, muted, false).setPadding(0, dp(16), 0, 0);
     }
 
     private void ruleCard(Automation.Rule rule) {
@@ -159,7 +160,23 @@ public final class AutomationActivity extends Activity {
         Spinner event = new Spinner(this); event.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, new ArrayList<>(Automation.EVENTS.values())));
         event.setSelection(Math.max(0, eventIds.indexOf(rule.event))); event.setMinimumHeight(dp(48)); form.addView(event);
         EditText layer = field(form, "Layer number", rule.layer > 0 ? String.valueOf(rule.layer) : "", InputType.TYPE_CLASS_NUMBER);
-        Runnable layerShown = () -> layer.setVisibility(eventIds.get(event.getSelectedItemPosition()).equals(Automation.LAYER) ? View.VISIBLE : View.GONE);
+        // A value rule: which value, and for "crosses a limit" the direction and the limit.
+        String[] watched = {rule.field};
+        Button watchedButton = new Button(this); watchedButton.setAllCaps(false); watchedButton.setMinHeight(dp(48)); form.addView(watchedButton, new LinearLayout.LayoutParams(-1, -2));
+        Runnable watchedLabel = () -> watchedButton.setText(watched[0].isEmpty() ? "Choose the value…" : "Value: {" + watched[0] + "}");
+        watchedLabel.run();
+        RadioGroup direction = new RadioGroup(this); RadioButton reaches = new RadioButton(this), below = new RadioButton(this);
+        reaches.setText("reaches or goes above"); below.setText("goes below"); reaches.setTextColor(ink); below.setTextColor(ink); direction.addView(reaches); direction.addView(below); form.addView(direction);
+        (rule.above ? reaches : below).setChecked(true);
+        EditText limit = field(form, "Limit (a number)", rule.field.isEmpty() ? "" : Automation.number(rule.limit), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        Runnable layerShown = () -> {
+            String id = eventIds.get(event.getSelectedItemPosition());
+            layer.setVisibility(id.equals(Automation.LAYER) ? View.VISIBLE : View.GONE);
+            boolean value = id.equals(Automation.VALUE), change = id.equals(Automation.CHANGE);
+            watchedButton.setVisibility(value || change ? View.VISIBLE : View.GONE);
+            direction.setVisibility(value ? View.VISIBLE : View.GONE); limit.setVisibility(value ? View.VISIBLE : View.GONE);
+        };
+        watchedButton.setOnClickListener(v -> pickValue(eventIds.get(event.getSelectedItemPosition()).equals(Automation.VALUE), false, key -> { watched[0] = key; watchedLabel.run(); }));
         event.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             public void onItemSelected(android.widget.AdapterView<?> p, View v, int pos, long id) { layerShown.run(); }
             public void onNothingSelected(android.widget.AdapterView<?> p) { }
@@ -170,6 +187,18 @@ public final class AutomationActivity extends Activity {
         EditText to = field(form, "Until time, e.g. 07:00 (blank: any)", rule.toMinute >= 0 ? Automation.clock(rule.toMinute) : "", InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME);
         CheckBox last = new CheckBox(this); last.setText("Only for a print marked as the last of the day (Print tab, Automations…)"); last.setTextColor(ink); last.setChecked(rule.lastPrintOnly); last.setMinHeight(dp(48)); form.addView(last);
         EditText delay = field(form, "Wait minutes before acting (0–240)", rule.delayMinutes > 0 ? String.valueOf(rule.delayMinutes) : "", InputType.TYPE_CLASS_NUMBER);
+        String[] condition = {rule.ifField};
+        Button conditionButton = new Button(this); conditionButton.setAllCaps(false); conditionButton.setMinHeight(dp(48)); form.addView(conditionButton, new LinearLayout.LayoutParams(-1, -2));
+        RadioGroup ifDirection = new RadioGroup(this); RadioButton ifAbove = new RadioButton(this), ifBelow = new RadioButton(this);
+        ifAbove.setText("is at or above"); ifBelow.setText("is below"); ifAbove.setTextColor(ink); ifBelow.setTextColor(ink); ifDirection.addView(ifAbove); ifDirection.addView(ifBelow); form.addView(ifDirection);
+        (rule.ifAbove ? ifAbove : ifBelow).setChecked(true);
+        EditText ifLimit = field(form, "Number", rule.ifField.isEmpty() ? "" : Automation.number(rule.ifLimit), InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        Runnable conditionShown = () -> {
+            conditionButton.setText(condition[0].isEmpty() ? "And only while a value… (none)" : "And only while {" + condition[0] + "}");
+            ifDirection.setVisibility(condition[0].isEmpty() ? View.GONE : View.VISIBLE); ifLimit.setVisibility(condition[0].isEmpty() ? View.GONE : View.VISIBLE);
+        };
+        conditionShown.run();
+        conditionButton.setOnClickListener(v -> pickValue(true, true, key -> { condition[0] = key; conditionShown.run(); }));
         text(form, "Do", 13, muted, true);
         List<Automation.Action> actions = new ArrayList<>();   // copies, so Cancel leaves the rule as it was
         for (Automation.Action a : rule.actions) try { actions.add(Automation.Action.fromJson(a.toJson(false))); } catch (Exception unreadable) { actions.add(a); }
@@ -206,12 +235,19 @@ public final class AutomationActivity extends Activity {
                 : eventId.equals(Automation.LAYER) && layerNumber < 1 ? "Enter the layer number."
                 : fromMinute == -2 || toMinute == -2 ? "Write times as hours:minutes, such as 22:00."
                 : wait > 240 ? "Wait at most 240 minutes." : "";
+            boolean valueRule = eventId.equals(Automation.VALUE), changeRule = eventId.equals(Automation.CHANGE);
+            double limitValue = decimal(limit.getText().toString()), ifLimitValue = decimal(ifLimit.getText().toString());
+            if ((valueRule || changeRule) && watched[0].isEmpty()) problem = "Choose the value to watch.";
+            else if (valueRule && Double.isNaN(limitValue)) problem = "Enter the limit as a number.";
+            else if (!condition[0].isEmpty() && Double.isNaN(ifLimitValue)) problem = "Enter the number for “and only while”.";
             for (Automation.Action a : actions) if (a.kind.equals(Automation.WEBHOOK) && !Automation.webhookUrlOk(a.url)) problem = "A webhook needs an address starting with https:// or http://.";
             if (!problem.isEmpty()) { toast(problem); return; }
             boolean wasChanging = rule.changesPrinter();
-            rule.name = name.getText().toString().trim().isEmpty() ? (eventId.equals(Automation.LAYER) ? "Layer " + layerNumber : Automation.EVENTS.get(eventId)) : name.getText().toString().trim();
+            rule.name = name.getText().toString().trim().isEmpty() ? (eventId.equals(Automation.LAYER) ? "Layer " + layerNumber : valueRule || changeRule ? "{" + watched[0] + "} " + (changeRule ? "changes" : (reaches.isChecked() ? "reaches " : "below ") + limit.getText().toString().trim()) : Automation.EVENTS.get(eventId)) : name.getText().toString().trim();
             rule.event = eventId; rule.layer = eventId.equals(Automation.LAYER) ? layerNumber : 0; rule.fromMinute = fromMinute; rule.toMinute = toMinute;
             rule.lastPrintOnly = last.isChecked(); rule.delayMinutes = wait; rule.actions.clear(); rule.actions.addAll(actions);
+            rule.field = valueRule || changeRule ? watched[0] : ""; rule.above = reaches.isChecked(); rule.limit = valueRule ? limitValue : 0;
+            rule.ifField = condition[0]; rule.ifAbove = ifAbove.isChecked(); rule.ifLimit = condition[0].isEmpty() ? 0 : ifLimitValue;
             if (!wasChanging && rule.changesPrinter() && rule.enabled && !adding) rule.enabled = false;   // a new light action is turned on deliberately, with the question
             if (adding) { if (rule.changesPrinter()) rule.enabled = false; rules.add(rule); }
             saveRules(); Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" " + (adding ? "added" : "changed"));
@@ -228,7 +264,8 @@ public final class AutomationActivity extends Activity {
         switch (a.kind) {
             case Automation.NOTIFY:
                 title = field(form, "Title", a.title, InputType.TYPE_CLASS_TEXT); body = field(form, "Text", a.text, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-                text(form, "Fill-ins: " + variables(), 12, muted, false); break;
+                insertButton(form, title, body);
+                text(form, "Type a value's name in braces, such as {nozzle}, or use Insert a value. A notification shows one picture: the camera picture when both are chosen.", 12, muted, false); break;
             case Automation.LIGHT: {
                 RadioGroup group = new RadioGroup(this); lightOn = new RadioButton(this); lightOn.setText("Turn the light on"); RadioButton off = new RadioButton(this); off.setText("Turn the light off");
                 lightOn.setTextColor(ink); off.setTextColor(ink); group.addView(lightOn); group.addView(off); form.addView(group); (a.on ? lightOn : off).setChecked(true);
@@ -240,7 +277,8 @@ public final class AutomationActivity extends Activity {
                 header = field(form, "Header name for a token (optional), e.g. Authorization", a.header, InputType.TYPE_CLASS_TEXT);
                 boolean kept = false; try { kept = new CredentialStore(this).remembers("automation:" + a.secretId); } catch (Exception unreadable) { }
                 secret = field(form, kept ? "Header value (kept; blank keeps it)" : "Header value, e.g. Bearer …", "", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-                text(form, "Sent as a POST. A body starting with { is sent as JSON with each fill-in escaped. Fill-ins: " + variables() + ". The header value is kept encrypted on this phone and never shared.", 12, muted, false);
+                insertButton(form, body);
+                text(form, "Sent as a POST. A body starting with { is sent as JSON with each value escaped. With a picture or chart it is sent as a form: the body as payload_json (JSON) or content (text), the images as files[0] and files[1], as Discord takes them. The header value is kept encrypted on this phone and never shared.", 12, muted, false);
                 break;
             }
             case Automation.HA_EVENT:
@@ -248,11 +286,24 @@ public final class AutomationActivity extends Activity {
             default:
                 text(form, "Sends the Android broadcast " + AutomationRun.BROADCAST_ACTION + " with each fill-in as a text extra (event, file, layer, …). In Tasker: Event → System → Intent Received, action as written here. Any app on the phone can receive it.", 13, ink, false);
         }
+        CheckBox picture = null, chart = null, raw = null; EditText messageHeader = null;
+        if (!a.kind.equals(Automation.LIGHT) && !a.kind.equals(Automation.BROADCAST)) {
+            if (!a.kind.equals(Automation.HA_EVENT)) { picture = new CheckBox(this); picture.setText("Attach the latest camera picture"); picture.setChecked(a.picture); picture.setTextColor(ink); picture.setMinHeight(dp(48)); form.addView(picture); }
+            chart = new CheckBox(this); chart.setText(a.kind.equals(Automation.HA_EVENT) ? "Also send a chart of the print to the “Print chart” camera" : "Attach a chart of this print (temperatures and progress)");
+            chart.setChecked(a.chart); chart.setTextColor(ink); chart.setMinHeight(dp(48)); form.addView(chart);
+        }
+        if (a.kind.equals(Automation.WEBHOOK)) {
+            raw = new CheckBox(this); raw.setText("Send one picture as the whole body, the text in a header (ntfy and similar)"); raw.setChecked(a.rawImage); raw.setTextColor(ink); raw.setMinHeight(dp(48)); form.addView(raw);
+            messageHeader = field(form, "Header for the text (ntfy: Message)", a.messageHeader, InputType.TYPE_CLASS_TEXT);
+        }
+        CheckBox fPicture = picture, fChart = chart, fRaw = raw; EditText fMessage = messageHeader;
         EditText fTitle = title, fBody = body, fUrl = url, fHeader = header, fSecret = secret; RadioButton fOn = lightOn;
         new AlertDialog.Builder(this).setTitle(Automation.ACTIONS.get(a.kind)).setView(scroll).setPositiveButton("Done", (d, w) -> {
             if (fTitle != null) a.title = fTitle.getText().toString();
             if (fBody != null && a.kind.equals(Automation.NOTIFY)) a.text = fBody.getText().toString();
             if (fOn != null) a.on = fOn.isChecked();
+            if (fPicture != null) a.picture = fPicture.isChecked(); if (fChart != null) a.chart = fChart.isChecked();
+            if (fRaw != null) { a.rawImage = fRaw.isChecked(); String h = fMessage.getText().toString().trim(); a.messageHeader = h.matches("[A-Za-z0-9-]{1,40}") ? h : "Message"; }
             if (fUrl != null) {
                 a.url = fUrl.getText().toString().trim(); a.body = fBody.getText().toString(); a.header = fHeader.getText().toString().trim();
                 String value = fSecret.getText().toString();
@@ -314,7 +365,67 @@ public final class AutomationActivity extends Activity {
         boolean on = false, off = false; for (Automation.Action a : rule.actions) if (a.kind.equals(Automation.LIGHT)) { if (a.on) on = true; else off = true; }
         return on && off ? "on and off" : on ? "on" : "off";
     }
-    private static String variables() { StringBuilder s = new StringBuilder(); for (String[] v : Automation.VARIABLES) s.append(s.length() > 0 ? ", " : "").append('{').append(v[0]).append('}'); return s.toString(); }
+    private static double decimal(String text) { try { return Double.parseDouble(text.trim().replace(',', '.')); } catch (NumberFormatException blank) { return Double.NaN; } }
+
+    /** Values now (named and raw), when the printer service is reachable. */
+    private java.util.Map<String, String> currentValues() {
+        if (printer == null || printer.automations == null) return new java.util.LinkedHashMap<>();
+        return printer.automations.values(printer.liveStatus());
+    }
+    /** Every value, by group, with what it is now; tapping one copies {name}. Then every raw field the printer reported. */
+    private void valuesDialog() {
+        java.util.Map<String, String> now = currentValues();
+        ScrollView scroll = new ScrollView(this); LinearLayout list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); list.setPadding(dp(20), dp(8), dp(20), dp(8)); scroll.addView(list);
+        text(list, now.isEmpty() ? "No printer status yet: connect to see the values now. Tap a value to copy its name." : "With the values the printer reports now. Tap one to copy its name, then paste it into a text or body.", 12, muted, false);
+        String group = "";
+        for (AutomationValues.Value v : AutomationValues.CATALOGUE) {
+            if (!v.group.equals(group)) { group = v.group; text(list, group, 15, ink, true).setPadding(0, dp(12), 0, dp(2)); }
+            valueRow(list, v.key, v.description, now.get(v.key));
+        }
+        text(list, "Attachments", 15, ink, true).setPadding(0, dp(12), 0, dp(2));
+        for (String[] a : AutomationValues.ATTACHMENTS) text(list, a[0] + ": " + a[1] + ". Turn it on in a notification or webhook action.", 13, muted, false);
+        text(list, "Everything the printer reports", 15, ink, true).setPadding(0, dp(12), 0, dp(2));
+        boolean any = false;
+        for (java.util.Map.Entry<String, String> e : now.entrySet()) if (e.getKey().startsWith("status.")) { any = true; valueRow(list, e.getKey(), null, e.getValue()); }
+        if (!any) text(list, "Shown here once the printer has reported its status.", 13, muted, false);
+        new AlertDialog.Builder(this).setTitle("Values").setView(scroll).setPositiveButton("Close", null).show();
+    }
+    private void valueRow(LinearLayout list, String key, String description, String value) {
+        TextView row = new TextView(this); row.setTextColor(ink); row.setTextSize(14); row.setPadding(0, dp(6), 0, dp(6)); row.setMinHeight(dp(48));
+        row.setText("{" + key + "}" + (value == null ? "" : "  = " + (value.length() > 60 ? value.substring(0, 60) + "…" : value)) + (description == null ? "" : "\n" + description));
+        row.setOnClickListener(v -> {
+            android.content.ClipboardManager clipboard = getSystemService(android.content.ClipboardManager.class);
+            if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("value", "{" + key + "}"));
+            toast("Copied {" + key + "}");
+        });
+        list.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+    /** Chooses a value: the named ones (numbers only when `numbers`), then the printer's raw fields; `none` offers no value. */
+    private void pickValue(boolean numbers, boolean none, java.util.function.Consumer<String> chosen) {
+        java.util.Map<String, String> now = currentValues();
+        List<String> keys = new ArrayList<>(), labels = new ArrayList<>();
+        if (none) { keys.add(""); labels.add("No condition"); }
+        for (AutomationValues.Value v : AutomationValues.CATALOGUE) {
+            if (numbers && !v.number || v.group.equals("Event")) continue;
+            keys.add(v.key); labels.add(v.group + " · {" + v.key + "}" + (now.containsKey(v.key) ? " = " + now.get(v.key) : "") + "\n" + v.description);
+        }
+        for (java.util.Map.Entry<String, String> e : now.entrySet()) {
+            if (!e.getKey().startsWith("status.") || numbers && Double.isNaN(AutomationValues.number(now, e.getKey()))) continue;
+            keys.add(e.getKey()); labels.add("Printer · {" + e.getKey() + "} = " + e.getValue());
+        }
+        new AlertDialog.Builder(this).setTitle(numbers ? "Choose a number value" : "Choose a value").setItems(labels.toArray(new String[0]), (d, which) -> chosen.accept(keys.get(which)))
+            .setNegativeButton("Cancel", null).show();
+    }
+    /** "Insert a value…": puts {name} at the cursor of whichever of `fields` was last focused (the last one by default). */
+    private void insertButton(LinearLayout form, EditText... fields) {
+        EditText[] target = {fields[fields.length - 1]};
+        for (EditText f : fields) f.setOnFocusChangeListener((v, has) -> { if (has) target[0] = (EditText) v; });
+        LinearLayout line = row(form);
+        action(line, "Insert a value…", () -> pickValue(false, false, key -> {
+            EditText f = target[0]; int at = Math.max(0, f.getSelectionStart());
+            f.getText().insert(at, "{" + key + "}");
+        }));
+    }
     /** Minutes after midnight for "HH:MM", -1 for blank, -2 for unreadable. */
     static int clock(String text) {
         String t = text.trim(); if (t.isEmpty()) return -1;

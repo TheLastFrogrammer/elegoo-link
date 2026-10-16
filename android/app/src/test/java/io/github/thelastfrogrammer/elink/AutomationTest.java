@@ -119,4 +119,84 @@ public class AutomationTest {
         Automation.Rule last = Automation.defaults().get(2);
         assertEquals("A print finishes · last print of the day · wait 10 min → Turn the light off", last.summary());
     }
+
+    private static JSONObject full() throws Exception {
+        return status(2, 2075, "cube.gcode", 12, 30)
+            .put("extruder", new JSONObject().put("temperature", 219.64).put("target", 220)).put("heater_bed", new JSONObject().put("temperature", 60).put("target", 60))
+            .put("ztemperature_sensor", new JSONObject().put("temperature", 38.2).put("measured_max_temperature", 41.5).put("measured_min_temperature", 22))
+            .put("fans", new JSONObject().put("fan", new JSONObject().put("speed", 255).put("rpm", 9000)).put("heater_fan", new JSONObject().put("speed", 255).put("rpm", 7400)))
+            .put("gcode_move_inf", new JSONObject().put("x", 100.5).put("y", 80).put("z", 2.4).put("e", 1234.56).put("speed_mode", 1))
+            .put("led", new JSONObject().put("status", 1)).put("external_device", new JSONObject().put("u_disk", true).put("camera", true))
+            .put("system", new JSONObject().put("sn", "SECRET123").put("hostname", "my-printer").put("version", "1.2"));
+    }
+
+    @Test public void namedValuesComeFromTheStatus() throws Exception {
+        JSONObject s = full(); s.getJSONObject("print_status").put("print_duration", 4320).put("total_duration", 4500);
+        JSONObject canvas = new JSONObject().put("active_canvas_id", 0).put("active_tray_id", 1).put("canvas_list", new org.json.JSONArray().put(new JSONObject().put("canvas_id", 0)
+            .put("tray_list", new org.json.JSONArray().put(new JSONObject().put("tray_id", 1).put("filament_type", "PETG").put("brand", "Acme").put("filament_color", "#FF0000").put("min_nozzle_temp", 230).put("max_nozzle_temp", 260)))));
+        Map<String, String> v = AutomationValues.from(s, canvas, Map.of("pictures", "7"), 0, java.util.Locale.ROOT, TimeZone.getTimeZone("UTC"));
+        assertEquals("219.6", v.get("nozzle")); assertEquals("41.5", v.get("chamber_max")); assertEquals("100", v.get("heatsink_fan")); assertEquals("7400", v.get("heatsink_fan_rpm"));
+        assertEquals("1234.6", v.get("extruded_mm")); assertEquals("on", v.get("light")); assertEquals("yes", v.get("usb_stick")); assertEquals("4320", v.get("elapsed_s"));
+        assertEquals("2", v.get("tray")); assertEquals("PETG", v.get("filament_type")); assertEquals("260", v.get("filament_max_nozzle")); assertEquals("7", v.get("pictures"));
+        for (String key : v.keySet()) assertTrue("catalogued: " + key, AutomationValues.find(key) != null);
+        Map<String, String> raw = AutomationValues.raw(s);
+        assertEquals("1.2", raw.get("status.system.version")); assertEquals("7400", raw.get("status.fans.heater_fan.rpm"));
+        assertFalse(raw.containsKey("status.system.sn")); assertFalse(raw.containsKey("status.system.hostname"));
+        assertEquals(1, AutomationValues.number(v, "light"), 0); assertEquals(42, AutomationValues.number(Map.of("remaining", "42 min"), "remaining"), 0);
+    }
+
+    @Test public void valueRulesFireOnCrossingOnceUntilBackOnTheSafeSide() {
+        Automation.Rule hot = new Automation.Rule(); hot.event = Automation.VALUE; hot.field = "chamber"; hot.above = true; hot.limit = 40;
+        Automation.Watcher w = new Automation.Watcher(); List<Automation.Rule> rules = List.of(hot);
+        assertTrue("already past when first seen: no event", w.check(rules, Map.of("chamber", "45"), 0, null).isEmpty());
+        assertTrue(w.check(rules, Map.of("chamber", "38"), 1, null).isEmpty());
+        List<Automation.Event> crossed = w.check(rules, Map.of("chamber", "40"), 2, null);
+        assertEquals(1, crossed.size()); assertEquals(hot.id, crossed.get(0).ruleId); assertTrue(crossed.get(0).detail.contains("reached 40"));
+        assertTrue("wobbling at the limit does not fire again", w.check(rules, Map.of("chamber", "39.5"), 3, null).isEmpty());
+        assertTrue(w.check(rules, Map.of("chamber", "40.2"), 4, null).isEmpty());
+        assertTrue(w.check(rules, Map.of("chamber", "38"), 5, null).isEmpty());
+        assertEquals(1, w.check(rules, Map.of("chamber", "41"), 6, null).size());
+
+        Automation.Rule tray = new Automation.Rule(); tray.event = Automation.CHANGE; tray.field = "tray";
+        Automation.Watcher c = new Automation.Watcher();
+        assertTrue(c.check(List.of(tray), Map.of("tray", "1"), 0, null).isEmpty());
+        assertEquals("{tray} 1 → 2", c.check(List.of(tray), Map.of("tray", "2"), 1000, null).get(0).detail);
+        assertTrue("at most once a minute", c.check(List.of(tray), Map.of("tray", "3"), 2000, null).isEmpty());
+        assertEquals(1, c.check(List.of(tray), Map.of("tray", "4"), 70_000, null).size());
+    }
+
+    @Test public void theExtraConditionAndValueEventsMatchTheirOwnRule() {
+        Automation.Rule fan = new Automation.Rule(); fan.event = Automation.VALUE; fan.field = "heatsink_fan_rpm"; fan.above = false; fan.limit = 500;
+        fan.ifField = "nozzle"; fan.ifAbove = true; fan.ifLimit = 150;
+        Automation.Event e = new Automation.Event(Automation.VALUE); e.ruleId = fan.id;
+        assertTrue(Automation.matches(fan, e, 0, null, Map.of("nozzle", "210")));
+        assertFalse("cold nozzle", Automation.matches(fan, e, 0, null, Map.of("nozzle", "40")));
+        assertFalse("value missing", Automation.matches(fan, e, 0, null, Map.of()));
+        Automation.Event other = new Automation.Event(Automation.VALUE); other.ruleId = "someone-else";
+        assertFalse(Automation.matches(fan, other, 0, null, Map.of("nozzle", "210")));
+        Automation.Rule any = new Automation.Rule(); any.event = Automation.ANY;
+        assertFalse("any is milestones only", Automation.matches(any, e, 0, null, Map.of()));
+    }
+
+    @Test public void valueRulesAndAttachmentsShareAndCheckTheirFields() throws Exception {
+        Automation.Rule r = new Automation.Rule(); r.event = Automation.VALUE; r.field = "status.fans.heater_fan.rpm"; r.above = false; r.limit = 500.5;
+        Automation.Action a = new Automation.Action(); a.kind = Automation.WEBHOOK; a.url = "https://ntfy.sh/x"; a.picture = true; a.chart = true; a.rawImage = true; r.actions.add(a);
+        Automation.Rule back = Automation.parseShared(Automation.share(List.of(r))).get(0);
+        assertEquals("status.fans.heater_fan.rpm", back.field); assertEquals(500.5, back.limit, 0); assertFalse(back.above);
+        assertTrue(back.actions.get(0).picture && back.actions.get(0).chart && back.actions.get(0).rawImage);
+        assertTrue(back.summary().startsWith("{status.fans.heater_fan.rpm} goes below 500.5"));
+        for (String bad : new String[] {"{\"event\": \"value_crossed\", \"field\": \"password\", \"actions\": [{\"kind\": \"notify\"}]}",
+            "{\"event\": \"value_crossed\", \"actions\": [{\"kind\": \"notify\"}]}"})
+            try { Automation.parseShared(bad); fail("accepted " + bad); } catch (org.json.JSONException expected) { }
+    }
+
+    @Test public void multipartCarriesTheTextAndBothImages() throws Exception {
+        byte[] form = AutomationRun.Multipart.build("B", "{\"content\": \"hi\"}", true, new byte[] {1, 2}, new byte[] {3});
+        String text = new String(form, java.nio.charset.StandardCharsets.ISO_8859_1);
+        assertTrue(text.startsWith("--B\r\nContent-Disposition: form-data; name=\"payload_json\""));
+        assertTrue(text.contains("name=\"files[0]\"; filename=\"picture.jpg\""));
+        assertTrue(text.contains("name=\"files[1]\"; filename=\"chart.png\""));
+        assertTrue(text.endsWith("--B--\r\n"));
+        assertTrue(new String(AutomationRun.Multipart.build("B", "plain", false, null, new byte[] {3}), java.nio.charset.StandardCharsets.ISO_8859_1).contains("name=\"content\""));
+    }
 }
