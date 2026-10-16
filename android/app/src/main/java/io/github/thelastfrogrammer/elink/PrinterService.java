@@ -1573,6 +1573,20 @@ public final class PrinterService extends Service {
         probe.start();
     }
     public void cancelProbe() { PrinterProbe running = probe; if (running != null) running.cancel(); }
+    /** "Listen for a print sent from Elegoo's app": the cloud control link stays up 15 minutes, sending nothing (CloudControl.heard). */
+    public volatile String otherAppListen = "";
+    public void listenForOtherApps() {
+        if (cloudApi == null || cloudSerial.isEmpty()) { otherAppListen = "Sign in with Elegoo and choose the printer first."; changed(); return; }
+        ensureCloudControl();
+        String serialNow = cloudSerial; int before = CloudFileRoute.heardCount(serialNow);
+        otherAppListen = "Listening for 15 minutes. Start a print from Elegoo's app now; nothing is sent to the printer."; changed();
+        cloudControl.listen(15 * 60_000L, error -> main.post(() -> { if (!error.isEmpty()) { otherAppListen = "Could not listen: " + StatusPresentation.clean(error); changed(); } }));
+        main.postDelayed(() -> {
+            otherAppListen = CloudFileRoute.heardCount(serialNow) > before ? "The printer named the G-code it fetched: the live toolpath can download it through the cloud."
+                : "Done listening. The printer did not name a G-code. The log (Local and cloud) lists what it sent, without values: please share it.";
+            changed();
+        }, 15 * 60_000L);
+    }
     private void ensureCloudControl() {
         if (cloudControl == null) cloudControl = new CloudControl(() -> {
             CloudApi current = cloudApi; if (current == null) throw new IOException("Sign in with Elegoo again.");

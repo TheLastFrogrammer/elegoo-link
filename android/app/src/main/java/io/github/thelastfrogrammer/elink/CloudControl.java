@@ -241,6 +241,38 @@ public final class CloudControl implements AutoCloseable {
         synchronized (this) { link = created; }
     }
 
+    private volatile long listenUntil;
+    /** Connects and stays connected for `ms` only listening (nothing is sent), to hear what the printer reports unasked; `result` gets "" or why not. */
+    public void listen(long ms, java.util.function.Consumer<String> result) {
+        worker.execute(() -> {
+            try { ensureConnected(); listenUntil = System.currentTimeMillis() + ms; scheduleIdleClose(); Diagnostics.note(Diagnostics.HYBRID, "listening on the cloud channel for " + ms / 60_000 + " min (nothing sent)"); result.accept(""); }
+            catch (IOException error) { result.accept(String.valueOf(error.getMessage())); }
+        });
+    }
+    private final java.util.Set<Integer> shapesLogged = new java.util.HashSet<>();
+    /**
+     * A message the printer sent without being asked (for example while it fetches a file another app, such as Elegoo's,
+     * sent through the cloud). Its structure is logged once per method, values masked; a field that plainly names a G-code in
+     * Elegoo's storage is kept for fetching that file later (CloudFileRoute). Nothing is sent and nothing is guessed.
+     */
+    private void heard(String serial, int method, JSONObject message) {
+        List<JSONObject> parts = new ArrayList<>(); collect(message, parts, 0);
+        if (shapesLogged.add(method)) {
+            StringBuilder shape = new StringBuilder();
+            for (JSONObject part : parts) { String p = CloudApi.patterns(part); if (!p.equals("none")) shape.append(shape.length() > 0 ? " | " : "").append(p); }
+            Diagnostics.note(Diagnostics.HYBRID, "the printer sent method " + method + " unasked through the cloud: " + (shape.length() == 0 ? "no text fields" : shape));
+        }
+        for (JSONObject part : parts) {
+            CloudApi.Reference reference = CloudApi.gcodeReference(part);
+            if (reference != null && CloudFileRoute.heard(serial, reference)) Diagnostics.note(Diagnostics.FILES, "the printer named a G-code in Elegoo's storage (method " + method + "); kept for the live toolpath");
+        }
+    }
+    private static void collect(Object value, List<JSONObject> out, int depth) {
+        if (depth > 4 || out.size() > 20) return;
+        if (value instanceof JSONObject) { JSONObject o = (JSONObject) value; out.add(o); for (java.util.Iterator<String> it = o.keys(); it.hasNext(); ) collect(o.opt(it.next()), out, depth + 1); }
+        else if (value instanceof org.json.JSONArray) { org.json.JSONArray a = (org.json.JSONArray) value; for (int i = 0; i < a.length() && i < 10; i++) collect(a.opt(i), out, depth + 1); }
+        else if (value instanceof String && ((String) value).startsWith("{")) { try { collect(new JSONObject((String) value), out, depth + 1); } catch (Exception notJson) { } }
+    }
     private void received(String publisher, String text) {
         JSONObject message;
         try { message = new JSONObject(text); } catch (Exception error) { return; }
@@ -253,7 +285,13 @@ public final class CloudControl implements AutoCloseable {
         }
         Pending wait;
         synchronized (this) { wait = pending; }
-        if (wait == null || !wait.publisher.equals(publisher) || message.optInt("id", -1) != wait.id) { unasked.saw("cloud", message.optInt("method", -1)); return; }
+        if (wait == null || !wait.publisher.equals(publisher) || message.optInt("id", -1) != wait.id) {
+            int method = message.optInt("method", -1);
+            unasked.saw("cloud", method);
+            String uid; synchronized (this) { uid = userId; }
+            if (uid != null && publisher.startsWith(uid) && publisher.length() > uid.length()) heard(publisher.substring(uid.length()), method, message);
+            return;
+        }
         JSONObject result = message.optJSONObject("result");
         int code = result == null ? -1 : result.optInt("error_code", 0);
         if (code == 0) finish(wait, true, "Printer acknowledged through the cloud. Waiting for its status to update.", result);
@@ -280,7 +318,7 @@ public final class CloudControl implements AutoCloseable {
     private void scheduleIdleClose() {
         synchronized (this) {
             if (idle != null) idle.cancel(false);
-            idle = worker.schedule(() -> { synchronized (CloudControl.this) { if (pending != null || watching != null) { scheduleIdleClose(); return; } } closeLink(); }, idleCloseMs, TimeUnit.MILLISECONDS);
+            idle = worker.schedule(() -> { synchronized (CloudControl.this) { if (pending != null || watching != null || System.currentTimeMillis() < listenUntil) { scheduleIdleClose(); return; } } closeLink(); }, idleCloseMs, TimeUnit.MILLISECONDS);
         }
     }
 

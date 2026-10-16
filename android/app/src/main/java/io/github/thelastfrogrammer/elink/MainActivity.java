@@ -2817,7 +2817,7 @@ public final class MainActivity extends Activity {
     // ------------------------------------------------------------------ local and cloud together
 
     private CheckBox followBox, localCameraBox;
-    private TextView followLabel, cameraTryLabel, folderLabel, listenLabel;
+    private TextView followLabel, cameraTryLabel, folderLabel, listenLabel, otherAppLabel;
     private Button cameraTry, folderButton, folderStop, listenButton;
     /** The Printer tab's card for using this Wi-Fi alongside the cloud. Everything here only reads from the printer. */
     private void buildHybrid() {
@@ -2852,6 +2852,9 @@ public final class MainActivity extends Activity {
         label(tests, "Check whether a printer in cloud mode still reports its status on your Wi-Fi. Enter the pairing PIN from the printer's screen. The app listens to the printer's local broker for 30 seconds and sends nothing: no requests, no registration. The PIN is used once and not kept. Another project saw nothing here; this checks your firmware.", 13, MUTED, false);
         listenButton = button(tests, "Try listening for local status…", this::listenDialog);
         listenLabel = A11y.polite(label(tests, "", 13, INK, false));
+        label(tests, "When Elegoo's phone app starts a print through the cloud, the printer fetches the file from Elegoo's storage. This listens on your account's cloud channel for 15 minutes while you start a print there, and sends nothing. If the printer names the file it fetches, the live toolpath can download it the same way. The log keeps the shape of what the printer sent, without values.", 13, MUTED, false);
+        button(tests, "Listen for a print sent from Elegoo's app…", () -> { if (printer != null) cloudGate(true, printer::listenForOtherApps); });
+        otherAppLabel = A11y.polite(label(tests, "", 13, INK, false));
         currentSection = null;
     }
     private void listenDialog() {
@@ -2881,6 +2884,7 @@ public final class MainActivity extends Activity {
         listenButton.setEnabled(bound && !printer.listening);
         listenLabel.setText(bound && printer.listenText != null ? StatusPresentation.clean(printer.listenText) : "");
         listenLabel.setVisibility(listenLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
+        otherAppLabel.setText(bound ? printer.otherAppListen : ""); otherAppLabel.setVisibility(otherAppLabel.getText().length() == 0 ? View.GONE : View.VISIBLE);
     }
 
     // ------------------------------------------------------------------ showcase video

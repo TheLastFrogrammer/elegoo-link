@@ -25,10 +25,36 @@ final class CloudFileRoute {
         Choice(String objectName, String url, String source) { this.objectName = objectName; this.url = url; this.source = source; }
     }
 
-    /** Own upload memory first (no request), then what the cloud's record for the file clearly names. Null when neither knows. */
+    /** G-code references the printer itself named in messages (CloudControl.heard), newest last, per printer; kept for this run only. */
+    private static final java.util.Map<String, java.util.List<CloudApi.Reference>> HEARD = new java.util.HashMap<>();
+    /** Keeps a reference the printer named; false when it was already known. */
+    static synchronized boolean heard(String serial, CloudApi.Reference reference) {
+        java.util.List<CloudApi.Reference> list = HEARD.computeIfAbsent(serial, s -> new java.util.ArrayList<>());
+        for (CloudApi.Reference r : list) if (r.objectName.equals(reference.objectName) && r.url.equals(reference.url)) return false;
+        list.add(reference); while (list.size() > 10) list.remove(0);
+        return true;
+    }
+    static synchronized int heardCount(String serial) { java.util.List<CloudApi.Reference> list = HEARD.get(serial); return list == null ? 0 : list.size(); }
+    /** The newest heard reference whose path ends with this file's name (so it is that file, not another), or null. */
+    static synchronized CloudApi.Reference heardFor(String serial, String filename) {
+        java.util.List<CloudApi.Reference> list = HEARD.get(serial);
+        if (list == null || filename == null || filename.isEmpty()) return null;
+        String base = filename.substring(filename.lastIndexOf('/') + 1).toLowerCase(java.util.Locale.ROOT);
+        for (int i = list.size() - 1; i >= 0; i--) {
+            CloudApi.Reference r = list.get(i);
+            String path = (r.url.isEmpty() ? r.objectName : r.url.contains("?") ? r.url.substring(0, r.url.indexOf('?')) : r.url).toLowerCase(java.util.Locale.ROOT);
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            if (name.equals(base) || name.equals(base + ".gz") || name.endsWith("_" + base) || name.endsWith("-" + base)) return r;
+        }
+        return null;
+    }
+
+    /** Own upload memory first (no request), then a file the printer itself named, then what the cloud's record for the file clearly names. Null when none knows. */
     static Choice choose(CloudFileMemory memory, String serial, String filename, Records records) {
         String known = memory.objectNameFor(serial, filename);
         if (!known.isEmpty()) return new Choice(known, "", "an upload from this app");
+        CloudApi.Reference told = heardFor(serial, filename);
+        if (told != null) return new Choice(told.objectName, told.url, "a message from the printer");
         try {
             CloudApi.Reference reference = CloudApi.gcodeReference(records.record(serial, filename));
             if (reference != null) return new Choice(reference.objectName, reference.url, "the cloud's record of the file");

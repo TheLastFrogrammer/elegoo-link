@@ -446,3 +446,14 @@ With the printer's camera service working, the printer joins within about 1–2 
 ("user-unpublished") about 26 s later (21:07:15 → 21:07:41, 21:08:21 → 21:08:47). A new join starts it again. The camera
 page and the toolpath viewer now leave and join again by themselves when the printer stops, so watching carries on after
 a short gap; the app's own stop uses `end()`, after which nothing rejoins.
+
+## Files Elegoo's phone app sends (v0.55.0)
+
+When Elegoo's app starts a print in cloud mode, the printer fetches the G-code from Elegoo's storage; how that file is named
+is not known, and the app does not guess or build storage paths. Printer messages reach every client of the account on the
+user's cloud (RTM) channel, including ones another app asked for. Settings → Experiment → "Listen for a print sent from
+Elegoo's app" keeps the cloud control link up for 15 minutes and sends nothing. Each unasked method's text fields are logged
+once (Local and cloud), masked with `CloudApi.pattern`. If a message plainly names a G-code (the same rule as file records:
+an object path ending .gcode/.gcode.gz, or an https link on an Elegoo domain) and that name ends with the printing file's
+name, the live toolpath fetches it through `oss/generate-pre-access-url` like the app's own uploads. Field result pending.
+Reading another app's own traffic (a proxy or VPN that decrypts TLS) is not attempted.

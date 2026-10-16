@@ -199,4 +199,24 @@ public class CloudControlTest {
     @Test public void aDoubleJoinIsExplained() {
         assertTrue(CloudCameraActivity.explain("Disconnected from the camera service (UID_BANNED).").contains("twice at once"));
     }
+
+    @Test public void listeningKeepsWhatThePrinterNamesAndSendsNothing() throws Exception {
+        CloudControl control = control(5000, 200);
+        BlockingQueue<String> result = new LinkedBlockingQueue<>();
+        control.listen(60_000, result::add);
+        assertEquals("", result.poll(5, TimeUnit.SECONDS));
+        FakeLink link = waitForLink();
+        // A message from the printer that nobody asked for, naming the file it fetches (nested, as a JSON string).
+        String params = new JSONObject().put("taskID", "t1").put("file", new JSONObject().put("objectName", "gcode/user/abc/Benchy_PLA.gcode")).toString();
+        link.events.message("12345SN818", new JSONObject().put("method", 6006).put("params", params).toString());
+        link.events.message("12345SN818", new JSONObject().put("method", 6006).put("result", new JSONObject().put("url", "https://evil.example/Benchy_PLA.gcode")).toString());
+        for (int i = 0; i < 50 && CloudFileRoute.heardFor("SN818", "Benchy_PLA.gcode") == null; i++) Thread.sleep(20);
+        CloudApi.Reference heard = CloudFileRoute.heardFor("SN818", "/local/Benchy_PLA.gcode");
+        assertNotNull(heard); assertEquals("gcode/user/abc/Benchy_PLA.gcode", heard.objectName);
+        assertNull("only a reference ending with the file's name counts", CloudFileRoute.heardFor("SN818", "Other.gcode"));
+        assertEquals("a link off Elegoo's domains is not kept", 1, CloudFileRoute.heardCount("SN818"));
+        Thread.sleep(500);
+        assertFalse("still connected while listening", link.closed);
+        assertFalse("nothing was published", link.calls.stream().anyMatch(c -> c.startsWith("publish")));
+    }
 }
