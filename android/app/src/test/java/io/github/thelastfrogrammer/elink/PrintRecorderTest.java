@@ -176,4 +176,42 @@ public class PrintRecorderTest {
         recorder.setPictureMinutes(5);
         assertEquals("back to time", "Every 5 minutes", recorder.current().pictureWords());
     }
+
+    private static JSONObject moving(int layer, int progress, double e, long remaining) throws Exception {
+        JSONObject s = status(2075, "e.gcode", layer, progress);
+        s.getJSONObject("gcode_move_inf").put("e", e); s.getJSONObject("print_status").put("remaining_time_sec", remaining);
+        return s;
+    }
+    @Test public void filamentFedSkipsResetsAndRetractions() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        recorder.update(0, moving(1, 0, 0, 3600), "local", "CC2");
+        recorder.update(20_000, moving(2, 1, 100, 3600), "local", "CC2");
+        recorder.update(40_000, moving(3, 2, 99.2, 3600), "local", "CC2");     // a retraction
+        recorder.update(60_000, moving(4, 3, 0.5, 3600), "local", "CC2");      // G92 E0: skipped
+        recorder.update(80_000, moving(5, 4, 50.5, 3600), "local", "CC2");
+        assertEquals(149.2, recorder.current().extrudedMm, 0.01);
+        List<double[]> rows = PrintRecorder.samples(recorder.current());
+        assertEquals(149.2, rows.get(rows.size() - 1)[PrintRecorder.column("extruded_mm")], 0.01);
+        assertEquals(149.2, PrintRecorder.Recording.read(recorder.current().meta).extrudedMm, 0.01);
+        assertEquals(0.45, PrintRecorder.grams(149.2, "PLA"), 0.01);
+    }
+    @Test public void finishedPrintsTeachHowLongTheEstimateRuns() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        for (int i = 0; i < 3; i++) {
+            String file = "p" + i + ".gcode"; long t0 = i * 10_000_000L;
+            recorder.update(t0, status(2075, file, 1, 0), "local", "CC2");
+            JSONObject ten = status(2075, file, 10, 10); ten.getJSONObject("print_status").put("remaining_time_sec", 900);
+            recorder.update(t0 + 100_000, ten, "local", "CC2");   // estimate at 10 %: 100 + 900 = 1000 s
+            recorder.update(t0 + 1_200_000, status(2077, file, 100, 100), "local", "CC2");   // took 1200 s: 20 % over
+        }
+        assertEquals(1.2, recorder.learnedRatio(), 0.01);
+        List<PrintRecorder.Recording> all = recorder.list();
+        assertEquals(1.2, PrintRecorder.ratio(all.get(0)), 0.01);
+        // A new print: at 10 % the printer says 900 s left after 100 s; by experience 1200 s in all, so 1100 s left.
+        recorder.update(50_000_000L, status(2075, "new.gcode", 1, 0), "local", "CC2");
+        JSONObject ten = status(2075, "new.gcode", 10, 10); ten.getJSONObject("print_status").put("remaining_time_sec", 900);
+        recorder.update(50_100_000L, ten, "local", "CC2");
+        assertEquals(1100, recorder.learnedRemaining(50_100_000L), 1);
+        assertTrue("fewer than three prints teach nothing", Double.isNaN(PrintRecorder.learnedRatio(all.subList(0, 2))));
+    }
 }

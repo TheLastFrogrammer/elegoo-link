@@ -164,6 +164,12 @@ public final class RecordingsActivity extends Activity {
         tile(tiles, "Duration", duration(recording.duration()), 0);
         tile(tiles, "Result", outcome(recording.outcome), dp(8));
         tile(tiles, "Ended", ended > 0 ? when(ended, Locale.getDefault(), TimeZone.getDefault()) : "—", dp(8));
+        // Filament fed (from the extruder position) and how the printer's estimate at 10 % compared with the real time.
+        List<String> extra = new ArrayList<>();
+        if (recording.extrudedMm > 1) extra.add(String.format(Locale.getDefault(), "Filament fed: %.2f m (≈ %.0f g of PLA-like filament)", recording.extrudedMm / 1000, PrintRecorder.grams(recording.extrudedMm, "PLA")));
+        double q = PrintRecorder.ratio(recording);
+        if (!Double.isNaN(q)) extra.add(String.format(Locale.getDefault(), "The printer estimated %s at 10 %%; it took %s (%+.0f %%).", duration(recording.estimate * 1000), duration(Math.round(recording.estimate * q) * 1000), (q - 1) * 100));
+        if (!extra.isEmpty()) label(String.join("\n", extra), 13, muted, false);
         String last = lastReading(rows);
         if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, readingLines(last), 13, muted, false); }
         double[] t = column(rows, "elapsed_s");

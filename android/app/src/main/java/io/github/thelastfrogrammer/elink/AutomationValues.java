@@ -74,6 +74,8 @@ final class AutomationValues {
         add("Filament", true, "filament_min_nozzle", "The active filament's lowest nozzle temperature, °C");
         add("Filament", true, "filament_max_nozzle", "The active filament's highest nozzle temperature, °C");
         add("App", true, "pictures", "Camera pictures kept with this print's recording");
+        add("App", true, "filament_used_m", "Filament the print has fed so far, metres (from the extruder position)");
+        add("App", false, "done_at_learned", "When the print should be done by what your past prints took against the printer's estimate (HH:mm)");
         add("App", false, "guardian", "The print guardian's latest verdict");
     }
     /** Things an action can attach, listed with the values (they are not fill-ins). */

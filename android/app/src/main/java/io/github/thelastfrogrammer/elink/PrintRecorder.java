@@ -17,7 +17,8 @@ public final class PrintRecorder {
     static final int KEEP = 100;
     public static final String[] COLUMNS = {"time_ms", "elapsed_s", "progress", "layer", "total_layers", "remaining_s", "z_mm",
         "nozzle_c", "nozzle_target_c", "bed_c", "bed_target_c", "chamber_c", "part_fan_pct", "aux_fan_pct", "chamber_fan_pct", "speed_mode", "sub_status", "source",
-        "tray", "tray_rgb"};   // the active CANVAS tray (1 = unit 0 tray 0) and its filament colour as 0xRRGGBB, when reported
+        "tray", "tray_rgb",   // the active CANVAS tray (1 = unit 0 tray 0) and its filament colour as 0xRRGGBB, when reported
+        "extruded_mm"};       // filament the G-code has fed so far (commanded, from the extruder position; not measured)
 
     public static final class Recording {
         public final File csv, meta;
@@ -31,13 +32,20 @@ public final class PrintRecorder {
         public int pictureMinutes, pictures;
         /** Or a picture every this many layers (0 = by time): for timelapses where the print grows evenly between pictures. */
         public int pictureLayers;
+        /** Filament fed so far (mm), summed from the extruder position (resets skipped), and the last position seen. */
+        public double extrudedMm; double lastE = Double.NaN;
+        /** The printer's own print time (s, print_duration) as last reported, or -1; progress when the recording began (-1 unknown). */
+        public long printDuration = -1; public int startProgress = -1;
+        /** The printer's estimate of the whole print (s) when it reached 10 %, or 0: compared with the real time when it ends. */
+        public long estimate;
         /** "Every 5 min", "Every layer", "Every 2 layers" or "No pictures". */
         public String pictureWords() { return pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") : pictureMinutes == 0 ? "No pictures" : pictureMinutes == 1 ? "Every minute" : "Every " + pictureMinutes + " minutes"; }
         Recording(File csv, File meta) { this.csv = csv; this.meta = meta; }
         JSONObject toJson() throws Exception {
             return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("outcome", outcome).put("source", source)
                 .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
-                .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures);
+                .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
+                .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate);
         }
         static Recording read(File meta) throws Exception {
             String base = meta.getName().replaceFirst("\\.json$", "");
@@ -48,6 +56,8 @@ public final class PrintRecorder {
             recording.start = json.optLong("start"); recording.end = json.optLong("end"); recording.lastSample = json.optLong("last_sample"); recording.elapsed = json.optLong("elapsed");
             recording.samples = json.optInt("samples"); recording.layers = json.optInt("layers");
             recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictureLayers = json.optInt("picture_layers"); recording.pictures = json.optInt("pictures");
+            recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
+            recording.printDuration = json.optLong("print_duration", -1); recording.startProgress = json.optInt("start_progress", -1); recording.estimate = json.optLong("estimate", 0);
             return recording;
         }
         /** The folder of this recording's camera pictures, named by elapsed seconds (e.g. 0600.jpg). */
@@ -213,7 +223,25 @@ public final class PrintRecorder {
             number(status.optJSONObject("heater_bed"), "temperature"), number(status.optJSONObject("heater_bed"), "target"),
             number(status.optJSONObject("ztemperature_sensor"), "temperature"),
             fan(status, "fan"), fan(status, "aux_fan"), fan(status, "box_fan"),
-            number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1] };
+            number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1], "" };
+        // Filament fed: the extruder position's steps, skipping resets (a G92 E0 jumps back) and jumps; retractions cancel out.
+        double e = position == null || !position.has("e") ? Double.NaN : position.optDouble("e", Double.NaN);
+        if (!Double.isNaN(e)) {
+            if (!Double.isNaN(current.lastE)) { double step = e - current.lastE; if (step > -50 && step < 5000) current.extrudedMm = Math.max(0, current.extrudedMm + step); }
+            current.lastE = e;
+            cells[cells.length - 1] = String.format(Locale.ROOT, "%.1f", current.extrudedMm);
+        }
+        if (current.samples == 0 && current.startProgress < 0 && machine != null) current.startProgress = machine.optInt("progress", -1);
+        if (print != null && print.has("print_duration")) current.printDuration = print.optLong("print_duration");
+        int progressNow = machine == null ? -1 : machine.optInt("progress", -1); long remainingNow = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+        if (current.estimate == 0 && progressNow >= 10 && progressNow <= 20 && remainingNow > 0) {
+            long ran = ranSeconds(current, mono);
+            if (ran > 0) {
+                current.estimate = ran + remainingNow;
+                // For checking the printer's print_duration unit and meaning against this phone's clock.
+                Diagnostics.note(Diagnostics.STATUS, "estimate at " + progressNow + " %: " + current.estimate + " s in all (printer print time " + current.printDuration + " s, this phone " + (Math.max(0, mono - current.monoStart) / 1000) + " s)");
+            }
+        }
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(current.csv, true), StandardCharsets.UTF_8)) { writer.write(String.join(",", cells) + "\n"); }
         catch (IOException ignored) { return; }
         current.samples++; current.lastSample = now; current.elapsed = Math.max(0, mono - current.monoStart);
@@ -248,7 +276,44 @@ public final class PrintRecorder {
         current.elapsed += since;
         current.outcome = outcome; current.end = current.lastSample + since;
         if (current.end == 0) current.end = now;
-        save(current); current = null; lastLayer = -1;
+        save(current); current = null; lastLayer = -1; learnedRead = false;
+    }
+
+    /** How long the print has run (s): this phone's own measure when it saw the start, else the printer's print time; -1 unknown. */
+    static long ranSeconds(Recording r, long mono) {
+        if (r.startProgress >= 0 && r.startProgress <= 2) return Math.max(0, mono - r.monoStart) / 1000;
+        return r.printDuration > 0 ? r.printDuration : -1;
+    }
+    /** A finished print's real time over the printer's estimate at 10 %, or NaN (unknown, or outside 0.5–2: something else happened). */
+    static double ratio(Recording r) {
+        if (!"complete".equals(r.outcome) || r.estimate <= 0) return Double.NaN;
+        long actual = r.startProgress >= 0 && r.startProgress <= 2 ? r.duration() / 1000 : r.printDuration;
+        if (actual <= 0) return Double.NaN;
+        double q = actual / (double) r.estimate;
+        return q >= 0.5 && q <= 2 ? q : Double.NaN;
+    }
+    /** The middle ratio of the latest 10 finished prints that have one (`newestFirst`); NaN with fewer than 3. */
+    static double learnedRatio(List<Recording> newestFirst) {
+        List<Double> ratios = new ArrayList<>();
+        for (Recording r : newestFirst) { double q = ratio(r); if (!Double.isNaN(q)) ratios.add(q); if (ratios.size() == 10) break; }
+        if (ratios.size() < 3) return Double.NaN;
+        java.util.Collections.sort(ratios);
+        int n = ratios.size(); return n % 2 == 1 ? ratios.get(n / 2) : (ratios.get(n / 2 - 1) + ratios.get(n / 2)) / 2;
+    }
+    private double learned = Double.NaN; private boolean learnedRead;
+    public synchronized double learnedRatio() { if (!learnedRead) { learned = learnedRatio(list()); learnedRead = true; } return learned; }
+    /** Seconds left for the running print by what past prints took against the printer's estimate, or -1 when not known yet. */
+    public synchronized long learnedRemaining(long mono) {
+        double q = learnedRatio();
+        if (current == null || current.estimate <= 0 || Double.isNaN(q)) return -1;
+        long ran = ranSeconds(current, mono);
+        return ran < 0 ? -1 : Math.max(0, Math.round(current.estimate * q) - ran);
+    }
+    /** Grams for `mm` of 1.75 mm filament of this type (density by family; PLA when unknown). */
+    static double grams(double mm, String type) {
+        String t = type == null ? "" : FilamentMatch.family(type);
+        double density = t.equals("PETG") ? 1.27 : t.equals("ABS") ? 1.04 : t.equals("ASA") ? 1.07 : t.equals("TPU") ? 1.21 : t.equals("PC") ? 1.20 : t.startsWith("PA") ? 1.14 : 1.24;
+        return mm * Math.PI * 0.875 * 0.875 * density / 1000;
     }
 
     private void save(Recording recording) {

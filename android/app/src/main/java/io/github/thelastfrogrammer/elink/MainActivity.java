@@ -144,7 +144,7 @@ public final class MainActivity extends Activity {
     /** Dashboard pieces of the hero: "Done at" beside the percentage, the Elapsed / Remaining / Layer tiles, Light beside Pause and Stop, the camera's badge. */
     /** Temperatures, fans & speed: what the heaters and fans are doing now, above the controls that change them. */
     private TextView tuneNozzle, tuneBed, tunePartFan, tuneAuxFan, tuneChamberFan; private LinearLayout tuneReadout;
-    private TextView doneText, statElapsed, statRemaining, statLayer, monitorBadge;
+    private TextView doneText, statElapsed, statRemaining, statLayer, monitorBadge, printNotes;
     private LinearLayout statsRow;
     private Button printLight;
     /** "This print so far": the running print's temperatures from its recording, redrawn at most once a minute. */
@@ -374,6 +374,8 @@ public final class MainActivity extends Activity {
         statsRow = new LinearLayout(this); statsRow.setOrientation(getResources().getConfiguration().fontScale >= 1.5f ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         LinearLayout.LayoutParams statsLayout = new LinearLayout.LayoutParams(-1, -2); statsLayout.topMargin = dp(12); hero.addView(statsRow, statsLayout); statsRow.setVisibility(View.GONE);
         statElapsed = stat(statsRow, "Elapsed", 0); statRemaining = stat(statsRow, "Remaining", dp(8)); statLayer = stat(statsRow, "Layer", dp(8));
+        // Filament fed so far, and the finish time by what past prints took against the printer's estimate.
+        printNotes = label(hero, "", 13, MUTED, false); printNotes.setVisibility(View.GONE);
         LinearLayout.LayoutParams cameraAt = new LinearLayout.LayoutParams(-1, -2); cameraAt.topMargin = dp(12); hero.addView(monitorCamera, cameraAt);
         // Pause / Resume and Stop sit with the job they act on; each still asks first.
         printRow = row(hero); ((LinearLayout.LayoutParams) printRow.getLayoutParams()).topMargin = dp(8);
@@ -1331,6 +1333,21 @@ public final class MainActivity extends Activity {
     private static String printKey(JSONObject status) {
         JSONObject print = status == null ? null : status.optJSONObject("print_status"); if (print == null) return "";
         String key = print.optString("uuid", ""); return key.isEmpty() ? print.optString("filename", "") : key;
+    }
+    /** "Filament used so far 3.21 m (≈ 9.6 g) · By your past prints: done ≈ 14:42 (+12 min)", or the parts known. */
+    private String printNotes(long remaining) {
+        PrintRecorder.Recording now = printer == null || printer.recorder == null ? null : printer.recorder.current();
+        if (now == null) return "";
+        List<String> parts = new ArrayList<>();
+        if (now.extrudedMm > 1) {
+            JSONObject tray = PrintWatch.activeTray(printer.canvas);
+            parts.add(String.format(Locale.getDefault(), "Filament used so far %.2f m (≈ %.0f g)", now.extrudedMm / 1000, PrintRecorder.grams(now.extrudedMm, tray == null ? "" : tray.optString("filament_type"))));
+        }
+        long learned = printer.recorder.learnedRemaining(android.os.SystemClock.elapsedRealtime());
+        if (learned >= 0 && remaining >= 0 && Math.abs(learned - remaining) >= 180)
+            parts.add("By your past prints: done ≈ " + StatusPresentation.doneAt(System.currentTimeMillis(), learned, Locale.getDefault(), TimeZone.getDefault())
+                + " (" + (learned > remaining ? "+" : "−") + StatusPresentation.span(Math.abs(learned - remaining)) + ")");
+        return String.join(" · ", parts);
     }
     /** This print's automation choices: the day's last print (for rules that wait for it) and rules to skip. Nothing is sent to the printer here. */
     private void printAutomationsDialog() {
@@ -2425,11 +2442,14 @@ public final class MainActivity extends Activity {
             setTile(statLayer, layers > 0 ? print.optInt("current_layer", 0) + " / " + layers : "—");
             String done = remaining < 0 ? "" : "Done at " + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault());
             doneText.setText(done); doneText.setContentDescription(done.isEmpty() ? null : done + (live ? "" : ", out of date"));
+            String notes = printNotes(remaining);
+            printNotes.setText(notes); printNotes.setVisibility(notes.isEmpty() ? View.GONE : View.VISIBLE);
             detail.setText(live ? "" : "Out of date: the printer has not reported for a while.");
         } else {
             job.setText(snapshot.length() == 0 ? (cloud || ready ? "" : "Connect in Settings, or sign in to Elegoo to watch through the cloud.") : "No active print.");
             doneText.setText("");
             detail.setText("");
+            printNotes.setVisibility(View.GONE);
         }
         // Camera on top while printing. It starts by itself only after the user started it here once, and only while this tab is on screen.
         boolean cloudCameraOk = !ready && printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1;

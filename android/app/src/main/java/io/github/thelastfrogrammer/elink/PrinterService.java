@@ -44,6 +44,7 @@ public final class PrinterService extends Service {
     /** Print watch (stalls, heaters off target), one per route like the alerts; Settings can turn it off. */
     private final PrintWatch watch = new PrintWatch(), cloudWatch = new PrintWatch();
     private String watched(PrintWatch which, JSONObject value) {
+        which.canvas = canvas;
         String text = which.update(value, SystemClock.elapsedRealtime());
         boolean on = getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("printWatch", true);
         if (on && !text.isEmpty() && automations != null) automations.outside(which == watch ? automations.local : automations.cloud, Automation.WATCH, text, value, which == watch ? host : cloudName);
@@ -1741,7 +1742,12 @@ public final class PrinterService extends Service {
         public java.util.Map<String, String> appValues() {
             java.util.Map<String, String> v = new java.util.LinkedHashMap<>();
             PrintRecorder.Recording running = recorder == null ? null : recorder.current();
-            if (running != null) v.put("pictures", String.valueOf(running.pictures));
+            if (running != null) {
+                v.put("pictures", String.valueOf(running.pictures));
+                if (running.extrudedMm > 0) v.put("filament_used_m", String.format(java.util.Locale.ROOT, "%.2f", running.extrudedMm / 1000));
+                long learned = recorder.learnedRemaining(SystemClock.elapsedRealtime());
+                if (learned >= 0) v.put("done_at_learned", StatusPresentation.doneAt(System.currentTimeMillis(), learned, java.util.Locale.getDefault(), java.util.TimeZone.getDefault()));
+            }
             if (guardian != null && !guardian.verdict.isEmpty()) v.put("guardian", guardian.verdict);
             return v;
         }
