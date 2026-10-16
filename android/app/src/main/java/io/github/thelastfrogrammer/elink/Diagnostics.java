@@ -26,6 +26,7 @@ final class Diagnostics {
     static synchronized void init(File directory) {
         File target = new File(directory, "diagnostics.log");
         if (target.equals(file)) return;
+        if (saveQueued && file != null) { saveQueued = false; write(file, text()); }   // the previous log keeps what it had
         file = target; entries.clear();
         if (!file.isFile()) return;
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
@@ -102,13 +103,42 @@ final class Diagnostics {
         while (list.size() > KEEP_PER_AREA) list.removeFirst();
     }
 
+    /**
+     * Saving happens on its own thread, at most once a second, outside the lock: a note from the screen thread only adds a
+     * line in memory, so the screen never waits for the file (the whole log used to be rewritten on every note).
+     */
+    private static boolean saveQueued;
+    private static final java.util.concurrent.ScheduledExecutorService writer = java.util.concurrent.Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "diagnostics-writer"); t.setDaemon(true); return t;
+    });
     private static void save() {
-        if (file == null) return;
-        File temporary = new File(file.getPath() + ".part");
-        try (Writer out = new OutputStreamWriter(new FileOutputStream(temporary), StandardCharsets.UTF_8)) {
-            for (Map.Entry<String, Deque<String>> area : entries.entrySet())
-                for (String line : area.getValue()) out.write(area.getKey() + SEPARATOR + line + "\n");
-        } catch (IOException error) { temporary.delete(); return; }
-        if (!temporary.renameTo(file)) temporary.delete();
+        if (file == null || saveQueued) return;
+        saveQueued = true;
+        writer.schedule(() -> {
+            File target; String text;
+            synchronized (Diagnostics.class) { if (!saveQueued) return; saveQueued = false; target = file; text = text(); }
+            write(target, text);
+        }, 1, java.util.concurrent.TimeUnit.SECONDS);
+    }
+    /** Writes everything now (tests, and before the app's files move). */
+    static void flush() {
+        File target; String text;
+        synchronized (Diagnostics.class) { if (file == null) return; saveQueued = false; target = file; text = text(); }
+        write(target, text);
+    }
+    private static String text() {
+        StringBuilder out = new StringBuilder();
+        for (Map.Entry<String, Deque<String>> area : entries.entrySet())
+            for (String line : area.getValue()) out.append(area.getKey()).append(SEPARATOR).append(line).append('\n');
+        return out.toString();
+    }
+    private static void write(File target, String text) {
+        if (target == null) return;
+        synchronized (writer) {
+            File temporary = new File(target.getPath() + ".part");
+            try (Writer out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(temporary), StandardCharsets.UTF_8))) { out.write(text); }
+            catch (IOException error) { temporary.delete(); return; }
+            if (!temporary.renameTo(target)) temporary.delete();
+        }
     }
 }

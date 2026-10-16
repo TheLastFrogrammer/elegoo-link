@@ -49,7 +49,7 @@ final class Crashes {
         Recorder(Context app, Thread.UncaughtExceptionHandler previous) { this.app = app; this.previous = previous; }
         @Override public void uncaughtException(Thread thread, Throwable error) {
             try {
-                Diagnostics.note(AREA, describe(thread.getName(), error));
+                Diagnostics.note(AREA, describe(thread.getName(), error)); Diagnostics.flush();   // saved now: the process ends next
                 app.getSharedPreferences("workshop-settings", Context.MODE_PRIVATE).edit().putLong(SEEN_KEY, System.currentTimeMillis()).commit();
             } catch (Throwable ignored) { }   // recording must never stand in the way of the crash itself
             if (previous != null) previous.uncaughtException(thread, error);

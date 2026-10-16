@@ -34,6 +34,15 @@ final class MainThreadWatch {
             }
         }, "main-thread-watch");
         watcher.setDaemon(true); watcher.start();
+        // Android reports disk writes and network use on the screen thread; each place in the app is noted once (20 at most).
+        if (android.os.Build.VERSION.SDK_INT >= 28) {
+            java.util.Set<String> seen = java.util.Collections.synchronizedSet(new java.util.HashSet<>());
+            android.os.StrictMode.setThreadPolicy(new android.os.StrictMode.ThreadPolicy.Builder().detectDiskWrites().detectNetwork().detectCustomSlowCalls()
+                .penaltyListener(java.util.concurrent.Executors.newSingleThreadExecutor(), violation -> {
+                    String where = frames(violation.getStackTrace());
+                    if (seen.size() < 20 && seen.add(where)) Diagnostics.note(AREA, violation.getClass().getSimpleName().replace("Violation", "") + " on the screen thread, in: " + where);
+                }).build());
+        }
     }
 
     /** The app's own frames, innermost first (at most 6), plus the innermost frame overall when it is a library's. */
