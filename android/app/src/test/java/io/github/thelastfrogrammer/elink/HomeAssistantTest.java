@@ -15,7 +15,7 @@ public class HomeAssistantTest {
     }
     @Test public void discoveryAnnouncesEverySensorAndACameraUnderOneDevice() throws Exception {
         List<String[]> messages = HomeAssistant.discovery("cc2_12345678", "Bedroom");
-        assertEquals(HomeAssistant.ENTITIES.size() + 1, messages.size());
+        assertEquals(HomeAssistant.ENTITIES.size() + 2, messages.size());
         String[] progress = messages.stream().filter(m -> m[0].equals("homeassistant/sensor/cc2_12345678/progress/config")).findFirst().get();
         JSONObject c = new JSONObject(progress[1]);
         assertEquals("linkworkshop/cc2_12345678/state", c.getString("state_topic"));
@@ -24,6 +24,9 @@ public class HomeAssistantTest {
         assertEquals("Bedroom", c.getJSONObject("device").getString("name"));
         assertTrue(messages.stream().anyMatch(m -> m[0].equals("homeassistant/binary_sensor/cc2_12345678/light/config")));
         assertTrue(messages.stream().anyMatch(m -> m[0].equals("homeassistant/camera/cc2_12345678/picture/config")));
+        JSONObject event = new JSONObject(messages.stream().filter(m -> m[0].equals("homeassistant/event/cc2_12345678/event/config")).findFirst().get()[1]);
+        assertEquals("linkworkshop/cc2_12345678/event", event.getString("state_topic"));
+        assertTrue(event.getJSONArray("event_types").toString().contains("print_finished"));
         assertFalse("nothing listens for commands", messages.stream().anyMatch(m -> m[1].contains("command_topic")));
     }
     @Test public void theStateCarriesWhatThePrinterReported() throws Exception {

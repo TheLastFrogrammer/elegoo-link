@@ -45,7 +45,9 @@ public final class PrinterService extends Service {
     private final PrintWatch watch = new PrintWatch(), cloudWatch = new PrintWatch();
     private String watched(PrintWatch which, JSONObject value) {
         String text = which.update(value, SystemClock.elapsedRealtime());
-        return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("printWatch", true) ? text : "";
+        boolean on = getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("printWatch", true);
+        if (on && !text.isEmpty() && automations != null) automations.outside(which == watch ? automations.local : automations.cloud, Automation.WATCH, text, value, which == watch ? host : cloudName);
+        return on ? text : "";
     }
     public File selectedFile;
     /** Copies of uploaded, sliced and downloaded G-code, for the toolpath viewer to follow prints. */
@@ -77,6 +79,7 @@ public final class PrinterService extends Service {
         if (move != null && move.has("speed_mode") && move.optInt("speed_mode") != loggedSpeedMode) { loggedSpeedMode = move.optInt("speed_mode"); Diagnostics.note(Diagnostics.STATUS, "speed mode number now " + loggedSpeedMode + " (" + source + ")"); }
         if (machine != null && machine.has("status") && machine.optInt("status") != loggedMachineState) { loggedMachineState = machine.optInt("status"); Diagnostics.note(Diagnostics.STATUS, "state now " + StatusPresentation.state(value) + " (status " + loggedMachineState + ", sub_status " + machine.optInt("sub_status", -1) + ", " + source + ")"); }
         checkWaiting(value); checkFolder(value);
+        if (automations != null) automations.status("cloud".equals(source) ? automations.cloud : automations.local, value, name);
         SpoolStore spools = spools(); long now = System.currentTimeMillis();
         if (canvasFresh() && canvas != null) spools.sync(canvas, now);
         String used = spools.observe(value, now); if (used != null) feedback = used;
@@ -184,6 +187,7 @@ public final class PrinterService extends Service {
         cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         guardian = new GuardianRun(this); recorder.pictureKept = this::guard;
+        automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);
     }
@@ -335,7 +339,10 @@ public final class PrinterService extends Service {
         retryable = retryable && !pinProbe;
         // A print was running when contact was lost: say so now, since the notification below goes away if retries end.
         JSONObject lastMachine = status.optJSONObject("machine_status");
-        if (wanted && lastMachine != null && lastMachine.optInt("status", -1) == 2 && !pinProbe) showAlert(LOST_CONTACT);
+        if (wanted && lastMachine != null && lastMachine.optInt("status", -1) == 2 && !pinProbe) {
+            showAlert(LOST_CONTACT);
+            if (automations != null) automations.outside(automations.local, Automation.LOST, "local connection lost", status, host);
+        }
         boolean lostUpload = session != null && session.uploading() || queuedName != null && cloudUpload == null;
         boolean lostCommand = session != null && session.commandPending();
         if (lostUpload || lostCommand) feedback = (lostUpload ? UPLOAD_LOST + " " : "") + (lostCommand ? COMMAND_UNKNOWN : "");
@@ -1718,9 +1725,36 @@ public final class PrinterService extends Service {
         if (overlay != null) builder.setLargeIcon(scaled(overlay, 128));
         manager.notify(6, builder.build());
         Diagnostics.note(Diagnostics.NOTIFICATIONS, "print guardian: " + reason);
+        if (automations != null) automations.outside(wanted ? automations.local : automations.cloud, Automation.GUARDIAN, reason, liveStatus(), wanted ? host : cloudName);
     }
+    /** Automation workshop rules (see AutomationRun); made in onCreate. */
+    public AutomationRun automations;
+    private final AutomationRun.Host automationHost = new AutomationRun.Host() {
+        public String lightBlocked() {
+            if (ready() && fresh()) return "";
+            if (viaCloud()) return workshop().getBoolean("cloudControlUnderstood", false) ? "" : "cloud control is not turned on yet (use a control in the app once to agree)";
+            return "no live connection to the printer";
+        }
+        public void light(boolean on) { if (ready() && fresh()) PrinterService.this.light(on); else cloudLight(on); }
+        public JSONObject liveStatus() { return PrinterService.this.liveStatus(); }
+        public void notifyPerson(int id, String title, String text) {
+            if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+            NotificationManager manager = getSystemService(NotificationManager.class);
+            manager.createNotificationChannel(new NotificationChannel("automations", "Automations", NotificationManager.IMPORTANCE_DEFAULT));
+            PendingIntent open = PendingIntent.getActivity(PrinterService.this, 0, new Intent(PrinterService.this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+            manager.notify(id, new Notification.Builder(PrinterService.this, "automations").setSmallIcon(R.drawable.ic_launcher).setContentTitle(StatusPresentation.clean(title))
+                .setContentText(text).setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true).build());
+        }
+        public String homeAssistantEvent(JSONObject event) {
+            if (!workshop().getBoolean("haEnabled", false)) return "link is off; skipped";
+            String node = haNode; if (node == null) return "not connected yet; event not sent";
+            haWorker.execute(() -> Diagnostics.note(Diagnostics.AUTOMATIONS, "Home Assistant: " + ha.event(node, event)));
+            return "event handed to the Home Assistant link";
+        }
+    };
     @Override public void onDestroy() {
         if (guardian != null) guardian.shutdown();
+        if (automations != null) automations.shutdown();
         { String node = haNode; haWorker.execute(() -> ha.stop(node)); haWorker.shutdown(); }   // Home Assistant shows the printer offline
         destroyed = true; observer = null; watchers.clear(); clearRoute(); main.removeCallbacksAndMessages(null);
         if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();

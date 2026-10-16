@@ -77,6 +77,14 @@ public class MoreScreensRenderTest {
         CloudStatusActivity status = Robolectric.buildActivity(CloudStatusActivity.class).setup().get();
         show(status, "cloud-status-" + theme + ".png", 2340);
     }
+    private static void automationScreen(String theme) throws Exception {
+        setTheme(theme.equals("dark"));
+        AutomationRun.rulesFile(org.robolectric.RuntimeEnvironment.getApplication()).delete();
+        AutomationActivity workshop = Robolectric.buildActivity(AutomationActivity.class).setup().get();
+        show(workshop, "automation-" + theme + ".png", 2600);
+    }
+    @Test public void renderAutomationLight() throws Exception { automationScreen("light"); }
+    @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderAutomationDark() throws Exception { automationScreen("dark"); }
     @Test public void renderCloudStatusLight() throws Exception { statusScreen("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderCloudStatusDark() throws Exception { statusScreen("dark"); }
 

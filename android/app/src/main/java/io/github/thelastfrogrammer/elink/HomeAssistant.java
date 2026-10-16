@@ -75,6 +75,11 @@ final class HomeAssistant {
         JSONObject camera = new JSONObject().put("name", "Latest picture").put("unique_id", node + "_picture").put("object_id", node + "_picture")
             .put("topic", base(node) + "/picture").put("availability_topic", base(node) + "/availability").put("device", device);
         out.add(new String[] {"homeassistant/camera/" + node + "/picture/config", camera.toString()});
+        // Print events from the automation workshop, for Home Assistant automations ("event" entities have no command topic).
+        JSONArray types = new JSONArray(); for (String type : Automation.EVENTS.keySet()) if (!type.equals(Automation.ANY)) types.put(type);
+        JSONObject event = new JSONObject().put("name", "Print event").put("unique_id", node + "_event").put("object_id", node + "_event")
+            .put("state_topic", base(node) + "/event").put("event_types", types).put("availability_topic", base(node) + "/availability").put("device", device);
+        out.add(new String[] {"homeassistant/event/" + node + "/event/config", event.toString()});
         return out;
     }
 
@@ -153,7 +158,7 @@ final class HomeAssistant {
                 for (String[] message : discovery(node, printerName)) send(message[0], message[1].getBytes(StandardCharsets.UTF_8), true);
                 send(base(node) + "/availability", "online".getBytes(StandardCharsets.UTF_8), true);
                 announced = node + "|" + printerName;
-                Diagnostics.note(Diagnostics.HOME_ASSISTANT, "announced " + ENTITIES.size() + " sensors and a camera to Home Assistant");
+                Diagnostics.note(Diagnostics.HOME_ASSISTANT, "announced " + ENTITIES.size() + " sensors, a camera and print events to Home Assistant");
             }
             String text = state.toString();
             if (!text.equals(lastState) || nowMs - lastStateAt > 60_000) { send(base(node) + "/state", text.getBytes(StandardCharsets.UTF_8), true); lastState = text; lastStateAt = nowMs; }
@@ -165,6 +170,13 @@ final class HomeAssistant {
             Diagnostics.note(Diagnostics.HOME_ASSISTANT, "could not publish: " + Diagnostics.scrub(why));
             close();
         }
+    }
+    /** Publishes one print event (not retained) on the open connection; what happened, for the log. */
+    synchronized String event(String node, JSONObject payload) {
+        if (node == null) return "not set up";
+        if (client == null || !client.isConnected()) return "not connected yet; event not sent";
+        try { send(base(node) + "/event", payload.toString().getBytes(StandardCharsets.UTF_8), false); return "event sent"; }
+        catch (Exception failed) { return "event not sent: " + failed.getClass().getSimpleName(); }
     }
     private void send(String topic, byte[] payload, boolean retained) throws Exception {
         MqttMessage message = new MqttMessage(payload); message.setQos(0); message.setRetained(retained); client.publish(topic, message);

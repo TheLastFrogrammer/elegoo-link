@@ -105,7 +105,7 @@ public final class MainActivity extends Activity {
     private LinearLayout getStarted, heroCard;
     /** Print tab quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Layer alert (printing) or Print again (idle) and Print recordings; printExtrasRow the running print's Pictures. */
     private LinearLayout quickRow, recordingsRow, printExtrasRow;
-    private Button quickSlice, quickCamera, quickAgain, picturesNow;
+    private Button quickSlice, quickCamera, quickAgain, picturesNow, printAutomations;
     /** Maintenance starts collapsed; the Emergency stop button stays outside the collapsed part. */
     private CloudAccountStore cloudAccounts;
     private TextView summary, fileInfo, historyInfo, diskInfo, cameraInfo;
@@ -392,6 +392,7 @@ public final class MainActivity extends Activity {
         // The running print's picture interval on its own row; then Layer alert (printing) or Print again (idle) beside Print recordings.
         printExtrasRow = row(hero);
         picturesNow = rowButton(printExtrasRow, "Pictures…", () -> pictureDialog(false), false);
+        printAutomations = rowButton(printExtrasRow, "Automations…", this::printAutomationsDialog, false);
         recordingsRow = row(hero);
         layerAlert = rowButton(recordingsRow, "Layer alert…", this::layerAlertDialog, false);
         quickAgain = rowButton(recordingsRow, "Print again…", () -> selectPage(HISTORY), false);
@@ -593,6 +594,8 @@ public final class MainActivity extends Activity {
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(preferences, "Alerts need notification permission and the app watching the printer. They stop when you disconnect or when Android stops the app. "
             + "While a print runs, Layer alert… on the Print tab adds one for a layer you choose. Tapping an alert only opens the app.", 13, MUTED, false);
+        button(preferences, "Automation workshop…", () -> startActivity(new Intent(this, AutomationActivity.class)));
+        label(preferences, "Rules for print events: notifications, webhooks, Home Assistant, other apps, and the printer's light (for example, off after the last print of the day). Templates can be shared.", 12, MUTED, false);
         buildHomeAssistant();
         currentSection = helpSection.body;
         LinearLayout help = card(null);
@@ -1328,6 +1331,25 @@ public final class MainActivity extends Activity {
     private static String printKey(JSONObject status) {
         JSONObject print = status == null ? null : status.optJSONObject("print_status"); if (print == null) return "";
         String key = print.optString("uuid", ""); return key.isEmpty() ? print.optString("filename", "") : key;
+    }
+    /** This print's automation choices: the day's last print (for rules that wait for it) and rules to skip. Nothing is sent to the printer here. */
+    private void printAutomationsDialog() {
+        String key = printKey(snapshot); if (key.isEmpty()) return;
+        Automation.ThisPrint mine = AutomationRun.thisPrint(this).forPrint(key);
+        List<Automation.Rule> on = new ArrayList<>(); for (Automation.Rule r : AutomationRun.rules(this)) if (r.enabled) on.add(r);
+        String[] items = new String[on.size() + 1]; boolean[] checked = new boolean[items.length];
+        items[0] = "This is the last print of the day"; checked[0] = mine.lastOfDay;
+        for (int i = 0; i < on.size(); i++) { items[i + 1] = "Run “" + on.get(i).name + "”" + (on.get(i).lastPrintOnly ? " (last print only)" : ""); checked[i + 1] = !mine.muted.contains(on.get(i).id); }
+        new AlertDialog.Builder(this).setTitle("Automations for this print")
+            .setMultiChoiceItems(items, checked, (d, which, value) -> checked[which] = value)
+            .setNeutralButton("Workshop…", (d, w) -> startActivity(new Intent(this, AutomationActivity.class)))
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save", (d, w) -> {
+                mine.lastOfDay = checked[0]; mine.muted.clear();
+                for (int i = 0; i < on.size(); i++) if (!checked[i + 1]) mine.muted.add(on.get(i).id);
+                AutomationRun.saveThisPrint(this, mine);
+                Diagnostics.note(Diagnostics.AUTOMATIONS, "this print: " + (mine.lastOfDay ? "last of the day" : "not the last of the day") + ", " + mine.muted.size() + " rules skipped");
+            }).show();
     }
     private void layerAlertDialog() {
         JSONObject print = snapshot.optJSONObject("print_status"); if (print == null) return;
@@ -2463,7 +2485,8 @@ public final class MainActivity extends Activity {
         quickRow.setVisibility(liveToolpath.getVisibility() == View.VISIBLE || quickSlice.getVisibility() == View.VISIBLE || quickCamera.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         quickAgain.setVisibility(idleOnline && hasHistory ? View.VISIBLE : View.GONE);
         spaceActions(quickRow); spaceActions(recordingsRow); spaceActions(printExtrasRow);
-        printExtrasRow.setVisibility(picturesNow.getVisibility());
+        printAutomations.setVisibility(inJobNow && !printKey(snapshot).isEmpty() ? View.VISIBLE : View.GONE);
+        printExtrasRow.setVisibility(picturesNow.getVisibility() == View.VISIBLE || printAutomations.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
         String faultText = codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen."; if (!faultText.contentEquals(faults.getText())) faults.setText(faultText);
