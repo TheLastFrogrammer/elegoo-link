@@ -34,7 +34,20 @@ function show(user) {
   user.videoTrack.play(box, { fit: 'contain' });
   status(''); send({ type: 'playing' });
 }
+// The printer stops sending after about 26 s per viewer (seen on a CC2, October 2026) and starts again for a new join:
+// when it stops, the page leaves and joins again with the same access, so watching carries on after a short gap.
+let lastArgs = null, resuming = false, resumes = 0;
+async function resume(why) {
+  if (resuming || !lastArgs) return;
+  if (resumes >= 500) { status('The printer stopped its camera stream.'); return; }
+  resuming = true; resumes++;
+  event(why + '; joining again (' + resumes + ')');
+  status('The printer paused its video. Reconnecting…');
+  await stop();
+  setTimeout(() => { resuming = false; if (lastArgs) start.apply(null, lastArgs); }, 800);
+}
 async function start(appId, channel, token, uid) {
+  lastArgs = [appId, channel, token, uid];
   try {
     AgoraRTC.setLogLevel(3);
     try { AgoraRTC.disableLogUpload(); } catch (e) {}
@@ -45,8 +58,8 @@ async function start(appId, channel, token, uid) {
       if (type !== 'video') return;
       try { await client.subscribe(user, 'video'); show(user); } catch (e) { event('subscribing to the video failed (' + ((e && (e.code || e.message)) || e) + ')'); }
     });
-    client.on('user-unpublished', (user, type) => { if (type === 'video' && remote === user) { remote = null; status('The printer stopped its camera stream.'); } });
-    client.on('user-left', (user) => { if (remote === user) { remote = null; status('The printer left the camera channel.'); } });
+    client.on('user-unpublished', (user, type) => { if (type === 'video' && remote === user) { remote = null; resume('the printer stopped sending video'); } });
+    client.on('user-left', (user) => { if (remote === user) { remote = null; resume('the printer left the channel'); } });
     client.on('connection-state-change', (current, previous, reason) => {
       event('connection ' + previous + ' -> ' + current + (reason ? ' (' + reason + ')' : ''));
       if (current === 'DISCONNECTED' && reason && reason !== 'LEAVE') status('Disconnected from the camera service (' + reason + ').');
@@ -71,7 +84,9 @@ async function start(appId, channel, token, uid) {
     status('The camera could not start (' + ((e && (e.code || e.message)) || e) + ').');
   }
 }
-async function stop() { try { if (client) await client.leave(); } catch (e) {} client = null; remote = null; }
+async function stop() { const c = client; client = null; remote = null; try { if (c) await c.leave(); } catch (e) {} }
+// The app's own stop: no rejoining after it.
+async function end() { lastArgs = null; await stop(); }
 // forRecording: a picture for the running print's recording (smaller, kept by the app without asking) rather than one to save.
 function snapshot(forRecording) {
   const type = forRecording ? 'picture' : 'snapshot';

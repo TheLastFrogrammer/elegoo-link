@@ -1223,8 +1223,16 @@ public final class PrinterService extends Service {
         });
     }
     private String loggedConnection = "", loggedFeedback = ""; private int loggedOnline = -2;
+    private static volatile boolean offThreadNoted;
     private void changed() {
         if (destroyed) return;
+        // Screens are only ever told on the screen thread: a change noticed by a background task is handed over, so no
+        // screen updates its views from another thread (that left stale layouts, such as a button row measured for
+        // other buttons).
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            if (!offThreadNoted) { offThreadNoted = true; Diagnostics.note(MainThreadWatch.AREA, "a status change came from a background thread (" + Thread.currentThread().getName() + ", in: " + MainThreadWatch.frames(Thread.currentThread().getStackTrace()) + "); handed to the screen thread"); }
+            main.post(this::changed); return;
+        }
         // The log keeps every change of the connection line, the cloud's online state and each message shown to the user.
         if (!connection.equals(loggedConnection)) { loggedConnection = connection; Diagnostics.note(Diagnostics.CONNECTION, Diagnostics.scrub(connection)); }
         if (cloudOnline != loggedOnline && usingCloud()) { loggedOnline = cloudOnline; Diagnostics.note(Diagnostics.CONNECTION, "Elegoo cloud says the printer is " + (cloudOnline == 1 ? "online" : cloudOnline == 0 ? "offline" : "of unknown state")); }

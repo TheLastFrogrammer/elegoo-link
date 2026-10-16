@@ -21,10 +21,12 @@ window.AgoraRTC = {
         emit('connection-state-change', 'CONNECTING', 'DISCONNECTED');
         emit('connection-state-change', 'CONNECTED', 'CONNECTING');
         const s = window.__scenario;
-        if (s === 'printer') setTimeout(() => {
+        if (s === 'printer' || s === 'stops') setTimeout(() => {
           const printer = { uid: 7, hasVideo: false };
           client.remoteUsers.push(printer); emit('user-joined', printer);
           printer.hasVideo = true; emit('user-published', printer, 'video');
+          // 'stops': the printer stops sending after a while (once), as a CC2 does after about 26 s.
+          if (s === 'stops' && !window.__stoppedOnce) { window.__stoppedOnce = true; setTimeout(() => { printer.hasVideo = false; emit('user-unpublished', printer, 'video'); }, 3000); }
         }, 300);
         if (s === 'banned') setTimeout(() => emit('connection-state-change', 'DISCONNECTED', 'CONNECTED', 'UID_BANNED'), 300);
         return 1;
@@ -88,11 +90,16 @@ const server = http.createServer((q, r) => {
     const early = await run(browser, port, 'empty', 15000);
     if (texts(early, 'status').some((t) => t.startsWith('The printer is not sending'))) fail('empty: gave up before 20 s');
 
+    // 2b. The printer stops sending: the page rejoins by itself and the video plays again, without reporting a problem.
+    const stops = await run(browser, port, 'stops', 8000);
+    if (!texts(stops, 'event').some((t) => t === 'the printer stopped sending video; joining again (1)')) fail('stops: no rejoin: ' + texts(stops, 'event').join(' | '));
+    if (stops.filter((m) => m.type === 'playing').length < 2) fail('stops: video did not play again after the rejoin');
+    if (texts(stops, 'status').some((t) => t.startsWith('The printer stopped'))) fail('stops: reported a stop instead of rejoining');
     // 3. A second join with the same account: the page reports the disconnect with its reason.
     const banned = await run(browser, port, 'banned', 1000);
     if (!texts(banned, 'status').some((t) => t.includes('UID_BANNED'))) fail('banned: reason not reported: ' + texts(banned, 'status').join(' | '));
     if (!texts(banned, 'event').some((t) => t.includes('-> DISCONNECTED (UID_BANNED)'))) fail('banned: no connection event');
   } catch (e) { fail(e.message); }
   finally { await browser.close(); server.close(); }
-  if (!process.exitCode) console.log('camera check passed: printer joins and plays (picture kept), empty channel reported after 20 s, double join reported');
+  if (!process.exitCode) console.log('camera check passed: printer joins and plays (picture kept), rejoins when the printer stops sending, empty channel reported after 20 s, double join reported');
 });

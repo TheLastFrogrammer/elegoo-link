@@ -24,6 +24,9 @@ final class PictureVisits {
     private final BooleanSupplier videoOpen;
     private final Handler main = new Handler(Looper.getMainLooper());
     private CloudVideo visit; private FrameLayout box;
+    /** Why visits are waiting, noted in the camera log each time it changes. */
+    private String waiting = "";
+    private void waitingFor(String why) { if (!why.equals(waiting)) { waiting = why; if (!why.isEmpty()) Diagnostics.note(Diagnostics.CAMERA, "cloud picture visits waiting: " + why); } }
 
     PictureVisits(Activity activity, Supplier<PrinterService> printer, SharedPreferences settings, BooleanSupplier videoOpen) {
         this.activity = activity; this.printer = printer; this.settings = settings; this.videoOpen = videoOpen;
@@ -51,9 +54,14 @@ final class PictureVisits {
         if (p == null || visit != null || p.cloudSerial.isEmpty() || !CloudVideo.supported()) return;
         long now = SystemClock.elapsedRealtime();
         boolean pictureDue = p.recorder != null && p.recorder.pictureDue(now);
-        if (due(settings.getBoolean(PREF, true), videoOpen.getAsBoolean(), p.ready() || !p.usingCloud(), p.cloudFresh(), p.localCamera(), p.cloudOnline == 1,
-                settings.getBoolean("cloudControlUnderstood", false), CloudCameraActivity.holdsChannel(), CloudVideo.emptyStreak(), now - CloudVideo.emptyAt(), pictureDue))
-            start(p);
+        boolean enabled = settings.getBoolean(PREF, true), open = videoOpen.getAsBoolean(), local = p.ready() || !p.usingCloud(), fresh = p.cloudFresh(),
+            alongside = p.localCamera(), online = p.cloudOnline == 1, agreed = settings.getBoolean("cloudControlUnderstood", false), held = CloudCameraActivity.holdsChannel();
+        if (due(enabled, open, local, fresh, alongside, online, agreed, held, CloudVideo.emptyStreak(), now - CloudVideo.emptyAt(), pictureDue)) { waitingFor(""); start(p); return; }
+        boolean recording = p.recorder != null && p.recorder.current() != null;
+        // The first reason that applies, in the order due() checks them; "no picture due" is the normal state and not noted.
+        waitingFor(!enabled ? "turned off in Settings" : open ? "" : local ? "" : !fresh ? "no fresh status from the cloud" : alongside ? "" : !online ? "the cloud says the printer is offline"
+            : !agreed ? "cloud control not agreed yet" : held ? "" : CloudVideo.emptyStreak() >= 2 && now - CloudVideo.emptyAt() < 30 * 60_000L ? "the printer's camera did not answer twice; trying again in 30 minutes"
+            : !recording ? "no print is being recorded" : "");
     } };
 
     private void start(PrinterService p) {

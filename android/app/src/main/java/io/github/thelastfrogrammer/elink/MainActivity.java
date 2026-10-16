@@ -2179,6 +2179,7 @@ public final class MainActivity extends Activity {
     private long slowRenderNotedAt;
     private void render() {
         if (connect == null || isDestroyed()) return;
+        if (android.os.Looper.myLooper() != android.os.Looper.getMainLooper()) { main.post(this::render); return; }   // views change on the screen thread only
         long renderStart = android.os.SystemClock.elapsedRealtime();
         try { renderNow(); } finally {
             long took = android.os.SystemClock.elapsedRealtime() - renderStart;

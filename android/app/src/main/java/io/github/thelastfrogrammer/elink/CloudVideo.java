@@ -57,7 +57,7 @@ final class CloudVideo {
     private final Runnable pictureTick = new Runnable() { public void run() {
         PrinterService p = printer.get();
         if (web != null && playing && p != null && p.recorder != null && p.recorder.pictureDue(android.os.SystemClock.elapsedRealtime())) web.evaluateJavascript("snapshot(true)", null);
-        main.postDelayed(this, 15_000);
+        main.postDelayed(this, 5_000);   // often enough not to miss a due picture while the printer sends (about 26 s at a time)
     } };
 
     CloudVideo(Activity activity, String serial, Supplier<PrinterService> printer, Listener listener) { this.activity = activity; this.serial = serial; this.printer = printer; this.listener = listener; }
@@ -122,7 +122,7 @@ final class CloudVideo {
         if (!stopped && startedAt > 0) log("stopped after " + since() / 1000 + " s" + (playing ? "" : ", video never started"));
         stopped = true; playing = false; main.removeCallbacksAndMessages(null); worker.shutdownNow();
         if (web != null) {
-            web.evaluateJavascript("stop()", null);
+            web.evaluateJavascript("end()", null);
             WebView old = web; web = null;
             // Give the page a moment to leave the channel before the view goes.
             main.postDelayed(() -> { if (old.getParent() instanceof ViewGroup) ((ViewGroup) old.getParent()).removeView(old); old.destroy(); }, 500);
@@ -160,7 +160,7 @@ final class CloudVideo {
                         playing = true; emptyStreak = 0; log("video playing after " + since() + " ms");
                         // A visit waits a moment for a sharp frame, then keeps one picture; a watched video keeps them on the interval.
                         if (oneShot) main.postDelayed(() -> { if (web != null && !stopped) web.evaluateJavascript("snapshot(true)", null); }, 1_500);
-                        else main.postDelayed(pictureTick, 3_000);
+                        else main.postDelayed(pictureTick, 1_500);
                     }
                     listener.playing(); break;
                 case "picture": keep(message.optString("data")); break;
@@ -172,6 +172,7 @@ final class CloudVideo {
 
     private void keep(String dataUrl) {
         byte[] jpeg = decode(dataUrl); PrinterService p = printer.get();
+        if (jpeg == null) return;   // between the printer's stop and the rejoin there is no frame; the next check tries again
         if (p != null && p.recorder != null) p.recorder.savePicture(jpeg, android.os.SystemClock.elapsedRealtime(), oneShot ? "a short cloud picture visit" : "the Print tab's cloud video");
         if (oneShot && afterPicture != null) { Runnable done = afterPicture; afterPicture = null; main.post(done); }
     }

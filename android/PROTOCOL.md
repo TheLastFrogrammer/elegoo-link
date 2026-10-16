@@ -439,3 +439,10 @@ Resolution (2026-10-15): a printer restart fixed it. Afterwards the printer join
 app did ("a member joined", then "started sending video") with no request sent first: in cloud mode the printer joins its
 video channel on its own when a viewer joins. Before the restart its camera service was stuck and never joined. The
 no-video message now suggests restarting the printer.
+
+### Cloud video lasts about 26 s per join (2026-10-15)
+
+With the printer's camera service working, the printer joins within about 1–2 s of a viewer and sends video, then stops
+("user-unpublished") about 26 s later (21:07:15 → 21:07:41, 21:08:21 → 21:08:47). A new join starts it again. The camera
+page and the toolpath viewer now leave and join again by themselves when the printer stops, so watching carries on after
+a short gap; the app's own stop uses `end()`, after which nothing rejoins.

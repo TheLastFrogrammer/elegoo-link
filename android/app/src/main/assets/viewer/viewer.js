@@ -370,7 +370,14 @@
         printerCam.video = holder.querySelector("video"); printerCam.playing = true; cameraStatus("playing"); pump(); measureDelay(client);
       };
       client.on("user-published", (user, type) => { if (type === "video") play(user); });
-      client.on("user-unpublished", () => { printerCam.playing = false; cameraStatus("The printer stopped sending video."); });
+      // The printer stops sending after about 26 s per viewer and starts again for a new join: rejoin with the same access.
+      client.on("user-unpublished", () => {
+        printerCam.playing = false;
+        printerCam.resumes = (printerCam.resumes || 0) + 1;
+        if (printerCam.resumes > 500) { cameraStatus("The printer stopped sending video."); return; }
+        cameraStatus("The printer paused its video. Reconnecting…");
+        setTimeout(() => { if (printerCam.client === client) cameraCloud(appId, channel, token, uid); }, 800);
+      });
       await client.join(appId, channel, token, Number(uid));
       await client.setClientRole("host");
       for (const user of client.remoteUsers) if (user.hasVideo) { await play(user); break; }

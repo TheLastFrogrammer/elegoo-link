@@ -259,13 +259,13 @@ public final class CloudCameraActivity extends Activity {
     @Override protected void onStop() {
         super.onStop(); leftAt = android.os.SystemClock.elapsedRealtime();
         // Leave the video channel when hidden, like the local camera; reopening the screen starts again.
-        if (web != null && started && !choosingFile) { web.evaluateJavascript("stop()", null); finish(); }
+        if (web != null && started && !choosingFile) { web.evaluateJavascript("end()", null); finish(); }
     }
     @Override protected void onDestroy() {
         showing = false; leftAt = android.os.SystemClock.elapsedRealtime();
         worker.shutdownNow(); main.removeCallbacksAndMessages(null);
         if (bound) { unbindService(connection); bound = false; }
-        if (web != null) { web.evaluateJavascript("stop()", null); ((ViewGroup) web.getParent()).removeView(web); web.destroy(); web = null; }
+        if (web != null) { web.evaluateJavascript("end()", null); ((ViewGroup) web.getParent()).removeView(web); web.destroy(); web = null; }
         super.onDestroy();
     }
 }
