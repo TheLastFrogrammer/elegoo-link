@@ -162,4 +162,18 @@ public class PrintRecorderTest {
         recorder.update(2_000_000, 140_000, idle(), "local", "CC2");
         assertEquals("no print, no elapsed time", -1, recorder.elapsedSeconds(150_000));
     }
+    @Test public void picturesEveryNLayersFollowTheLayerNotTheClock() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir); recorder.setDefaultPictureLayers(2);
+        assertTrue(recorder.update(1_000, 1_000, status(2075, "a.gcode", 1, 1), "local", "CC2"));
+        assertEquals("Every 2 layers", recorder.current().pictureWords());
+        assertTrue("the first layer gets a picture", recorder.pictureDue(1_000));
+        assertTrue(recorder.savePicture(new byte[200], 1_000, "test"));
+        assertFalse(recorder.pictureDue(600_000));   // hours later, still layer 1: no picture by time
+        recorder.update(700_000, 700_000, status(2075, "a.gcode", 2, 2), "local", "CC2");
+        assertFalse("one layer on", recorder.pictureDue(700_000));
+        recorder.update(710_000, 710_000, status(2075, "a.gcode", 3, 3), "local", "CC2");
+        assertTrue("two layers on", recorder.pictureDue(710_000));
+        recorder.setPictureMinutes(5);
+        assertEquals("back to time", "Every 5 minutes", recorder.current().pictureWords());
+    }
 }

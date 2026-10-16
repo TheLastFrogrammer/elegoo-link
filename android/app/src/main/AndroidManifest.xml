@@ -1,4 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
@@ -143,6 +144,10 @@
         <activity android:name=".PlateActivity" android:exported="false" android:label="Layout"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
         <activity android:name=".GcodeViewerActivity" android:exported="false" android:label="Toolpath" android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize" />
+        <receiver android:name=".PrintWidget" android:exported="false" android:label="Print progress">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/print_widget" />
+        </receiver>
         <service android:name=".PrinterService" android:exported="false" android:foregroundServiceType="connectedDevice" />
         <service android:name=".ShowcaseService" android:exported="false" android:foregroundServiceType="mediaProjection" />
     </application>

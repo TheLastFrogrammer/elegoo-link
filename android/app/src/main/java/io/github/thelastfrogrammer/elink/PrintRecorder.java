@@ -29,11 +29,15 @@ public final class PrintRecorder {
         public int samples, layers;
         /** Camera pictures every this many minutes for this print (0 = none), and how many were taken. */
         public int pictureMinutes, pictures;
+        /** Or a picture every this many layers (0 = by time): for timelapses where the print grows evenly between pictures. */
+        public int pictureLayers;
+        /** "Every 5 min", "Every layer", "Every 2 layers" or "No pictures". */
+        public String pictureWords() { return pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") : pictureMinutes == 0 ? "No pictures" : pictureMinutes == 1 ? "Every minute" : "Every " + pictureMinutes + " minutes"; }
         Recording(File csv, File meta) { this.csv = csv; this.meta = meta; }
         JSONObject toJson() throws Exception {
             return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("outcome", outcome).put("source", source)
                 .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
-                .put("picture_minutes", pictureMinutes).put("pictures", pictures);
+                .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures);
         }
         static Recording read(File meta) throws Exception {
             String base = meta.getName().replaceFirst("\\.json$", "");
@@ -43,7 +47,7 @@ public final class PrintRecorder {
             recording.outcome = json.optString("outcome", "unknown"); recording.source = json.optString("source");
             recording.start = json.optLong("start"); recording.end = json.optLong("end"); recording.lastSample = json.optLong("last_sample"); recording.elapsed = json.optLong("elapsed");
             recording.samples = json.optInt("samples"); recording.layers = json.optInt("layers");
-            recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictures = json.optInt("pictures");
+            recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictureLayers = json.optInt("picture_layers"); recording.pictures = json.optInt("pictures");
             return recording;
         }
         /** The folder of this recording's camera pictures, named by elapsed seconds (e.g. 0600.jpg). */
@@ -57,7 +61,9 @@ public final class PrintRecorder {
     private long sampledMono = Long.MIN_VALUE / 2, picturedMono = Long.MIN_VALUE / 2;
     private JSONObject canvas;
     /** Minutes between pictures for prints that start from now (0 = none); a print's own setting can differ. */
-    private int defaultPictureMinutes;
+    private int defaultPictureMinutes, defaultPictureLayers;
+    /** The layer of the running print's last picture (-1 none yet), for pictures every N layers. */
+    private int picturedLayer = -1;
 
     public PrintRecorder(File directory) { this.directory = directory; }
     public synchronized Recording current() { return current; }
@@ -66,10 +72,18 @@ public final class PrintRecorder {
     /** The latest CANVAS report, for the active tray and its colour in each sample. */
     public synchronized void setCanvas(JSONObject value) { canvas = value; }
     public synchronized void setDefaultPictureMinutes(int minutes) { defaultPictureMinutes = Math.max(0, Math.min(120, minutes)); }
+    /** Pictures every N layers for prints that start from now (0 = by time, as setDefaultPictureMinutes says). */
+    public synchronized void setDefaultPictureLayers(int layers) { defaultPictureLayers = Math.max(0, Math.min(50, layers)); }
+    /** Changes the running print to pictures every N layers (0 goes back to its time interval). */
+    public synchronized void setPictureLayers(int layers) { if (current != null) { current.pictureLayers = Math.max(0, Math.min(50, layers)); save(current); } }
     /** Changes the running print's picture interval (0 stops them). */
-    public synchronized void setPictureMinutes(int minutes) { if (current != null) { current.pictureMinutes = Math.max(0, Math.min(120, minutes)); save(current); } }
+    public synchronized void setPictureMinutes(int minutes) { if (current != null) { current.pictureMinutes = Math.max(0, Math.min(120, minutes)); current.pictureLayers = 0; save(current); } }
     /** Whether a camera picture is due for the running print (`mono`: the monotonic clock). */
-    public synchronized boolean pictureDue(long mono) { return current != null && current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L; }
+    public synchronized boolean pictureDue(long mono) {
+        if (current == null) return false;
+        if (current.pictureLayers > 0) return lastLayer >= 1 && (picturedLayer < 0 || lastLayer - picturedLayer >= current.pictureLayers);
+        return current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L;
+    }
     /** Keeps a JPEG camera picture with the running print, named by its elapsed time; false when there is no print to keep it with. */
     public synchronized boolean savePicture(byte[] jpeg, long mono) { return savePicture(jpeg, mono, "camera"); }
     /** As above, naming where the picture came from for the camera log (the first picture of a print, every tenth, and every failure). */
@@ -80,7 +94,7 @@ public final class PrintRecorder {
         long elapsed = Math.max(0, mono - current.monoStart) / 1000;
         try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
         catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
-        picturedMono = mono; current.pictures++; save(current);
+        picturedMono = mono; picturedLayer = lastLayer; current.pictures++; save(current);
         if (current.pictures == 1 || current.pictures % 10 == 0) Diagnostics.note(Diagnostics.CAMERA, "picture " + current.pictures + " of this print kept from " + source + " (" + jpeg.length / 1024 + " KB)");
         return true;
     }
@@ -118,7 +132,7 @@ public final class PrintRecorder {
             // Elapsed time counts on from what was recorded before (a resumed print), measured with the monotonic clock from here.
             current.monoStart = mono - current.elapsed;
             if (current.elapsed == 0 && current.lastSample > current.start) current.monoStart = mono - (current.lastSample - current.start);
-            lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2;
+            lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2; picturedLayer = -1;
         }
         int layer = print.optInt("current_layer", -1);
         boolean last = sub == 2077 || sub == 2504;
@@ -177,7 +191,7 @@ public final class PrintRecorder {
         String base = now + "-" + file.replaceAll("[^A-Za-z0-9._-]", "_").replaceFirst("(?i)\\.gcode$", "");
         if (base.length() > 80) base = base.substring(0, 80);
         Recording recording = new Recording(new File(directory, base + ".csv"), new File(directory, base + ".json"));
-        recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now; recording.pictureMinutes = defaultPictureMinutes;
+        recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now; recording.pictureMinutes = defaultPictureMinutes; recording.pictureLayers = defaultPictureLayers;
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(recording.csv), StandardCharsets.UTF_8)) { writer.write(String.join(",", COLUMNS) + "\n"); }
         catch (IOException ignored) { }
         save(recording); prune();

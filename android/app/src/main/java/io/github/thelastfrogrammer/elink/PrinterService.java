@@ -82,7 +82,7 @@ public final class PrinterService extends Service {
         String used = spools.observe(value, now); if (used != null) feedback = used;
         android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         if (recorder == null || !settings.getBoolean("recordPrints", true)) return;
-        recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5));
+        recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5)); recorder.setDefaultPictureLayers(settings.getInt("pictureLayers", 0));
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name);
         if (recorder.pictureDue(mono)) {
@@ -1223,6 +1223,36 @@ public final class PrinterService extends Service {
         });
     }
     private String loggedConnection = "", loggedFeedback = ""; private int loggedOnline = -2;
+    // ------------------------------------------------------------------ Home Assistant link (Settings › Home Assistant)
+    final HomeAssistant ha = new HomeAssistant(HomeAssistant.paho());
+    private final java.util.concurrent.ExecutorService haWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    private volatile boolean haBusy; private long haAt; private String haNode;
+    /** On a status change: sends the shown status to the user's broker (read only), at most every 10 s, on its own thread. */
+    private void homeAssistant() {
+        android.content.SharedPreferences settings = workshop();
+        if (!settings.getBoolean("haEnabled", false)) { if (haNode != null) { String node = haNode; haNode = null; haWorker.execute(() -> ha.stop(node)); } return; }
+        long now = SystemClock.elapsedRealtime(); if (haBusy || now - haAt < 10_000) return;
+        String id = wanted ? serial : cloudSerial; if (id == null || id.isEmpty()) id = host == null ? "" : host;
+        if (id.isEmpty()) return;
+        JSONObject shownNow = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
+        String route = wanted ? (ready() ? "local network" : "not connected") : cloudFresh() ? "Elegoo cloud" : "not connected";
+        String host = settings.getString("haHost", "").trim(), user = settings.getString("haUser", "").trim(); int port = settings.getInt("haPort", 1883); boolean tls = settings.getBoolean("haTls", false);
+        if (host.isEmpty()) return;
+        String node = HomeAssistant.node(id), name = wanted || cloudName.isEmpty() ? "Centauri Carbon 2" : StatusPresentation.clean(cloudName);
+        PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
+        haBusy = true; haAt = now; haNode = node;
+        haWorker.execute(() -> {
+            try {
+                String password = ""; try { CredentialStore store = new CredentialStore(this); if (store.remembers("homeassistant:" + host)) password = store.load("homeassistant:" + host); } catch (Exception unreadable) { }
+                JSONObject state; try { state = HomeAssistant.state(shownNow, route, System.currentTimeMillis()); } catch (Exception impossible) { return; }
+                byte[] picture = null; String pictureKey = null;
+                List<java.io.File> pictures = recording == null ? null : PrintRecorder.pictures(recording);
+                if (pictures != null && !pictures.isEmpty()) { java.io.File newest = pictures.get(pictures.size() - 1); pictureKey = newest.getPath();
+                    try { picture = java.nio.file.Files.readAllBytes(newest.toPath()); } catch (Exception unreadable) { } }
+                ha.publish(host, port, tls, user, password, null, node, name, state, picture, pictureKey, System.currentTimeMillis());
+            } finally { haBusy = false; }
+        });
+    }
     private static volatile boolean offThreadNoted;
     private void changed() {
         if (destroyed) return;
@@ -1239,6 +1269,12 @@ public final class PrinterService extends Service {
         if (feedback != null && !feedback.isEmpty() && !feedback.equals(loggedFeedback)) { loggedFeedback = feedback; Diagnostics.note(Diagnostics.MESSAGES, Diagnostics.scrub(feedback)); }
         if (observer != null) observer.changed();
         for (Observer watcher : new ArrayList<>(watchers)) watcher.changed();
+        homeAssistant();
+        // Home-screen widget: the status shown here, locally or through the cloud (throttled inside).
+        try {
+            JSONObject shownNow = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
+            PrintWidget.update(this, shownNow, wanted || cloudName.isEmpty() ? "Centauri Carbon 2" : StatusPresentation.clean(cloudName), progressPicture);
+        } catch (RuntimeException widgetTrouble) { }
     }
 
     /** Monitoring through the cloud while the app is visible; background watching is a separate opt-in setting. */
@@ -1616,7 +1652,19 @@ public final class PrinterService extends Service {
         // A look at the print: a camera picture (expand the notification to see it larger).
         android.graphics.Bitmap look = printingNow && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("alertPictures", true) ? progressPicture() : null;
         if (!printingNow) { progressPicture = null; progressPictureKey = ""; }
-        if (look != null) builder.setLargeIcon(scaled(look, 128)).setStyle(new Notification.BigPictureStyle().bigPicture(look).setSummaryText(text));
+        // Android 16: a Live Update while printing (progress in the notification's own style, time left as a status-bar chip);
+        // the picture becomes the notification's icon. Earlier Android keeps the large picture.
+        boolean live = printingNow && Build.VERSION.SDK_INT >= 36 && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("liveProgress", true);
+        if (live) {
+            JSONObject print = running.optJSONObject("print_status");
+            long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+            Notification.ProgressStyle progress = new Notification.ProgressStyle().setStyledByProgress(true)
+                .setProgress(Math.max(0, Math.min(100, runningMachine.optInt("progress", 0))));
+            builder.setStyle(progress);
+            if (remaining > 0) builder.setShortCriticalText(StatusPresentation.span(remaining));
+            android.os.Bundle promote = new android.os.Bundle(); promote.putBoolean("android.requestPromotedOngoing", true); builder.addExtras(promote);
+            if (look != null) builder.setLargeIcon(scaled(look, 256));
+        } else if (look != null) builder.setLargeIcon(scaled(look, 128)).setStyle(new Notification.BigPictureStyle().bigPicture(look).setSummaryText(text));
         // While printing: shortcuts that only open the app at a feature; nothing here sends the printer a command.
         JSONObject shown = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
         JSONObject machine = shown == null ? null : shown.optJSONObject("machine_status");
@@ -1648,6 +1696,7 @@ public final class PrinterService extends Service {
         lastNotification = now; getSystemService(NotificationManager.class).notify(NOTIFICATION, notification());
     }
     @Override public void onDestroy() {
+        { String node = haNode; haWorker.execute(() -> ha.stop(node)); haWorker.shutdown(); }   // Home Assistant shows the printer offline
         destroyed = true; observer = null; watchers.clear(); clearRoute(); main.removeCallbacksAndMessages(null);
         if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();
         if (session != null) session.close(); session = null; code = "";

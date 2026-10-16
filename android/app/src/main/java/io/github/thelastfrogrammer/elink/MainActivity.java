@@ -252,6 +252,7 @@ public final class MainActivity extends Activity {
         // Settings: a short front page of sections, the connection first.
         connectionSection = section(SETTINGS, "Printer connection", "");
         preferencesSection = section(SETTINGS, "App preferences", "Appearance, recordings, camera pictures and notifications");
+        haSection = section(SETTINGS, "Home Assistant", "Send the printer's status to Home Assistant over MQTT (read only)");
         helpSection = section(SETTINGS, "Help & diagnostics", "Connection help, Field check, printer probe and diagnostics");
         aboutSection = section(SETTINGS, "About", "Version " + appVersion() + ", licenses and planned features");
         currentSection = connectionSection.body;
@@ -564,6 +565,10 @@ public final class MainActivity extends Activity {
         CheckBox visits = checkbox(preferences, "Take print pictures through the cloud while the app is open", settings.getBoolean(PictureVisits.PREF, true));
         visits.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean(PictureVisits.PREF, enabled).apply(); if (!enabled) pictureVisits.end(); });
         label(preferences, "Camera pictures are saved with each print's recording, from the printer's camera on this network or through the cloud. In cloud mode, while the app is open, it checks the printer's video for a few seconds whenever a picture is due. Each check uses a little mobile data. An open camera view takes pictures too. Each print can set its own interval in Pictures… on the Print tab while it prints.", 12, MUTED, false);
+        if (android.os.Build.VERSION.SDK_INT >= 36) {
+            CheckBox live = checkbox(preferences, "Live progress in the status bar while printing", settings.getBoolean("liveProgress", true));
+            live.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("liveProgress", enabled).apply());
+        }
         CheckBox alerts = checkbox(preferences, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
         CheckBox firstLayer = checkbox(preferences, "Also when the first layer is done", settings.getBoolean("alertFirstLayer", false));
@@ -574,6 +579,7 @@ public final class MainActivity extends Activity {
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(preferences, "Alerts need notification permission and the app watching the printer. They stop when you disconnect or when Android stops the app. "
             + "While a print runs, Layer alert… on the Print tab adds one for a layer you choose. Tapping an alert only opens the app.", 13, MUTED, false);
+        buildHomeAssistant();
         currentSection = helpSection.body;
         LinearLayout help = card(null);
         button(help, "Connection help…", this::connectionHelp);
@@ -1914,7 +1920,7 @@ public final class MainActivity extends Activity {
         long mono = android.os.SystemClock.elapsedRealtime();
         if (recording == null) out.add("Pictures: no print is being recorded" + (settings.getBoolean("recordPrints", true) ? "" : " (recording prints is off in Settings)"));
         else { long since = printer.recorder.secondsSincePicture(mono);
-            out.add("Pictures: " + (recording.pictureMinutes == 0 ? "off for this print" : "every " + recording.pictureMinutes + " min") + "; " + recording.pictures + " so far; last "
+            out.add("Pictures: " + (recording.pictureLayers > 0 ? recording.pictureWords().toLowerCase(Locale.ROOT) : recording.pictureMinutes == 0 ? "off for this print" : "every " + recording.pictureMinutes + " min") + "; " + recording.pictures + " so far; last "
                 + (since < 0 ? "none this app run" : since / 60 + " min ago") + (printer.recorder.pictureDue(mono) ? "; one is due now" : "")); }
         out.add("Picture source now: " + (ready ? "the printer's camera on this network" : cloud && printer.localCamera() ? "the printer's camera alongside the cloud"
             : cloud ? (cloudVideo != null && cloudVideo.playing() ? "the Print tab's cloud video" : "none: in cloud mode only an open cloud video gives pictures") : "none: not connected"));
@@ -1970,6 +1976,33 @@ public final class MainActivity extends Activity {
             })).show();
     }
     private Button addLoad;
+    /** Settings › Home Assistant: the user's broker, the printer's status published read only with discovery. */
+    private Section haSection; private TextView haStatus;
+    private void buildHomeAssistant() {
+        currentSection = haSection.body;
+        LinearLayout card = card(null);
+        label(card, "Sends the printer's progress, time left, layer, temperatures, fans, light, state and latest picture to your own MQTT broker, with Home Assistant discovery: the sensors appear by themselves under one device. "
+            + "Read only: nothing in Home Assistant can control the printer through this. It runs while this app is open, or watching in the background.", 13, MUTED, false);
+        CheckBox on = checkbox(card, "Send to Home Assistant", settings.getBoolean("haEnabled", false));
+        EditText host = input(card, "Broker address (for example homeassistant.local or 192.168.1.10)", false); host.setText(settings.getString("haHost", ""));
+        EditText port = input(card, "Port", false); port.setInputType(InputType.TYPE_CLASS_NUMBER); port.setText(String.valueOf(settings.getInt("haPort", 1883)));
+        CheckBox tls = checkbox(card, "Use TLS (usually port 8883)", settings.getBoolean("haTls", false));
+        EditText user = input(card, "User name (optional)", false); user.setText(settings.getString("haUser", ""));
+        EditText password = input(card, "Password (kept encrypted on this phone; leave empty to keep the saved one)", true);
+        haStatus = label(card, "", 13, MUTED, false);
+        button(card, "Save", () -> {
+            String address = host.getText().toString().trim(); int number;
+            try { number = Integer.parseInt(port.getText().toString().trim()); } catch (NumberFormatException bad) { number = 0; }
+            if (on.isChecked() && (address.isEmpty() || number <= 0 || number > 65535)) { message("Enter the broker's address and a port from 1 to 65535."); return; }
+            settings.edit().putBoolean("haEnabled", on.isChecked()).putString("haHost", address).putInt("haPort", number <= 0 ? 1883 : number)
+                .putBoolean("haTls", tls.isChecked()).putString("haUser", user.getText().toString().trim()).apply();
+            String secret = password.getText().toString();
+            if (!secret.isEmpty() && !address.isEmpty()) try { new CredentialStore(this).save("homeassistant:" + address, secret, true); } catch (Exception failed) { message("The password could not be saved securely on this phone."); return; }
+            password.setText("");
+            Diagnostics.note(Diagnostics.HOME_ASSISTANT, on.isChecked() ? "turned on" + (tls.isChecked() ? " (TLS)" : "") : "turned off");
+            message(on.isChecked() ? "Saved. The next status update goes to Home Assistant." : "Saved. Home Assistant updates are off.");
+        });
+    }
     /** "Everything the printer reports": the latest status, attributes and trays as sorted "path = value" lines, live while open. */
     private Section reportsSection; private TextView reportsText, reportsCount; private String reportsShown = ""; private long reportsAt;
     private void buildReports() {
@@ -2043,19 +2076,25 @@ public final class MainActivity extends Activity {
     }
     /** Recording pictures: the default interval (Settings) or the running print's own (Print tab). 0 = none. */
     private Button pictureDefault;
-    private static final int[] PICTURE_MINUTES = {0, 1, 2, 5, 10, 15, 30, 60};
-    private static String pictureText(int minutes) { return minutes == 0 ? "No pictures" : minutes == 1 ? "Every minute" : "Every " + minutes + " minutes"; }
-    private void showPictureDefault() { if (pictureDefault != null) pictureDefault.setText("Recording pictures: " + pictureText(settings.getInt("pictureMinutes", 5)).toLowerCase(Locale.ROOT) + "…"); }
+    /** The choices: minutes (by time) then layers (at layer changes, for smooth timelapses). {minutes, layers}. */
+    private static final int[][] PICTURE_CHOICES = {{0, 0}, {1, 0}, {2, 0}, {5, 0}, {10, 0}, {15, 0}, {30, 0}, {60, 0}, {0, 1}, {0, 2}, {0, 5}, {0, 10}};
+    private static String pictureText(int minutes) { return pictureText(minutes, 0); }
+    private static String pictureText(int minutes, int layers) { return layers > 0 ? (layers == 1 ? "Every layer" : "Every " + layers + " layers") : minutes == 0 ? "No pictures" : minutes == 1 ? "Every minute" : "Every " + minutes + " minutes"; }
+    private void showPictureDefault() { if (pictureDefault != null) pictureDefault.setText("Recording pictures: " + pictureText(settings.getInt("pictureMinutes", 5), settings.getInt("pictureLayers", 0)).toLowerCase(Locale.ROOT) + "…"); }
     private void pictureDialog(boolean forDefault) {
         PrintRecorder.Recording now = printer == null || printer.recorder == null ? null : printer.recorder.current();
         if (!forDefault && now == null) return;
-        int current = forDefault ? settings.getInt("pictureMinutes", 5) : now.pictureMinutes, chosen = 0;
-        String[] names = new String[PICTURE_MINUTES.length];
-        for (int i = 0; i < names.length; i++) { names[i] = pictureText(PICTURE_MINUTES[i]); if (PICTURE_MINUTES[i] == current) chosen = i; }
+        int minutes = forDefault ? settings.getInt("pictureMinutes", 5) : now.pictureMinutes, layers = forDefault ? settings.getInt("pictureLayers", 0) : now.pictureLayers, chosen = 0;
+        String[] names = new String[PICTURE_CHOICES.length];
+        for (int i = 0; i < names.length; i++) {
+            int[] c = PICTURE_CHOICES[i]; names[i] = pictureText(c[0], c[1]) + (c[1] == 1 ? " (smoothest timelapse)" : "");
+            if (layers > 0 ? c[1] == layers : c[1] == 0 && c[0] == minutes) chosen = i;
+        }
         new AlertDialog.Builder(this).setTitle(forDefault ? "Pictures for new prints" : "Pictures for this print")
             .setSingleChoiceItems(names, chosen, (d, which) -> {
-                if (forDefault) { settings.edit().putInt("pictureMinutes", PICTURE_MINUTES[which]).apply(); showPictureDefault(); }
-                else if (printer != null && printer.recorder != null) printer.recorder.setPictureMinutes(PICTURE_MINUTES[which]);
+                int[] c = PICTURE_CHOICES[which];
+                if (forDefault) { settings.edit().putInt("pictureMinutes", c[0]).putInt("pictureLayers", c[1]).apply(); showPictureDefault(); }
+                else if (printer != null && printer.recorder != null) { if (c[1] > 0) printer.recorder.setPictureLayers(c[1]); else printer.recorder.setPictureMinutes(c[0]); }
                 d.dismiss(); render();
             }).setNegativeButton("Cancel", null).show();
     }
@@ -2188,6 +2227,7 @@ public final class MainActivity extends Activity {
     }
     private void renderNow() {
         renderHybrid(); renderReports();
+        if (haStatus != null && printer != null) { String text = settings.getBoolean("haEnabled", false) ? printer.ha.lastResult : "Off."; if (!text.contentEquals(haStatus.getText())) haStatus.setText(text); }
         if (probeButton != null) {
             boolean probing = printer != null && printer.probing;
             probeButton.setText(probing ? "Stop probe" : "Probe printer (read-only)…");
@@ -2385,8 +2425,10 @@ public final class MainActivity extends Activity {
         layerAlert.setVisibility(inJobNow && total > 1 ? View.VISIBLE : View.GONE);
         int alertAt = settings.getInt("alertLayer", 0); boolean thisPrint = alertAt > 0 && printKey(snapshot).equals(settings.getString("alertLayerKey", ""));
         layerAlert.setText(thisPrint ? "Layer alert at " + alertAt + "…" : "Layer alert…");
-        if (recordingNow != null) { picturesNow.setText(recordingNow.pictureMinutes == 0 ? "Pictures: off" : "Pictures: " + recordingNow.pictureMinutes + " min");
-            picturesNow.setContentDescription("Camera pictures for this print: " + pictureText(recordingNow.pictureMinutes) + ". Change"); }
+        if (recordingNow != null) {
+            picturesNow.setText(recordingNow.pictureLayers > 0 ? "Pictures: " + (recordingNow.pictureLayers == 1 ? "every layer" : "every " + recordingNow.pictureLayers + " layers")
+                : recordingNow.pictureMinutes == 0 ? "Pictures: off" : "Pictures: " + recordingNow.pictureMinutes + " min");
+            picturesNow.setContentDescription("Camera pictures for this print: " + recordingNow.pictureWords() + ". Change"); }
         // Quick actions by state. Printing: Live toolpath and Camera. Connected and idle: Slice a model, Camera and, with history, Print again.
         // Not connected: only Print recordings, as before (Get started and the fix guidance cover the rest). None of these sends a printer command.
         boolean idleOnline = live && !inJobNow, hasHistory = printer != null && !FeatureData.historyRows(printer.history).isEmpty();

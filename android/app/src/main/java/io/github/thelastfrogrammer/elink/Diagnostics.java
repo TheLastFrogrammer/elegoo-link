@@ -13,7 +13,7 @@ import java.util.*;
  */
 final class Diagnostics {
     static final String SLICER = "Slicer", FOLLOW = "Live toolpath", TRAYS = "CANVAS tray plan", FILES = "Printer files", PROBE = "Printer probe", SITES = "Model sites", HYBRID = "Local and cloud", CAMERA = "Camera",
-        CONNECTION = "Connection", COMMANDS = "Printer commands", MESSAGES = "Messages shown",
+        CONNECTION = "Connection", COMMANDS = "Printer commands", MESSAGES = "Messages shown", HOME_ASSISTANT = "Home Assistant",
         NOTIFICATIONS = "Notifications", STATUS = "Printer status";
     static final int KEEP_PER_AREA = 100;
     private static final String SEPARATOR = "\u001f";

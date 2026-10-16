@@ -193,10 +193,10 @@ public final class RecordingsActivity extends Activity {
     /** The print's camera pictures in a strip, each with its time into the print; tap for the full picture. */
     private void pictures(PrintRecorder.Recording recording) {
         List<File> files = PrintRecorder.pictures(recording);
-        if (files.isEmpty() && recording.pictureMinutes == 0) return;
+        if (files.isEmpty() && recording.pictureMinutes == 0 && recording.pictureLayers == 0) return;
         LinearLayout card = card(); label(card, "Camera pictures", 15, ink, true);
-        if (files.isEmpty()) { label(card, "No pictures yet. One is taken every " + recording.pictureMinutes + " min from the printer's camera on this network, or through the cloud while the camera is open in Live toolpath.", 13, muted, false); return; }
-        label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 ? " · every " + recording.pictureMinutes + " min" : "") + ". Tap one to see it larger.", 13, muted, false);
+        if (files.isEmpty()) { label(card, "No pictures yet. " + recording.pictureWords() + ", from the printer's camera on this network, or through the cloud while the app is open.", 13, muted, false); return; }
+        label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 || recording.pictureLayers > 0 ? " · " + recording.pictureWords().toLowerCase(Locale.ROOT) : "") + ". Tap one to see it larger.", 13, muted, false);
         if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files)); }
         LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
         HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.addView(strip); card.addView(scroll);

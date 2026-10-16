@@ -76,6 +76,7 @@ final class FeatureIndex {
         new Feature("alerts", "Notifications", "notifications alerts done finished fault first layer picture watch stuck stall failure temperature", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),
         new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),
+        new Feature("homeassistant", "Home Assistant", "home assistant mqtt broker dashboard sensors automation smart home", SETTINGS, "Send to Home Assistant", Prepare.NONE, false),
         new Feature("logs", "View logs", "logs log events history debug errors camera connection commands messages", SETTINGS, "View logs", Prepare.NONE, true),
         new Feature("cameracheck", "Camera check", "camera check test video not working diagnose stream cloud", PRINT, "Run camera check", Prepare.NONE, false),
         new Feature("diagnostics", "Share diagnostics", "diagnostics logs report bug share", SETTINGS, "Share diagnostics", Prepare.NONE, true),

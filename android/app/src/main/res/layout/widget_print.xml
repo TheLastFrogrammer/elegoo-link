@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Home-screen widget: the print's latest picture, its name and state, progress, time and temperatures. Read only. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="horizontal" android:padding="12dp" android:background="@drawable/widget_background"
+    android:gravity="center_vertical">
+    <ImageView android:id="@+id/widget_picture" android:layout_width="96dp" android:layout_height="96dp"
+        android:layout_marginEnd="12dp" android:background="@drawable/widget_picture" android:scaleType="centerCrop"
+        android:contentDescription="Latest picture of the print" />
+    <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+        <TextView android:id="@+id/widget_name" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="#FF9FB3BB" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="bottom">
+            <TextView android:id="@+id/widget_percent" android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:textColor="#FFE6EEF1" android:textSize="26sp" android:textStyle="bold" />
+            <TextView android:id="@+id/widget_state" android:layout_width="0dp" android:layout_weight="1" android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" android:paddingBottom="4dp" android:textColor="#FFE6EEF1" android:textSize="13sp" android:maxLines="1" android:ellipsize="end" />
+        </LinearLayout>
+        <ProgressBar android:id="@+id/widget_progress" style="@android:style/Widget.ProgressBar.Horizontal"
+            android:layout_width="match_parent" android:layout_height="6dp" android:layout_marginTop="2dp" android:max="100"
+            android:progressTint="#FF5FD4C4" android:progressBackgroundTint="#FF2A3A40" />
+        <TextView android:id="@+id/widget_time" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" android:textColor="#FFE6EEF1" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+        <TextView android:id="@+id/widget_temps" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:textColor="#FF9FB3BB" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" />
+    </LinearLayout>
+</LinearLayout>
