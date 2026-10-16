@@ -183,6 +183,7 @@ public final class PrinterService extends Service {
         cloudAccounts = new CloudAccountStore(this);
         cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
+        guardian = new GuardianRun(this); recorder.pictureKept = this::guard;
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);
     }
@@ -1695,7 +1696,31 @@ public final class PrinterService extends Service {
         if (!force && now - lastNotification < TimeUnit.SECONDS.toNanos(5)) return;
         lastNotification = now; getSystemService(NotificationManager.class).notify(NOTIFICATION, notification());
     }
+    /** Print guardian (beta): each kept picture compared with the toolpath so far (see GuardianRun). Notify only, never acts on the printer. */
+    public GuardianRun guardian;   // made in onCreate (the service has no context before)
+    private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb) {
+        if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("guardian", true)) return;
+        JSONObject now = liveStatus(), print = now.optJSONObject("print_status"), move = now.optJSONObject("gcode_move_inf");
+        int total = print == null ? 0 : print.optInt("total_layer", 0);
+        double[] head = move == null ? new double[] {Double.NaN, Double.NaN, Double.NaN}
+            : new double[] {move.optDouble("x", Double.NaN), move.optDouble("y", Double.NaN), move.optDouble("z", Double.NaN)};
+        guardian.check(recording, jpeg, layer, total, head, trayRgb, this::guardianAlarm, this::changed);
+    }
+    private void guardianAlarm(String reason, android.graphics.Bitmap overlay) {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("printer-alerts", "Print completion and faults", NotificationManager.IMPORTANCE_DEFAULT));
+        PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        String text = "The camera picture does not look like the print should: " + reason + ". Check the print. (Beta: it can be wrong.)";
+        Notification.Builder builder = new Notification.Builder(this, "printer-alerts").setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle("Link Workshop · Print guardian").setContentText(text).setContentIntent(open).setAutoCancel(true).setOnlyAlertOnce(true)
+            .setStyle(overlay == null ? new Notification.BigTextStyle().bigText(text) : new Notification.BigPictureStyle().bigPicture(overlay).setSummaryText(text));
+        if (overlay != null) builder.setLargeIcon(scaled(overlay, 128));
+        manager.notify(6, builder.build());
+        Diagnostics.note(Diagnostics.NOTIFICATIONS, "print guardian: " + reason);
+    }
     @Override public void onDestroy() {
+        if (guardian != null) guardian.shutdown();
         { String node = haNode; haWorker.execute(() -> ha.stop(node)); haWorker.shutdown(); }   // Home Assistant shows the printer offline
         destroyed = true; observer = null; watchers.clear(); clearRoute(); main.removeCallbacksAndMessages(null);
         if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();

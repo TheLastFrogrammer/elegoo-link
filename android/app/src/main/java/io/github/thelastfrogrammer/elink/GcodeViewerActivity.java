@@ -418,17 +418,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
      * value (so how the camera relates to the bed is measured, not assumed); with one, or with a preset, the camera simply
      * sits higher above the bed by as much as the bed went down.
      */
-    private double[] currentParams() {
-        int spot = viewerPrefs().getInt("cameraSpot", 0);
-        java.util.List<double[]> points = spot == LINED_UP ? savedPoints() : java.util.Collections.emptyList();
+    private double[] currentParams() { return cameraFor(viewerPrefs(), bedZ); }
+    /** The camera (as lined up in this viewer, else the chosen spot) for the bed at height bedZ; also used by the print guardian. */
+    static double[] cameraFor(android.content.SharedPreferences prefs, double bedZ) {
+        int spot = prefs.getInt("cameraSpot", 0);
+        java.util.List<double[]> points = spot == LINED_UP ? savedPoints(prefs) : java.util.Collections.emptyList();
         if (!points.isEmpty()) return modelAt(points, bedZ);
         double[] c = spotParams(spot == LINED_UP ? 0 : spot); c[2] += bedZ; return c;
     }
     /** Saved line-ups as {bed Z, x, y, height above the bed, turn, tilt, view angle, lens}. */
-    private java.util.List<double[]> savedPoints() {
-        java.util.List<double[]> points = parsePoints(viewerPrefs().getString("cameraPoints", null));
+    private java.util.List<double[]> savedPoints() { return savedPoints(viewerPrefs()); }
+    static java.util.List<double[]> savedPoints(android.content.SharedPreferences prefs) {
+        java.util.List<double[]> points = parsePoints(prefs.getString("cameraPoints", null));
         if (points.isEmpty()) {   // v0.14.5 kept one line-up with the bed at 0
-            double[] old = parseParams(viewerPrefs().getString("cameraCustomBed0", null));
+            double[] old = parseParams(prefs.getString("cameraCustomBed0", null));
             if (old != null) { double[] point = new double[9]; System.arraycopy(old, 0, point, 1, 8); points.add(point); }
         }
         return points;

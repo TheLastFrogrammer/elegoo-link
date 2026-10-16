@@ -96,8 +96,13 @@ public final class PrintRecorder {
         catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
         picturedMono = mono; picturedLayer = lastLayer; current.pictures++; save(current);
         if (current.pictures == 1 || current.pictures % 10 == 0) Diagnostics.note(Diagnostics.CAMERA, "picture " + current.pictures + " of this print kept from " + source + " (" + jpeg.length / 1024 + " KB)");
+        PictureKept told = pictureKept;
+        if (told != null) { String rgb = activeTray()[1]; told.kept(current, jpeg, lastLayer, rgb.isEmpty() ? -1 : Integer.parseInt(rgb)); }
         return true;
     }
+    /** Told about each kept picture with the printer's layer then and the active tray's colour (-1 when unknown), e.g. for the print guardian. Called with the recorder locked: hand the work off. */
+    interface PictureKept { void kept(Recording recording, byte[] jpeg, int layer, int trayRgb); }
+    volatile PictureKept pictureKept;
     /** Seconds since the running print's last picture (monotonic `mono`), or -1 when none yet / no print. */
     public synchronized long secondsSincePicture(long mono) { return current == null || current.pictures == 0 || picturedMono < 0 ? -1 : Math.max(0, mono - picturedMono) / 1000; }
     /** A recording's pictures, oldest first, each with its elapsed seconds. */

@@ -74,6 +74,7 @@ final class FeatureIndex {
         new Feature("appearance", "Appearance (dark mode)", "appearance theme dark light night", SETTINGS, "Appearance", Prepare.NONE, true),
         new Feature("pictures", "Camera pictures during prints", "pictures snapshots interval photos timelapse recording camera", SETTINGS, "Recording pictures", Prepare.NONE, true),
         new Feature("alerts", "Notifications", "notifications alerts done finished fault first layer picture watch stuck stall failure temperature", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
+        new Feature("guardian", "Print guardian (beta)", "guardian failure detection spaghetti blob detached knocked camera ai watch print", SETTINGS, "Print guardian (beta)", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),
         new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),
         new Feature("homeassistant", "Home Assistant", "home assistant mqtt broker dashboard sensors automation smart home", SETTINGS, "Send to Home Assistant", Prepare.NONE, false),

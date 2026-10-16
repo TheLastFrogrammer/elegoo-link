@@ -148,6 +148,7 @@ public final class MainActivity extends Activity {
     private LinearLayout statsRow;
     private Button printLight;
     /** "This print so far": the running print's temperatures from its recording, redrawn at most once a minute. */
+    private LinearLayout guardianCard, guardianButtons; private ImageView guardianImage; private TextView guardianText; private android.graphics.Bitmap guardianShown;
     private LinearLayout telemetryCard; private ChartView telemetryChart; private long telemetryAt; private String telemetryFor = "";
     private boolean monitorCameraTried, traysOpen;
     private String jobThumbAsked = "", jobThumbKey = "";
@@ -409,6 +410,16 @@ public final class MainActivity extends Activity {
         cardHeader(telemetryCard, "This print so far", "All charts ›", () -> graphs.performClick());
         telemetryChart = new ChartView(this, INK, MUTED, TRACK, SURFACE); telemetryCard.addView(telemetryChart, new LinearLayout.LayoutParams(-1, -2));
         telemetryCard.setVisibility(View.GONE);
+        // Print guardian (beta): the latest check of a picture against the toolpath. Its buttons only tell the guardian; nothing goes to the printer.
+        guardianCard = card("Print guardian (beta)");
+        guardianImage = new ImageView(this); guardianImage.setAdjustViewBounds(true); guardianImage.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        guardianImage.setContentDescription("The latest picture checked: where the print should be in teal, filament-coloured spots off the print in red");
+        guardianCard.addView(guardianImage, new LinearLayout.LayoutParams(-1, -2));
+        guardianText = A11y.polite(label(guardianCard, "", 13, MUTED, false));
+        guardianButtons = row(guardianCard);
+        rowButton(guardianButtons, "Looks fine", () -> { if (printer != null && printer.guardian != null) printer.guardian.feedback(true); guardianButtons.setVisibility(View.GONE); }, false);
+        rowButton(guardianButtons, "Real problem", () -> { if (printer != null && printer.guardian != null) printer.guardian.feedback(false); guardianButtons.setVisibility(View.GONE); }, false);
+        guardianCard.setVisibility(View.GONE);
         LinearLayout controls = card("Controls"); controlsCard = controls;
         controlSource = label(controls, "", 13, MUTED, false);
         controlFix = rowButton(row(controls), "", this::fixControl, true); ((View) controlFix.getParent()).setVisibility(View.GONE);
@@ -575,6 +586,9 @@ public final class MainActivity extends Activity {
         firstLayer.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertFirstLayer", enabled).apply());
         CheckBox watchBox = checkbox(preferences, "Print watch: tell me if a print seems stuck or a heater drifts", settings.getBoolean("printWatch", true));
         watchBox.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("printWatch", enabled).apply());
+        CheckBox guardianBox = checkbox(preferences, "Print guardian (beta): compare camera pictures with the toolpath and tell me if something looks wrong", settings.getBoolean("guardian", true));
+        guardianBox.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean("guardian", enabled).apply(); Diagnostics.note(Diagnostics.GUARDIAN, enabled ? "turned on" : "turned off"); });
+        label(preferences, "The guardian only looks and notifies; it never pauses or stops a print. It needs the print's G-code on the phone, the print pictures, and works best with the camera lined up in Live toolpath.", 12, MUTED, false);
         CheckBox alertPictures = checkbox(preferences, "Add camera pictures to notifications", settings.getBoolean("alertPictures", true));
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(preferences, "Alerts need notification permission and the app watching the printer. They stop when you disconnect or when Android stops the app. "
@@ -2420,6 +2434,16 @@ public final class MainActivity extends Activity {
         PrintRecorder.Recording recordingNow = printer == null || printer.recorder == null ? null : printer.recorder.current();
         picturesNow.setVisibility(inJobNow && recordingNow != null ? View.VISIBLE : View.GONE);
         renderTelemetry(inJobNow ? recordingNow : null);
+        GuardianRun guard = printer == null ? null : printer.guardian;
+        boolean guardShown = inJobNow && guard != null && settings.getBoolean("guardian", true) && !guard.verdict.isEmpty();
+        guardianCard.setVisibility(guardShown ? View.VISIBLE : View.GONE);
+        if (guardShown) {
+            android.graphics.Bitmap picture = guard.overlay;
+            if (picture != guardianShown) { guardianShown = picture; guardianImage.setImageBitmap(picture); }
+            guardianImage.setVisibility(picture == null ? View.GONE : View.VISIBLE);
+            guardianText.setText(guard.verdict); guardianText.setTextColor(guard.alarmed ? ERROR : MUTED);
+            guardianButtons.setVisibility(guard.alarmed ? View.VISIBLE : View.GONE);
+        }
         // One alert at a chosen layer of this print (navigation-only notification; the printer is never told anything).
         int total = snapshot.optJSONObject("print_status") == null ? 0 : snapshot.optJSONObject("print_status").optInt("total_layer", 0);
         layerAlert.setVisibility(inJobNow && total > 1 ? View.VISIBLE : View.GONE);
