@@ -47,6 +47,9 @@ final class AutomationValues {
         add("Temperatures", true, "chamber", "Chamber temperature, °C");
         add("Temperatures", true, "chamber_max", "Highest chamber temperature the printer measured, °C");
         add("Temperatures", true, "chamber_min", "Lowest chamber temperature the printer measured, °C");
+        add("Temperatures", true, "chamber_rate", "How fast the chamber warms (or cools, below 0) over the last five minutes, °C per minute");
+        add("Temperatures", true, "chamber_goal", "The chamber to wait for with the loaded filament: 40 °C for ABS, ASA, PC and nylon");
+        add("Temperatures", true, "chamber_ready_in", "Minutes until the chamber reaches that goal at the present rate (0 when there)");
         add("Fans", true, "part_fan", "Part cooling fan, percent");
         add("Fans", true, "aux_fan", "Auxiliary fan, percent");
         add("Fans", true, "chamber_fan", "Chamber (box) fan, percent");

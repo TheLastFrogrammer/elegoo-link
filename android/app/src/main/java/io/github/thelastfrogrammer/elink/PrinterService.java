@@ -73,12 +73,24 @@ public final class PrinterService extends Service {
     public PrintRecorder recorder;
     /** Spools and their filament left (see SpoolStore): follows fresh tray reports, and takes a finished print's use off. */
     public SpoolStore spools() { return SpoolStore.at(new java.io.File(getFilesDir(), "spools.json")); }
-    private int loggedSpeedMode = Integer.MIN_VALUE; private int loggedMachineState = Integer.MIN_VALUE;
+    private int loggedSpeedMode = Integer.MIN_VALUE; private int loggedMachineState = Integer.MIN_VALUE; private String loggedAssistant = "";
+    /** The chamber's warming or cooling, for the Print tab's countdown and automations. */
+    public final ChamberTrend chamberTrend = new ChamberTrend();
     private void record(JSONObject value, String source, String name) {
         // The log notes the printer's state and speed-mode number when they change (the speed names are not confirmed yet).
         JSONObject move = value.optJSONObject("gcode_move_inf"), machine = value.optJSONObject("machine_status");
         if (move != null && move.has("speed_mode") && move.optInt("speed_mode") != loggedSpeedMode) { loggedSpeedMode = move.optInt("speed_mode"); Diagnostics.note(Diagnostics.STATUS, "speed mode number now " + loggedSpeedMode + " (" + source + ")"); }
         if (machine != null && machine.has("status") && machine.optInt("status") != loggedMachineState) { loggedMachineState = machine.optInt("status"); Diagnostics.note(Diagnostics.STATUS, "state now " + StatusPresentation.state(value) + " (status " + loggedMachineState + ", sub_status " + machine.optInt("sub_status", -1) + ", " + source + ")"); }
+        JSONObject chamberNow = value.optJSONObject("ztemperature_sensor");
+        if (chamberNow != null && chamberNow.has("temperature")) chamberTrend.add(SystemClock.elapsedRealtime(), chamberNow.optDouble("temperature", Double.NaN));
+        // The printer's own AI detection: what it reports is not documented, so the log keeps each change with the print's state, to learn it.
+        JSONObject assistant = value.optJSONObject("device_assistant");
+        if (assistant != null && !assistant.toString().equals(loggedAssistant)) {
+            loggedAssistant = assistant.toString();
+            JSONObject print = value.optJSONObject("print_status");
+            Diagnostics.note(Diagnostics.STATUS, "printer AI detection (device_assistant) now " + Diagnostics.scrub(loggedAssistant) + " · " + StatusPresentation.state(value)
+                + (print != null && print.has("current_layer") ? " · layer " + print.optInt("current_layer") : "") + " (" + source + ")");
+        }
         checkWaiting(value); checkFolder(value);
         if (automations != null) automations.status("cloud".equals(source) ? automations.cloud : automations.local, value, name);
         SpoolStore spools = spools(); long now = System.currentTimeMillis();
@@ -1749,6 +1761,14 @@ public final class PrinterService extends Service {
                 if (learned >= 0) v.put("done_at_learned", StatusPresentation.doneAt(System.currentTimeMillis(), learned, java.util.Locale.getDefault(), java.util.TimeZone.getDefault()));
             }
             if (guardian != null && !guardian.verdict.isEmpty()) v.put("guardian", guardian.verdict);
+            double rate = chamberTrend.perMinute(); if (!Double.isNaN(rate)) v.put("chamber_rate", String.format(java.util.Locale.ROOT, "%.2f", rate));
+            JSONObject tray = PrintWatch.activeTray(canvas), chamber = liveStatus().optJSONObject("ztemperature_sensor");
+            double goal = ChamberTrend.goal(tray == null ? "" : tray.optString("filament_type"));
+            if (!Double.isNaN(goal) && chamber != null && chamber.has("temperature")) {
+                v.put("chamber_goal", String.valueOf(Math.round(goal)));
+                long ready = chamberTrend.secondsTo(goal, chamber.optDouble("temperature"));
+                if (ready >= 0) v.put("chamber_ready_in", String.valueOf(Math.round(ready / 60.0)));
+            }
             return v;
         }
         public byte[] latestPicture() {

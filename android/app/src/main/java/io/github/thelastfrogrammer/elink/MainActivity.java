@@ -2404,6 +2404,9 @@ public final class MainActivity extends Activity {
         }
         // The name doubles as the printer switcher once a printer is saved.
         boolean canSwitch = profiles.all().length() > 0;
+        // What is plugged in, as the printer reports it: a USB stick, and its camera when it says the camera is missing.
+        JSONObject devices = snapshot.optJSONObject("external_device");
+        if (devices != null) model = StatusPresentation.joinParts(model, devices.optBoolean("u_disk") ? "USB stick in" : "", devices.has("camera") && !devices.optBoolean("camera") ? "camera not connected" : "");
         if (Showcase.running()) {   // a video to share: no address, serial or the printer's own name
             name = "Centauri Carbon 2"; model = ready ? StatusPresentation.clean(printer.attributes.optString("machine_model", "Centauri Carbon 2")) : "Centauri Carbon 2";
         }
@@ -2511,7 +2514,7 @@ public final class MainActivity extends Activity {
         String codes = StatusPresentation.faultCodes(snapshot);
         String faultText = codes.isEmpty() ? "" : "Printer reports fault code(s): " + codes + ". Check the printer screen."; if (!faultText.contentEquals(faults.getText())) faults.setText(faultText);
         faults.setVisibility(codes.isEmpty() ? View.GONE : View.VISIBLE);
-        setTile(tileNozzle, temperature("extruder")); setTile(tileBed, temperature("heater_bed")); setTile(tileChamber, temperature("ztemperature_sensor"));
+        setTile(tileNozzle, temperature("extruder")); setTile(tileBed, temperature("heater_bed")); setTile(tileChamber, chamberTile());
         // Where controls go.
         switch (block) {
             case NONE: controlSource.setText(ready ? "Commands go over your local network." : "Commands go through the Elegoo cloud. " + lastReport() + (printer.cloudLiveOn ? " · live" : "") + "."); break;
@@ -2713,6 +2716,16 @@ public final class MainActivity extends Activity {
         return fan == null || !fan.has("speed") ? -1 : (int) Math.round(fan.optDouble("speed", 0) * 100 / 255);
     }
     /** "219°" over "↑ heating to 220°", "↓ cooling to 60°", "at 220°" or "off". */
+    /** The chamber now, then its countdown to the loaded filament's goal (ABS, ASA, PC, nylon), its rate, or its peak. */
+    private String chamberTile() {
+        JSONObject chamber = snapshot.optJSONObject("ztemperature_sensor"); if (chamber == null || !chamber.has("temperature")) return "—";
+        double now = chamber.optDouble("temperature", 0);
+        String text = String.format(Locale.ROOT, "%.0f°", now);
+        if (printer == null) return text;
+        JSONObject tray = PrintWatch.activeTray(printer.canvas);
+        String line = printer.chamberTrend.line(now, ChamberTrend.goal(tray == null ? "" : tray.optString("filament_type")), chamber.optDouble("measured_max_temperature", Double.NaN));
+        return line.isEmpty() ? text : text + "\n" + line;
+    }
     private String temperature(String key) {
         JSONObject value = snapshot.optJSONObject(key); if (value == null || !value.has("temperature")) return "—";
         double now = value.optDouble("temperature", 0), target = value.optDouble("target", 0);
