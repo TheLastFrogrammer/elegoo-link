@@ -182,7 +182,8 @@ public final class MainActivity extends Activity {
         setTheme(dark ? R.style.WorkshopDark : R.style.WorkshopLight);
         super.onCreate(saved);
         if (saved != null) { pendingExportHash = saved.getString("exportHash", ""); String uri = saved.getString("exportUri", ""); if (!uri.isEmpty()) pendingExportUri = android.net.Uri.parse(uri); }
-        Diagnostics.init(getFilesDir()); Crashes.install(this);
+        Diagnostics.init(getFilesDir()); Crashes.install(this); MainThreadWatch.start();
+        long createdAt = android.os.SystemClock.elapsedRealtime();
         // After a crash: say so once, and where the details are (the record holds no messages, addresses or codes).
         if (settings.getLong(Crashes.SEEN_KEY, 0) > 0) { settings.edit().remove(Crashes.SEEN_KEY).apply(); pendingFeedback = "Link Workshop closed unexpectedly last time. Settings › Share diagnostics… has the details, if you want to send them."; }
         credentials = new CredentialStore(this);
@@ -238,6 +239,15 @@ public final class MainActivity extends Activity {
         }
         root.addView(navigation, new LinearLayout.LayoutParams(-1, -2));
         setContentView(root);
+        // The log notes how long the first screen took: the first frame, then the first frame with the Print tab's cards laid out.
+        boolean[] noted = {false, false};
+        root.getViewTreeObserver().addOnPreDrawListener(new android.view.ViewTreeObserver.OnPreDrawListener() { public boolean onPreDraw() {
+            long took = android.os.SystemClock.elapsedRealtime() - createdAt;
+            if (!noted[0]) { noted[0] = true; Diagnostics.note(MainThreadWatch.AREA, "first frame after " + took + " ms"); }
+            if (!noted[1] && heroCard != null && heroCard.getHeight() > 0) { noted[1] = true; Diagnostics.note(MainThreadWatch.AREA, "Print tab cards drawn after " + took + " ms"); }
+            if (noted[0] && noted[1]) root.getViewTreeObserver().removeOnPreDrawListener(this);
+            return true;
+        } });
         for (int i = 0; i < TAB_COUNT; i++) buildHub(i);
         // Settings: a short front page of sections, the connection first.
         connectionSection = section(SETTINGS, "Printer connection", "");
@@ -422,6 +432,7 @@ public final class MainActivity extends Activity {
         tuningSection = section(PRINTER, "Temperatures, fans & speed", "Heater targets, fans and print speed");
         filamentSection = section(PRINTER, "Filament", "Load or unload filament and CANVAS trays");
         motionSection = section(PRINTER, "Move & calibrate", "Home, move axes, level the bed, run a vibration test and a full self-check");
+        reportsSection = section(PRINTER, "Everything the printer reports", "Every value in its latest status, live");
         hybridSection = section(PRINTER, "Local and cloud together", "Your Wi-Fi and the Elegoo cloud: camera, files, LAN Only switching and tests");
         currentSection = tuningSection.body;
         LinearLayout tuning = card(null); tuningCard = tuning;
@@ -462,7 +473,7 @@ public final class MainActivity extends Activity {
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration test?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "The printer runs a vibration test, a heater (PID) check and bed leveling, as the official app does. This takes several minutes. Keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
         emergencyButton(upkeep);
-        buildHybrid();
+        buildHybrid(); buildReports();
         currentSection = fronts[FILES];
         // Order on the Files tab: what is on the printer, then sending a new file. What was printed is on History.
         buildFileBrowser();
@@ -1959,6 +1970,34 @@ public final class MainActivity extends Activity {
             })).show();
     }
     private Button addLoad;
+    /** "Everything the printer reports": the latest status, attributes and trays as sorted "path = value" lines, live while open. */
+    private Section reportsSection; private TextView reportsText, reportsCount; private String reportsShown = ""; private long reportsAt;
+    private void buildReports() {
+        currentSection = reportsSection.body;
+        LinearLayout card = card(null);
+        label(card, "What the printer sends: status, its attributes and the CANVAS trays. Serial numbers, addresses, names and keys are hidden. It updates while this page is open.", 13, MUTED, false);
+        reportsCount = label(card, "", 12, MUTED, false);
+        rowButton(row(card), "Copy", () -> {
+            android.content.ClipboardManager clipboard = getSystemService(android.content.ClipboardManager.class);
+            if (clipboard != null) clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Printer values", reportsShown));
+            message("Copied the printer's values.");
+        }, false);
+        reportsText = label(card, "", 12, INK, false); reportsText.setTypeface(Typeface.MONOSPACE); reportsText.setTextIsSelectable(true);
+    }
+    private void renderReports() {
+        if (reportsSection == null || opened[PRINTER] != reportsSection || printer == null) return;
+        long now = android.os.SystemClock.elapsedRealtime(); if (now - reportsAt < 2_000) return; reportsAt = now;
+        List<String> lines = new ArrayList<>();
+        boolean ready = printer.ready();
+        if (snapshot.length() > 0) { lines.add("# status (" + (ready ? "local network" : "Elegoo cloud") + ")"); lines.addAll(StatusPresentation.flatten(snapshot)); }
+        if (ready && printer.attributes != null && printer.attributes.length() > 0) { lines.add(""); lines.add("# attributes (1001)"); lines.addAll(StatusPresentation.flatten(printer.attributes)); }
+        if (printer.canvas != null && printer.canvas.length() > 0) { lines.add(""); lines.add("# CANVAS trays"); lines.addAll(StatusPresentation.flatten(printer.canvas)); }
+        String text = lines.isEmpty() ? "No status yet. Connect, or watch through the Elegoo cloud, then open this again." : String.join("\n", lines);
+        if (text.equals(reportsShown)) return;
+        reportsShown = text; reportsText.setText(text);
+        long values = lines.stream().filter(l -> l.contains(" = ")).count();
+        reportsCount.setText(values + " values · updated " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new Date()));
+    }
     /** Picks the CANVAS tray to load from (with its reported filament when known), then makes the repaired copy. */
     private void addLoadDialog() {
         if (printer == null || printer.selectedFile == null) return;
@@ -2136,9 +2175,18 @@ public final class MainActivity extends Activity {
         cameraAskButton.setVisibility(cloud && signedIn ? View.VISIBLE : View.GONE);
         if (ready != cameraLocalFirst) { cameraLocalFirst = ready; cameraSection.body.removeView(cameraLocalCard); cameraSection.body.addView(cameraLocalCard, ready ? 1 : 2); }
     }
+    /** render() runs on every status change and every second; a slow one is noted (at most every 30 s) with its time. */
+    private long slowRenderNotedAt;
     private void render() {
         if (connect == null || isDestroyed()) return;
-        renderHybrid();
+        long renderStart = android.os.SystemClock.elapsedRealtime();
+        try { renderNow(); } finally {
+            long took = android.os.SystemClock.elapsedRealtime() - renderStart;
+            if (took > 300 && renderStart - slowRenderNotedAt > 30_000) { slowRenderNotedAt = renderStart; Diagnostics.note(MainThreadWatch.AREA, "updating the screen took " + took + " ms (tab " + page + ")"); }
+        }
+    }
+    private void renderNow() {
+        renderHybrid(); renderReports();
         if (probeButton != null) {
             boolean probing = printer != null && printer.probing;
             probeButton.setText(probing ? "Stop probe" : "Probe printer (read-only)…");

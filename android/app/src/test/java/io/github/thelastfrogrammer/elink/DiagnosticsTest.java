@@ -37,6 +37,8 @@ public class DiagnosticsTest {
     @Test public void cameraLogHoldsNoAddressesOrSerialsAndListsRecentEvents() throws Exception {
         assertEquals("failed to connect to <address> (port 8080)", Diagnostics.scrub("failed to connect to 192.168.1.50:8080 (port 8080)"));
         assertEquals("channel <id> left", Diagnostics.scrub("channel F01PLX9A3K2B7Q left"));
+        assertEquals("firmware 01.03.02.15", Diagnostics.scrub("firmware 01.03.02.15"));
+        assertEquals("http://<address>/", Diagnostics.scrub("http://10.0.0.7:8080/"));
         assertEquals("Connected. Waiting for video", Diagnostics.scrub("Connected. Waiting for video"));
         assertEquals("", Diagnostics.scrub(null));
         Diagnostics.init(Files.createTempDirectory("camera").toFile()); Diagnostics.clear();

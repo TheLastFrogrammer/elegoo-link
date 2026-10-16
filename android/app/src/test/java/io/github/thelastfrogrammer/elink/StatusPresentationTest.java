@@ -70,4 +70,23 @@ public class StatusPresentationTest {
         assertEquals(0.84f, SegmentBar.filled(41, 9, 24), 1e-3f);   // 41 % of 24 = 9.84 segments
         assertEquals(1f, SegmentBar.filled(150, 23, 24), 0f);
     }
+    @Test public void everyValueIsListedWithIdentifyingOnesHidden() throws Exception {
+        JSONObject status = new JSONObject("{\"extruder\":{\"temperature\":219.6,\"target\":220},\"sn\":\"F01PLX9A3K2B7Q\",\"network\":{\"ip\":\"192.168.1.50\",\"wifiName\":\"Home\"},"
+            + "\"print_status\":{\"filename\":\"Benchy.gcode\",\"url\":\"http://192.168.1.50:8080/\"},\"exception\":{\"exception_code\":{}},\"list\":[1,\"two\"],\"none\":[]}");
+        java.util.List<String> lines = StatusPresentation.flatten(status);
+        assertTrue(lines.contains("extruder.temperature = 219.6")); assertTrue(lines.contains("extruder.target = 220"));
+        assertTrue(lines.contains("sn = (hidden)")); assertTrue(lines.contains("network.ip = (hidden)")); assertTrue(lines.contains("network.wifiName = (hidden)"));
+        assertTrue(lines.contains("print_status.filename = Benchy.gcode"));
+        assertTrue(lines.contains("print_status.url = http://<address>/"));
+        assertTrue("error codes are not hidden", lines.contains("exception.exception_code = {}"));
+        assertTrue(lines.contains("list[0] = 1")); assertTrue(lines.contains("list[1] = two")); assertTrue(lines.contains("none = []"));
+        assertEquals("sorted by path", new java.util.ArrayList<>(new java.util.TreeSet<>(lines)), lines);
+        assertFalse(StatusPresentation.privateKey("error_code")); assertFalse(StatusPresentation.privateKey("speed_mode")); assertTrue(StatusPresentation.privateKey("machineSn"));
+    }
+    @Test public void stallsNameTheAppsOwnMethods() {
+        StackTraceElement[] stack = { new StackTraceElement("java.io.FileOutputStream", "write", "F.java", 1),
+            new StackTraceElement("io.github.thelastfrogrammer.elink.Diagnostics", "save", "Diagnostics.java", 99),
+            new StackTraceElement("android.os.Looper", "loop", "Looper.java", 5) };
+        assertEquals("FileOutputStream.write:1 < Diagnostics.save:99", MainThreadWatch.frames(stack));
+    }
 }

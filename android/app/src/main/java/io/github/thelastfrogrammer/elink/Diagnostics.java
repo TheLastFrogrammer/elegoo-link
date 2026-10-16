@@ -62,7 +62,9 @@ final class Diagnostics {
     /** Text from a network error or a page, safe for the log: addresses and serial-like ids replaced. */
     static String scrub(String text) {
         if (text == null) return "";
-        return text.replaceAll("\\b\\d{1,3}(\\.\\d{1,3}){3}(:\\d+)?\\b", "<address>")
+        // An address part is 0-255 without a leading zero, so versions such as 01.03.02.15 stay readable.
+        String part = "(?:25[0-5]|2[0-4]\\d|1\\d\\d|[1-9]?\\d)";
+        return text.replaceAll("(?<![\\d.])" + part + "(?:\\." + part + "){3}(?::\\d+)?(?![\\d.])", "<address>")
             .replaceAll("\\b(?=[A-Za-z0-9]*\\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{12,}\\b", "<id>");
     }
 

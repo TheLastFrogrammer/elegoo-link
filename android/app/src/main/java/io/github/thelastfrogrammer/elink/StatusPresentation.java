@@ -165,4 +165,34 @@ public final class StatusPresentation {
         boolean today = a.get(Calendar.YEAR) == b.get(Calendar.YEAR) && a.get(Calendar.DAY_OF_YEAR) == b.get(Calendar.DAY_OF_YEAR);
         return (today ? time : day).format(new Date(end));
     }
+
+    /** Key parts whose values identify the printer, the network or an account: shown as "(hidden)". */
+    private static final java.util.Set<String> PRIVATE_PARTS = new java.util.HashSet<>(java.util.Arrays.asList(
+        "sn", "serial", "mac", "ip", "token", "password", "pin", "ssid", "email", "uid", "userid", "access", "hostname", "wifi", "key", "secret"));
+    static boolean privateKey(String key) {
+        for (String part : key.replaceAll("([a-z])([A-Z])", "$1_$2").toLowerCase(Locale.ROOT).split("[^a-z0-9]+")) if (PRIVATE_PARTS.contains(part)) return true;
+        return false;
+    }
+    /**
+     * Every value in a printer reply as "path = value" lines, sorted by path ("extruder.temperature = 219.6",
+     * "canvas_info.canvas_list[0].tray_list[1].filament_type = PLA"). Identifying values are hidden, addresses and long ids
+     * scrubbed, long texts shortened.
+     */
+    static List<String> flatten(JSONObject object) { List<String> out = new ArrayList<>(); flatten("", object, out); Collections.sort(out); return out; }
+    private static void flatten(String path, Object value, List<String> out) {
+        if (value instanceof JSONObject) {
+            JSONObject o = (JSONObject) value;
+            if (o.length() == 0) out.add(path + " = {}");
+            for (Iterator<String> it = o.keys(); it.hasNext(); ) { String key = it.next(); String child = path.isEmpty() ? key : path + "." + key;
+                if (privateKey(key)) out.add(child + " = (hidden)"); else flatten(child, o.opt(key), out); }
+        } else if (value instanceof JSONArray) {
+            JSONArray a = (JSONArray) value;
+            if (a.length() == 0) out.add(path + " = []");
+            for (int i = 0; i < a.length(); i++) flatten(path + "[" + i + "]", a.opt(i), out);
+        } else {
+            String text = value == null || value == JSONObject.NULL ? "null" : Diagnostics.scrub(String.valueOf(value));
+            if (text.length() > 80) text = text.substring(0, 77) + "…";
+            out.add(path + " = " + text);
+        }
+    }
 }
