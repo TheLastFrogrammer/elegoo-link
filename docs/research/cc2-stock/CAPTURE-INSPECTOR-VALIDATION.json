@@ -1,0 +1,19 @@
+{
+  "date": "2026-10-17",
+  "scope": "Host-only offline owner-export parser; synthetic inputs",
+  "python": "3.12.14",
+  "sqlite": "3.53.1",
+  "command": "python -m unittest discover -s tools/research/tests -v",
+  "tests": 16,
+  "failures": 0,
+  "errors": 0,
+  "result": "passed",
+  "source_sha256": {
+    "tools/research/cc2_capture_inspect.py": "d1700f4c4a0f318daa30bc82f9fe9775c02a98b5d3a732a127d89b505a291fa2",
+    "tools/research/tests/test_cc2_capture_inspect.py": "88e9c707f80765baab64d6b679bfde2a8826d134afcc2c28639dd23759622de7"
+  },
+  "real_printer_export_tested": false,
+  "printer_network_access": false,
+  "firmware_changes": false,
+  "android_app_changes": false
+}

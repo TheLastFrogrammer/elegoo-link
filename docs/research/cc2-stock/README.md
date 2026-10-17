@@ -11,6 +11,8 @@ Read in this order:
 5. [Next steps](NEXT-STEPS.md): dependency order, acceptance criteria and current blockers.
 6. [Original implementation handoff](STOCK-FIRMWARE-HANDOFF.md): historical starting brief; the access follow-up and next-step tracker supersede its earlier console/cloud-cache unknowns.
 
+The first follow-on tool is ready: [offline capture inspector](../../../tools/research/README.md). It reads consistent owner-exported records/logs; it does not collect them from a printer.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout

@@ -19,11 +19,13 @@ Recorded 17 October 2026. All current technical results below are offline findin
 | R13 | A small independent file/UDS reader may retain WAN operation | Proposed architecture; stock paths and local interfaces exist | Access report companion contract | Owner bootstrap, resource limits, active-print reads, persistence and update behavior |
 | A01 | App already retains some exact input/download copies | Source verified at dde7699 | GcodeLibrary.java; PrinterService.keep | Do not recreate retention as a new feature |
 | A02 | Existing retained-file identity is too weak for exact live-job association | Source verified: name-keyed replacement, global name lookup and 12-file/1.5-GiB pruning | GcodeLibrary.put/find; CloudFileMemory name mapping | Digest/version/printer/job identity design and acceptance tests |
+| N01 | Offline owner-export inspector | Implemented; 16 host tests pass on synthetic SQLite/log fixtures | tools/research/cc2_capture_inspect.py; tools/research/tests/; CAPTURE-INSPECTOR-VALIDATION.json | A real consistent owner export; no device collection was performed |
 
 ## Process record
 
 - Initial pass: verified the package and stock network/download policy; recovered numbered methods and candidate owner-shell/file-reader paths.
 - Access follow-up: traced the bundled console client, native UDS methods, cloud URL cache, final download rename, media/database paths and camera-host watchdog. Reviewed separate camera-module mitigation coverage.
 - Repository checkpoint: added the reports, source pins, evidence, reproduction tools and dated app reviews to the app branch. No application behavior is changed by this checkpoint.
+- Next software experiment: implemented a standard-library capture inspector with default URL redaction, explicit private-reference export, known-table inventory and cloud/camera log events. Tests cover parser limits, immutable reads and refusal of unfinished database exports. Original app file retention was confirmed; strengthening artifact identity remains separate implementation work.
 
 New experiments should record input fingerprint, command/tool version, result, relevant redacted output and what the result does not establish. Keep raw diagnostic exports, signed URLs and camera identities outside the repository. A failed or absent file lookup is evidence too; never replace it with a filename-based claim of exact identity.
