@@ -141,6 +141,15 @@ public final class PlateActivity extends Activity {
                 NativeSlicer engine = SliceActivity.engine(getApplicationContext());
                 JSONObject layout = engine.arrangeJson(models, new JSONObject(selection).put("placements", new JSONArray()).toString());
                 JSONArray initial = start != null ? new JSONArray(start) : layout.getJSONArray("placements");
+                // The support settings this slice will use, for shading the faces that will need support.
+                try {
+                    JSONObject chosen = new JSONObject(selection), overrides = chosen.optJSONObject("overrides");
+                    JSONObject described = engine.describeJson(models, chosen.put("placements", new JSONArray()).toString(), java.util.Arrays.asList("enable_support", "support_threshold_angle"));
+                    String on = overrides != null && overrides.has("enable_support") ? overrides.optString("enable_support") : described.optJSONObject("enable_support") == null ? "" : described.optJSONObject("enable_support").optString("preset");
+                    String angle = overrides != null && overrides.has("support_threshold_angle") ? overrides.optString("support_threshold_angle") : described.optJSONObject("support_threshold_angle") == null ? "" : described.optJSONObject("support_threshold_angle").optString("preset");
+                    supportOn = "1".equals(on) || "true".equals(on);
+                    try { double a = Double.parseDouble(angle); supportAngle = a > 0 && a < 90 ? a : 30; } catch (NumberFormatException none) { supportAngle = 30; }
+                } catch (Exception unknown) { supportAngle = 30; }
                 byte[] built = buildScene(layout, initial);
                 main.post(() -> {
                     if (isDestroyed()) return;
@@ -148,7 +157,7 @@ public final class PlateActivity extends Activity {
                     int unfit = layout.optInt("unfit");
                     status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, open More…, choose Scale…, then tap Fit to the bed; or turn on shrinking in Arrange options on the Slice screen."
                         : layout.optDouble("shrunk", 1) < 0.999 ? "Every model was shrunk to " + Math.round(layout.optDouble("shrunk") * 100) + " % so all of them fit (Arrange options on the Slice screen)."
-                        : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; use two fingers to zoom and turn the view." : "Drag a model to move it. One finger turns the view, two fingers zoom and pan.");
+                        : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; use two fingers to zoom and turn the view." : "Drag a model to move it, or use its handles: arrows move, rings turn and tilt, the yellow square scales. One finger turns the view, two fingers zoom and pan.");
                     status.setTextColor(unfit > 0 ? ui.error : ui.muted);
                     load();
                 });
@@ -197,6 +206,14 @@ public final class PlateActivity extends Activity {
     private void load() {
         if (!pageReady || !sceneReady) return;
         js("plate.setTheme(" + theme() + ")"); js("plate.load()");
+        applyViewChoices();
+    }
+    /** Support angle and whether supports are on for this slice (from the engine and the Slice screen's changes). */
+    private double supportAngle = 30; private boolean supportOn;
+    private android.content.SharedPreferences viewChoices() { return getSharedPreferences("plate-view", MODE_PRIVATE); }
+    private void applyViewChoices() {
+        js("plate.setGimbal(" + viewChoices().getBoolean("handles", true) + ")");
+        js("plate.setOverhangs(" + (viewChoices().getBoolean("supports", true) ? supportAngle : 0) + ")");
     }
 
     private String theme() {
@@ -336,14 +353,21 @@ public final class PlateActivity extends Activity {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
-        String[] names = {"Select a model…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Reset view"};
+        boolean handles = viewChoices().getBoolean("handles", true), supports = viewChoices().getBoolean("supports", true);
+        String[] names = {"Select a model…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…",
+            handles ? "Hide the handles" : "Show the handles (move, turn, tilt, scale)",
+            supports ? "Hide where supports go" : "Show where supports go", "Reset view"};
         Runnable[] actions = {this::selectDialog, this::moveDialog, this::copiesDialog, this::filamentDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
                 status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
-            () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings, () -> js("plate.resetCamera()")};
+            () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings,
+            () -> { viewChoices().edit().putBoolean("handles", !handles).apply(); applyViewChoices(); },
+            () -> { viewChoices().edit().putBoolean("supports", !supports).apply(); applyViewChoices();
+                if (!supports) { status.setText("Purple hatching: faces that will need support (facing down, less than " + Math.round(supportAngle) + "° from flat)." + (supportOn ? "" : " Supports are off for this slice: turn them on on the Slice screen.")); status.setTextColor(ui.muted); } },
+            () -> js("plate.resetCamera()")};
         for (int i = 0; i < names.length; i++) {
             Runnable action = actions[i];
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
-            b.setEnabled(i == 0 ? placements.length() > 0 : i == names.length - 1 || on);
+            b.setEnabled(i == 0 ? placements.length() > 0 : i >= names.length - 3 || on);
         }
         if (!on) ui.label(body, "Pick a model first: tap it on the plate, or use Select a model…", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);

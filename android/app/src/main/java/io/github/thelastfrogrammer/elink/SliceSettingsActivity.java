@@ -34,7 +34,7 @@ public final class SliceSettingsActivity extends Activity {
 
     /** Filament settings for one slot (the per-filament values of the slot's preset). */
     static final String[][] FILAMENT_GROUPS = {
-        {"Temperatures", "nozzle_temperature_initial_layer", "nozzle_temperature", "textured_plate_temp_initial_layer", "textured_plate_temp"},
+        {"Temperatures", "nozzle_temperature_initial_layer", "nozzle_temperature", "textured_plate_temp_initial_layer", "textured_plate_temp", "hot_plate_temp_initial_layer", "hot_plate_temp"},
         {"Flow", "filament_flow_ratio", "enable_pressure_advance", "pressure_advance", "filament_max_volumetric_speed"},
         {"Retraction", "filament_retraction_length", "filament_retraction_speed", "filament_deretraction_speed", "filament_z_hop"},
         {"Cooling", "fan_min_speed", "fan_max_speed", "close_fan_the_first_x_layers", "full_fan_speed_layer", "slow_down_layer_time"},
@@ -51,7 +51,7 @@ public final class SliceSettingsActivity extends Activity {
         {"Infill", "sparse_infill_density", "sparse_infill_pattern", "internal_solid_infill_pattern", "infill_wall_overlap", "infill_combination"},
         {"Speed", "initial_layer_speed", "outer_wall_speed", "inner_wall_speed", "sparse_infill_speed", "internal_solid_infill_speed", "top_surface_speed", "gap_infill_speed", "travel_speed", "default_acceleration"},
         {"Support", "enable_support", "support_type", "support_style", "support_threshold_angle", "support_on_build_plate_only", "support_top_z_distance", "support_interface_top_layers", "support_base_pattern_spacing"},
-        {"Adhesion", "brim_type", "brim_width", "brim_object_gap", "skirt_loops", "skirt_distance"},
+        {"Build plate and adhesion", "curr_bed_type", "brim_type", "brim_width", "brim_object_gap", "skirt_loops", "skirt_distance"},
         {"Prime tower and multi-material", "enable_prime_tower", "prime_tower_width", "prime_volume", "flush_into_infill", "flush_into_support"},
         {"Special", "spiral_mode", "print_sequence", "fuzzy_skin", "fuzzy_skin_thickness", "reduce_crossing_wall", "enable_arc_fitting"},
     };
@@ -77,7 +77,8 @@ public final class SliceSettingsActivity extends Activity {
             {"stringing string strings stringy oozing ooze", "filament_retraction_length filament_retraction_speed filament_deretraction_speed filament_z_hop"},
             {"adhesion adhere stick sticking stuck warp warping curl peel", "brim_type brim_width brim_object_gap initial_layer_print_height initial_layer_speed nozzle_temperature_initial_layer textured_plate_temp_initial_layer textured_plate_temp"},
             {"first", "initial_layer_print_height initial_layer_speed nozzle_temperature_initial_layer textured_plate_temp_initial_layer"},
-            {"bed", "textured_plate_temp_initial_layer textured_plate_temp"},
+            {"bed", "curr_bed_type textured_plate_temp_initial_layer textured_plate_temp hot_plate_temp_initial_layer hot_plate_temp"},
+            {"plate smooth textured pei build sheet side", "curr_bed_type hot_plate_temp_initial_layer hot_plate_temp textured_plate_temp_initial_layer textured_plate_temp"},
             {"vase", "spiral_mode"},
             {"smooth smoother shiny", "ironing_type"},
         };
@@ -101,7 +102,9 @@ public final class SliceSettingsActivity extends Activity {
             {"internal_solid_infill_speed", "Internal solid infill speed"}, {"top_surface_speed", "Top surface speed"},
             {"gap_infill_speed", "Gap infill speed"}, {"travel_speed", "Travel speed"}, {"fuzzy_skin", "Fuzzy skin"},
             {"fan_min_speed", "Minimum fan speed"}, {"fan_max_speed", "Maximum fan speed"}, {"textured_plate_temp", "Bed temperature (textured plate)"},
-            {"textured_plate_temp_initial_layer", "First layer bed temperature (textured plate)"}, {"filament_retraction_length", "Retraction length"},
+            {"textured_plate_temp_initial_layer", "First layer bed temperature (textured plate)"},
+            {"hot_plate_temp", "Bed temperature (smooth plate)"}, {"hot_plate_temp_initial_layer", "First layer bed temperature (smooth plate)"},
+            {"curr_bed_type", "Build plate"}, {"filament_retraction_length", "Retraction length"},
             {"filament_retraction_speed", "Retraction speed"}, {"filament_deretraction_speed", "De-retraction speed"}, {"slow_down_layer_time", "Slow down for layers under"}};
         for (String[] name : names) LABELS.put(name[0], name[1]);
     }
@@ -234,6 +237,7 @@ public final class SliceSettingsActivity extends Activity {
                 JSONObject definition = definitions.optJSONObject(group[i]);
                 if (definition == null || !supported(definition.optString("type"))) continue;
                 if (LABELS.containsKey(group[i])) try { definition.put("label", LABELS.get(group[i])); } catch (JSONException ignored) { }
+                if (group[i].equals("curr_bed_type")) plateChoices(definition);
                 if (section == null) section = section(group[0]);
                 rows.put(group[i], row(section.body, group[0], group[i], definition));
                 section.keys.add(group[i]);
@@ -246,6 +250,18 @@ public final class SliceSettingsActivity extends Activity {
         updateSummary(); filter();
     }
 
+    /**
+     * The CC2's plate has two sides: A, textured PEI, and B, smooth. Only those two are offered. The smooth side uses the
+     * "High Temp Plate" (Smooth PEI) temperatures, which Elegoo's CC2 filament profiles fill in (their Cool Plate ones
+     * are generic, 0 for PETG).
+     */
+    static void plateChoices(JSONObject definition) {
+        try {
+            definition.put("enum", new JSONArray().put(new JSONArray().put("Textured PEI Plate").put("Textured PEI (side A)"))
+                .put(new JSONArray().put("High Temp Plate").put("Smooth PEI (side B)")));
+            definition.put("tooltip", "Which side of the build plate faces up. The bed temperatures follow it: textured or smooth plate values from the filament. When starting the print, choose the same side (A or B).");
+        } catch (JSONException impossible) { }
+    }
     /** A settings group: a header that opens or closes it, and the body holding its rows. */
     private Section section(String name) {
         LinearLayout card = ui.card(list, null);

@@ -26,6 +26,31 @@ public final class GcodeInspector {
         FIELDS.put("filament_colour", "Configured filament colors");
         FIELDS.put("printer_model", "Configured printer model");
         FIELDS.put("nozzle_diameter", "Configured nozzle diameter [mm]");
+        FIELDS.put("curr_bed_type", "Sliced for build plate");
+    }
+    /**
+     * The build plate side a file was sliced for, from its "curr_bed_type" (start G-code comment or settings block): "A" for the
+     * textured PEI side, "B" for a smooth one, "" when the file does not say. Reads only the first 512 KB and the last 512 KB.
+     */
+    static String plateSide(java.io.File gcode) {
+        if (gcode == null || !gcode.isFile()) return "";
+        try (java.io.RandomAccessFile in = new java.io.RandomAccessFile(gcode, "r")) {
+            long length = in.length();
+            for (long start : new long[] {0, Math.max(0, length - 512 * 1024)}) {
+                byte[] chunk = new byte[(int) Math.min(512 * 1024, length - start)];
+                in.seek(start); in.readFully(chunk);
+                String side = plateSide(new String(chunk, java.nio.charset.StandardCharsets.ISO_8859_1));
+                if (!side.isEmpty()) return side;
+            }
+        } catch (java.io.IOException unreadable) { }
+        return "";
+    }
+    static String plateSide(String text) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile(";\\s*curr_bed_type\\s*[=:]\\s*([^\\r\\n]+)").matcher(text);
+        if (!m.find()) return "";
+        String type = m.group(1).trim().toLowerCase(Locale.ROOT);
+        if (type.isEmpty() || type.startsWith("{")) return "";
+        return type.contains("textured pei") ? "A" : "B";
     }
     public static final class Report {
         public final long bytes, lines;

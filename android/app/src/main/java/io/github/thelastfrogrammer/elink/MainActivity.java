@@ -28,7 +28,7 @@ public final class MainActivity extends Activity {
     private ImageView filePreview;
     private TextView previewInfo, previewWarning;
     private LinearLayout timelapseList;
-    private String saveAfterDownload, pendingPrintSetup;
+    private String saveAfterDownload, pendingPrintSetup, previewAfterDownload; private long previewGiveUpAt;
     /** Intent extra: the tab to open (FeatureIndex.PRINT … SETTINGS), from another screen's hint. Settings opens on its connection section. */
     static final String EXTRA_PAGE = "openPage";
     private long printSetupUntil;
@@ -1455,6 +1455,17 @@ public final class MainActivity extends Activity {
         startActivityForResult(save, SAVE_GCODE);
     }
 
+    /** "Preview toolpath" of a printer file the phone has no copy of: once its download is in, open it in the toolpath viewer. */
+    private void continuePreviewAfterDownload() {
+        if (previewAfterDownload == null || printer == null) return;
+        if (printer.selectedFile != null && previewAfterDownload.equals(printer.selectedName) && !printer.importing) {
+            previewAfterDownload = null; previewGiveUpAt = 0;
+            startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, printer.selectedFile.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, printer.selectedName));
+        } else if (!printer.downloading() && !printer.importing) {
+            long now = System.currentTimeMillis();
+            if (previewGiveUpAt == 0) previewGiveUpAt = now + 3000; else if (now > previewGiveUpAt) { previewAfterDownload = null; previewGiveUpAt = 0; }
+        } else previewGiveUpAt = 0;
+    }
     /** "Download and save": once the download is in, open the save picker; give up when the download ends otherwise. */
     private void continueSaveAfterDownload() {
         if (saveAfterDownload == null || printer == null) return;
@@ -1500,6 +1511,14 @@ public final class MainActivity extends Activity {
         boolean usable = printer != null && printer.liveFresh() && Cc2Codec.idle(printer.liveStatus()) && printer.filesFresh();
         Button setup = rowButton(row(body), "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); }, true); setup.setEnabled(usable);
         if (!usable) label(body, printer == null || !printer.liveFresh() ? "Printing and deleting need a fresh printer status." : !Cc2Codec.idle(printer.liveStatus()) ? "The printer is busy. Printing and deleting are available when it is idle." : "The file list is out of date. Refresh files to print or delete.", 13, MUTED, false);
+        // The toolpath of this file: straight away from the phone's copy, else after downloading it (locally, or through the cloud when Elegoo keeps a copy).
+        java.io.File phoneCopy = new GcodeLibrary(new java.io.File(getFilesDir(), "gcode-library")).find(name);
+        Button preview = button(body, phoneCopy != null ? "Preview toolpath" : "Preview toolpath (downloads it first)", () -> {
+            dialog.dismiss();
+            if (phoneCopy != null) startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, phoneCopy.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, name));
+            else if (printer != null) { previewAfterDownload = name; printer.download(storage, name); }
+        });
+        preview.setEnabled(phoneCopy != null || printer != null && !printer.fileBusy());
         Button save = button(body, "Save to phone…", () -> { dialog.dismiss(); if (printer != null) { saveAfterDownload = name; printer.download(storage, name); } });
         Button download = button(body, "Keep a copy in this app", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
         save.setEnabled(printer != null && !printer.fileBusy()); download.setEnabled(printer != null && !printer.fileBusy());
@@ -1520,7 +1539,19 @@ public final class MainActivity extends Activity {
         force.setOnCheckedChangeListener((view, checked) -> { if (checked) leveling.setChecked(true); });
         leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
         subheading(body, "Build plate");
-        Spinner plate = spinner(body, new String[] {"Build plate A", "Build plate B"});
+        Spinner plate = spinner(body, new String[] {"A · textured PEI side", "B · smooth side"});
+        // The side the file was sliced for, when this phone has a copy: read off the main thread, then chosen here.
+        TextView plateNote = label(body, "", 13, MUTED, false); plateNote.setVisibility(View.GONE);
+        java.io.File copy = new GcodeLibrary(new java.io.File(getFilesDir(), "gcode-library")).find(name);
+        if (copy != null) checks.execute(() -> {
+            String side = GcodeInspector.plateSide(copy);
+            main.post(() -> {
+                if (side.isEmpty()) return;
+                plate.setSelection(side.equals("A") ? 0 : 1);
+                plateNote.setText("This file was sliced for side " + side + (side.equals("A") ? " (textured PEI)." : " (smooth)."));
+                plateNote.setVisibility(View.VISIBLE);
+            });
+        });
         subheading(body, "Filament");
         label(body, "Filaments used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 filament", "2 filaments", "3 filaments", "4 filaments", "5 filaments", "6 filaments", "7 filaments", "8 filaments"});
@@ -2229,7 +2260,7 @@ public final class MainActivity extends Activity {
         if (noStorage) diskInfo.setText("Storage and print history load once the printer is reachable.");
         historyButtons.setVisibility(query ? View.VISIBLE : View.GONE); loadDisk.setVisibility(historyButtons.getVisibility()); if (noHistory) historyInfo.setVisibility(View.GONE);
         renderTimelapses();
-        continueSaveAfterDownload();
+        continueSaveAfterDownload(); continuePreviewAfterDownload();
         continuePrintSetup();
         for (int i = 0; i < timelapseList.getChildCount(); i++) timelapseList.getChildAt(i).setEnabled(ready && !printer.pinProbe() && !printer.fileBusy());
         timelapseHint.setText(!ready ? "Timelapse downloads need the local connection (the printer's HTTP port 80)." : printer.pinProbe() ? "Timelapse downloads are disabled in read-only PIN probe mode." : "");

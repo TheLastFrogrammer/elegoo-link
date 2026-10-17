@@ -21,7 +21,8 @@
   if (!gl) { fail("This device's WebView has no WebGL 2, which the layout view needs."); return; }
 
   const theme = { background: [0.95, 0.96, 0.965], plate: [0.86, 0.89, 0.9, 1], grid: [0.7, 0.75, 0.77, 1],
-    excluded: [0.85, 0.3, 0.25, 0.35], tower: [0.4, 0.45, 0.5, 0.45], selected: [0.0, 0.47, 0.42], problem: [0.86, 0.2, 0.16] };
+    excluded: [0.85, 0.3, 0.25, 0.35], tower: [0.4, 0.45, 0.5, 0.45], selected: [0.0, 0.47, 0.42], problem: [0.86, 0.2, 0.16],
+    support: [0.55, 0.2, 0.85] };
   const camera = { yaw: -60, pitch: 38, distance: 420, target: [128, 128, 0], fov: 35 };
   const scene = { bed: null, excluded: null, tower: null, height: 256, objects: [], placements: [], colours: [] };
   let selected = -1, dirty = false;
@@ -56,15 +57,17 @@
     uniform mat4 uViewProj, uModel, uView;
     uniform vec3 uColors[16];
     uniform int uSlot;   // the filament slot the whole file prints with, or 0 for the file's own per-part filaments
-    out vec3 vNormal; out vec3 vColor;
+    out vec3 vNormal; out vec3 vColor; out vec3 vWorldNormal; out float vWorldZ;
     void main() {
       vNormal = mat3(uView) * mat3(uModel) * aNormal;
+      vWorldNormal = mat3(uModel) * aNormal; vWorldZ = (uModel * vec4(aPosition, 1.0)).z;
       vColor = uColors[uSlot > 0 ? min(uSlot - 1, 15) : int(clamp(aFilament - 1.0, 0.0, 15.0) + 0.5)];
       gl_Position = uViewProj * uModel * vec4(aPosition, 1.0);
     }`, `#version 300 es
     precision mediump float;
-    in vec3 vNormal; in vec3 vColor;
+    in vec3 vNormal; in vec3 vColor; in vec3 vWorldNormal; in float vWorldZ;
     uniform vec3 uTint; uniform float uTintAmount; uniform float uPeriod;
+    uniform float uOverhang; uniform vec3 uSupportColor;   // cos of the support angle (0: not shown), and the colour of faces that need support
     out vec4 fragment;
     void main() {
       vec3 n = normalize(vNormal);
@@ -75,6 +78,12 @@
       vec3 stripe = distance(vColor, uTint) < 0.4 ? (dot(vColor, vec3(0.3, 0.6, 0.1)) > 0.5 ? vec3(0.5, 0.05, 0.05) : vec3(1.0)) : uTint;
       float band = uTintAmount > 0.0 ? step(0.5, fract((gl_FragCoord.x + gl_FragCoord.y) / uPeriod)) : 0.0;
       vec3 base = mix(vColor, stripe, band * 0.9);
+      // Faces that will need support: facing down more steeply than the support angle allows, and not resting on the bed.
+      vec3 wn = normalize(vWorldNormal);
+      if (uOverhang > 0.0 && wn.z < -uOverhang && vWorldZ > 0.3) {
+        float hatch = step(0.5, fract((gl_FragCoord.x - gl_FragCoord.y) / uPeriod));
+        base = mix(base, uSupportColor, 0.6 + 0.3 * hatch); light = max(light, 0.8);
+      }
       fragment = vec4(min(base * light, vec3(1.0)), 1.0);
     }`);
 
@@ -415,6 +424,7 @@
       gl.uniform3fv(mesh.u.uTint, theme.problem);
       gl.uniform1f(mesh.u.uTintAmount, bad ? 1 : 0);
       gl.uniform1f(mesh.u.uPeriod, 18 * devicePixelRatio);
+      gl.uniform1f(mesh.u.uOverhang, gimbal.overhangs ? gimbal.overhangCos : 0); gl.uniform3fv(mesh.u.uSupportColor, theme.support);
       gl.bindVertexArray(object.vao); gl.drawArrays(gl.TRIANGLES, 0, object.count);
     });
     // Rings on the bed around the footprints: the selected model in the selection colour, one with a problem in the problem
@@ -426,6 +436,7 @@
       if (issues[i].length > 0) ring(r, 3.5, 1.8, theme.problem);
       if (i === selected) ring(r, 1.2, 1.8, theme.selected);
     });
+    drawGimbal(viewProj);
     gl.bindVertexArray(null);
     updateTags(issues, viewProj);
   }
@@ -443,6 +454,165 @@
     gl.disable(gl.DEPTH_TEST); gl.drawArrays(gl.TRIANGLES, 0, 24); gl.enable(gl.DEPTH_TEST);
   }
   function redraw() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
+
+  // ---------------------------------------------------------------- gimbal
+  // Handles on the selected model: arrows on the bed move it along X (red) or Y (green), the ring on the bed turns it about
+  // Z (blue), the two upright rings tilt it about X and Y, and the yellow square scales it. Tilting is kept as the engine
+  // keeps any turn: a face that points down ("down") and a turn about Z.
+  const gimbal = { on: true, overhangs: false, overhangCos: Math.cos(30 * Math.PI / 180) };
+  const AXIS = { x: [0.9, 0.27, 0.25], y: [0.25, 0.7, 0.3], z: [0.25, 0.5, 0.95], tx: [0.9, 0.27, 0.25], ty: [0.25, 0.7, 0.3], s: [0.95, 0.72, 0.1] };
+  let gimbalDrag = null;
+  function mul3(a, b) {
+    const out = new Array(9);
+    for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) out[r * 3 + c] = a[r * 3] * b[c] + a[r * 3 + 1] * b[3 + c] + a[r * 3 + 2] * b[6 + c];
+    return out;
+  }
+  /** The copy's turn without scale or stretch, model to world, row-major. */
+  function orientation(p) {
+    const c = Math.cos(p.rotation * Math.PI / 180), s = Math.sin(p.rotation * Math.PI / 180);
+    return mul3([c, -s, 0, s, c, 0, 0, 0, 1], layDown(p.down));
+  }
+  function axisTurn(axis, degrees) {
+    const t = degrees * Math.PI / 180, c = Math.cos(t), s = Math.sin(t);
+    return axis === "x" ? [1, 0, 0, 0, c, -s, 0, s, c] : [c, 0, s, 0, 1, 0, -s, 0, c];
+  }
+  /** Stores a turn as the engine takes it: the model direction that ends up facing down, then a turn about Z. */
+  function setOrientation(p, M) {
+    const down = [-M[6], -M[7], -M[8]], L = layDown(down);
+    const Rz = mul3(M, [L[0], L[3], L[6], L[1], L[4], L[7], L[2], L[5], L[8]]);
+    let angle = Math.atan2(Rz[3], Rz[0]) * 180 / Math.PI;
+    angle = Math.round((((angle % 360) + 540) % 360 - 180) * 10) / 10;
+    if (Math.abs(down[0]) < 1e-6 && Math.abs(down[1]) < 1e-6 && down[2] < 0) delete p.down; else p.down = down.map((v) => Math.round(v * 1e5) / 1e5);
+    p.rotation = angle;
+  }
+  function ringPart(kind, C, u, v, r, band) {
+    const n = 72, tris = [], pick = [];
+    const at = (a, rr) => [0, 1, 2].map((k) => C[k] + (Math.cos(a) * u[k] + Math.sin(a) * v[k]) * rr);
+    for (let i = 0; i < n; i++) {
+      const a0 = i / n * 2 * Math.PI, a1 = (i + 1) / n * 2 * Math.PI;
+      const i0 = at(a0, r - band / 2), o0 = at(a0, r + band / 2), i1 = at(a1, r - band / 2), o1 = at(a1, r + band / 2);
+      tris.push(...i0, ...o0, ...o1, ...i0, ...o1, ...i1); pick.push(at(a0, r));
+    }
+    pick.push(pick[0]);
+    return { kind, tris, pick };
+  }
+  function arrowPart(kind, C, dir, from, to, width) {
+    const side = [-dir[1], dir[0]], head = Math.max(width * 3, 5);
+    const at = (t, s) => [C[0] + dir[0] * t + side[0] * s, C[1] + dir[1] * t + side[1] * s, C[2]];
+    const tris = [];
+    for (const sign of [1, -1]) {   // both ways along the axis
+      const f = from * sign, b = (to - head) * sign, e = to * sign;
+      tris.push(...at(f, -width / 2), ...at(b, -width / 2), ...at(b, width / 2), ...at(f, -width / 2), ...at(b, width / 2), ...at(f, width / 2),
+        ...at(b, -head / 2), ...at(e, 0), ...at(b, head / 2));
+    }
+    return { kind, tris, pick: [at(-to, 0), at(-from, 0), null, at(from, 0), at(to, 0)] };
+  }
+  function squarePart(kind, C, size) {
+    const h = size / 2, q = [C[0] - h, C[1] - h, C[0] + h, C[1] + h];
+    return { kind, tris: quad(q, C[2]), pick: [C, C] };
+  }
+  function gimbalParts(p) {
+    const r = rect(p), w = r[2] - r[0], d = r[3] - r[1], h = r[4];
+    const R = Math.max(12, Math.max(w, d) / 2 + 6), band = Math.max(1.2, camera.distance * 0.006);
+    const T = Math.max(R, h / 2 + 8), C = [p.x, p.y, h / 2];
+    return [
+      ringPart("z", [p.x, p.y, 0.15], [1, 0, 0], [0, 1, 0], R, band),
+      ringPart("tx", C, [0, 1, 0], [0, 0, 1], T, band),
+      ringPart("ty", C, [1, 0, 0], [0, 0, 1], T, band),
+      arrowPart("x", [p.x, p.y, 0.25], [1, 0], R + 3, R + 3 + Math.max(16, R * 0.5), band * 1.3),
+      arrowPart("y", [p.x, p.y, 0.25], [0, 1], R + 3, R + 3 + Math.max(16, R * 0.5), band * 1.3),
+      squarePart("s", [p.x + R * 0.7071 + 5, p.y - R * 0.7071 - 5, 0.3], Math.max(5, band * 4)),
+    ];
+  }
+  let gimbalVao, gimbalBuffer, gimbalBytes = 0;
+  function drawGimbal(viewProj) {
+    const p = current(); if (!p || !gimbal.on || layMode || !objectOf(p)) return;
+    if (!gimbalVao) {
+      gimbalVao = gl.createVertexArray(); gl.bindVertexArray(gimbalVao);
+      gimbalBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, gimbalBuffer);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+    }
+    gl.useProgram(flat.p); gl.uniformMatrix4fv(flat.u.uViewProj, false, viewProj);
+    gl.disable(gl.DEPTH_TEST);
+    for (const part of gimbalParts(p)) {
+      if (gimbalDrag && gimbalDrag.kind !== part.kind) continue;   // while dragging, only the handle in use
+      const data = new Float32Array(part.tris);
+      gl.bindVertexArray(gimbalVao); gl.bindBuffer(gl.ARRAY_BUFFER, gimbalBuffer);
+      if (data.byteLength > gimbalBytes) { gl.bufferData(gl.ARRAY_BUFFER, data, gl.DYNAMIC_DRAW); gimbalBytes = data.byteLength; }
+      else gl.bufferSubData(gl.ARRAY_BUFFER, 0, data);
+      const c = AXIS[part.kind]; gl.uniform4f(flat.u.uColor, c[0], c[1], c[2], gimbalDrag ? 1 : 0.85);
+      gl.drawArrays(gl.TRIANGLES, 0, data.length / 3);
+    }
+    gl.enable(gl.DEPTH_TEST);
+  }
+  function screenPoint(q, viewProj) {
+    const c = transform(viewProj, q, 1); if (c[3] <= 0.001) return null;
+    return [(c[0] / c[3] * 0.5 + 0.5) * canvas.clientWidth, (0.5 - c[1] / c[3] * 0.5) * canvas.clientHeight];
+  }
+  function segmentDistance(x, y, a, b) {
+    const dx = b[0] - a[0], dy = b[1] - a[1], l = dx * dx + dy * dy;
+    const t = l < 1e-9 ? 0 : Math.max(0, Math.min(1, ((x - a[0]) * dx + (y - a[1]) * dy) / l));
+    return Math.hypot(x - a[0] - t * dx, y - a[1] - t * dy);
+  }
+  /** The handle under a screen point (within 24 px), or null. */
+  function gimbalAt(clientX, clientY) {
+    const p = current(); if (!p || !gimbal.on || layMode || !objectOf(p)) return null;
+    const box = canvas.getBoundingClientRect(), x = clientX - box.left, y = clientY - box.top, { viewProj } = matrices();
+    let best = null, bestDistance = 24;
+    for (const part of gimbalParts(p)) {
+      const points = part.pick.map((q) => q && screenPoint(q, viewProj));
+      for (let i = 0; i < points.length; i++) {
+        const a = points[i], b = i + 1 < points.length ? points[i + 1] : points[i];
+        if (!a || !b) continue;
+        const distance = segmentDistance(x, y, a, b) - (part.kind === "s" ? 8 : 0);   // the square is small: a little more room
+        if (distance < bestDistance) { bestDistance = distance; best = part.kind; }
+      }
+    }
+    return best;
+  }
+  function planeHit(clientX, clientY, C, axis) {
+    const r = ray(clientX, clientY);
+    if (Math.abs(r.direction[axis]) < 1e-6) return null;
+    const t = (C[axis] - r.origin[axis]) / r.direction[axis];
+    return t > 0 ? r.origin.map((o, i) => o + r.direction[i] * t) : null;
+  }
+  /** What the pointer means for the handle: a bed point, an angle (degrees) or a distance; null when it cannot say. */
+  function gimbalReading(kind, p, h, clientX, clientY) {
+    if (kind === "x" || kind === "y") return onBed(clientX, clientY);
+    if (kind === "z") { const q = onBed(clientX, clientY); return q ? Math.atan2(q[1] - p.y, q[0] - p.x) * 180 / Math.PI : null; }
+    if (kind === "s") { const q = onBed(clientX, clientY); return q ? Math.hypot(q[0] - p.x, q[1] - p.y) : null; }
+    const C = [p.x, p.y, h / 2];
+    const q = planeHit(clientX, clientY, C, kind === "tx" ? 0 : 1);
+    if (!q) return clientY * -0.5;   // seen edge-on: half a degree per pixel up or down
+    return Math.atan2(q[2] - C[2], kind === "tx" ? q[1] - C[1] : q[0] - C[0]) * 180 / Math.PI;
+  }
+  function wrap(degrees) { return ((degrees % 360) + 540) % 360 - 180; }
+  function gimbalStart(kind, clientX, clientY) {
+    const p = current(); const h = rect(p)[4];
+    const start = Object.assign({}, p); if (p.down) start.down = p.down.slice(); if (p.stretch) start.stretch = p.stretch.slice();
+    const reading = gimbalReading(kind, p, h, clientX, clientY);
+    if (reading === null) return false;
+    gimbalDrag = { kind, start, reading, h };
+    return true;
+  }
+  function gimbalMove(clientX, clientY) {
+    const p = current(); if (!p || !gimbalDrag) return;
+    const { kind, start, reading, h } = gimbalDrag, now = gimbalReading(kind, start, h, clientX, clientY);
+    if (now === null) return;
+    let text = "";
+    if (kind === "x") { p.x = Math.round((start.x + now[0] - reading[0]) * 10) / 10; p.y = start.y; text = "X " + p.x.toFixed(1) + " mm"; }
+    else if (kind === "y") { p.y = Math.round((start.y + now[1] - reading[1]) * 10) / 10; p.x = start.x; text = "Y " + p.y.toFixed(1) + " mm"; }
+    else if (kind === "z") { const turn = Math.round(wrap(now - reading) / 5) * 5; p.rotation = wrap(start.rotation + turn); text = "Turn " + turn + "°"; }
+    else if (kind === "s") {
+      if (reading < 1) return;
+      p.scale = Math.max(0.02, Math.min(50, Math.round(start.scale * now / reading * 100) / 100)); text = "Scale " + Math.round(p.scale * 100) + " %";
+    } else {
+      let tilt = Math.round(wrap(now - reading) / 5) * 5; if (kind === "ty") tilt = -tilt;
+      setOrientation(p, mul3(axisTurn(kind === "tx" ? "x" : "y", tilt), orientation(start)));
+      text = "Tilt about " + (kind === "tx" ? "X" : "Y") + " " + tilt + "°";
+    }
+    showMode(text); redraw();
+  }
 
   // ---------------------------------------------------------------- picking and dragging
   function ray(clientX, clientY) {
@@ -513,19 +683,26 @@
     moved = false; hideHint();
     if (pointers.size === 1) {
       tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
+      const handle = gimbalAt(e.clientX, e.clientY);
+      if (handle && gimbalStart(handle, e.clientX, e.clientY)) { drag = null; redraw(); return; }
       const hit = pick(e.clientX, e.clientY), point = onBed(e.clientX, e.clientY);
       if (hit >= 0 && point) {
         if (hit !== selected) select(hit);
         drag = { index: hit, dx: scene.placements[hit].x - point[0], dy: scene.placements[hit].y - point[1] };
       } else drag = null;
-    } else { drag = null; tapStart = null; }
+    } else { drag = null; tapStart = null; if (gimbalDrag) cancelGimbal(); }
   });
+  function cancelGimbal() {
+    const p = current(); if (p && gimbalDrag) { Object.keys(p).forEach((k) => delete p[k]); Object.assign(p, gimbalDrag.start); }
+    gimbalDrag = null; showMode(""); redraw();
+  }
   canvas.addEventListener("pointermove", (e) => {
     if (!pointers.has(e.pointerId)) return;
     const before = [...pointers.values()].map((p) => ({ ...p }));
     pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     const after = [...pointers.values()];
     if (tapStart && Math.hypot(e.clientX - tapStart.x, e.clientY - tapStart.y) > 8) moved = true;
+    if (gimbalDrag && after.length === 1) { if (moved) gimbalMove(e.clientX, e.clientY); return; }
     if (after.length === 1 && drag) {
       if (!moved) return;
       const point = onBed(e.clientX, e.clientY); if (!point) return;
@@ -553,6 +730,13 @@
   }
   function release(e) {
     pointers.delete(e.pointerId);
+    if (gimbalDrag) {
+      const was = gimbalDrag; gimbalDrag = null; showMode("");
+      if (moved) changed(); else redraw();
+      tapStart = null; drag = null;
+      if (was && android && android.onGimbal) android.onGimbal(was.kind);
+      return;
+    }
     if (drag && moved) changed();
     else if (tapStart && !moved && Date.now() - tapStart.t < 400) {
       const hit = pick(e.clientX, e.clientY);
@@ -630,6 +814,19 @@
     setLayMode(on) { layMode = !!on; showMode(layMode ? "Tap the face of the model that should lie flat on the bed" : ""); },
     upright() { const p = current(); if (!p) return; delete p.down; p.rotation = 0; changed(); },
     resetCamera() { resetView(); redraw(); },
+    /** Where a handle of the selected model can be grabbed on screen (CSS px in the canvas), or null: for checks and accessibility tools. */
+    handlePoint(kind) {
+      const p = current(); if (!p || !gimbal.on || layMode) return null;
+      const part = gimbalParts(p).find((q) => q.kind === kind); if (!part) return null;
+      const { viewProj } = matrices();
+      const points = part.pick.filter((q) => q).map((q) => screenPoint(q, viewProj)).filter((q) => q);
+      if (kind === "x" || kind === "y") { const a = points[2], b = points[3]; return a && b ? [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] : null; }
+      return points.reduce((best, q) => !best || q[1] > best[1] ? q : best, null);   // rings: their nearest (lowest on screen) point
+    },
+    /** Handles on the selected model (move, turn, tilt, scale). */
+    setGimbal(on) { gimbal.on = !!on; redraw(); },
+    /** Shades the faces that will need support: facing down at less than `angle` degrees from flat (0: off). */
+    setOverhangs(angle) { gimbal.overhangs = angle > 0; if (angle > 0) gimbal.overhangCos = Math.cos(Math.min(89, angle) * Math.PI / 180); redraw(); },
     redraw, camera, scene,
   };
   window.plate = api;

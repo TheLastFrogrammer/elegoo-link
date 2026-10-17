@@ -3,10 +3,26 @@ package io.github.thelastfrogrammer.elink;
 import org.json.*;
 import java.net.URI;
 import java.util.Locale;
+import java.util.List;
+import java.util.ArrayList;
 
 /** Presentation and validation of CC2 file/query data. No wire-field names are guessed. */
 public final class FeatureData {
     private FeatureData() { }
+    /** The file's color_map as "T1 PLA orange (#F88D36)"; a list given as text is read too; "" when there is nothing readable. */
+    static String slicedFilaments(Object map) {
+        org.json.JSONArray list = map instanceof org.json.JSONArray ? (org.json.JSONArray) map : null;
+        if (list == null && map instanceof String) try { list = new org.json.JSONArray((String) map); } catch (Exception notAList) { return StatusPresentation.clean((String) map); }
+        if (list == null) return "";
+        List<String> parts = new ArrayList<>();
+        for (int i = 0; i < list.length() && i < 16; i++) {
+            JSONObject one = list.optJSONObject(i); if (one == null) continue;
+            String colour = TrayPlan.colour(one.optString("color")), type = StatusPresentation.clean(one.optString("type")).trim();
+            String name = colour == null ? "" : WorkshopUi.colourName(colour);
+            parts.add(StatusPresentation.joinParts("T" + (one.optInt("t", i) + 1), type, name.isEmpty() ? "" : name, colour == null ? "" : "(" + colour + ")").replace(" · ", " "));
+        }
+        return String.join(", ", parts);
+    }
     public static String size(long value) {
         if (value < 0) return "Not reported";
         if (value < 1024) return value + " B";
@@ -19,7 +35,7 @@ public final class FeatureData {
         if (file.has("layer")) text.append(" · ").append(file.optInt("layer")).append(" layers");
         if (file.has("print_time")) text.append("\nEstimated print time: ").append(duration(file.optLong("print_time", -1)));
         if (file.has("total_filament_used")) text.append("\nFilament used (reported): ").append(StatusPresentation.clean(file.opt("total_filament_used").toString()));
-        if (file.has("color_map")) text.append("\nSliced filament information: ").append(StatusPresentation.clean(file.opt("color_map").toString()));
+        if (file.has("color_map")) { String sliced = slicedFilaments(file.opt("color_map")); if (!sliced.isEmpty()) text.append("\nSliced for: ").append(sliced); }
         return text.toString();
     }
     /**
