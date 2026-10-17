@@ -42,6 +42,10 @@ struct Selection {
         int slot = 0;
     };
     std::vector<Placement> placements;
+    // Support blockers and enforcers, as the desktop adds them to an object: boxes on the bed (center and size in mm, z up
+    // from the bed, along the bed's axes). Each becomes a part of every placed copy it touches; needs `placements`.
+    struct SupportBox { bool enforcer = false; double center[3] = {0, 0, 0}, size[3] = {1, 1, 1}; };
+    std::vector<SupportBox> support_boxes;
     // How automatic arranging places copies: let it turn them to fit more; shrink every copy by the same factor (down to
     // `min_scale`) until all fit; and the gap between copies in mm (below 0: the printer's default).
     struct Arrange { bool rotate = false, shrink = false; double min_scale = 0.5, spacing = -1; } arrange;

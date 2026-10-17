@@ -572,6 +572,63 @@ void apply_placements(ModelObject* object, const std::vector<const Selection::Pl
     }
 }
 
+// Adds the support boxes to the copies they touch, as support blocker or enforcer parts. A part is shared by all copies
+// of an object, so an object with several copies that a box touches is split first: each copy its own object.
+void add_support_boxes(Model& model, const std::vector<Selection::SupportBox>& boxes)
+{
+    if (boxes.empty())
+        return;
+    if (boxes.size() > 50)
+        throw std::runtime_error("At most 50 support blockers and enforcers");
+    std::vector<BoundingBoxf3> areas;
+    for (const Selection::SupportBox& box : boxes) {
+        for (int k = 0; k < 3; ++k)
+            if (!std::isfinite(box.center[k]) || !(box.size[k] >= 0.1 && box.size[k] <= 2000))
+                throw std::runtime_error("A support blocker or enforcer has a bad position or size");
+        const Vec3d center(box.center[0], box.center[1], box.center[2]), half(box.size[0] / 2, box.size[1] / 2, box.size[2] / 2);
+        areas.emplace_back(center - half, center + half);
+    }
+    auto touches = [&](const ModelObject* object, size_t instance, const BoundingBoxf3& area) {
+        const BoundingBoxf3 copy = object->instance_bounding_box(instance, false);
+        return copy.defined && copy.min.x() <= area.max.x() && area.min.x() <= copy.max.x() && copy.min.y() <= area.max.y()
+            && area.min.y() <= copy.max.y() && copy.min.z() <= area.max.z() && area.min.z() <= copy.max.z();
+    };
+    const size_t original = model.objects.size();
+    for (size_t o = 0; o < original; ++o) {
+        ModelObject* object = model.objects[o];
+        bool touched = false;
+        for (size_t i = 0; i < object->instances.size() && !touched; ++i)
+            for (const BoundingBoxf3& area : areas) touched = touched || touches(object, i, area);
+        if (!touched || object->instances.size() < 2)
+            continue;
+        while (object->instances.size() > 1) {
+            ModelObject* single = model.add_object(*object);
+            while (single->instances.size() > 1) single->delete_instance(0);
+            object->delete_instance(object->instances.size() - 1);
+        }
+    }
+    int added = 0;
+    for (ModelObject* object : model.objects) {
+        if (object->instances.size() != 1)
+            continue;
+        const Transform3d to_object = object->instances.front()->get_matrix().inverse();
+        for (size_t b = 0; b < boxes.size(); ++b) {
+            if (!touches(object, 0, areas[b]))
+                continue;
+            ModelVolume* volume = object->add_volume(TriangleMesh(its_make_cube(1, 1, 1)),
+                boxes[b].enforcer ? ModelVolumeType::SUPPORT_ENFORCER : ModelVolumeType::SUPPORT_BLOCKER, false);
+            volume->name = boxes[b].enforcer ? "Support enforcer" : "Support blocker";
+            Transform3d box = Transform3d::Identity();
+            box.translate(areas[b].min);
+            box.scale(Vec3d(boxes[b].size[0], boxes[b].size[1], boxes[b].size[2]));
+            volume->set_transformation(Geometry::Transformation(to_object * box));
+            ++added;
+        }
+    }
+    if (added == 0)
+        throw std::runtime_error("No support blocker or enforcer touches a model; move them onto the models");
+}
+
 } // namespace
 
 // Cuts object `index` of `model` at height z (from the bed), keeping the lower or the upper part (Plater::cut_horizontal).
@@ -1208,6 +1265,18 @@ Selection selection_from_json(const std::string& text)
                 for (int k = 0; k < 3; ++k) placement.down[k] = item["down"][k].get<double>();
             selection.placements.push_back(placement);
         }
+    if (json.contains("support_boxes"))
+        for (const auto& item : json["support_boxes"]) {
+            Selection::SupportBox box;
+            const std::string kind = item.value("kind", "");
+            if (kind != "blocker" && kind != "enforcer")
+                throw std::runtime_error("A support box is a blocker or an enforcer, not " + kind);
+            box.enforcer = kind == "enforcer";
+            if (!item.contains("center") || !item["center"].is_array() || item["center"].size() != 3 || !item.contains("size") || !item["size"].is_array() || item["size"].size() != 3)
+                throw std::runtime_error("A support box needs a center and a size");
+            for (int k = 0; k < 3; ++k) { box.center[k] = item["center"][k].get<double>(); box.size[k] = item["size"][k].get<double>(); }
+            selection.support_boxes.push_back(box);
+        }
     return selection;
 }
 
@@ -1382,6 +1451,9 @@ Result Engine::slice(const std::vector<std::string>& models, const Selection& se
     report(0, "Loading model");
     Loaded loaded = load(models, selection, true);
     Model& model = loaded.model;
+    if (!selection.support_boxes.empty() && selection.placements.empty())
+        throw std::runtime_error("Support blockers and enforcers need a layout from the plate view");
+    add_support_boxes(model, selection.support_boxes);
     if (loaded.shrunk < 0.999)
         loaded.warnings.push_back("Every model was shrunk to " + std::to_string(int(std::lround(loaded.shrunk * 100))) + " % of its size so all of them fit the bed");
     DynamicPrintConfig& config = loaded.config;
