@@ -426,7 +426,8 @@ public final class CloudApi {
                 String host = hostOf(text);
                 String path = lower.contains("?") ? lower.substring(0, lower.indexOf('?')) : lower;
                 if (host != null && (host.equals("elegoo.com") || host.endsWith(".elegoo.com") || host.equals("elegoo.com.cn") || host.endsWith(".elegoo.com.cn")) && (path.endsWith(".gcode") || path.endsWith(".gcode.gz"))) return new Reference("", text);
-            } else if (OBJECT_NAME.matcher(text).matches() && (lower.endsWith(".gcode") || lower.endsWith(".gcode.gz"))) return new Reference(text, "");
+            } else if (OBJECT_NAME.matcher(text).matches() && (lower.endsWith(".gcode") || lower.endsWith(".gcode.gz"))
+                && !java.util.Arrays.asList(text.split("/")).contains("..") && !java.util.Arrays.asList(text.split("/")).contains(".")) return new Reference(text, "");
         }
         return null;
     }

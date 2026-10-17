@@ -190,6 +190,6 @@ final class AutomationValues {
         String s = values == null ? null : values.get(key);
         if (s == null || s.isEmpty()) return Double.NaN;
         if (s.equals("on") || s.equals("yes")) return 1; if (s.equals("off") || s.equals("no")) return 0;
-        try { return Double.parseDouble(s.split(" ")[0]); } catch (NumberFormatException words) { return Double.NaN; }
+        try { double v = Double.parseDouble(s.split(" ")[0]); return Double.isInfinite(v) ? Double.NaN : v; } catch (NumberFormatException words) { return Double.NaN; }
     }
 }

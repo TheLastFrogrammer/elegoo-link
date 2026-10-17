@@ -243,7 +243,8 @@ public final class AutomationActivity extends Activity {
             for (Automation.Action a : actions) if (a.kind.equals(Automation.WEBHOOK) && !Automation.webhookUrlOk(a.url)) problem = "A webhook needs an address starting with https:// or http://.";
             if (!problem.isEmpty()) { toast(problem); return; }
             boolean wasChanging = rule.changesPrinter();
-            rule.name = name.getText().toString().trim().isEmpty() ? (eventId.equals(Automation.LAYER) ? "Layer " + layerNumber : valueRule || changeRule ? "{" + watched[0] + "} " + (changeRule ? "changes" : (reaches.isChecked() ? "reaches " : "below ") + limit.getText().toString().trim()) : Automation.EVENTS.get(eventId)) : name.getText().toString().trim();
+            String typed = Automation.cap(name.getText().toString().trim(), 80);
+            rule.name = Automation.cap(!typed.isEmpty() ? typed : (eventId.equals(Automation.LAYER) ? "Layer " + layerNumber : valueRule || changeRule ? "{" + watched[0] + "} " + (changeRule ? "changes" : (reaches.isChecked() ? "reaches " : "below ") + limit.getText().toString().trim()) : Automation.EVENTS.get(eventId)), 80);
             rule.event = eventId; rule.layer = eventId.equals(Automation.LAYER) ? layerNumber : 0; rule.fromMinute = fromMinute; rule.toMinute = toMinute;
             rule.lastPrintOnly = last.isChecked(); rule.delayMinutes = wait; rule.actions.clear(); rule.actions.addAll(actions);
             rule.field = valueRule || changeRule ? watched[0] : ""; rule.above = reaches.isChecked(); rule.limit = valueRule ? limitValue : 0;
@@ -299,13 +300,14 @@ public final class AutomationActivity extends Activity {
         CheckBox fPicture = picture, fChart = chart, fRaw = raw; EditText fMessage = messageHeader;
         EditText fTitle = title, fBody = body, fUrl = url, fHeader = header, fSecret = secret; RadioButton fOn = lightOn;
         new AlertDialog.Builder(this).setTitle(Automation.ACTIONS.get(a.kind)).setView(scroll).setPositiveButton("Done", (d, w) -> {
-            if (fTitle != null) a.title = fTitle.getText().toString();
-            if (fBody != null && a.kind.equals(Automation.NOTIFY)) a.text = fBody.getText().toString();
+            if (fTitle != null) a.title = Automation.cap(fTitle.getText().toString(), 200);
+            if (fBody != null && a.kind.equals(Automation.NOTIFY)) a.text = Automation.cap(fBody.getText().toString(), 2000);
             if (fOn != null) a.on = fOn.isChecked();
             if (fPicture != null) a.picture = fPicture.isChecked(); if (fChart != null) a.chart = fChart.isChecked();
             if (fRaw != null) { a.rawImage = fRaw.isChecked(); String h = fMessage.getText().toString().trim(); a.messageHeader = h.matches("[A-Za-z0-9-]{1,40}") ? h : "Message"; }
             if (fUrl != null) {
-                a.url = fUrl.getText().toString().trim(); a.body = fBody.getText().toString(); a.header = fHeader.getText().toString().trim();
+                a.url = Automation.cap(fUrl.getText().toString().trim(), 2000); a.body = Automation.cap(fBody.getText().toString(), 8000); a.header = fHeader.getText().toString().trim();
+                if (!a.header.isEmpty() && !a.header.matches("[A-Za-z0-9-]{1,60}")) { toast("A header name has only letters, digits and dashes (for example Authorization). It was left out."); a.header = ""; }
                 String value = fSecret.getText().toString();
                 try { CredentialStore store = new CredentialStore(this);
                     if (a.header.isEmpty()) store.forget("automation:" + a.secretId); else if (!value.isEmpty()) store.save("automation:" + a.secretId, value, true); }
@@ -365,7 +367,9 @@ public final class AutomationActivity extends Activity {
         boolean on = false, off = false; for (Automation.Action a : rule.actions) if (a.kind.equals(Automation.LIGHT)) { if (a.on) on = true; else off = true; }
         return on && off ? "on and off" : on ? "on" : "off";
     }
-    private static double decimal(String text) { try { return Double.parseDouble(text.trim().replace(',', '.')); } catch (NumberFormatException blank) { return Double.NaN; } }
+    private static double decimal(String text) {
+        try { double v = Double.parseDouble(text.trim().replace(',', '.')); return Double.isInfinite(v) || Math.abs(v) > 1e9 ? Double.NaN : v; } catch (NumberFormatException blank) { return Double.NaN; }
+    }
 
     /** Values now (named and raw), when the printer service is reachable. */
     private java.util.Map<String, String> currentValues() {

@@ -84,7 +84,9 @@ final class Automation {
         static Action fromJson(JSONObject o) throws JSONException {
             Action a = new Action(); a.kind = o.getString("kind");
             if (!ACTIONS.containsKey(a.kind)) throw new JSONException("unknown action " + a.kind);
-            a.on = o.optBoolean("on"); a.title = o.optString("title"); a.text = o.optString("text"); a.url = o.optString("url"); a.body = o.optString("body"); a.header = o.optString("header");
+            a.on = o.optBoolean("on"); a.title = cap(o.optString("title"), 200); a.text = cap(o.optString("text"), 2000); a.url = cap(o.optString("url"), 2000).trim();
+            a.body = cap(o.optString("body"), 8000); a.header = o.optString("header").trim();
+            if (!a.header.isEmpty() && !a.header.matches("[A-Za-z0-9-]{1,60}")) throw new JSONException("a header name has letters, digits and dashes only");
             if (o.has("secretId")) a.secretId = o.getString("secretId");
             a.picture = o.optBoolean("picture"); a.chart = o.optBoolean("chart"); a.rawImage = o.optBoolean("rawImage"); a.messageHeader = o.optString("messageHeader", "Message");
             if (!a.messageHeader.matches("[A-Za-z0-9-]{1,40}")) a.messageHeader = "Message";
@@ -134,7 +136,9 @@ final class Automation {
         }
         static Rule fromJson(JSONObject o) throws JSONException {
             Rule r = new Rule();
-            r.name = o.optString("name", "").trim(); r.event = o.getString("event");
+            for (String key : new String[] {"layer", "from", "to", "delay", "limit", "ifLimit"})
+                if (o.has(key) && (!(o.opt(key) instanceof Number) || Double.isNaN(o.optDouble(key)) || Double.isInfinite(o.optDouble(key)))) throw new JSONException(key + " must be a number");
+            r.name = cap(o.optString("name", "").trim(), 80); r.event = o.getString("event");
             if (!EVENTS.containsKey(r.event)) throw new JSONException("unknown event " + r.event);
             r.layer = Math.max(0, o.optInt("layer")); r.fromMinute = minute(o.optInt("from", -1)); r.toMinute = minute(o.optInt("to", -1));
             r.lastPrintOnly = o.optBoolean("lastPrintOnly"); r.delayMinutes = Math.max(0, Math.min(240, o.optInt("delay")));
@@ -198,7 +202,7 @@ final class Automation {
         return !p.muted.contains(rule.id);
     }
     static boolean inWindow(int minute, int from, int to) {
-        if (from < 0 && to < 0) return true;
+        if (from < 0 && to < 0 || from == to) return true;   // the same start and end: all day
         if (from >= 0 && to < 0) return minute >= from;
         if (from < 0) return minute < to;
         return from <= to ? minute >= from && minute < to : minute >= from || minute < to;   // past midnight
@@ -207,6 +211,7 @@ final class Automation {
         if (from >= 0 && to >= 0) return clock(from) + "–" + clock(to);
         return from >= 0 ? "after " + clock(from) : "before " + clock(to);
     }
+    static String cap(String text, int length) { return text == null ? "" : text.length() <= length ? text : text.substring(0, length); }
     static boolean validField(String key) { return AutomationValues.find(key) != null || key.matches("status(\\.[A-Za-z0-9_]+){1,8}"); }
     static String number(double v) { return v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v); }
 
@@ -272,7 +277,7 @@ final class Automation {
     }
     static boolean looksLikeJson(String body) { String t = body.trim(); return t.startsWith("{") || t.startsWith("["); }
     static boolean webhookUrlOk(String url) {
-        try { java.net.URI u = new java.net.URI(url.trim()); return ("https".equals(u.getScheme()) || "http".equals(u.getScheme())) && u.getHost() != null && !u.getHost().isEmpty(); }
+        try { java.net.URI u = new java.net.URI(url.trim()); return ("https".equalsIgnoreCase(u.getScheme()) || "http".equalsIgnoreCase(u.getScheme())) && u.getHost() != null && !u.getHost().isEmpty(); }
         catch (Exception bad) { return false; }
     }
     static String shortUrl(String url) {
@@ -307,7 +312,19 @@ final class Automation {
     }
     static List<Rule> load(String text) {
         List<Rule> rules = new ArrayList<>();
-        try { JSONArray list = new JSONObject(text).getJSONArray("rules"); for (int i = 0; i < list.length(); i++) try { rules.add(Rule.fromJson(list.getJSONObject(i))); } catch (JSONException skipped) { } }
+        try {
+            JSONArray list = new JSONObject(text).getJSONArray("rules");
+            for (int i = 0; i < list.length(); i++) {
+                JSONObject one = list.optJSONObject(i); if (one == null) continue;
+                try { rules.add(Rule.fromJson(one)); }
+                catch (JSONException strict) {
+                    // The person's own rule from an earlier version: drop only a header name that is no longer accepted, rather than the rule.
+                    JSONArray actions = one.optJSONArray("actions");
+                    for (int k = 0; actions != null && k < actions.length(); k++) { JSONObject a = actions.optJSONObject(k); if (a != null && !a.optString("header").trim().matches("|[A-Za-z0-9-]{1,60}")) a.remove("header"); }
+                    try { rules.add(Rule.fromJson(one)); } catch (JSONException skipped) { Diagnostics.note(Diagnostics.AUTOMATIONS, "a saved rule could not be read: " + skipped.getMessage()); }
+                }
+            }
+        }
         catch (Exception unreadable) { }
         return rules;
     }
@@ -377,7 +394,9 @@ final class Automation {
             String name = print == null ? "" : print.optString("filename", ""), key = print == null ? "" : print.optString("uuid", ""); if (key.isEmpty()) key = name;
             int layer = print == null ? -1 : print.optInt("current_layer", -1);
             if (state == 2 && !key.isEmpty()) {
-                if (!key.equals(job)) {
+                // The same file printed again straight after it ended (no idle report between two cloud polls): a new print.
+                boolean again = key.equals(job) && ended && sub != 2077 && sub != 2504 && layer >= 0 && layer <= 1;
+                if (!key.equals(job) || again) {
                     job = key; file = name; paused = false; ended = false; lastLayer = -1;
                     watched = layer <= 1 && machine.optInt("progress", 0) <= 1 && sub != 2077 && sub != 2504;
                     if (watched) out.add(event(STARTED, status, printer));

@@ -44,7 +44,9 @@ final class CloudFileRoute {
             CloudApi.Reference r = list.get(i);
             String path = (r.url.isEmpty() ? r.objectName : r.url.contains("?") ? r.url.substring(0, r.url.indexOf('?')) : r.url).toLowerCase(java.util.Locale.ROOT);
             String name = path.substring(path.lastIndexOf('/') + 1);
-            if (name.equals(base) || name.equals(base + ".gz") || name.endsWith("_" + base) || name.endsWith("-" + base)) return r;
+            // The name itself, or the name after a storage id (hex or digits, at least 8) and a separator: never a longer name that merely ends the same.
+            String bare = name.endsWith(".gz") && !base.endsWith(".gz") ? name.substring(0, name.length() - 3) : name;
+            if (bare.equals(base) || bare.matches("[0-9a-f]{8,}[_-]" + java.util.regex.Pattern.quote(base))) return r;
         }
         return null;
     }

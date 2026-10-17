@@ -17,8 +17,8 @@ final class ChamberTrend {
     /** One reading (`mono`: a clock that never steps). Readings closer than 5 s to the last are skipped. */
     synchronized void add(long mono, double celsius) {
         if (Double.isNaN(celsius)) return;
+        if (!points.isEmpty() && mono < points.peekLast()[0]) points.clear();   // the clock went back: start again
         if (!points.isEmpty() && mono - points.peekLast()[0] < 5_000) return;
-        if (!points.isEmpty() && mono < points.peekLast()[0]) points.clear();
         points.addLast(new double[] {mono, celsius});
         while (!points.isEmpty() && mono - points.peekFirst()[0] > WINDOW_MS) points.removeFirst();
     }
