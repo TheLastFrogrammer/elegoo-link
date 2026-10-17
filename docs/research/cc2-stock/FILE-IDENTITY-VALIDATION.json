@@ -1,0 +1,96 @@
+{
+  "recorded_utc": "2026-10-17T13:26:06.054699+00:00",
+  "app_version": "0.65.0",
+  "version_code": 156,
+  "base_commit": "7239d9b8dbe3f002d2f5585e9fcd159da0561708",
+  "build": {
+    "command": "./gradlew --no-daemon --no-build-cache --max-workers=2 testDebugUnitTest lintDebug assembleDebug",
+    "result": "passed",
+    "gradle": "8.13",
+    "jdk": "Temurin 17.0.20+101",
+    "compile_sdk": 36
+  },
+  "jvm": {
+    "tests": 665,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 77,
+    "passed": 588
+  },
+  "skipped_categories": {
+    "opt_in_native_engine": 33,
+    "opt_in_rendering": 44
+  },
+  "focused_classes": {
+    "FailureLocalTransferTest": {
+      "tests": 5,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "GcodeJobTrackerTest": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "GcodeLibraryTest": {
+      "tests": 15,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "ViewerFileIdentityTest": {
+      "tests": 6,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "FailureHistoryScreensTest": {
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 3
+    }
+  },
+  "lint": {
+    "errors": 0,
+    "warnings": 287,
+    "issue_counts": {
+      "ApplySharedPref": 1,
+      "RequiresFeature": 2,
+      "UnusedAttribute": 2,
+      "AndroidGradlePluginVersion": 1,
+      "SetJavaScriptEnabled": 4,
+      "DrawAllocation": 10,
+      "ObsoleteSdkInt": 1,
+      "ViewConstructor": 2,
+      "ClickableViewAccessibility": 1,
+      "SetTextI18n": 262,
+      "HardcodedText": 1
+    }
+  },
+  "browser": {
+    "playwright": "1.56.1",
+    "chromium": "141.0.7390.37",
+    "viewer-check.js": "passed; 11602 segments; includes stale fetch cancellation and app load tickets",
+    "camera-check.js": "passed",
+    "plate-check.js": "passed"
+  },
+  "engine_checks": {
+    "pinned_source": "passed",
+    "apk": "passed; slicer engine and 1113 preset files"
+  },
+  "apk": {
+    "variant": "debug",
+    "bytes": 17956109,
+    "sha256": "c9b988c2304b4a2c2a2dc993aabf78a5cfb4087d2b73a4edd9138aebc84990cb",
+    "signed_release_published": false
+  },
+  "device_validation": {
+    "printer_connected": false,
+    "android_handset_connected": false,
+    "status": "pending; see android/GCODE_IDENTITY.md"
+  },
+  "firmware_modified": false
+}

@@ -13,6 +13,8 @@ Read in this order:
 
 The first follow-on tool is ready: [offline capture inspector](../../../tools/research/README.md). It reads consistent owner-exported records/logs; it does not collect them from a printer.
 
+The second follow-on is implemented in Android v0.65.0 source: [retained-file identity and live-view selection](../../../android/GCODE_IDENTITY.md). This changes the app and requires device acceptance; it does not establish printer console access or bypass stock file serving.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout

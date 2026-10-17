@@ -137,7 +137,7 @@ public final class StatusPresentation {
     public static String clean(String value) { return value.replaceAll("[\\p{Cntrl}]", " ").substring(0, Math.min(value.length(), 160)); }
 
     /** The viewer's one plain line when the phone holds no copy of the G-code being printed. */
-    static final String NO_FILE_LINE = "The toolpath needs the G-code file. Files sent from this phone, or downloaded over the local connection, show here.";
+    static final String NO_FILE_LINE = "Choose the G-code used for this print. A matching name or size cannot confirm its contents.";
 
     /** "41% · layer 87 of 212 · 1h 15m left": what the printer reports about the running print, only the parts it reports. */
     static String runningLine(JSONObject machine, JSONObject print) {

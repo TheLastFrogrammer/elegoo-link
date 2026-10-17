@@ -53,6 +53,16 @@ public final class PrinterService extends Service {
     public File selectedFile;
     /** Copies of uploaded, sliced and downloaded G-code, for the toolpath viewer to follow prints. */
     GcodeLibrary library;
+    private final GcodeJobTracker fileJobs = new GcodeJobTracker();
+    String filePrinterId() {
+        if (!wanted) return usingCloud() ? cloudSerial : "";
+        Cc2Session current = session;
+        return current != null && !current.printerSerial().isEmpty() ? current.printerSerial() : serial;
+    }
+    GcodeJobTracker.Job fileJob() {
+        if (!liveFresh()) { fileJobs.clear(); return null; }
+        return fileJobs.current(SystemClock.elapsedRealtime());
+    }
     private String viewerDownload;
     public String selectedName;
     public GcodeInspector.Report selectedReport;
@@ -77,6 +87,8 @@ public final class PrinterService extends Service {
     /** The chamber's warming or cooling, for the Print tab's countdown and automations. */
     public final ChamberTrend chamberTrend = new ChamberTrend();
     private void record(JSONObject value, String source, String name) {
+        fileJobs.update("local".equals(source) ? filePrinterId() : cloudSerial,
+            source + ":" + ("local".equals(source) ? generation : System.identityHashCode(cloudApi)), value, SystemClock.elapsedRealtime());
         // The log notes the printer's state and speed-mode number when they change (the speed names are not confirmed yet).
         JSONObject move = value.optJSONObject("gcode_move_inf"), machine = value.optJSONObject("machine_status");
         if (move != null && move.has("speed_mode") && move.optInt("speed_mode") != loggedSpeedMode) { loggedSpeedMode = move.optInt("speed_mode"); Diagnostics.note(Diagnostics.STATUS, "speed mode number now " + loggedSpeedMode + " (" + source + ")"); }
@@ -223,6 +235,11 @@ public final class PrinterService extends Service {
     @Override public void onCreate() {
         Crashes.install(this);   // the service can run without any screen open
         library = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
+        files.execute(() -> {
+            try { library.migrateLegacy(); }
+            catch (IOException error) { Diagnostics.note(Diagnostics.FILES, "Earlier G-code copies could not all be migrated: " + error.getClass().getSimpleName()); }
+            main.post(() -> { if (!destroyed) changed(); });
+        });
         super.onCreate();
         SliceStore.sweepCache(this);
         File[] oldCopies = getCacheDir().listFiles();
@@ -273,6 +290,7 @@ public final class PrinterService extends Service {
         connect(host, code, serial, remote, false);
     }
     public void connect(String host, String code, String serial, boolean remote, boolean pinProbe) {
+        fileJobs.clear();
         new PrinterAuthentication(pinProbe, code); new PrinterHttp(host, pinProbe ? "" : code);
         if (!serial.isEmpty() && !Cc2Discovery.validSerial(serial)) throw new IllegalArgumentException("Invalid serial number");
         followed = false;   // a connection made here is the user's own (follow mode marks its own afterwards)
@@ -303,7 +321,7 @@ public final class PrinterService extends Service {
             public void failure(String text, boolean retryable) { deliver(() -> failed(text, retryable)); }
             public void query(int method, JSONObject params, JSONObject result) { deliver(() -> handleQuery(method, params, result)); }
             public void queryError(int method, String text) { deliver(() -> handleQueryError(method, text)); }
-            public void uploaded(String name) { deliver(() -> uploadedFile(name, "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it.")); }
+            public void uploaded(File file, String name) { String forPrinter = filePrinterId(); deliver(() -> uploadedFile(file, name, "Upload acknowledged: " + name + ". Refresh Files and choose Print setup to start it.", forPrinter)); }
             public void downloadProgress(int percent) { deliver(() -> feedback = (timelapseRequested != null ? "Downloading timelapse" : "Downloading G-code") + (percent < 0 ? "… size not reported" : ": " + percent + "%")); }
             public void timelapseDownloaded(File file, String url) { deliver(() -> {
                 File previous = timelapseFile; if (previous != null && !previous.equals(file)) previous.delete();
@@ -475,10 +493,9 @@ public final class PrinterService extends Service {
         else if (cloudUploadReady()) uploadFiles(java.util.Collections.singletonList(selectedFile), java.util.Collections.singletonList(selectedName));
     }
     public void cancelUpload() { if (session != null) session.cancelUpload(); CloudUpload cloud = cloudUpload; if (cloud != null) cloud.cancel(); }
-    private void uploadedFile(String name, String message) {
+    private void uploadedFile(File copy, String name, String message, String forPrinter) {
         feedback = message; browse("local", 0);
-        File copy = queuedName != null && queuedName.equals(name) ? queuedFile : selectedFile;
-        if (copy != null) files.execute(() -> keep(copy, name));
+        if (copy != null) files.execute(() -> keep(copy, name, forPrinter, GcodeLibrary.Origin.UPLOADED));
         if (queuedName != null) {
             queuedFile = null; queuedName = null; uploadedCount++;
             if (uploadQueue.isEmpty()) feedback = uploadedCount == 1 ? message : "Uploaded " + uploadedCount + " files.";
@@ -525,7 +542,7 @@ public final class PrinterService extends Service {
                 cloudUpload = null;
                 Diagnostics.note(Diagnostics.FILES, "cloud upload " + (done ? "finished" : "ended: " + message));
                 if (destroyed) return;
-                if (done) uploadedFile(name, message + " Choose Print setup to start it.");
+                if (done) uploadedFile(file, name, message + " Choose Print setup to start it.", serial);
                 else { feedback = message; queueFailed(); loadDisk(); }
                 changed();
             }); }
@@ -630,7 +647,7 @@ public final class PrinterService extends Service {
                     else { feedback = "Still waiting for the printer to serve " + StatusPresentation.clean(filename) + "."; changed(); return; }
                 }
                 if (problem != null || done == null) { if (done != null) done.delete(); feedback = problem; changed(); return; }
-                received(done, filename);
+                received(done, filename, serial);
             });
         });
     }
@@ -874,12 +891,13 @@ public final class PrinterService extends Service {
         String tree = workshop().getString("gcodeFolder", "");
         if (tree.isEmpty() || filename.isEmpty()) return;
         folderTried = filename;
-        if (library != null && library.find(filename) != null) return;
+        String forPrinter = filePrinterId();
         String base = filename.substring(filename.lastIndexOf('/') + 1);
         long expected = reportedSize(base);
         cloudReads.execute(() -> {
             String text; File kept = null;
             try {
+                if (library != null && !library.candidates(forPrinter, filename).isEmpty()) return;
                 FolderMatch match = FolderMatch.search(getContentResolver(), Uri.parse(tree), base);
                 if (match == null) text = StatusPresentation.clean(base) + " is not in your G-code folder.";
                 else if (expected > 0 && match.size > 0 && match.size != expected) text = "Your G-code folder has a " + StatusPresentation.clean(base) + ", but its size (" + match.size + " bytes) differs from the printer's (" + expected + "). It was not used.";
@@ -890,7 +908,7 @@ public final class PrinterService extends Service {
                         byte[] buffer = new byte[65536]; int n; long total = 0;
                         while ((n = in.read(buffer)) != -1) { total += n; if (total > GcodeInspector.MAX_BYTES) throw new IOException("too large"); out.write(buffer, 0, n); }
                     }
-                    keep(copy, base); copy.delete(); kept = copy;
+                    keep(copy, base, forPrinter, GcodeLibrary.Origin.FOLDER); copy.delete(); kept = copy;
                     text = "Found " + StatusPresentation.clean(base) + " in your G-code folder" + (expected > 0 ? " (same size as the printer's)" : "") + ".";
                 }
             } catch (SecurityException lost) { text = "The app can no longer read your G-code folder. Choose it again."; }
@@ -1084,9 +1102,12 @@ public final class PrinterService extends Service {
     }
     /** A downloaded printer file: kept for the viewer, inspected and shown in the Files workspace. */
     private void received(File file, String name) {
+        received(file, name, filePrinterId());
+    }
+    private void received(File file, String name, String forPrinter) {
         importing = true; feedback = "Download received. Inspecting kept copy…"; changed();
                 files.execute(() -> {
-                    keep(file, name);
+                    keep(file, name, forPrinter, GcodeLibrary.Origin.DOWNLOADED);
                     GcodeInspector.Report report = null;
                     try { report = GcodeInspector.inspect(file); } catch (Exception ignored) { }
                     GcodeInspector.Report result = report;
@@ -1094,9 +1115,13 @@ public final class PrinterService extends Service {
                     main.post(() -> finishFile(file, name, result, preview, "Downloaded and kept in this app. Save to phone… exports a copy; the printer's copy is unchanged."));
                 });
     }
-    /** Keeps a copy in the viewer's library; failures only cost the viewer that file. */
+    /** Retains input bytes as an unverified candidate; selecting the live job's copy is separate. */
     void keep(File file, String name) {
-        try { if (library != null) library.put(file, name); } catch (IOException ignored) { }
+        keep(file, name, "", GcodeLibrary.Origin.IMPORTED);
+    }
+    private void keep(File file, String name, String forPrinter, GcodeLibrary.Origin origin) {
+        try { if (library != null) library.retain(file, name, forPrinter, origin); }
+        catch (IOException error) { Diagnostics.note(Diagnostics.FILES, "G-code archive copy unavailable: " + error.getClass().getSimpleName()); }
     }
     public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, JSONArray maps) {
         if (fileBusy()) { feedback = "A file is being sent or received. Wait for it to finish before starting a print."; changed(); return; }
@@ -1180,6 +1205,7 @@ public final class PrinterService extends Service {
         historyDetails.clear(); historyDetailMessages.clear(); queryBusy.clear(); fileMessage = "Refresh to browse printer files."; historyMessage = "Refresh to load print history.";
     }
     public void disconnect() {
+        fileJobs.clear();
         if (followed) followPaused = true;   // disconnected by hand: no automatic local connection until the printer is seen in cloud mode again
         followed = false;
         wanted = false; generation++; main.removeCallbacks(reconnect); clearRoute();
@@ -1215,7 +1241,7 @@ public final class PrinterService extends Service {
                     }
                 }
                 if (local.length() == 0) throw new IOException("File is empty");
-                keep(local, name);   // the live toolpath finds it by name when the printer prints it
+                keep(local, name);   // retained candidate; the filename alone does not identify the live job
                 File readyFile = local; String readyName = name; GcodeInspector.Report report = GcodeInspector.inspect(local);
                 android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
                 main.post(() -> finishFile(readyFile, readyName, report, preview, "Kept copy inspected. Uploading does not start a print."));
@@ -1263,6 +1289,7 @@ public final class PrinterService extends Service {
                     byte[] buffer = new byte[65536]; int count;
                     while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
                 }
+                keep(local, name, "", GcodeLibrary.Origin.SLICED);
                 File readyFile = local; GcodeInspector.Report report = GcodeInspector.inspect(local);
                 android.graphics.Bitmap preview = ThumbnailDecoder.decode(report.thumbnail);
                 main.post(() -> finishFile(readyFile, name, report, preview, doneText));
@@ -1362,6 +1389,7 @@ public final class PrinterService extends Service {
     public boolean cloudBackground() { return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudBackground", false) && cloudAccountPresent(); }
     /** Called after the setting changes or the account changes, while the app is visible. */
     public void cloudSettingsChanged() {
+        if (!ready()) fileJobs.clear();
         // A new sign-in or printer: answers still on their way from the old one are dropped (they check cloudApi), its
         // command channel is closed, and nothing it reported counts as fresh any more.
         cloudApi = null;

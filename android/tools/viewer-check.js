@@ -19,13 +19,13 @@ const server = http.createServer((q, r) => {
   try {
     const page = await browser.newPage({ viewport: { width: 500, height: 400 } });
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
-    await page.addInitScript(() => { window.Android = { onReady() {}, onLoaded(n) { window.__loaded = n; }, onError(m) { window.__error = m; }, onCamera() {}, onCameraDelay() {}, onMark() {} }; });
+    await page.addInitScript(() => { window.Android = { onReady() {}, onLoaded(n, ticket) { window.__loaded = n; window.__ticket = ticket; window.__loadCount = (window.__loadCount || 0) + 1; }, onError(m) { window.__error = m; }, onCamera() {}, onCameraDelay() {}, onMark() {} }; });
     await page.goto(`http://localhost:${server.address().port}/assets/viewer/index.html`);
     await page.waitForFunction(() => window.viewer, null, { timeout: 10000 });
-    await page.evaluate(() => viewer.load());
+    await page.evaluate(() => viewer.load(7));
     await page.waitForFunction(() => window.__loaded || window.__error, null, { timeout: 20000 }).catch(() => {});
     const r = await page.evaluate(async () => {
-      const out = { loaded: window.__loaded || 0, error: window.__error || '' };
+      const out = { loaded: window.__loaded || 0, ticket: window.__ticket, error: window.__error || '' };
       const wait = (ms) => new Promise((done) => setTimeout(done, ms));
       viewer.setLockstep({ on: true, delayMs: 500 });
       const t = Date.now(); viewer.update({ end: 100, at: t - 2000 }); viewer.update({ end: 400, at: t });
@@ -50,6 +50,20 @@ const server = http.createServer((q, r) => {
     if (!(differ(solid, edges) > 200)) fail('edges only did not change the drawing (' + differ(solid, edges) + ')');
     if (!(differ(solid, faded) > 50)) fail('see-through infill did not change the drawing (' + differ(solid, faded) + ')');
     await page.evaluate(() => viewer.update({ edgeMask: 0, typeAlpha: null }));
+    // A previous job's asynchronous data fetches must not repopulate the scene after it was cleared.
+    const cleared = await page.evaluate(async () => {
+      const original = window.fetch, release = [], before = window.__loadCount;
+      window.fetch = (...args) => new Promise((resolve) => release.push(() => resolve(original(...args))));
+      const pending = viewer.load(); viewer.clearToolpath();
+      const immediate = viewer.probe(); release.forEach((done) => done()); await pending;
+      window.fetch = original;
+      const after = viewer.probe(), loads = window.__loadCount;
+      await viewer.load(8);
+      return { immediate, after, before, loads, reloaded: viewer.probe().count, ticket: window.__ticket };
+    });
+    if (cleared.immediate.count !== 0 || cleared.after.count !== 0 || cleared.after.end !== 0 || cleared.after.nozzle !== null || cleared.loads !== cleared.before) fail('a cleared job reappeared after its pending load: ' + JSON.stringify(cleared));
+    if (cleared.reloaded !== r.loaded) fail('a new selected file could not load after clearing the previous job');
+    if (r.ticket !== 7 || cleared.ticket !== 8) fail('WebView completion did not carry its app load ticket');
     if (errors.length) fail('script error: ' + errors.join(' | '));
     if (r.error) fail('the viewer reported: ' + r.error);
     if (!(r.loaded > 0)) fail('the toolpath did not load');
@@ -57,6 +71,6 @@ const server = http.createServer((q, r) => {
     const c = r.view && r.view.camera;
     if (!c || c.yaw !== 12 || c.pitch !== 34 || c.distance !== 222 || c.target.join() !== '10,20,3') fail('the view did not survive a save and restore: ' + JSON.stringify(r.view));
     if (!(Math.abs(r.orbit - 90) < 0.01)) fail('the showcase orbit did not turn the view by 90 degrees: ' + r.orbit);
-    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit, view state, edges only and see-through types work`);
+    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit, view state, edges, opacity, job clearing and stale-load cancellation work`);
   } catch (e) { fail(e.message); } finally { await browser.close(); server.close(); }
 });

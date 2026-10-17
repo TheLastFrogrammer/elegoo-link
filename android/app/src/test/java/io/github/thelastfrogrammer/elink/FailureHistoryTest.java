@@ -86,7 +86,8 @@ public class FailureHistoryTest {
         assertEquals("41% · layer 87 of 212 · 1h 15m left", StatusPresentation.runningLine(machine, print));
         assertEquals("only what is reported", "41%", StatusPresentation.runningLine(machine, new JSONObject()));
         assertEquals("Printing", StatusPresentation.runningLine(null, null));
-        assertEquals("The toolpath needs the G-code file. Files sent from this phone, or downloaded over the local connection, show here.", StatusPresentation.NO_FILE_LINE);
+        assertTrue(StatusPresentation.NO_FILE_LINE.contains("Choose the G-code used for this print"));
+        assertTrue(StatusPresentation.NO_FILE_LINE.contains("matching name or size cannot confirm"));
     }
 
     // ---- Print again ----

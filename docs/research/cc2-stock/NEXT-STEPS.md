@@ -1,11 +1,11 @@
 # Ordered next steps
 
-App baseline: dde7699 / v0.64.0. Device access is not established. Keep the vendor printer executable intact and do not toggle mode to work around file access.
+Research baseline: dde7699 / v0.64.0. Follow-on app implementation: v0.65.0 / build 156, based on 7239d9b. Device access is not established. Keep the vendor printer executable intact and do not toggle mode to work around file access.
 
 | Priority / ID | Work | Done when | Dependency |
 |---|---|---|---|
 | P0 / N01 | Offline capture inspector implemented; owner export pending | [Tool and instructions](../../../tools/research/README.md) inventory cloud_file_cache, thumbnails, print records and cloud-download/camera events; 16 synthetic tests pass | Owner-exported captures still needed for real-data validation |
-| P0 / N02 | Strengthen exact-file identity in the app | Different bytes under the same name remain distinct; printers cannot cross-match; filename-only candidates cannot silently become a verified live toolpath; eviction is explicit | Extend existing GcodeLibrary/CloudFileMemory; do not introduce duplicate retention |
+| P0 / N02 | Implemented in app source; device acceptance pending | Content-addressed GcodeLibrary preserves same-name versions; printer-scoped candidates require explicit observed-job selection; source/hash shown; stale results cannot revive old scenes; eviction explained | [Implementation and acceptance](../../../android/GCODE_IDENTITY.md); [validation](../../../android/VALIDATION.md). Cloud references remain transport hints |
 | P1 / N03 | Establish read-only CC2 serial capture | Exact board/header mapping, voltage, observed baud/boot output and configured terminal recorded | Physical owner access and suitable UART hardware |
 | P1 / N04 | Run stock console discovery | list_endpoints and gcode/help captured; output subscription and selected object reads validated | N03 or another independently established owner shell |
 | P1 / N05 | Recover one known cloud-started file | Exported cache/log reference correlated with completed local file and content digest | Owner access; consistent idle export |
@@ -29,6 +29,10 @@ This tool can establish what a captured export contains. It does not establish t
 
 ## N02: implementation boundaries
 
-GcodeLibrary already stores copies; put replaces the same filename and find matches a basename without printer identity. The next change is an artifact model with content digest/size plus a separate association record containing printer, job, original filename, source and confidence. Preserve multiple versions when filenames repeat. Treat external folders and heard cloud references as candidates until stronger evidence ties them to the job.
+The existing GcodeLibrary was extended rather than duplicated. SHA-256 objects, source/printer aliases and separate explicit observed-job bindings replace filename-keyed replacement and automatic live lookup. All import/slice/upload/download/folder/manual-choice paths feed the archive. Earlier copies migrate as unscoped candidates. CloudFileMemory remains a per-printer/name object-location hint, not evidence of the running job's exact bytes.
 
-Start with a domain model and meaningful regressions for same-name/different-bytes, same-name/two-printers, unknown job, pruning, partial transfers and stale references. Wire all upload/slice/download/selection paths before claiming exact-file retention is repaired. Production UI must distinguish a retained candidate from verified job bytes. No new release or firmware modification is part of the research-only checkpoint.
+The UI labels a confirmed choice **Selected by you**. It does not claim a firmware-verified match. An observed job scope expires conservatively on transitions, route changes or gaps; wholly unreported same-name restarts remain unknowable. Automated domain, actual-activity, production-session and browser regressions cover the repaired paths. Device acceptance remains required. This implementation changes the Android app; the earlier research-only checkpoint remains historical. No signed release/tag or firmware change is included.
+
+## Next available work
+
+N03/N04 require owner hardware access. In parallel, run the N02 device checklist above and provide a consistent idle export for N01/N05. Do not attempt the active-print reader (N06) until the console/file source and bounded transfer path have been established. Keep camera diagnosis (N07) tied to the installed camera host build and hardware variant.

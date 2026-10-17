@@ -1,3 +1,13 @@
+# v0.65.0 / build 156 — retained-file identity
+
+Validated 2026-10-17 against baseline `7239d9b8dbe3f002d2f5585e9fcd159da0561708`. Full `testDebugUnitTest lintDebug assembleDebug` passed with `--no-build-cache`, Gradle 8.13, JDK 17 and compile SDK 36: **665 tests, 588 passed, zero failures/errors, 77 opt-in tests skipped** (33 native-engine and 44 rendering). Lint completed with **zero errors and 287 warnings**, including the app's programmatic UI translation warnings. The development APK assembled successfully. No signed release/tag was published.
+
+Archive/job tests: 15 GcodeLibrary, 6 GcodeJobTracker and 6 actual-viewer activity tests pass. The production-session transfer suite verifies that upload completion carries its original source file and resolved printer serial. Updated history-screen coverage checks progress plus all three file recovery actions through the service's observed-job scope. The full run also caught and repaired a late disconnect callback after viewer destruction.
+
+Headless Chromium checks pass for the viewer (11,602 real parsed segments, stale fetch cancellation and app load tickets), camera playback/rejoin and plate controls. Both pinned-engine checks pass: source fingerprint matches, and the APK contains the slicer engine plus 1,113 preset files. [Machine-readable results](../docs/research/cc2-stock/FILE-IDENTITY-VALIDATION.json) record totals, tooling and this debug APK's digest.
+
+No physical printer, Android handset or console is connected. Same-name file selection, rotation/reconnection, real providers, large phone files and stock firmware transfers need the [device acceptance checklist](GCODE_IDENTITY.md). This change labels user-selected bytes; it cannot prove a match to unreported printer bytes. No firmware patch, mode change or helper installation was performed.
+
 # v0.3.5 source validation — CI passed; compatible installer pending
 
 2026-10-06. The latest supplied v0.3.3 screenshot progresses past the earlier MQTT code 5: broker CONNECT completes, UDP reports cloud/WAN with code protection enabled, but application registration times out. HTTP port 80 remains unreachable and was not used by the probe. No usable monitoring, PIN validity, or successful Matrix coexistence has been established.

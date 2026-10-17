@@ -24,6 +24,7 @@ public final class Cc2Session implements AutoCloseable {
         default void query(int method, JSONObject params, JSONObject result) { }
         default void queryError(int method, String message) { }
         default void uploaded(String filename) { }
+        default void uploaded(File file, String filename) { uploaded(filename); }
         default void uploadFailed(String filename) { }
         default void downloadProgress(int percent) { }
         default void downloaded(File file, String filename) { }
@@ -62,6 +63,7 @@ public final class Cc2Session implements AutoCloseable {
     private volatile PrinterHttp uploadHttp, downloadHttp;
     private volatile boolean closed, ready, uploading, downloading, downloadCancelled;
     private volatile String sessionToken;
+    private volatile String resolvedSerial = "";
     private boolean canvasSupported = true;
     private volatile long statusAt;
     private long canvasAt;
@@ -91,6 +93,8 @@ public final class Cc2Session implements AutoCloseable {
         this.clients = clients; this.listener = listener; this.identity = identity; sessionToken = http.token();
     }
     public boolean ready() { return ready && !closed; }
+    /** Identity actually resolved for this MQTT session, including connections made with only an IP address. */
+    String printerSerial() { return resolvedSerial; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
     /** A printer-changing command has been sent and not yet answered. */
@@ -105,6 +109,7 @@ public final class Cc2Session implements AutoCloseable {
             String serial = identity.resolve(http);
             if (!Cc2Discovery.validSerial(serial)) throw new PrinterErrors.IdentityUnavailable();
             if (closed) return;
+            resolvedSerial = serial;
             if (!identity.summary().isEmpty()) emitResult(identity.summary());
             sessionToken = identity.password(http);
             base = "elegoo/" + serial + "/";
@@ -425,7 +430,7 @@ public final class Cc2Session implements AutoCloseable {
             try {
                 uploader.upload(file, name, percent -> { Listener current = listener; if (current != null && !closed) current.uploadProgress(percent); });
                 emitResult("Upload acknowledged by printer. Refresh Files to review print setup.");
-                Listener current = listener; if (current != null && !closed) current.uploaded(name);
+                Listener current = listener; if (current != null && !closed) current.uploaded(file, name);
             } catch (Exception exception) {
                 if (!closed && !uploadCancelled) emitResult(PrinterErrors.describe(exception, "Upload") + " A partial file may remain on the printer.");
                 Listener current = listener; if (current != null && !closed) current.uploadFailed(name);

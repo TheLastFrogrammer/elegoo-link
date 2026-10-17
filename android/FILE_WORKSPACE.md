@@ -1,5 +1,9 @@
 # G-code inspection and phone copies
 
+## Current retained-copy behavior (v0.65.0)
+
+The private G-code archive retains multiple content versions and printer/source associations. Live toolpath requires an explicit choice for the current observed print; filename or size alone never loads a retained candidate. See [retained G-code identity](GCODE_IDENTITY.md) for the workflow, migration, budgets and limits. The v0.3.4 notes below describe the earlier workspace and its original transfer restrictions; newer cloud/download/viewer features are covered in the app README and current source.
+
 v0.3.4 extends a file workspace under Files. Offline inspection does not need the printer, LAN Only, a PIN or a VPN. Downloading printer files does need a working LAN-authenticated printer session and HTTP port 80. Your earlier HTTP refusal therefore remains a separate obstacle to downloads, even if MQTT monitoring succeeds.
 
 ## Inspect a sliced file on your phone

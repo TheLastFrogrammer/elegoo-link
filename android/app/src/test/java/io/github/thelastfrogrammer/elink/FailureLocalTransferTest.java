@@ -27,12 +27,14 @@ public class FailureLocalTransferTest {
         final BlockingQueue<JSONObject> statuses = new LinkedBlockingQueue<>();
         final BlockingQueue<String> results = new LinkedBlockingQueue<>(), failures = new LinkedBlockingQueue<>(), uploadFailures = new LinkedBlockingQueue<>();
         final BlockingQueue<File> downloads = new LinkedBlockingQueue<>();
+        final BlockingQueue<File> uploadedSources = new LinkedBlockingQueue<>();
         public void connection(String message, boolean registered) { }
         public void status(JSONObject snapshot) { statuses.add(snapshot); }
         public void result(String message) { results.add(message); }
         public void uploadProgress(int percent) { }
         public void failure(String message, boolean retryable) { failures.add(message); }
         public void uploadFailed(String filename) { uploadFailures.add(filename); }
+        public void uploaded(File file, String filename) { uploadedSources.add(file); }
         public void downloaded(File file, String filename) { downloads.add(file); }
     }
 
@@ -147,6 +149,18 @@ public class FailureLocalTransferTest {
             String shown = null; for (String result; (result = take(listener.results, 1)) != null; ) shown = result;
             assertEquals("Upload stopped: connection lost. A partial file may remain on the printer.", shown);
         } finally { session.close(); }
+    }
+
+    @Test public void uploadCompletionNamesTheActualSourceFile() throws Exception {
+        File original = folder.newFile("original.gcode"); Files.write(original.toPath(), "G28\n".getBytes(StandardCharsets.UTF_8));
+        Listener listener = new Listener(); List<FakeMqtt> clients = new CopyOnWriteArrayList<>();
+        try (Cc2Session session = session(listener, clients, url -> info(url, url.getPath().equals("/upload") ? "{\"error_code\":0}" : "{\"system_info\":{\"sn\":\"TEST\"}}"))) {
+            session.connect(); assertNotNull(take(listener.statuses, 12));
+            assertEquals("TEST", session.printerSerial());
+            session.upload(original, "part.gcode");
+            assertSame("retention must use the transferred source, not a later selected file", original, take(listener.uploadedSources, 5));
+            assertTrue(listener.uploadFailures.isEmpty());
+        }
     }
 
     /** Works well: an upload that fails while the session is still open IS reported, with no automatic second attempt. */

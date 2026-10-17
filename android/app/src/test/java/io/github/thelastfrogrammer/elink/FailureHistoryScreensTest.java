@@ -174,16 +174,21 @@ public class FailureHistoryScreensTest {
         long now = System.currentTimeMillis();
         service.cloudSignedIn = true; service.cloudSerial = SERIAL; service.cloudOnline = 1; service.cloudCheckedAt = now; service.cloudReportedAt = now; service.cloudOnlineSignal = true;
         service.cloudStatus = status(2);
-        activity.changed(); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        call(service, "record", new Class<?>[] {JSONObject.class, String.class, String.class}, service.cloudStatus, "cloud", "Test printer");
+        activity.changed();
+        Field worker = GcodeViewerActivity.class.getDeclaredField("worker"); worker.setAccessible(true);
+        ((java.util.concurrent.ExecutorService) worker.get(activity)).submit(() -> { }).get(10, java.util.concurrent.TimeUnit.SECONDS);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
         return activity;
     }
-    @Test public void withoutAGcodeCopyTheViewerShowsProgressThePlainLineAndBothButtons() throws Exception {
+    @Test public void withoutAChosenCopyTheViewerShowsProgressAndTheThreeRecoveryActions() throws Exception {
         GcodeViewerActivity activity = viewer("light");
         View root = activity.getWindow().getDecorView();
         Field status = GcodeViewerActivity.class.getDeclaredField("status"); status.setAccessible(true);
         assertEquals("41% · layer 87 of 212 · 1h 15m left", ((TextView) status.get(activity)).getText().toString());
         assertTrue(hasText(root, StatusPresentation.NO_FILE_LINE));
         assertEquals(1, buttons(root, "Download from printer").size()); assertEquals(1, buttons(root, "Choose file…").size());
+        assertEquals(1, buttons(root, "Kept copies…").size());
         assertFalse("the port-80 story is not the main message", hasText(root, "port 80"));
     }
     @Test public void renderTheViewerWithoutAFile() throws Exception {

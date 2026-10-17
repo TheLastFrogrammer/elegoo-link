@@ -723,12 +723,24 @@
   window.addEventListener("resize", redraw);
 
   // ---------------------------------------------------------------- API for the app
-  async function load() {
+  let loadGeneration = 0;
+  function clearToolpath() {
+    loadGeneration++;
+    data.meta = null; data.f = null; data.count = 0; data.travelCount = 0; data.box = null;
+    view.start = view.end = view.ghostEnd = view.travelStart = view.travelEnd = 0; view.nozzle = null;
+    cum = null; glide.on = false; glide.lastTarget = -1; lock.samples = [];
+    gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+    redraw();
+  }
+  async function load(ticket = 0) {
+    const generation = ++loadGeneration;
+    message.style.display = "none";
     try {
       const [meta, segments, travels] = await Promise.all([
         fetch("/data/meta.json").then((r) => r.json()),
         fetch("/data/segments.bin").then((r) => r.arrayBuffer()),
         fetch("/data/travels.bin").then((r) => r.arrayBuffer())]);
+      if (generation !== loadGeneration) return;
       data.meta = meta; data.count = segments.byteLength / STRIDE; data.travelCount = travels.byteLength / 24;
       gl.bindBuffer(gl.ARRAY_BUFFER, instanceBuffer); gl.bufferData(gl.ARRAY_BUFFER, segments, gl.STATIC_DRAW);
       gl.bindBuffer(gl.ARRAY_BUFFER, travelBuffer); gl.bufferData(gl.ARRAY_BUFFER, travels, gl.STATIC_DRAW);
@@ -750,8 +762,8 @@
       const keep = printerCam.looking ? { ...zoom2d } : null;
       fit();
       if (keep) { lookFromCamera(); Object.assign(zoom2d, keep); drawMarks(); redraw(); }
-      if (android && android.onLoaded) android.onLoaded(data.count);
-    } catch (error) { fail("The toolpath could not be shown: " + error.message); }
+      if (android && android.onLoaded) android.onLoaded(data.count, ticket);
+    } catch (error) { if (generation === loadGeneration) fail("The toolpath could not be shown: " + error.message); }
   }
   // Live updates arrive every second or two, irregularly. With smoothMs the drawing moves continuously along the toolpath's
   // own length (mm, so long walls and short infill zigzags pass at the same pace) at the speed recent updates show, a little
@@ -980,7 +992,7 @@
     requestAnimationFrame(step);
   }
   // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
-  function probe() { return { end: view.end, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
-  window.viewer = { probe, orbit, load, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  function probe() { return { end: view.end, count: data.count, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
+  window.viewer = { probe, orbit, load, clearToolpath, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

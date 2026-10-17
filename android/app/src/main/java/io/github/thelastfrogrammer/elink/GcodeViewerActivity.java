@@ -52,7 +52,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private boolean dark, pageReady, sent, following, followMode, playing, showTravel, bound;
     private int ink, muted, teal, background, surface, buttonColor;
     private WebView web;
-    private TextView title, status, layerLabel, moveLabel;
+    private TextView title, status, layerLabel, moveLabel, fileSource;
     private SeekBar layerBar, moveBar;
     private Button play, follow, firstLayer, more;
     private Flow legend;
@@ -60,6 +60,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private GcodeToolpath path;
     private byte[] segments, travels, meta;
     private String loadedName, loadingName;
+    private String observedJob = "";
+    private String resolvingJob;
+    private GcodeLibrary.Artifact loadedArtifact;
+    private GcodeJobTracker.Job pendingChoice;
+    private long loadGeneration;
     private int layer, move, hidden, lastLocated = -1, loggedLayer = -1;
     private boolean lastAttempt; // a download was tried: keep showing its outcome
     private long loggedAt;
@@ -81,6 +86,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            if (isDestroyed()) return;
             printer = ((PrinterService.LocalBinder) binder).service(); if (followMode) printer.watch(GcodeViewerActivity.this);
             readBedZ(); startCamera();
             if (alignOnly && aligning == null) startAligning();
@@ -90,7 +96,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 pushAlign();
             }
         }
-        @Override public void onServiceDisconnected(ComponentName name) { printer = null; }
+        @Override public void onServiceDisconnected(ComponentName name) {
+            printer = null;
+            if (followMode && !alignOnly && !isDestroyed()) { clearLivePath(); observedJob = ""; status.setText("Waiting for printer status…"); }
+        }
     };
     private final Runnable player = new Runnable() {
         @Override public void run() {
@@ -126,7 +135,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (followMode) { hidden = viewerPrefs().getInt("liveHidden", hidden); showTravel = viewerPrefs().getBoolean("liveTravel", showTravel); }
         build();
         String file = getIntent().getStringExtra(EXTRA_FILE), name = getIntent().getStringExtra(EXTRA_NAME);
-        if (file != null) load(new File(file), name != null ? name : new File(file).getName());
+        if (file != null && !followMode) load(new File(file), name != null ? name : new File(file).getName());
         else if (!followMode) status.setText("No G-code file to show.");
         if (followMode) bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         if (getIntent().getBooleanExtra(Showcase.EXTRA, false) && Showcase.stage == Showcase.VIEWER) showcase();
@@ -238,6 +247,9 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
         panel.addView(header, new LinearLayout.LayoutParams(-1, -2));
         status = A11y.polite(label(titles, "Reading toolpath…", 12, muted, false)); status.setPadding(0, 0, 0, 0);
+        fileSource = label(panel, "", 12, muted, false); fileSource.setVisibility(View.GONE);
+        fileSource.setPadding(0, dp(8), 0, dp(8)); fileSource.setFocusable(true); fileSource.setMinHeight(dp(48));
+        fileSource.setOnClickListener(view -> chooseKeptCopy());
         legend = new Flow(this); panel.addView(legend, new LinearLayout.LayoutParams(-1, -2));
         // One hint line under the chips: how to hide a type, and how the view works (live view always; gestures the first few times).
         int shown = hintsShown();
@@ -1095,7 +1107,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
 
     private final class Bridge {
         @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
-        @JavascriptInterface public void onLoaded(int count) { main.post(() -> { loadedOnce = true; setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); syncOverlay(); if (following) changed(); startCamera(); if (aligning != null) pushAlign(); }); }
+        @JavascriptInterface public void onLoaded(int count, long ticket) { main.post(() -> {
+            if (ticket != loadGeneration || path == null || followMode && !alignOnly && !sameObservedJob()) return;
+            web.setVisibility(View.VISIBLE); loadedOnce = true; setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); syncOverlay();
+            if (following) changed(); startCamera(); if (aligning != null) pushAlign();
+        }); }
         @JavascriptInterface public void onMark(double u, double v, double aspect) { main.post(() -> {
             if (!marking || aligning == null) return;
             // Taps are tied to the bed's height: none while it is unknown or moving.
@@ -1132,6 +1148,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         details.setVisibility(on ? View.VISIBLE : View.GONE);
         if (!on || (!force && segment == detailedSegment)) return;
         detailedSegment = segment;
+        long ticket = loadGeneration;
         GcodeToolpath read = path; GcodeToolpath.LineCursor lines = cursor;
         int line = read.lineOf(segment), tool = read.toolOf(segment); float[] time = read.timeAt(segment);
         String filament = read.filamentText(tool), camera = cameraText();
@@ -1144,7 +1161,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if (hex != null) material.append("● ", new android.text.style.ForegroundColorSpan(Color.parseColor(hex)), 0);
             material.append(filament.replaceFirst("^Filament ", ""));
             main.post(() -> {
-                if (isDestroyed() || detailedSegment != segment) return;
+                if (isDestroyed() || ticket != loadGeneration || detailedSegment != segment) return;
                 detailValues[0].setText(code); detailValues[1].setText(where); detailValues[2].setText(camera); detailValues[3].setText(material);
                 details.setContentDescription("G-code " + code + ". Print at " + where + ". Camera " + camera + ". Filament " + material + ".");
             });
@@ -1165,31 +1182,48 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         return String.format(Locale.getDefault(), "%s · %.1f s behind · %s", when, delay / 1000.0, measured ? "measured" : "manual");
     }
     private void load(File file, String name) {
-        if (name.equals(loadingName)) return;
-        loadingName = name; title.setText(StatusPresentation.clean(name.replaceFirst("(?i)\\.gcode$", "")));
+        load(file, name, null, null);
+    }
+    private void load(File file, String name, GcodeLibrary.Artifact artifact, GcodeJobTracker.Job job) {
+        String key = file.getAbsolutePath() + ":" + (job == null ? "offline" : job.token);
+        if (key.equals(loadingName)) return;
+        if (job != null) clearLivePath();
+        long ticket = ++loadGeneration;
+        loadingName = key; title.setText(StatusPresentation.clean(name.replaceFirst("(?i)\\.gcode$", "")));
         status.setText("Reading toolpath…"); missingCard.setVisibility(View.GONE); if (hint != null) hint.setVisibility(View.VISIBLE); setControlsEnabled(false);
         worker.execute(() -> {
             try {
+                if (artifact != null && !library.verify(artifact)) throw new IOException("The retained copy is missing or changed. Choose the file again.");
                 GcodeToolpath read = GcodeToolpath.read(file);
                 byte[] s = read.segmentsBinary(), t = read.travelsBinary(), m = read.layersJson().getBytes("UTF-8");
                 main.post(() -> {
-                    if (isDestroyed()) return;
+                    if (isDestroyed() || ticket != loadGeneration || job != null && !sameJob(job)) return;
                     synchronized (this) { path = read; segments = s; travels = t; meta = m; }
                     GcodeToolpath.LineCursor old = cursor; cursor = new GcodeToolpath.LineCursor(file); detailedSegment = -2; if (old != null) worker.execute(old::close);
-                    loadedName = name; layer = Math.max(0, read.layerCount - 1); move = layerSize(layer); lastLocated = -1;
+                    loadedName = name; loadedArtifact = artifact; layer = Math.max(0, read.layerCount - 1); move = layerSize(layer); lastLocated = -1;
+                    if (job != null) {
+                        fileSource.setText("Selected by you · " + artifact.origin.label + " · SHA-256 " + artifact.shortHash() + " · Change…");
+                        fileSource.setVisibility(View.VISIBLE);
+                    }
+                    if (job == null) web.setVisibility(View.VISIBLE);
                     status.setText(String.format(Locale.getDefault(), "%,d lines in %d layers%s", read.count, read.layerCount,
                         read.truncated ? " (first part only: very large file)" : ""));
                     layerBar.setMax(Math.max(0, read.layerCount - 1)); syncBars(); buildLegend(); sent = false; sendData();
                 });
             } catch (IOException | OutOfMemoryError failure) {
-                main.post(() -> { if (!isDestroyed()) { loadingName = null; status.setText("The G-code could not be read: " + failure.getMessage()); } });
+                if (job != null) try { library.forgetSelection(job.printer, job.token, artifact.sha256); } catch (IOException ignored) { }
+                main.post(() -> { if (!isDestroyed() && ticket == loadGeneration && (job == null || sameJob(job))) {
+                    loadingName = null;
+                    if (job != null) { clearLivePath(); fileSource.setText("The selected copy could not be read. Choose another copy."); fileSource.setVisibility(View.VISIBLE); }
+                    status.setText("The G-code could not be read: " + StatusPresentation.clean(failure.getMessage()));
+                } });
             }
         });
     }
 
     private void sendData() {
         if (!pageReady || path == null || sent || web == null) return;
-        sent = true; web.evaluateJavascript("viewer.load()", null);
+        sent = true; web.evaluateJavascript("viewer.load(" + loadGeneration + ")", null);
     }
 
     private void sendTheme() {
@@ -1641,18 +1675,22 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 aligning[2] += bedZ - alignZ; alignZ = bedZ; syncAlignRow(2); pushAlign();
             } else if (cameraWanted() && pageReady && (path != null || alignOnly)) try { web.evaluateJavascript("viewer.movePrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
         }
+        if (alignOnly) return;
         JSONObject live = printer.liveStatus();
         JSONObject machine = live.optJSONObject("machine_status"), print = live.optJSONObject("print_status");
         boolean printing = machine != null && machine.optInt("status", -1) == 2 && print != null;
         String filename = print == null ? "" : print.optString("filename", "");
-        if (!printing || filename.isEmpty()) {
-            if (following) status.setText(printer.liveFresh() ? "No print is running." : "Waiting for printer status…");
+        GcodeJobTracker.Job job = printer.fileJob();
+        String nextJob = job == null ? "" : job.token;
+        if (!observedJob.equals(nextJob)) { clearLivePath(); observedJob = nextJob; }
+        if (!printer.liveFresh() || !printing || filename.isEmpty() || job == null) {
+            if (path != null) clearLivePath();
+            if (following) status.setText(!printer.liveFresh() ? "Waiting for printer status…" : printing ? "Waiting to identify the current print…" : "No print is running.");
             return;
         }
-        if (loadedName == null || !GcodeLibrary.safeName(filename).equals(GcodeLibrary.safeName(loadedName))) {
-            File copy = library.find(filename);
-            if (copy != null) { load(copy, filename); return; }
-            if (path == null) { showMissing(filename, machine, print); return; }
+        if (loadedArtifact == null) {
+            if (loadingName == null && !job.token.equals(resolvingJob)) resolveCopy(job);
+            return;
         }
         if (!following || path == null) return;
         follow.setEnabled(false);
@@ -1686,7 +1724,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         else if (delay == 0) show.run();
         int progress = live.optJSONObject("machine_status").optInt("progress", -1);
         logFollow(print, position, hasPosition, currentLayer, located);
-        status.setText(String.format(Locale.getDefault(), "Live · printing layer %d of %d%s%s", currentLayer, path.layerCount,
+        status.setText(String.format(Locale.getDefault(), "Live · selected copy · printing layer %d of %d%s%s", currentLayer, path.layerCount,
             progress >= 0 ? " · " + progress + "%" : "", hasPosition ? "" : " · no nozzle position reported, so showing the layer start"));
     }
 
@@ -1714,6 +1752,46 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     private ImageView missingPreview;
+    /** Archive operations may wait behind a large copy; never acquire its lock on the UI thread. */
+    private void resolveCopy(GcodeJobTracker.Job job) {
+        resolvingJob = job.token; long ticket = loadGeneration;
+        worker.execute(() -> {
+            GcodeLibrary.Artifact copy = library.selected(job.printer, job.token);
+            boolean evicted = copy == null && library.selectionEvicted(job.printer, job.token);
+            main.post(() -> {
+                if (!job.token.equals(resolvingJob)) return;
+                resolvingJob = null;
+                if (isDestroyed() || ticket != loadGeneration || !sameJob(job)) return;
+                if (copy != null) { load(copy.file, job.filename, copy, job); return; }
+                JSONObject live = printer.liveStatus();
+                showMissing(job.filename, live.optJSONObject("machine_status"), live.optJSONObject("print_status"));
+                if (evicted) {
+                    fileSource.setText("The selected copy is no longer in the phone archive. Choose or download the file again."); fileSource.setVisibility(View.VISIBLE);
+                }
+            });
+        });
+    }
+    private boolean sameJob(GcodeJobTracker.Job expected) {
+        GcodeJobTracker.Job now = printer == null ? null : printer.fileJob();
+        return now != null && now.token.equals(expected.token) && now.printer.equals(expected.printer);
+    }
+    private boolean sameObservedJob() {
+        GcodeJobTracker.Job now = printer == null ? null : printer.fileJob();
+        return now != null && observedJob.equals(now.token);
+    }
+    private void clearLivePath() {
+        loadGeneration++; resolvingJob = null; loadingName = null; loadedName = null; loadedArtifact = null; lastLocated = -1; lastAttempt = false;
+        main.removeCallbacksAndMessages(delayToken); setPlaying(false);
+        synchronized (this) { path = null; segments = null; travels = null; meta = null; }
+        shownSegment = -1; detailedSegment = -2; layer = move = 0;
+        if (details != null) { details.setVisibility(View.GONE); details.setContentDescription(null); }
+        for (TextView value : detailValues) if (value != null) value.setText("");
+        title.setText("Live toolpath"); layerLabel.setText("No toolpath selected"); moveLabel.setText("");
+        GcodeToolpath.LineCursor old = cursor; cursor = null; if (old != null) worker.execute(old::close);
+        setControlsEnabled(false); legend.removeAllViews(); missingCard.setVisibility(View.GONE); fileSource.setVisibility(View.GONE);
+        if (pageReady && web != null) web.evaluateJavascript("viewer.clearToolpath()", null);
+        if (!alignOnly) web.setVisibility(View.INVISIBLE);
+    }
     private void showMissing(String filename, JSONObject machine, JSONObject print) {
         title.setText(StatusPresentation.clean(filename.replaceFirst("(?i)\\.gcode$", "")));
         boolean fetching = printer != null && (printer.fileBusy() || printer.feedback != null && printer.feedback.startsWith("Looking for"));
@@ -1758,37 +1836,81 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private TextView missingDetail, hint;
     private void buildMissingActions(String filename) {
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(row);
-        Button download = rowButton(row, "Download from printer", () -> {
+        rowButton(row, "Kept copies…", this::chooseKeptCopy);
+        rowButton(row, "Choose file…", () -> {
+            pendingChoice = printer == null ? null : printer.fileJob();
+            if (pendingChoice == null) { status.setText("Wait for fresh printer status before choosing this print's file."); return; }
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
+            startActivityForResult(intent, CHOOSE);
+        });
+        LinearLayout fetchRow = new LinearLayout(this); fetchRow.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(fetchRow);
+        Button download = rowButton(fetchRow, "Download from printer", () -> {
             if (printer == null) return;
             lastAttempt = true;
             printer.downloadForViewer(filename);
             status.setText(printer.feedback);
         });
         download.setEnabled(printer != null);
-        rowButton(row, "Choose file…", () -> {
-            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
-            startActivityForResult(intent, CHOOSE);
+    }
+
+    private void chooseKeptCopy() {
+        GcodeJobTracker.Job job = printer == null ? null : printer.fileJob();
+        if (job == null) { status.setText("Wait for fresh printer status before choosing this print's file."); return; }
+        worker.execute(() -> {
+            try {
+                java.util.List<GcodeLibrary.Artifact> copies = library.candidates(job.printer, job.filename);
+                main.post(() -> {
+                    if (isDestroyed() || !sameJob(job)) return;
+                    if (copies.isEmpty()) { new AlertDialog.Builder(this).setTitle("No kept copy for this filename").setMessage("Choose the sliced file from your phone, or download a copy from the printer. Earlier versions may have been removed to keep the archive within its size limit.").setPositiveButton("OK", null).show(); return; }
+                    String[] labels = new String[copies.size()];
+                    for (int i = 0; i < labels.length; i++) {
+                        GcodeLibrary.Artifact a = copies.get(i);
+                        labels[i] = a.origin.label + " · " + new java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(new java.util.Date(a.at))
+                            + " · " + String.format(Locale.getDefault(), "%,d bytes", a.size) + "\nSHA-256 " + a.shortHash();
+                    }
+                    new AlertDialog.Builder(this).setTitle("Choose copy for this print").setItems(labels, (dialog, which) -> confirmCopy(job, copies.get(which))).setNegativeButton("Cancel", null).show();
+                });
+            } catch (IOException error) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("The kept-copy archive could not be read."); }); }
         });
+    }
+    private void confirmCopy(GcodeJobTracker.Job job, GcodeLibrary.Artifact artifact) {
+        if (!sameJob(job)) { status.setText("The print changed. Choose its file again."); return; }
+        new AlertDialog.Builder(this).setTitle("Use this copy for the current print?")
+            .setMessage(StatusPresentation.clean(job.filename) + "\n" + artifact.origin.label + " · " + String.format(Locale.getDefault(), "%,d bytes", artifact.size)
+                + "\nSHA-256 " + artifact.sha256 + "\n\nThe printer has not supplied a matching content hash. Confirm this is the sliced file used to start this print. The viewer will label it as selected by you.")
+            .setPositiveButton("Use for this print", (dialog, which) -> {
+                if (!sameJob(job)) { status.setText("The print changed. Choose its file again."); return; }
+                status.setText("Checking retained copy…");
+                worker.execute(() -> {
+                    try {
+                        library.selectForJob(artifact, job.printer, job.token);
+                        main.post(() -> { if (!isDestroyed() && sameJob(job)) load(artifact.file, job.filename, artifact, job); });
+                    } catch (IOException error) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("The selected copy is missing or changed. Choose the file again."); }); }
+                });
+            }).setNegativeButton("Cancel", null).show();
     }
 
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request != CHOOSE || result != RESULT_OK || data == null || data.getData() == null || printer == null) return;
-        JSONObject print = printer.liveStatus().optJSONObject("print_status");
-        String filename = print == null ? null : print.optString("filename", null);
-        if (filename == null || filename.isEmpty()) return;
+        GcodeJobTracker.Job job = pendingChoice; pendingChoice = null;
+        if (job == null || !sameJob(job)) { status.setText("The print changed while choosing a file. Choose it again."); return; }
         Uri uri = data.getData();
         status.setText("Copying…");
         worker.execute(() -> {
-            File temporary = new File(getCacheDir(), "viewer-choice.gcode");
-            try (InputStream in = getContentResolver().openInputStream(uri); OutputStream out = new FileOutputStream(temporary)) {
-                if (in == null) throw new IOException("Cannot open the file");
-                byte[] buffer = new byte[65536]; int count; while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
-                File stored = library.put(temporary, filename);
-                main.post(() -> load(stored, filename));
+            File temporary = null;
+            try {
+                temporary = File.createTempFile("viewer-choice-", ".gcode", getCacheDir());
+                try (InputStream in = getContentResolver().openInputStream(uri); OutputStream out = new FileOutputStream(temporary)) {
+                    if (in == null) throw new IOException("Cannot open the file");
+                    byte[] buffer = new byte[65536]; int count; long total = 0;
+                    while ((count = in.read(buffer)) != -1) { total += count; if (total > GcodeLibrary.MAX_FILE_BYTES || Thread.currentThread().isInterrupted()) throw new IOException("File is too large or canceled"); out.write(buffer, 0, count); }
+                }
+                GcodeLibrary.Artifact stored = library.retain(temporary, job.filename, job.printer, GcodeLibrary.Origin.CHOSEN);
+                main.post(() -> { if (!isDestroyed() && sameJob(job)) confirmCopy(job, stored); });
             } catch (IOException failure) {
-                main.post(() -> status.setText("The file could not be copied: " + failure.getMessage()));
-            } finally { temporary.delete(); }
+                main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("The file could not be copied: " + StatusPresentation.clean(failure.getMessage())); });
+            } finally { if (temporary != null) temporary.delete(); }
         });
     }
 
