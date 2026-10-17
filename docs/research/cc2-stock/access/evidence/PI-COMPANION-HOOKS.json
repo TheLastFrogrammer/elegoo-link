@@ -1,0 +1,1134 @@
+{
+  "format": "cc2-stock-companion-hook-evidence-v1",
+  "recorded_date": "2026-10-17",
+  "baseline": "stock 02.01.01.07",
+  "firmware_executed": false,
+  "printer_contacted": false,
+  "inputs": {
+    "rootfs_sha256": "20375a79e1ee2748f43fd39a62e5a48b23b945ed048dbe52a54d0a1f37b1acae",
+    "kernel_sha256": "e1ca036e667f1976fb1a1944b6922df8a1c26d5870912dd8273e0fcc3bb4efec",
+    "sw_description_sha256": "6598586ada5e7e9256316c63b801579e65e797d2a77e13ab360f09b3581ae2fb"
+  },
+  "kernel_config_sha256": "8fa0a87f203d69cb9c4e027e8db11a9a0d92c5d2ea8ae83f87b34714aae7ec4a",
+  "selected_kernel_options": {
+    "CONFIG_USB_ACM": "y",
+    "CONFIG_USB_SERIAL": "not set",
+    "CONFIG_USB_NET_DRIVERS": "not set",
+    "CONFIG_USB_STORAGE": "y",
+    "CONFIG_USB_HID": "not set",
+    "CONFIG_INPUT_KEYBOARD": "not set",
+    "CONFIG_USB_CONFIGFS": "y",
+    "CONFIG_USB_CONFIGFS_ACM": "not set",
+    "CONFIG_USB_CONFIGFS_SERIAL": "y",
+    "CONFIG_USB_CONFIGFS_RNDIS": "y",
+    "CONFIG_USB_CONFIGFS_MASS_STORAGE": "y",
+    "CONFIG_USB_CONFIGFS_F_FS": "y",
+    "CONFIG_USB_CONFIGFS_F_HID": "y",
+    "CONFIG_USB_SUNXI_UDC0": "y",
+    "CONFIG_USB_EHCI_HCD_SUNXI": "y",
+    "CONFIG_USB_OHCI_HCD_SUNXI": "y",
+    "CONFIG_OVERLAY_FS": "y",
+    "CONFIG_IKCONFIG_PROC": "y",
+    "CONFIG_MODULES": "y",
+    "CONFIG_INOTIFY_USER": "y"
+  },
+  "files": {
+    "/etc/inittab": {
+      "bytes": 169,
+      "sha256": "e27a334193973696bc63468c9c7df8b61da3509b6c8c158bcd105f182f6c3cea",
+      "selected_lines": [
+        {
+          "line": 1,
+          "text": "::sysinit:/etc/init.d/rcS S boot"
+        },
+        {
+          "line": 3,
+          "text": "tts/0::askfirst:/bin/ash --login"
+        },
+        {
+          "line": 4,
+          "text": "ttyS2::askfirst:/bin/ash --login"
+        },
+        {
+          "line": 5,
+          "text": "tty1::askfirst:/bin/ash --login"
+        }
+      ]
+    },
+    "/etc/rc.local": {
+      "bytes": 1132,
+      "sha256": "17d7b9cf93ba8853f41ab3bc84ef1dc61b5bbf309cb78137c5fe1ea6b7bf33d8",
+      "selected_lines": [
+        {
+          "line": 24,
+          "text": "#/etc/install.sh -debug"
+        },
+        {
+          "line": 28,
+          "text": "/etc/init_dir.sh"
+        },
+        {
+          "line": 29,
+          "text": "/etc/time_sync.sh"
+        }
+      ]
+    },
+    "/etc/init.d/done": {
+      "bytes": 387,
+      "sha256": "22bb5196c67bb2a0f8ba80b57593464a896952c7a893f103329b28c517b47d7b",
+      "selected_lines": [
+        {
+          "line": 4,
+          "text": "START=94"
+        },
+        {
+          "line": 7,
+          "text": "\tmount_root done"
+        },
+        {
+          "line": 11,
+          "text": "\t[ -f /etc/rc.local ] && {"
+        },
+        {
+          "line": 12,
+          "text": "\t\tsh /etc/rc.local"
+        }
+      ]
+    },
+    "/etc/init.d/printer": {
+      "bytes": 4318,
+      "sha256": "6e7c875d40386854028779fdd1573c45a5ce4a69aba828227fff1bb568f7020f",
+      "selected_lines": [
+        {
+          "line": 3,
+          "text": "START=95"
+        },
+        {
+          "line": 9,
+          "text": "printer_cmd=\"run_printer.sh\""
+        },
+        {
+          "line": 99,
+          "text": "        usr_ext4=$(df -Th | awk '$2 ~ /^ext4$/ && $7 == \"'\"/opt/usr\"'\" {print $2}')"
+        },
+        {
+          "line": 100,
+          "text": "        if [ \"$usr_ext4\" = \"ext4\" ]; then"
+        },
+        {
+          "line": 107,
+          "text": "    if [ -f /opt/inst/daemon-000/daemon-000 ];then"
+        },
+        {
+          "line": 108,
+          "text": "        echo \"start daemon-000 service\""
+        },
+        {
+          "line": 109,
+          "text": "       /opt/inst/daemon-000/daemon-000 &"
+        },
+        {
+          "line": 152,
+          "text": "\t\trun_printer.sh start &"
+        }
+      ]
+    },
+    "/etc/rc.common": {
+      "bytes": 2407,
+      "sha256": "3a08c9bf74bc18ea4b119a50c65f7120faf8be926e88ee2fb8269628f1e38f4a",
+      "selected_lines": [
+        {
+          "line": 99,
+          "text": "[ -n \"$USE_PROCD\" ] && {"
+        },
+        {
+          "line": 102,
+          "text": "\t. $IPKG_INSTROOT/lib/functions/procd.sh"
+        }
+      ]
+    },
+    "/etc/init_dir.sh": {
+      "bytes": 2763,
+      "sha256": "1378bf0a4ab4750485d984260f622b3b9e0288cc7e23fd7d4885b3b072983633",
+      "selected_lines": [
+        {
+          "line": 4,
+          "text": "/opt/usr/record"
+        },
+        {
+          "line": 5,
+          "text": "/opt/usr/cfg"
+        },
+        {
+          "line": 6,
+          "text": "/opt/usr/logs"
+        },
+        {
+          "line": 7,
+          "text": "/opt/usr/gcode/local"
+        },
+        {
+          "line": 8,
+          "text": "/opt/usr/gcode_img"
+        },
+        {
+          "line": 9,
+          "text": "/opt/usr/video"
+        },
+        {
+          "line": 10,
+          "text": "/opt/usr/picture"
+        },
+        {
+          "line": 11,
+          "text": "/opt/usr/ota"
+        },
+        {
+          "line": 12,
+          "text": "/opt/usr/wifi"
+        },
+        {
+          "line": 13,
+          "text": "/opt/usr/firmware"
+        },
+        {
+          "line": 14,
+          "text": "/opt/usr/account"
+        },
+        {
+          "line": 15,
+          "text": "/opt/usr/cert"
+        },
+        {
+          "line": 18,
+          "text": "#if [ ! -e /opt/usr/record ];then"
+        },
+        {
+          "line": 24,
+          "text": "   local passwd_file_usr=\"/opt/usr/cfg/password_file\""
+        },
+        {
+          "line": 73,
+          "text": "    usr_ext4=$(df -Th | awk '$2 ~ /^ext4$/ && $7 == \"'\"/opt/usr\"'\" {print $2}')"
+        },
+        {
+          "line": 74,
+          "text": "#    usr_ext4=$(blkid -o value -s TYPE /dev/by-name/UDISK)"
+        },
+        {
+          "line": 75,
+          "text": "    if [ \"$usr_ext4\" = \"ext4\" ]; then"
+        },
+        {
+          "line": 86,
+          "text": "\t\tif [ \"$dir\" = \"/opt/usr/wifi\" ];then"
+        },
+        {
+          "line": 87,
+          "text": "\t\t\tcp -rf /etc/wifi/* /opt/usr/wifi"
+        },
+        {
+          "line": 92,
+          "text": "if [ ! -s \"/opt/usr/wifi/wpa_supplicant.conf\" ];then"
+        },
+        {
+          "line": 93,
+          "text": "    rm -rf /opt/usr/wifi/wpa_supplicant.conf"
+        },
+        {
+          "line": 94,
+          "text": "\tcp -rf /etc/wifi/wpa_supplicant.conf /opt/usr/wifi/wpa_supplicant.conf"
+        },
+        {
+          "line": 97,
+          "text": "if [ ! -f \"/opt/usr/cfg/password_file\" ];then"
+        },
+        {
+          "line": 98,
+          "text": "    cp -rf /opt/inst/password_file /opt/usr/cfg/password_file"
+        },
+        {
+          "line": 102,
+          "text": "        chown mosquitto /opt/usr/cfg/password_file"
+        },
+        {
+          "line": 110,
+          "text": "    chown mosquitto /opt/usr/cfg/password_file"
+        },
+        {
+          "line": 113,
+          "text": "if [ -e /opt/usr/gcode/udisk ];then"
+        },
+        {
+          "line": 116,
+          "text": "   ln -s /mnt/exUDISK/ /opt/usr/gcode/udisk"
+        }
+      ]
+    },
+    "/etc/config/fstab": {
+      "bytes": 1375,
+      "sha256": "391fd974dcd7e9e8c313777959b6c24a5e887466b428e7ccfb40ee0620d3ac5a",
+      "selected_lines": [
+        {
+          "line": 10,
+          "text": "\toption  target\t\t'/boot'"
+        },
+        {
+          "line": 11,
+          "text": "\toption\tdevice\t\t'/dev/by-name/boot'"
+        },
+        {
+          "line": 12,
+          "text": "\toption\toptions\t\t'ro,sync'"
+        },
+        {
+          "line": 13,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 16,
+          "text": "\toption  target\t\t'/boot-res'"
+        },
+        {
+          "line": 17,
+          "text": "\toption\tdevice\t\t'/dev/by-name/boot-res'"
+        },
+        {
+          "line": 18,
+          "text": "\toption\toptions\t\t'ro,sync'"
+        },
+        {
+          "line": 19,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 22,
+          "text": "\toption  target\t\t'/mnt/UDISK'"
+        },
+        {
+          "line": 23,
+          "text": "\toption\tdevice\t\t'/dev/by-name/UDISK'"
+        },
+        {
+          "line": 24,
+          "text": "\toption\toptions\t\t'rw,async'"
+        },
+        {
+          "line": 25,
+          "text": "\toption\tenabled\t\t'0'"
+        },
+        {
+          "line": 28,
+          "text": "\toption  target\t\t'/opt/usr'"
+        },
+        {
+          "line": 29,
+          "text": "\toption\tdevice\t\t'/dev/by-name/UDISK'"
+        },
+        {
+          "line": 30,
+          "text": "\toption\toptions\t\t'rw,async,noatime'"
+        },
+        {
+          "line": 31,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 34,
+          "text": "\toption  target\t\t'/overlay'"
+        },
+        {
+          "line": 35,
+          "text": "\toption\tdevice\t\t'/dev/by-name/rootfs_data'"
+        },
+        {
+          "line": 36,
+          "text": "\toption\toptions\t\t'rw,async'"
+        },
+        {
+          "line": 37,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 40,
+          "text": "\toption  target\t\t'/mnt/SDCARD'"
+        },
+        {
+          "line": 41,
+          "text": "\toption\tdevice\t\t'/dev/mmcblk0'"
+        },
+        {
+          "line": 42,
+          "text": "\toption\toptions\t\t'rw,async,utf8'"
+        },
+        {
+          "line": 43,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 46,
+          "text": "\toption  target\t\t'/mnt/SDCARD'"
+        },
+        {
+          "line": 47,
+          "text": "\toption\tdevice\t\t'/dev/mmcblk0p1'"
+        },
+        {
+          "line": 48,
+          "text": "\toption\toptions\t\t'rw,async,utf8'"
+        },
+        {
+          "line": 49,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 52,
+          "text": "\toption  target\t\t'/mnt/exUDISK'"
+        },
+        {
+          "line": 53,
+          "text": "\toption\tdevice\t\t'/dev/sda'"
+        },
+        {
+          "line": 54,
+          "text": "\toption\toptions\t\t'rw,async,utf8'"
+        },
+        {
+          "line": 55,
+          "text": "\toption\tenabled\t\t'1'"
+        },
+        {
+          "line": 58,
+          "text": "\toption  target\t\t'/mnt/exUDISK'"
+        },
+        {
+          "line": 59,
+          "text": "\toption\tdevice\t\t'/dev/sda1'"
+        },
+        {
+          "line": 60,
+          "text": "\toption\toptions\t\t'rw,async,utf8'"
+        },
+        {
+          "line": 61,
+          "text": "\toption\tenabled\t\t'1'"
+        }
+      ]
+    },
+    "/etc/hotplug.json": {
+      "bytes": 1668,
+      "sha256": "af70c591532927d8cec6cb0e1eba1decbaad2fb87df7053531c95728ea1bbd3f",
+      "selected_lines": [
+        {
+          "line": 43,
+          "text": "\t\t\t\t\t[ \"exec\", \"/sbin/hotplug-call\", \"%SUBSYSTEM%\" ],"
+        },
+        {
+          "line": 61,
+          "text": "\t\t[ \"eq\", \"SUBSYSTEM\", \"platform\" ],"
+        },
+        {
+          "line": 62,
+          "text": "\t\t[ \"exec\", \"/sbin/hotplug-call\", \"%SUBSYSTEM%\" ]"
+        },
+        {
+          "line": 67,
+          "text": "\t\t\t[ \"eq\", \"SUBSYSTEM\", \"button\" ],"
+        },
+        {
+          "line": 72,
+          "text": "\t\t[ \"eq\", \"SUBSYSTEM\","
+        },
+        {
+          "line": 73,
+          "text": "\t\t\t[ \"net\", \"input\", \"usb\", \"usbmisc\", \"ieee1394\", \"block\", \"atm\", \"zaptel\", \"tty\", \"button\", \"sound\" ]"
+        },
+        {
+          "line": 75,
+          "text": "\t\t[ \"exec\", \"/sbin/hotplug-call\", \"%SUBSYSTEM%\" ]"
+        },
+        {
+          "line": 79,
+          "text": "\t\t\t[ \"eq\", \"SUBSYSTEM\", \"usb-serial\" ],"
+        },
+        {
+          "line": 81,
+          "text": "\t\t\t\t[ \"^ttyUSB\", \"^ttyACM\" ]"
+        },
+        {
+          "line": 84,
+          "text": "\t\t[ \"exec\", \"/sbin/hotplug-call\", \"tty\" ]"
+        }
+      ]
+    },
+    "/sbin/hotplug-call": {
+      "bytes": 354,
+      "sha256": "66ce7dbf2a64211b65811ab573bcf834af05381b119039e9429e30e4c4213a40",
+      "selected_lines": [
+        {
+          "line": 4,
+          "text": "export HOTPLUG_TYPE=\"$1\""
+        },
+        {
+          "line": 9,
+          "text": "LOGNAME=root"
+        },
+        {
+          "line": 10,
+          "text": "USER=root"
+        },
+        {
+          "line": 14,
+          "text": "[ \\! -z \"$1\" -a -d /etc/hotplug.d/$1 ] && {"
+        },
+        {
+          "line": 15,
+          "text": "\tfor script in $(ls /etc/hotplug.d/$1/* 2>&-); do ("
+        }
+      ]
+    },
+    "/etc/init.d/udevd": {
+      "bytes": 423,
+      "sha256": "0a9fb9519affe05da1cb49f76cb17a7bc3ab956bb7a0f1be9d4383d8b5b0a98c",
+      "selected_lines": [
+        {
+          "line": 5,
+          "text": "START=85"
+        },
+        {
+          "line": 10,
+          "text": "\tudevd &"
+        },
+        {
+          "line": 11,
+          "text": "#\tudevadm trigger --action=add /dev/ttyACM0                                                               "
+        },
+        {
+          "line": 15,
+          "text": "        killall udevd        "
+        }
+      ]
+    },
+    "/lib/udev/rules.d/60-persistent-serial.rules": {
+      "bytes": 890,
+      "sha256": "72b5af2f176bd82ff74bf454c0410aa344484015a65f9c79a22466d6e905ea43",
+      "selected_lines": [
+        {
+          "line": 1,
+          "text": "# do not edit this file, it will be overwritten on update"
+        },
+        {
+          "line": 5,
+          "text": "KERNEL!=\"ttyUSB[0-9]*|ttyACM[0-9]*\", GOTO=\"persistent_serial_end\""
+        },
+        {
+          "line": 10,
+          "text": "ENV{ID_PATH}==\"?*\", ENV{ID_PORT}==\"\", SYMLINK+=\"serial/by-path/$env{ID_PATH}\""
+        },
+        {
+          "line": 11,
+          "text": "ENV{ID_PATH}==\"?*\", ENV{ID_PORT}==\"?*\", SYMLINK+=\"serial/by-path/$env{ID_PATH}-port$env{ID_PORT}\""
+        },
+        {
+          "line": 14,
+          "text": "ENV{ID_SERIAL}==\"\", GOTO=\"persistent_serial_end\""
+        },
+        {
+          "line": 17,
+          "text": "ENV{ID_PORT}==\"\", SYMLINK+=\"serial/by-id/$env{ID_BUS}-$env{ID_SERIAL}-if$env{ID_IFACE}\""
+        },
+        {
+          "line": 18,
+          "text": "ENV{ID_PORT}==\"?*\", SYMLINK+=\"serial/by-id/$env{ID_BUS}-$env{ID_SERIAL}-if$env{ID_IFACE}-port$env{ID_PORT}\""
+        }
+      ]
+    },
+    "/etc/hotplug.d/block/10-mount": {
+      "bytes": 6076,
+      "sha256": "a5b1f4145534e4567a154baad280d2c61a51a864726c26e2a60da501c03d8e4e",
+      "selected_lines": [
+        {
+          "line": 5,
+          "text": "set_theme(){"
+        },
+        {
+          "line": 81,
+          "text": "mount_device() {"
+        },
+        {
+          "line": 83,
+          "text": "    local theme_filepath=\"/mnt/exUDISK/set_theme\""
+        },
+        {
+          "line": 121,
+          "text": "                set_theme \"$dev_path\""
+        },
+        {
+          "line": 160,
+          "text": "if [ \"$ACTION\" = \"remove\" ]; then"
+        },
+        {
+          "line": 165,
+          "text": "if [ \"$ACTION\" != \"add\" ] || [ -z \"$DEVNAME\" ]; then"
+        },
+        {
+          "line": 174,
+          "text": "DEVICE=$(basename \"$DEVNAME\")"
+        },
+        {
+          "line": 185,
+          "text": "#    echo \"$(date): Disk $DEVNAME detected, trying to mount first partition: $PART1\" >> /dev/ttyS2 2>&1"
+        },
+        {
+          "line": 188,
+          "text": "        if mount_device \"$PART1\"; then"
+        },
+        {
+          "line": 193,
+          "text": "            mount_device \"$PART1\""
+        },
+        {
+          "line": 202,
+          "text": "#    echo \"$(date): Partition $DEVNAME detected, mounting directly\" >> /dev/ttyS2 2>&1"
+        },
+        {
+          "line": 203,
+          "text": "    if mount_device \"$DEVNAME\"; then"
+        },
+        {
+          "line": 206,
+          "text": "#        echo \"$(date): Mounting $DEVNAME failed, attempting repair...\" >> /dev/ttyS2 2>&1"
+        },
+        {
+          "line": 207,
+          "text": "#        repair_filesystem \"$DEVNAME\""
+        },
+        {
+          "line": 208,
+          "text": "        mount_device \"$DEVNAME\""
+        },
+        {
+          "line": 216,
+          "text": "    mount_device \"/dev/$DISK\""
+        }
+      ]
+    },
+    "/lib/preinit/79_format_partition": {
+      "bytes": 3236,
+      "sha256": "56a5345e53f16a89f8be93747c2812d0bed1755decd21b7c53e5c3dc37482b98",
+      "selected_lines": [
+        {
+          "line": 68,
+          "text": "do_clean()"
+        },
+        {
+          "line": 124,
+          "text": "# to clean rootfs_data and UDISK:"
+        },
+        {
+          "line": 125,
+          "text": "# fw_setenv parts_clean rootfs_data:UDISK"
+        },
+        {
+          "line": 127,
+          "text": "clean_parts()"
+        },
+        {
+          "line": 130,
+          "text": "\tlocal parts=$(fw_printenv -n parts_clean 2>/dev/null)"
+        },
+        {
+          "line": 138,
+          "text": "\t\t\tdo_clean \"/dev/by-name/$part\""
+        },
+        {
+          "line": 141,
+          "text": "\t\tfw_setenv parts_clean"
+        },
+        {
+          "line": 145,
+          "text": "do_format_filesystem()"
+        },
+        {
+          "line": 149,
+          "text": "\tclean_parts"
+        },
+        {
+          "line": 152,
+          "text": "\tdo_check_format /dev/by-name/rootfs_data"
+        },
+        {
+          "line": 156,
+          "text": "[ \"$INITRAMFS\" = \"1\" ] || boot_hook_add preinit_main do_format_filesystem"
+        },
+        {
+          "line": 157,
+          "text": "[ \"$INITRAMFS\" = \"1\" ] && boot_hook_add initramfs do_format_filesystem"
+        }
+      ]
+    },
+    "/lib/preinit/80_mount_root": {
+      "bytes": 2844,
+      "sha256": "ca9c88d832dc44c9415350a03dcd3f765f96dfee33bab59750476e57a69d0459",
+      "selected_lines": [
+        {
+          "line": 36,
+          "text": "\t\t# mount -n -t overlay overlayfs:/overlay -o rw,noatime,lowerdir=/,upperdir=/overlay /mnt || {"
+        },
+        {
+          "line": 38,
+          "text": "\t\t\t# mount -n -t overlay overlayfs:/overlay -o rw,noatime,lowerdir=/,upperdir=/overlay/upper,workdir=/overlay/workdir /mnt"
+        },
+        {
+          "line": 47,
+          "text": "\t\t\tmount -n -t overlayfs overlayfs:/mnt/UDISK/overlay -o rw,noatime,lowerdir=/,upperdir=/mnt/UDISK/overlay /mnt"
+        },
+        {
+          "line": 50,
+          "text": "\t\t\tmount -n -t overlay overlayfs:/mnt/UDISK/overlay -o rw,noatime,lowerdir=/,upperdir=/mnt/UDISK/overlay/upper,workdir=/mnt/UDISK/overlay/workdir /mnt"
+        },
+        {
+          "line": 54,
+          "text": "\t\tpivot_root /mnt /mnt/rom"
+        },
+        {
+          "line": 63,
+          "text": "do_mount_root() {"
+        },
+        {
+          "line": 64,
+          "text": "\tmount_root"
+        },
+        {
+          "line": 66,
+          "text": "\tlocal overlay_mount_by_UDISK=0"
+        },
+        {
+          "line": 67,
+          "text": "\tif [ x\"$overlay_mount_by_UDISK\" = x\"1\" ]; then"
+        },
+        {
+          "line": 71,
+          "text": "\tboot_run_hook preinit_mount_root"
+        },
+        {
+          "line": 82,
+          "text": "[ \"$INITRAMFS\" = \"1\" ] || boot_hook_add preinit_main do_mount_root"
+        }
+      ]
+    },
+    "/sbin/swupdate_cmd.sh": {
+      "bytes": 3021,
+      "sha256": "24425006f8c3b00d30d2b7e847633a989962df8615b08f366094b4f5f514a8f4",
+      "selected_lines": [
+        {
+          "line": 45,
+          "text": "        swu_next=$(fw_printenv -n swu_next 2>/dev/null)"
+        },
+        {
+          "line": 46,
+          "text": "        echo \"swu_next: ##$swu_next##\""
+        },
+        {
+          "line": 47,
+          "text": "        if [ x\"$swu_next\" = \"xreboot\" ]; then"
+        },
+        {
+          "line": 48,
+          "text": "\t\t\tfw_setenv swu_next"
+        },
+        {
+          "line": 49,
+          "text": "\t\t\tfw_setenv parts_clean rootfs_data"
+        },
+        {
+          "line": 51,
+          "text": "#           reboot -f"
+        }
+      ]
+    },
+    "/etc/init.d/S99swupdate_autorun": {
+      "bytes": 235,
+      "sha256": "4f453ce49625ede249b1be499522204d7683623f24b70349ce850b13ce89f694",
+      "selected_lines": [
+        {
+          "line": 4,
+          "text": "START=99"
+        },
+        {
+          "line": 7,
+          "text": "PROG=/sbin/swupdate_cmd.sh"
+        },
+        {
+          "line": 11,
+          "text": "#    $PROG_PROGRESS -w > /dev/console 2>&1 &"
+        },
+        {
+          "line": 12,
+          "text": "    $PROG"
+        }
+      ]
+    },
+    "/opt/bin/run_printer.sh": {
+      "bytes": 2172,
+      "sha256": "c26d495c6ea4870cb36a42c0e291db59caf2a9cfaa8782a3befeb766106581e0",
+      "selected_lines": [
+        {
+          "line": 13,
+          "text": "DEF_CFG_DIR=/opt/inst"
+        },
+        {
+          "line": 14,
+          "text": "USR_CFG_DIR=/opt/usr/cfg"
+        },
+        {
+          "line": 15,
+          "text": "CFG_FILE=printer_dsp.cfg"
+        },
+        {
+          "line": 16,
+          "text": "PRODUCT_TEST_CFG_FILE=product_test.cfg"
+        },
+        {
+          "line": 17,
+          "text": "AUTO_SAVE_CFG_FILE=autosave.cfg"
+        },
+        {
+          "line": 20,
+          "text": "mkdir -p $DEF_CFG_DIR"
+        },
+        {
+          "line": 21,
+          "text": "mkdir -p $USR_CFG_DIR"
+        },
+        {
+          "line": 29,
+          "text": "    # if [ -e \"$USR_CFG_DIR/user_$CFG_FILE\" ]; then"
+        },
+        {
+          "line": 31,
+          "text": "    #     elegoo_printer $USR_CFG_DIR/user_$CFG_FILE -a $UDS_FILE &"
+        },
+        {
+          "line": 34,
+          "text": "    #     cp $DEF_CFG_DIR/$CFG_FILE $USR_CFG_DIR/user_$CFG_FILE -rf"
+        },
+        {
+          "line": 35,
+          "text": "    #     elegoo_printer $USR_CFG_DIR/user_$CFG_FILE -a $UDS_FILE &"
+        },
+        {
+          "line": 37,
+          "text": "    LD_BIND_NOW=1 elegoo_printer $DEF_CFG_DIR/$CFG_FILE -s $USR_CFG_DIR/$AUTO_SAVE_CFG_FILE -a $UDS_FILE&"
+        },
+        {
+          "line": 46,
+          "text": "    # if [ -e \"$USR_CFG_DIR/user_$CFG_FILE\" ]; then"
+        },
+        {
+          "line": 48,
+          "text": "    #     elegoo_printer $USR_CFG_DIR/user_$CFG_FILE -a $UDS_FILE &"
+        },
+        {
+          "line": 51,
+          "text": "    #     cp $DEF_CFG_DIR/$CFG_FILE $USR_CFG_DIR/user_$CFG_FILE -rf"
+        },
+        {
+          "line": 52,
+          "text": "    #     elegoo_printer $USR_CFG_DIR/user_$CFG_FILE -a $UDS_FILE &"
+        },
+        {
+          "line": 54,
+          "text": "    exec elegoo_printer $DEF_CFG_DIR/$PRODUCT_TEST_CFG_FILE -s $USR_CFG_DIR/$AUTO_SAVE_CFG_FILE -a $UDS_FILE"
+        },
+        {
+          "line": 58,
+          "text": "    killall elegoo_printer"
+        },
+        {
+          "line": 62,
+          "text": "    echo \"start elegoo_printer!\""
+        },
+        {
+          "line": 65,
+          "text": "    echo \"start product_test elegoo_printer!\""
+        },
+        {
+          "line": 68,
+          "text": "    echo \"stop elegoo_printer!\""
+        }
+      ]
+    },
+    "/bin/setusbconfig": {
+      "bytes": 13586,
+      "sha256": "25de77a641e8683d9dc55d1e3a75f68af3196df9b72cd83e4a7ee7803e8b2889",
+      "selected_lines": [
+        {
+          "line": 11,
+          "text": "  echo \"          rndis,  support rndis function\""
+        },
+        {
+          "line": 18,
+          "text": "enable_adb() {"
+        },
+        {
+          "line": 86,
+          "text": "  rm -f /sys/kernel/config/usb_gadget/g1/configs/c.1/rndis.usb0"
+        },
+        {
+          "line": 92,
+          "text": "  rm -f /sys/kernel/config/usb_gadget/g1/configs/c.1/gser.usb0"
+        },
+        {
+          "line": 103,
+          "text": "\tenable_adb"
+        },
+        {
+          "line": 114,
+          "text": "\tenable_adb"
+        },
+        {
+          "line": 122,
+          "text": "\tenable_adb"
+        },
+        {
+          "line": 123,
+          "text": "  elif [ $1 == \"rndis\" ]; then"
+        },
+        {
+          "line": 124,
+          "text": "\t[ -d /sys/kernel/config/usb_gadget/g1/functions/rndis.usb0 ] || {"
+        },
+        {
+          "line": 125,
+          "text": "\t\tmkdir /sys/kernel/config/usb_gadget/g1/functions/rndis.usb0"
+        },
+        {
+          "line": 127,
+          "text": "\tln -s /sys/kernel/config/usb_gadget/g1/functions/rndis.usb0/ /sys/kernel/config/usb_gadget/g1/configs/c.1/rndis.usb0"
+        },
+        {
+          "line": 175,
+          "text": "  elif [ $1 == \"gser\" ]; then"
+        },
+        {
+          "line": 176,
+          "text": "\t[ -d /sys/kernel/config/usb_gadget/g1/functions/gser.usb0 ] || {"
+        },
+        {
+          "line": 177,
+          "text": "\t\tmkdir /sys/kernel/config/usb_gadget/g1/functions/gser.usb0"
+        },
+        {
+          "line": 180,
+          "text": "\tln -s /sys/kernel/config/usb_gadget/g1/functions/gser.usb0/ /sys/kernel/config/usb_gadget/g1/configs/c.1/gser.usb0"
+        },
+        {
+          "line": 233,
+          "text": "  echo $udc_controller > /sys/kernel/config/usb_gadget/g1/UDC"
+        },
+        {
+          "line": 251,
+          "text": "  if [ $1 == \"rndis\" ]; then"
+        },
+        {
+          "line": 252,
+          "text": "    set_usb_function rndis 0x0525 0xa4a2"
+        },
+        {
+          "line": 279,
+          "text": "  if [ $1 == \"gser\" ]; then"
+        },
+        {
+          "line": 280,
+          "text": "    set_usb_function gser 0x0525 0xa4a6"
+        },
+        {
+          "line": 281,
+          "text": "    #set_usb_function gser 0x067b 0x2303"
+        }
+      ]
+    },
+    "/usr/bin/ssh": {
+      "bytes": 595748,
+      "sha256": "2e9fa7063204d4492f88e2ead70d12c3f2e900702d2390dcf271b8d4cdb14afe",
+      "selected_strings": [
+        "OpenSSH_8.0p1",
+        "forwarded-streamlocal@openssh.com",
+        "direct-streamlocal@openssh.com",
+        "unix_listener"
+      ]
+    },
+    "/usr/bin/scp": {
+      "bytes": 79364,
+      "sha256": "c709fb83a5249702b6e8380f953cd2e484fb844b40c392e257920223e67eff89",
+      "selected_strings": [
+        "unix_listener"
+      ]
+    },
+    "/sbin/rsync": {
+      "bytes": 462668,
+      "sha256": "acc11756ab79b14ef45f15d67b93f324c82daf1ee563b4bafff4cd819acc9e9e",
+      "selected_strings": []
+    },
+    "/sbin/mount_root": {
+      "bytes": 5472,
+      "sha256": "b5443262ede37daf6e46ebe1da0243c8a6584e63f2a5d8f8171398bf06eab92f",
+      "selected_strings": [
+        "rootfs_data",
+        "/overlay"
+      ]
+    },
+    "/sbin/procd": {
+      "bytes": 60052,
+      "sha256": "70f6b9edc09823b1eff7d9c7bfdaa3f2f84e3538c28d092e049d2819d24609d8",
+      "selected_strings": [
+        "sysinit",
+        "valid format is rcS <S|K> <param>",
+        "/etc/rc.d"
+      ]
+    }
+  },
+  "rc_links": {
+    "/etc/rc.d/K90network": "../init.d/network",
+    "/etc/rc.d/K90sysfixtime": "../init.d/sysfixtime",
+    "/etc/rc.d/K98boot": "../init.d/boot",
+    "/etc/rc.d/K98wpa_supplicant": "../init.d/wpa_supplicant",
+    "/etc/rc.d/K99dbus": "../init.d/dbus",
+    "/etc/rc.d/K99printer": "../init.d/printer",
+    "/etc/rc.d/K99udevd": "../init.d/udevd",
+    "/etc/rc.d/K99umount": "../init.d/umount",
+    "/etc/rc.d/K99wifi_daemon": "../init.d/wifi_daemon",
+    "/etc/rc.d/S00sysfixtime": "../init.d/sysfixtime",
+    "/etc/rc.d/S10boot": "../init.d/boot",
+    "/etc/rc.d/S10dbus": "../init.d/dbus",
+    "/etc/rc.d/S10system": "../init.d/system",
+    "/etc/rc.d/S11sysctl": "../init.d/sysctl",
+    "/etc/rc.d/S20network": "../init.d/network",
+    "/etc/rc.d/S40fstab": "../init.d/fstab",
+    "/etc/rc.d/S50cron": "../init.d/cron",
+    "/etc/rc.d/S85udevd": "../init.d/udevd",
+    "/etc/rc.d/S94done": "../init.d/done",
+    "/etc/rc.d/S95printer": "../init.d/printer",
+    "/etc/rc.d/S96wpa_supplicant": "../init.d/wpa_supplicant",
+    "/etc/rc.d/S99swupdate_autorun": "../init.d/S99swupdate_autorun",
+    "/etc/rc.d/S99wifi_daemon": "../init.d/wifi_daemon"
+  },
+  "module_paths": [
+    "/lib/modules/5.4.61/aic8800_bsp.ko",
+    "/lib/modules/5.4.61/aic8800_fdrv.ko",
+    "/lib/modules/5.4.61/disp.ko",
+    "/lib/modules/5.4.61/fuse.ko",
+    "/lib/modules/5.4.61/ip_tables.ko",
+    "/lib/modules/5.4.61/ipt_REJECT.ko",
+    "/lib/modules/5.4.61/iptable_filter.ko",
+    "/lib/modules/5.4.61/iptable_mangle.ko",
+    "/lib/modules/5.4.61/xt_LOG.ko",
+    "/lib/modules/5.4.61/xt_TCPMSS.ko",
+    "/lib/modules/5.4.61/xt_comment.ko",
+    "/lib/modules/5.4.61/xt_limit.ko",
+    "/lib/modules/5.4.61/xt_mac.ko",
+    "/lib/modules/5.4.61/xt_mark.ko",
+    "/lib/modules/5.4.61/xt_multiport.ko",
+    "/lib/modules/5.4.61/xt_time.ko"
+  ],
+  "absent_paths": {
+    "/etc/hotplug.d/tty": true,
+    "/etc/install.sh": true,
+    "/usr/sbin/sshd": true,
+    "/usr/sbin/dropbear": true,
+    "/usr/bin/adbd": true
+  },
+  "inventory_entries": 3996,
+  "update_description_selected_lines": [
+    {
+      "line": 8,
+      "text": "        /* now in systemA, we need to upgrade systemB(bootB, rootfsB) */"
+    },
+    {
+      "line": 14,
+      "text": "                    installed-directly = true;"
+    },
+    {
+      "line": 18,
+      "text": "                    device = \"/dev/by-name/bootB\";"
+    },
+    {
+      "line": 19,
+      "text": "                    installed-directly = true;"
+    },
+    {
+      "line": 23,
+      "text": "                    device = \"/dev/by-name/rootfsB\";"
+    },
+    {
+      "line": 24,
+      "text": "                    installed-directly = true;"
+    },
+    {
+      "line": 42,
+      "text": "                    value = \"bootB\";"
+    },
+    {
+      "line": 46,
+      "text": "                    value = \"rootfsB\";"
+    },
+    {
+      "line": 49,
+      "text": "                    name = \"systemAB_next\";"
+    },
+    {
+      "line": 53,
+      "text": "                    name = \"swu_next\";"
+    },
+    {
+      "line": 54,
+      "text": "                    value = \"reboot\";"
+    },
+    {
+      "line": 59,
+      "text": "        /* now in systemB, we need to upgrade systemA(bootA, rootfsA) */"
+    },
+    {
+      "line": 65,
+      "text": "                    installed-directly = true;"
+    },
+    {
+      "line": 69,
+      "text": "                    device = \"/dev/by-name/bootA\";"
+    },
+    {
+      "line": 70,
+      "text": "                    installed-directly = true;"
+    },
+    {
+      "line": 74,
+      "text": "                    device = \"/dev/by-name/rootfsA\";"
+    },
+    {
+      "line": 75,
+      "text": "                    installed-directly = true;"
+    },
+    {
+      "line": 93,
+      "text": "                    value = \"bootA\";"
+    },
+    {
+      "line": 97,
+      "text": "                    value = \"rootfsA\";"
+    },
+    {
+      "line": 100,
+      "text": "                    name = \"systemAB_next\";"
+    },
+    {
+      "line": 104,
+      "text": "                    name = \"swu_next\";"
+    },
+    {
+      "line": 105,
+      "text": "                    value = \"reboot\";"
+    }
+  ],
+  "qualification": "Pinned image evidence only. Live mounts, CDC-ACM enumeration, event delivery, shell privilege, hook operation, SSH forwarding and update survival need physical acceptance."
+}

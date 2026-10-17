@@ -20,6 +20,7 @@ This is stronger than the earlier generic "owner shell required" wording. The un
 | Camera USB/ADB | Camera maintenance project establishes a route to supported camera modules | Useful for camera work; it does not establish mainboard shell access |
 | USB keyboard / tty1 | Init has a tty1 shell action, but the actual embedded kernel config disables HID/USB-HID keyboard support and framebuffer console rendering | No qualified plug-in keyboard shell route in the inspected image; gadget-side HID support is a different direction |
 | USB autorun or failsafe hooks | Debug-install line is commented and its script absent. A failsafe script refers to Dropbear, but its named binaries are absent from the rootfs inventory | Do not treat these remnants as a working bootstrap |
+| Persistent Pi over front USB | Subsequent kernel inspection confirms built-in CDC-ACM host support, but init has no USB serial shell. Boot/procd and tty-hotplug hooks are candidates after initial owner access | [Companion analysis](PI-COMPANION-HOOKS.md); startup hooks in the writable root overlay can be removed by stock update cleanup |
 | FEL / RAM recovery | Board reference labels FEL; this is a possible lower-level investigation | Not the first route. CC1 procedures and arbitrary boot images are not qualified CC2 recovery instructions |
 
 SSH historical source: [pycentauri CC2 field notes](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md#centauri-carbon-2-cc2-protocol-notes). Their SSH statement is historical and version-specific; other protocol claims are not adopted wholesale. Mainboard reference: [OpenCentauri CC2](https://docs.opencentauri.cc/hardware/CC2/mainboard/). Camera reference: [cc2_camera_fix](https://github.com/OpenCentauri/cc2_camera_fix).
@@ -84,6 +85,8 @@ command -v debug_window
 ```
 
 Only then proceed to [console discovery](CONSOLE-QUICKSTART.md). Getting a shell does not require enabling an SSH daemon, changing network mode, adding a startup hook, or replacing the printer executable. A later manually started helper can be tested separately; update survival remains unqualified.
+
+A permanently connected Pi can subsequently supervise that existing UART route and potentially start temporary helpers after each qualified normal boot. A front-USB serial gadget is also a candidate transport because the inspected kernel has `CONFIG_USB_ACM=y`; it still needs an initial printer-side launcher. The [deeper companion study](PI-COMPANION-HOOKS.md) distinguishes reboot persistence, external recovery and the actual updater's root-overlay cleanup. None is a network-only or USB-only shell bootstrap from a fresh stock image.
 
 ## Computer versus S24+
 
