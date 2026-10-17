@@ -27,7 +27,7 @@ import java.util.concurrent.Executors;
 public final class ProjectsActivity extends Activity {
     static final String EXTRA_PROJECT = "project", EXTRA_ADD_PATH = "addPath", EXTRA_ADD_NAME = "addName";
     private static final int PICK_COPY = 1, PICK_LINK = 2, PICK_RELINK = 3, EXPORT = 4, SAVE_ARCHIVE = 5, IMPORT = 6, SAVE_COVER_PNG = 7, SAVE_COVER_PDF = 8;
-    private static final String HOME = "home", OVERVIEW = "overview", PARTS = "parts", FILES = "files", PART = "part", UNASSIGNED = "unassigned", ARCHIVED = "archived", COVER = "cover";
+    private static final String HOME = "home", OVERVIEW = "overview", PARTS = "parts", FILES = "files", PART = "part", UNASSIGNED = "unassigned", ARCHIVED = "archived", COVER = "cover", PRINTS = "prints";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     /** Reads, copies, hashes and saves, one at a time and in order. */
@@ -107,7 +107,7 @@ public final class ProjectsActivity extends Activity {
         switch (screen) {
             case UNASSIGNED: unassigned(); break;
             case ARCHIVED: home(true); break;
-            case OVERVIEW: case PARTS: case FILES: projectScreen(project); break;
+            case OVERVIEW: case PARTS: case FILES: case PRINTS: projectScreen(project); break;
             case COVER: coverScreen(project); break;
             case PART: { Projects.Part part = project.part(partId); if (part == null) { screen = PARTS; projectScreen(project); } else partScreen(project, part); break; }
             default: home(false);
@@ -123,7 +123,8 @@ public final class ProjectsActivity extends Activity {
             if (p.archived != archived) continue;
             shown++;
             LinearLayout card = ui.card(content, p.title);
-            ui.label(card, summary(p), 13, ui.muted, false);
+            int[] done = p.printedProgress();
+            ui.label(card, status(p) + (done[1] > 0 ? " · " + done[0] + " / " + done[1] + " printed parts accepted" : "") + "\n" + summary(p), 13, ui.muted, false);
             if (!p.description.isEmpty()) { TextView d = ui.label(card, p.description, 13, ui.ink, false); d.setMaxLines(2); d.setEllipsize(android.text.TextUtils.TruncateAt.END); }
             String id = p.id;
             card.setOnClickListener(v -> { projectId = id; screen = OVERVIEW; render(); });
@@ -167,45 +168,62 @@ public final class ProjectsActivity extends Activity {
 
     private void tabs(Projects.Project p) {
         LinearLayout row = ui.row(content);
-        String[][] tabs = {{OVERVIEW, "Overview"}, {PARTS, "Parts (" + p.parts.size() + ")"}, {FILES, "Files (" + p.allAssets().size() + ")"}};
+        String[][] tabs = {{OVERVIEW, "Overview"}, {PARTS, "Parts"}, {FILES, "Files"}, {PRINTS, "Prints"}};
         for (String[] t : tabs) {
             Button b = ui.rowButton(row, t[1], () -> { screen = t[0]; render(); }, screen.equals(t[0]));
-            b.setSelected(screen.equals(t[0])); b.setContentDescription(t[1] + (screen.equals(t[0]) ? ", shown" : ""));
+            b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setSelected(screen.equals(t[0]));
+            int count = t[0].equals(PARTS) ? p.parts.size() : t[0].equals(FILES) ? p.allAssets().size() : t[0].equals(PRINTS) ? p.attempts.size() : -1;
+            b.setContentDescription(t[1] + (count >= 0 ? ", " + count : "") + (screen.equals(t[0]) ? ", shown" : ""));
         }
     }
 
+    /** The project's header: where it stands (a small overline), its name and purpose, then its views. */
     private void projectScreen(Projects.Project p) {
         ui.button(content, "‹ All projects", () -> { screen = HOME; render(); }, false);
-        A11y.heading(ui.label(content, p.title, 22, ui.ink, true));
-        if (p.archived) ui.label(content, "Archived. Bring it back from Overview.", 13, ui.muted, false);
+        overline(content, "PROJECT / " + (p.archived ? "ARCHIVED" : p.assembled ? "ASSEMBLED" : "ACTIVE"));
+        A11y.heading(ui.label(content, p.title, 24, ui.ink, true));
+        if (!p.description.isEmpty()) { TextView d = ui.label(content, p.description, 13, ui.muted, false); d.setMaxLines(3); d.setEllipsize(android.text.TextUtils.TruncateAt.END); }
         tabs(p);
-        if (screen.equals(OVERVIEW)) overview(p); else if (screen.equals(PARTS)) parts(p); else files(p, null);
+        switch (screen) {
+            case OVERVIEW: overview(p); break;
+            case PARTS: parts(p); break;
+            case PRINTS: prints(p); break;
+            default: files(p, null);
+        }
+    }
+    private TextView overline(LinearLayout parent, String text) {
+        TextView t = ui.label(parent, text, 11, ui.muted, true); t.setLetterSpacing(0.12f); t.setPadding(0, ui.dp(10), 0, 0); return t;
     }
 
+    // ------------------------------------------------------------------ overview: progress, the next step, a glance at parts and files
+
     private void overview(Projects.Project p) {
-        LinearLayout card = ui.card(content, "About");
-        ui.label(card, p.description.isEmpty() ? "No description yet." : p.description, 14, p.description.isEmpty() ? ui.muted : ui.ink, false);
-        ui.label(card, summary(p), 13, ui.muted, false);
-        ui.button(card, "Rename or describe…", () -> editProject(p), false);
-        LinearLayout next = ui.card(content, "Next");
-        List<String> todo = new ArrayList<>();
-        for (Projects.Part part : p.parts) {
-            if (part.kind.equals(Projects.PRINTED) && p.assetsOn(part.id).isEmpty()) todo.add(part.name + ": no model yet");
-            else if (part.kind.equals(Projects.PURCHASED) && part.have < part.quantity) todo.add(part.name + ": " + (part.quantity - part.have) + " still to get");
-            else if (part.kind.equals(Projects.TASK) && !part.done) todo.add(part.name);
+        progressCard(p);
+        List<Step> steps = steps(book, p);
+        if (!steps.isEmpty()) nextBanner(p, steps.get(0));
+        if (steps.size() > 1) {
+            sectionHead(content, "Then work on", "Full outline", () -> { screen = PARTS; render(); });
+            for (int i = 1; i < Math.min(4, steps.size()); i++) { Step step = steps.get(i); listRow(content, step.title, step.detail, null, null, () -> follow(p, step)); }
         }
-        if (p.parts.isEmpty()) ui.label(next, "Start the outline: add the parts this needs, even before any of them has a model.", 14, ui.ink, false);
-        else if (todo.isEmpty()) ui.label(next, "Every planned part has a file, every bought part is at hand and every task is done. Printing and fit checks are still yours to judge.", 14, ui.ink, false);
-        else for (int i = 0; i < Math.min(8, todo.size()); i++) ui.label(next, "• " + todo.get(i), 14, ui.ink, false);
-        LinearLayout row = ui.row(next);
-        ui.rowButton(row, "Add planned part", () -> editPart(p, null), true);
-        ui.rowButton(row, "Add files", () -> addFiles(p, ""), false);
+        sectionHead(content, "Parts outline", p.parts.isEmpty() ? null : "View all", () -> { screen = PARTS; render(); });
+        if (p.parts.isEmpty()) ui.label(content, "Start the outline: add the parts this needs, even before any of them has a model.", 14, ui.ink, false);
+        for (Projects.Part part : attention(p, 3)) partRow(content, p, part, null);
+        LinearLayout add = ui.row(content);
+        ui.rowButton(add, "Add planned part", () -> editPart(p, null), p.parts.isEmpty());
+        ui.rowButton(add, "Add files", () -> addFiles(p, ""), false);
+        List<String> files = new ArrayList<>(p.allAssets());
+        if (!files.isEmpty()) {
+            sectionHead(content, "Project files", "See files", () -> { screen = FILES; render(); });
+            for (int i = 0; i < Math.min(2, files.size()); i++) { Projects.Asset a = book.asset(files.get(i)); if (a != null) listRow(content, a.name, holdingShort(a), null, null, () -> { screen = FILES; render(); }); }
+        }
         LinearLayout share = ui.card(content, "Share");
-        ui.label(share, "Send the project to someone (or another phone) as one file they can import, or as a plain outline; and make a cover page.", 13, ui.muted, false);
+        ui.label(share, "Send the project as one file another phone imports, or as a plain outline; and make a cover page.", 13, ui.muted, false);
         LinearLayout shareRow = ui.row(share);
-        ui.rowButton(shareRow, "Share or export…", () -> exportDialog(p), true);
+        ui.rowButton(shareRow, "Share or export…", () -> exportDialog(p), false);
         ui.rowButton(shareRow, "Cover page…", () -> { screen = COVER; render(); }, false);
-        ui.button(content, p.archived ? "Bring back from the archive" : "Archive this project", () -> { p.archived = !p.archived; p.updated = now(); save(); render(); }, false);
+        LinearLayout more = ui.row(content);
+        ui.rowButton(more, "Rename or describe…", () -> editProject(p), false);
+        ui.rowButton(more, p.archived ? "Bring back" : "Archive", () -> { p.archived = !p.archived; p.updated = now(); save(); render(); }, false);
         ui.button(content, "Delete this project…", () -> deleteProject(p), false);
     }
 
@@ -217,38 +235,240 @@ public final class ProjectsActivity extends Activity {
             p.title = Projects.title(title.getText().toString()); p.description = Automation.cap(about.getText().toString().trim(), 4000); p.updated = now(); save(); render();
         }).show();
     }
-
     private void deleteProject(Projects.Project p) {
         new AlertDialog.Builder(this).setTitle("Delete “" + p.title + "”?")
-            .setMessage("Its planned parts and notes are deleted. Its files are not: ones no other project uses move to Files in no project, where they can be deleted on their own.")
+            .setMessage("Its planned parts, notes and print records are deleted. Its files are not: ones no other project uses move to Files in no project, where they can be deleted on their own. Recordings stay in Print recordings.")
             .setNegativeButton("Keep it", null).setPositiveButton("Delete", (d, w) -> { book.projects.remove(p); save(); screen = HOME; render(); }).show();
     }
 
-    private void parts(Projects.Project p) {
-        ui.button(content, "Add planned part", () -> editPart(p, null), true);
-        if (p.parts.isEmpty()) { ui.label(content, "No parts yet. Add each part the project needs, with how many, even before it has a model. Purchased parts and tasks can go here too.", 14, ui.muted, false); return; }
-        for (int i = 0; i < p.parts.size(); i++) {
-            Projects.Part part = p.parts.get(i);
-            LinearLayout card = ui.card(content, part.name + (part.counted() ? " × " + part.quantity : ""));
-            ui.label(card, partLine(p, part), 13, ui.muted, false);
-            if (!part.notes.isEmpty()) { TextView n = ui.label(card, part.notes, 13, ui.ink, false); n.setMaxLines(2); n.setEllipsize(android.text.TextUtils.TruncateAt.END); }
-            LinearLayout row = ui.row(card); String id = part.id; int at = i;
-            ui.rowButton(row, "Open", () -> { partId = id; screen = PART; render(); }, false).setContentDescription("Open " + part.name);
-            Button up = ui.rowButton(row, "↑", () -> { book.movePart(p, id, -1); save(); render(); }, false); up.setEnabled(at > 0); up.setContentDescription("Move " + part.name + " up");
-            Button down = ui.rowButton(row, "↓", () -> { book.movePart(p, id, 1); save(); render(); }, false); down.setEnabled(at < p.parts.size() - 1); down.setContentDescription("Move " + part.name + " down");
+    /** "3 / 8 printed parts accepted", a bar, and what is still open: kept apart from "assembled and checked". */
+    private void progressCard(Projects.Project p) {
+        LinearLayout card = ui.card(content, null);
+        int[] done = p.printedProgress(); int waiting = 0; for (Projects.Part part : p.parts) if (part.kind.equals(Projects.PRINTED)) waiting += p.waiting(part);
+        String state = status(p);
+        LinearLayout top = ui.row(card); top.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView big = new TextView(this); big.setTextColor(ui.ink); big.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        android.text.SpannableString number = new android.text.SpannableString(done[0] + " / " + done[1]);
+        number.setSpan(new android.text.style.RelativeSizeSpan(0.6f), String.valueOf(done[0]).length(), number.length(), 0);
+        number.setSpan(new android.text.style.ForegroundColorSpan(ui.muted), String.valueOf(done[0]).length(), number.length(), 0);
+        big.setText(number); big.setTextSize(30); top.addView(big, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView chip = new TextView(this); chip.setText(state); chip.setTextSize(12); chip.setTextColor(ui.teal); chip.setPadding(ui.dp(10), ui.dp(4), ui.dp(10), ui.dp(4));
+        android.graphics.drawable.GradientDrawable chipShape = new android.graphics.drawable.GradientDrawable(); chipShape.setColor(ui.button); chipShape.setCornerRadius(ui.dp(8)); chip.setBackground(chipShape);
+        top.addView(chip);
+        ui.label(card, done[1] == 0 ? "No printed parts planned yet" : "printed parts accepted", 13, ui.muted, false);
+        ProgressBar bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); bar.setMax(Math.max(1, done[1])); bar.setProgress(done[0]);
+        bar.setProgressTintList(android.content.res.ColorStateList.valueOf(ui.teal)); bar.setProgressBackgroundTintList(android.content.res.ColorStateList.valueOf(ui.button));
+        bar.setContentDescription(done[0] + " of " + done[1] + " printed parts accepted"); card.addView(bar, new LinearLayout.LayoutParams(-1, ui.dp(10)));
+        List<String> open = new ArrayList<>();
+        if (done[1] > done[0]) open.add((done[1] - done[0]) + " still needed");
+        if (waiting > 0) open.add(waiting + " awaiting inspection");
+        open.add(p.assembled ? "assembled and checked" : "assembly not checked");
+        ui.label(card, String.join(" · ", open), 13, ui.muted, false);
+        if (p.allAvailable() || p.assembled) {
+            CheckBox assembled = check(card, "Assembled and checked (your call: printing alone does not say it fits)", p.assembled);
+            assembled.setOnCheckedChangeListener((v, on) -> { p.assembled = on; p.updated = now(); save(); render(); });
         }
     }
+    static String status(Projects.Project p) {
+        if (p.assembled) return "Assembled";
+        if (p.allAvailable()) return "All parts available";
+        int[] done = p.printedProgress(); boolean printing = done[0] > 0 || !p.attempts.isEmpty();
+        return printing ? "In progress" : p.parts.isEmpty() ? "Starting" : "Planning";
+    }
 
-    static String partLine(Projects.Project p, Projects.Part part) {
-        int files = p.assetsOn(part.id).size();
-        String kind = Projects.label(Projects.KINDS, part.kind), state;
-        switch (part.kind) {
-            case Projects.PRINTED: state = files == 0 ? "no model yet" : files == 1 ? "1 file" : files + " files"; break;
-            case Projects.PURCHASED: state = part.have + " of " + part.quantity + " at hand" + (files == 0 ? "" : " · " + files + (files == 1 ? " file" : " files")); break;
-            case Projects.TASK: state = part.done ? "done" : "to do"; break;
-            default: state = files == 0 ? "note" : files + (files == 1 ? " file" : " files");
+    /** One step to take, worked out from the project: what to inspect, design, revise, print, buy or do. */
+    static final class Step {
+        final String title, detail, action, partId;
+        Step(String title, String detail, String action, String partId) { this.title = title; this.detail = detail; this.action = action; this.partId = partId; }
+    }
+    /** The steps in the order they matter: judge printed pieces first, then fix what failed, design what is missing, print, buy, do. */
+    static List<Step> steps(Projects.Book book, Projects.Project p) {
+        List<Step> out = new ArrayList<>();
+        for (Projects.Part part : p.parts) {
+            int waiting = part.kind.equals(Projects.PRINTED) ? p.waiting(part) : 0;
+            if (waiting > 0) out.add(new Step("Review " + waiting + " printed " + (waiting == 1 ? part.name.toLowerCase(Locale.getDefault()) : part.name.toLowerCase(Locale.getDefault()) + " pieces"),
+                "Confirm fit before adding to your count", "inspect", part.id));
         }
-        return kind + " · " + state;
+        for (Projects.Part part : p.parts) if (part.kind.equals(Projects.PRINTED) && part.design.equals("revise"))
+            out.add(new Step("Revise the " + part.name.toLowerCase(Locale.getDefault()), part.notes.isEmpty() ? "Marked as needing a revision" : firstLine(part.notes), "part", part.id));
+        for (Projects.Part part : p.parts) if (part.kind.equals(Projects.PRINTED) && !hasModel(book, p, part) && !part.design.equals("revise")) {
+            boolean sketch = false; for (String id : p.assetsOn(part.id)) { Projects.Asset a = book.asset(id); sketch |= a != null && (a.role.equals("image") || a.role.equals("source")); }
+            out.add(new Step("Design the " + part.name.toLowerCase(Locale.getDefault()), "Planned part · " + (sketch ? "sketch attached" : "no model yet"), "part", part.id));
+        }
+        for (Projects.Part part : p.parts) {
+            if (!part.kind.equals(Projects.PRINTED) || !hasModel(book, p, part) || part.design.equals("revise")) continue;
+            int missing = part.quantity - p.accepted(part) - p.waiting(part);
+            if (missing > 0) out.add(new Step("Print " + missing + " more " + part.name.toLowerCase(Locale.getDefault()), (part.revision.isEmpty() ? "" : "Revision " + part.revision + " · ") + p.accepted(part) + " of " + part.quantity + " accepted", "prepare", part.id));
+        }
+        for (Projects.Part part : p.parts) if (part.kind.equals(Projects.PURCHASED) && part.have < part.quantity)
+            out.add(new Step("Get " + (part.quantity - part.have) + " " + part.name, part.have + " of " + part.quantity + " at hand", "part", part.id));
+        for (Projects.Part part : p.parts) if (part.kind.equals(Projects.TASK) && !part.done) out.add(new Step(part.name, "Task", "part", part.id));
+        if (p.allAvailable() && !p.assembled) out.add(new Step("Assemble and check it", "Every part is available. Mark it assembled once it fits together.", "assemble", ""));
+        return out;
+    }
+    private static String firstLine(String text) { String t = text.trim(); int n = t.indexOf('\n'); return n < 0 ? t : t.substring(0, n); }
+    static boolean hasModel(Projects.Book book, Projects.Project p, Projects.Part part) {
+        for (String id : p.assetsOn(part.id)) { Projects.Asset a = book.asset(id); if (a != null && (a.role.equals("model") || a.role.equals("gcode"))) return true; }
+        return false;
+    }
+    /** The parts most worth a look: ones with something open first, then the rest, at most `n`. */
+    private static List<Projects.Part> attention(Projects.Project p, int n) {
+        List<Projects.Part> open = new ArrayList<>(), rest = new ArrayList<>();
+        for (Projects.Part part : p.parts) {
+            boolean needs = part.kind.equals(Projects.PRINTED) ? p.accepted(part) < part.quantity : part.kind.equals(Projects.PURCHASED) ? part.have < part.quantity : part.kind.equals(Projects.TASK) && !part.done;
+            (needs ? open : rest).add(part);
+        }
+        open.addAll(rest); return open.subList(0, Math.min(n, open.size()));
+    }
+    private void nextBanner(Projects.Project p, Step step) {
+        LinearLayout banner = new LinearLayout(this); banner.setOrientation(LinearLayout.HORIZONTAL); banner.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        banner.setPadding(ui.dp(16), ui.dp(14), ui.dp(12), ui.dp(14));
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setColor(ui.button); shape.setCornerRadius(ui.dp(18)); banner.setBackground(shape);
+        LinearLayout words = new LinearLayout(this); words.setOrientation(LinearLayout.VERTICAL);
+        overline(words, "NEXT").setPadding(0, 0, 0, 0);
+        ui.label(words, step.title, 16, ui.ink, true).setPadding(0, ui.dp(2), 0, 0);
+        ui.label(words, step.detail, 13, ui.muted, false).setPadding(0, 0, 0, 0);
+        banner.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextSize(26); chevron.setTextColor(ui.teal); banner.addView(chevron);
+        banner.setClickable(true); banner.setFocusable(true); banner.setMinimumHeight(ui.dp(48));
+        banner.setOnClickListener(v -> follow(p, step)); banner.setContentDescription("Next: " + step.title + ". " + step.detail);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.topMargin = ui.dp(12); content.addView(banner, lp);
+    }
+    /** Does what a step asks: opens the inspection, the part, the Slice screen with its model, or asks about assembly. */
+    private void follow(Projects.Project p, Step step) {
+        Projects.Part part = p.part(step.partId);
+        switch (step.action) {
+            case "inspect": { Projects.Attempt waiting = null; for (Projects.Attempt a : p.attempts) if (part != null && a.waiting(part.id) > 0) { waiting = a; break; } if (waiting != null) inspect(p, waiting); break; }
+            case "prepare": if (part != null) prepare(p, java.util.Collections.singletonList(part)); break;
+            case "assemble": new AlertDialog.Builder(this).setTitle("Assembled and checked?").setMessage("Mark " + p.title + " as put together and checked. This is your call; the app only knows the parts are available.")
+                .setNegativeButton("Not yet", null).setPositiveButton("Yes, it is", (d, w) -> { p.assembled = true; p.updated = now(); save(); render(); }).show(); break;
+            default: if (part != null) { partId = part.id; screen = PART; render(); }
+        }
+    }
+    private void sectionHead(LinearLayout parent, String title, String action, Runnable run) {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView t = new TextView(this); t.setText(title); t.setTextSize(16); t.setTextColor(ui.ink); t.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD); A11y.heading(t);
+        row.addView(t, new LinearLayout.LayoutParams(0, -2, 1));
+        if (action != null) { Button b = new Button(this); b.setText(action); b.setAllCaps(false); b.setTextColor(ui.teal); b.setBackgroundColor(android.graphics.Color.TRANSPARENT); b.setMinHeight(ui.dp(48)); b.setOnClickListener(v -> run.run()); row.addView(b); }
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-1, -2); lp.topMargin = ui.dp(16); parent.addView(row, lp);
+    }
+    /** A list row: a title and a line under it, an optional count on the right ("2 / 4" over "ACCEPTED"), tappable. */
+    private LinearLayout listRow(LinearLayout parent, String title, String line, String count, String countLabel, Runnable open) {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(ui.dp(4), ui.dp(10), ui.dp(4), ui.dp(10)); row.setMinimumHeight(ui.dp(56));
+        LinearLayout words = new LinearLayout(this); words.setOrientation(LinearLayout.VERTICAL);
+        TextView t = new TextView(this); t.setText(title); t.setTextSize(15); t.setTextColor(ui.ink); t.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD); words.addView(t);
+        if (line != null && !line.isEmpty()) { TextView l = new TextView(this); l.setText(line); l.setTextSize(13); l.setTextColor(ui.muted); words.addView(l); }
+        row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        if (count != null) {
+            LinearLayout right = new LinearLayout(this); right.setOrientation(LinearLayout.VERTICAL); right.setGravity(android.view.Gravity.END);
+            TextView c = new TextView(this); c.setText(count); c.setTextSize(15); c.setTextColor(ui.ink); c.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD); c.setGravity(android.view.Gravity.END); right.addView(c);
+            TextView k = new TextView(this); k.setText(countLabel); k.setTextSize(10); k.setLetterSpacing(0.1f); k.setTextColor(ui.muted); k.setGravity(android.view.Gravity.END); right.addView(k);
+            row.addView(right);
+        }
+        if (open != null) {
+            row.setClickable(true); row.setFocusable(true); row.setOnClickListener(v -> open.run());
+            android.util.TypedValue ripple = new android.util.TypedValue(); getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple, true); row.setBackgroundResource(ripple.resourceId);
+        }
+        row.setContentDescription(title + (line == null || line.isEmpty() ? "" : ". " + line) + (count == null ? "" : ". " + count.replace(" / ", " of ") + " " + countLabel.toLowerCase(Locale.getDefault())));
+        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        View rule = new View(this); rule.setBackgroundColor(ui.button); parent.addView(rule, new LinearLayout.LayoutParams(-1, Math.max(1, ui.dp(1))));
+        return row;
+    }
+    /** A part as a row: name, its state, and good pieces against what is needed (or at hand, for purchased parts). */
+    private LinearLayout partRow(LinearLayout parent, Projects.Project p, Projects.Part part, CheckBox pick) {
+        String count = null, label = null;
+        if (part.kind.equals(Projects.PRINTED)) { count = Math.min(p.accepted(part), Projects.MAX_QUANTITY) + " / " + part.quantity; label = "ACCEPTED"; }
+        else if (part.kind.equals(Projects.PURCHASED)) { count = Math.min(part.have, part.quantity) + " / " + part.quantity; label = part.have >= part.quantity ? "ACQUIRED" : "AT HAND"; }
+        else if (part.kind.equals(Projects.TASK)) { count = part.done ? "✓" : "–"; label = part.done ? "DONE" : "TO DO"; }
+        String id = part.id;
+        LinearLayout row = listRow(parent, part.name, partLine(book, p, part), count, label, () -> { partId = id; screen = PART; render(); });
+        if (pick != null) row.addView(pick, 0);
+        return row;
+    }
+    /** What a part's row says under its name: revision and design, or what is open ("No model yet", "1 awaiting inspection"). */
+    static String partLine(Projects.Book book, Projects.Project p, Projects.Part part) {
+        List<String> bits = new ArrayList<>();
+        switch (part.kind) {
+            case Projects.PRINTED: {
+                int waiting = p.waiting(part);
+                if (!part.revision.isEmpty()) bits.add("Revision " + part.revision);
+                if (waiting > 0) bits.add(waiting + " awaiting inspection");
+                else if (part.design.equals("revise")) bits.add("Revise fit");
+                else if (!hasModel(book, p, part)) bits.add(part.design.equals("modeling") ? "Being designed" : "No model yet");
+                else if (p.accepted(part) >= part.quantity) bits.add("Done");
+                else bits.add("Ready");
+                break;
+            }
+            case Projects.PURCHASED: bits.add(part.have >= part.quantity ? "Acquired" : (part.quantity - part.have) + " to get"); break;
+            case Projects.TASK: bits.add(part.done ? "Done" : "Task"); break;
+            default: bits.add("Reference");
+        }
+        if (!part.notes.isEmpty() && part.kind.equals(Projects.PURCHASED)) bits.add(firstLine(part.notes).toLowerCase(Locale.getDefault()));
+        return String.join(" · ", bits);
+    }
+    private String holdingShort(Projects.Asset a) {
+        if (a.storage.equals(Projects.WEB)) return "Web link";
+        String size = a.size >= 0 ? " · " + size(a.size) : "";
+        return (a.storage.equals(Projects.MANAGED) ? "Kept in the app" : "Linked file") + size;
+    }
+
+    // ------------------------------------------------------------------ parts bench: groups, pick parts, prepare them together
+
+    private final Set<String> collapsed = new HashSet<>(), picked = new HashSet<>();
+    private void parts(Projects.Project p) {
+        if (p.parts.isEmpty()) {
+            ui.label(content, "No parts yet. Add each part the project needs, with how many, even before it has a model. Purchased parts and tasks can go here too.", 14, ui.muted, false);
+            ui.button(content, "Add planned part", () -> editPart(p, null), true); return;
+        }
+        int[] done = p.printedProgress();
+        ui.label(content, done[0] + " / " + done[1] + " printed pieces accepted · tick printed parts with a model to prepare them together", 13, ui.muted, false);
+        // Groups in the order they first appear; parts without one come last under "Other parts" (or with no heading when no part has a group).
+        java.util.LinkedHashMap<String, List<Projects.Part>> groups = new java.util.LinkedHashMap<>();
+        for (Projects.Part part : p.parts) groups.computeIfAbsent(part.group, g -> new ArrayList<>()).add(part);
+        List<String> order = new ArrayList<>(groups.keySet()); if (order.remove("")) order.add("");
+        boolean headings = order.size() > 1 || !order.get(0).isEmpty();
+        picked.removeIf(id -> p.part(id) == null || !preparable(p, p.part(id)));
+        for (String group : order) {
+            List<Projects.Part> members = groups.get(group);
+            if (headings) {
+                String name = group.isEmpty() ? "Other parts" : group; boolean shut = collapsed.contains(group);
+                Button head = ui.button(content, name + " · " + members.size() + (shut ? "   ▸" : "   ▾"), () -> { if (!collapsed.remove(group)) collapsed.add(group); render(); }, false);
+                head.setGravity(android.view.Gravity.START | android.view.Gravity.CENTER_VERTICAL); head.setTextColor(ui.ink);
+                head.setContentDescription(name + ", " + members.size() + (members.size() == 1 ? " part" : " parts") + (shut ? ", collapsed" : ", expanded"));
+                if (shut) continue;
+            }
+            for (Projects.Part part : members) {
+                CheckBox pick = null;
+                if (preparable(p, part)) {
+                    pick = new CheckBox(this); pick.setChecked(picked.contains(part.id)); pick.setContentDescription("Choose " + part.name + " to prepare");
+                    String id = part.id; pick.setOnCheckedChangeListener((v, on) -> { if (on) picked.add(id); else picked.remove(id); render(); });
+                } else if (part.kind.equals(Projects.PRINTED)) { pick = new CheckBox(this); pick.setEnabled(false); pick.setContentDescription(part.name + ": no model to prepare yet"); }
+                partRow(content, p, part, pick);
+            }
+        }
+        ui.button(content, "Add planned part", () -> editPart(p, null), false);
+        List<Projects.Part> chosen = new ArrayList<>(); for (Projects.Part part : p.parts) if (picked.contains(part.id)) chosen.add(part);
+        Button prepare = ui.button(content, "Prepare selected (" + chosen.size() + ")", () -> prepare(p, chosen), true);
+        prepare.setEnabled(!chosen.isEmpty());
+    }
+    /** A printed part whose model is kept in the app, so the Slice screen can open it. */
+    private boolean preparable(Projects.Project p, Projects.Part part) {
+        if (!part.kind.equals(Projects.PRINTED)) return false;
+        for (String id : p.assetsOn(part.id)) { Projects.Asset a = book.asset(id); if (a != null && a.sliceable()) return true; }
+        return false;
+    }
+    /** Opens the Slice screen with the chosen parts' kept models (one file each: the newest added). */
+    private void prepare(Projects.Project p, List<Projects.Part> parts) {
+        List<String> paths = new ArrayList<>(); List<String> without = new ArrayList<>();
+        for (Projects.Part part : parts) {
+            File newest = null;
+            for (String id : p.assetsOn(part.id)) { Projects.Asset a = book.asset(id); File f = a != null && a.sliceable() ? Projects.managedFile(dir, a) : null; if (f != null && f.isFile()) newest = f; }
+            if (newest == null) without.add(part.name); else paths.add(newest.getAbsolutePath());
+        }
+        if (paths.isEmpty()) { toast(without.isEmpty() ? "Choose parts first." : "No kept model for " + String.join(", ", without) + ". Add one as a kept copy (linked files cannot be prepared together)."); return; }
+        if (!without.isEmpty()) toast("Left out (no kept model): " + String.join(", ", without));
+        startActivity(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_MODEL_PATHS, paths.toArray(new String[0])));
     }
 
     /** Adds (part null) or edits a planned part. */
@@ -260,13 +480,18 @@ public final class ProjectsActivity extends Activity {
         for (int i = 0; i < Projects.KINDS.length; i++) { kinds.add(Projects.KINDS[i][1]); if (part != null && Projects.KINDS[i][0].equals(part.kind)) chosen = i; }
         Spinner kind = ui.spinner(body, kinds, chosen);
         EditText quantity = field(body, "How many the project needs", String.valueOf(part == null ? 1 : part.quantity), InputType.TYPE_CLASS_NUMBER);
+        Set<String> known = new java.util.LinkedHashSet<>(); for (Projects.Part q : p.parts) if (!q.group.isEmpty()) known.add(q.group);
+        EditText group = field(body, "Group (optional)" + (known.isEmpty() ? ", such as Housing or Mounting" : ": " + String.join(", ", known)), part == null ? "" : part.group, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        EditText revision = field(body, "Design revision (optional), such as B", part == null ? "" : part.revision, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS);
+        ui.label(body, "Design (printed parts)", 13, ui.ink, false);
+        List<String> designs = new ArrayList<>(); int design = 0;
+        for (int i = 0; i < Projects.DESIGN.length; i++) { designs.add(Projects.DESIGN[i][1]); if (part != null && Projects.DESIGN[i][0].equals(part.design)) design = i; }
+        Spinner designSpinner = ui.spinner(body, designs, design);
         EditText have = field(body, "How many you have (purchased parts)", String.valueOf(part == null ? 0 : part.have), InputType.TYPE_CLASS_NUMBER);
         CheckBox done = new CheckBox(this); done.setText("Done (tasks)"); done.setTextColor(ui.ink); done.setMinHeight(ui.dp(48)); done.setChecked(part != null && part.done); body.addView(done);
         EditText notes = field(body, "Notes: sizes to check, what blocks it…", part == null ? "" : part.notes, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
-        ui.label(body, "Planning only: the number needed does not count anything as printed.", 12, ui.muted, false);
-        AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle(part == null ? "Planned part" : "Edit part").setView(scroll(body)).setNegativeButton("Cancel", null);
-        builder.setPositiveButton(part == null ? "Add" : "Save", null);
-        AlertDialog dialog = builder.show();
+        ui.label(body, "Planning only: the number needed does not count anything as printed. Printed pieces count once you accept them after a print.", 12, ui.muted, false);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle(part == null ? "Planned part" : "Edit part").setView(scroll(body)).setNegativeButton("Cancel", null).setPositiveButton(part == null ? "Add" : "Save", null).show();
         dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String kindId = Projects.KINDS[Math.max(0, kind.getSelectedItemPosition())][0];
             int count = number(quantity), at = number(have);
@@ -276,6 +501,8 @@ public final class ProjectsActivity extends Activity {
             Projects.Part target = part != null ? part : book.addPart(p, name.getText().toString(), kindId, counted ? count : 1, now());
             String typed = name.getText().toString().trim(); if (!typed.isEmpty()) target.name = Automation.cap(typed, 120);
             target.kind = kindId; target.quantity = counted ? count : 1; target.have = kindId.equals(Projects.PURCHASED) ? at : 0; target.done = kindId.equals(Projects.TASK) && done.isChecked();
+            target.group = Automation.cap(group.getText().toString().trim(), 40); target.revision = Automation.cap(revision.getText().toString().trim(), 20);
+            target.design = kindId.equals(Projects.PRINTED) ? Projects.DESIGN[Math.max(0, designSpinner.getSelectedItemPosition())][0] : "";
             target.notes = Automation.cap(notes.getText().toString().trim(), 4000); p.updated = now();
             save(); dialog.dismiss(); render();
         });
@@ -284,17 +511,172 @@ public final class ProjectsActivity extends Activity {
 
     private void partScreen(Projects.Project p, Projects.Part part) {
         ui.button(content, "‹ " + p.title, () -> { screen = PARTS; render(); }, false);
+        overline(content, (part.group.isEmpty() ? "" : part.group.toUpperCase(Locale.getDefault()) + " / ") + Projects.label(Projects.KINDS, part.kind).toUpperCase(Locale.getDefault()));
         A11y.heading(ui.label(content, part.name + (part.counted() ? " × " + part.quantity : ""), 22, ui.ink, true));
-        ui.label(content, partLine(p, part), 13, ui.muted, false);
+        ui.label(content, partLine(book, p, part) + (part.design.isEmpty() || part.design.equals("revise") ? "" : " · " + Projects.label(Projects.DESIGN, part.design)), 13, ui.muted, false);
         if (!part.notes.isEmpty()) ui.label(content, part.notes, 14, ui.ink, false);
-        LinearLayout row = ui.row(content);
+        if (part.kind.equals(Projects.PRINTED)) {
+            LinearLayout card = ui.card(content, "Pieces");
+            int good = p.accepted(part), waiting = p.waiting(part), bad = p.rejected(part);
+            ui.label(card, good + " of " + part.quantity + " accepted" + (waiting > 0 ? " · " + waiting + " awaiting inspection" : "") + (bad > 0 ? " · " + bad + " rejected" : "")
+                + (part.acceptedElsewhere > 0 ? " (" + part.acceptedElsewhere + " made elsewhere)" : ""), 14, ui.ink, false);
+            ui.label(card, "Pieces count once you accept them after a print (Prints tab). A finished print alone does not count them.", 12, ui.muted, false);
+            LinearLayout row = ui.row(card);
+            if (waiting > 0) ui.rowButton(row, "Inspect…", () -> follow(p, new Step("", "", "inspect", part.id)), true);
+            if (preparable(p, part)) ui.rowButton(row, "Prepare", () -> prepare(p, java.util.Collections.singletonList(part)), waiting == 0);
+            ui.button(card, "Good pieces made elsewhere…", () -> elsewhere(p, part), false);
+        } else if (part.kind.equals(Projects.PURCHASED)) {
+            LinearLayout card = ui.card(content, "At hand");
+            ui.label(card, part.have + " of " + part.quantity, 18, ui.ink, true);
+            LinearLayout row = ui.row(card);
+            ui.rowButton(row, "− 1", () -> { part.have = Math.max(0, part.have - 1); p.updated = now(); save(); render(); }, false).setContentDescription("One fewer at hand");
+            ui.rowButton(row, "+ 1", () -> { part.have = Math.min(Projects.MAX_QUANTITY, part.have + 1); p.updated = now(); save(); render(); }, false).setContentDescription("One more at hand");
+        } else if (part.kind.equals(Projects.TASK)) {
+            CheckBox done = check(content, "Done", part.done); done.setOnCheckedChangeListener((v, on) -> { part.done = on; p.updated = now(); save(); render(); });
+        }
+        LinearLayout row = ui.row(content); int at = p.parts.indexOf(part);
         ui.rowButton(row, "Edit…", () -> editPart(p, part), false);
-        ui.rowButton(row, "Remove part…", () -> new AlertDialog.Builder(this).setTitle("Remove “" + part.name + "”?")
-            .setMessage("The part comes off the plan. Its files stay with the project, and are not deleted.").setNegativeButton("Keep", null)
+        Button up = ui.rowButton(row, "Move up", () -> { book.movePart(p, part.id, -1); save(); render(); }, false); up.setEnabled(at > 0);
+        Button down = ui.rowButton(row, "Move down", () -> { book.movePart(p, part.id, 1); save(); render(); }, false); down.setEnabled(at < p.parts.size() - 1);
+        ui.button(content, "Remove part…", () -> new AlertDialog.Builder(this).setTitle("Remove “" + part.name + "”?")
+            .setMessage("The part comes off the plan. Its files stay with the project, and are not deleted; prints keep their other parts.").setNegativeButton("Keep", null)
             .setPositiveButton("Remove", (d, w) -> { book.removePart(p, part.id); p.updated = now(); save(); screen = PARTS; render(); }).show(), false);
         files(p, part);
     }
+    private void elsewhere(Projects.Project p, Projects.Part part) {
+        LinearLayout body = form();
+        EditText count = field(body, "Good pieces made outside the prints listed here", String.valueOf(part.acceptedElsewhere), InputType.TYPE_CLASS_NUMBER);
+        ui.label(body, "For pieces printed before this project was set up, or on another printer. Sets the number (it does not add to it).", 12, ui.muted, false);
+        new AlertDialog.Builder(this).setTitle(part.name).setView(scroll(body)).setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> {
+            int n = number(count); if (n < 0) return; part.acceptedElsewhere = Math.min(Projects.MAX_QUANTITY, n); p.updated = now(); save(); render();
+        }).show();
+    }
 
+    // ------------------------------------------------------------------ prints: attempts, what they made, and inspection
+
+    private final Map<String, String> recordingLines = new HashMap<>();
+    private void prints(Projects.Project p) {
+        LinearLayout row = ui.row(content);
+        ui.rowButton(row, "Add a recorded print…", () -> pickRecording(p), true);
+        ui.rowButton(row, "Add by hand…", () -> editAttempt(p, null, "", ""), false);
+        if (p.attempts.isEmpty()) {
+            ui.label(content, "No prints yet. Add a print the app recorded (or one made elsewhere), say which parts it made and how many, then inspect them: only accepted pieces count toward the project.", 14, ui.muted, false);
+            return;
+        }
+        List<String> missing = new ArrayList<>();
+        for (int i = p.attempts.size() - 1; i >= 0; i--) {
+            Projects.Attempt a = p.attempts.get(i);
+            LinearLayout card = ui.card(content, "#" + String.format(Locale.ROOT, "%03d", i + 1) + " · " + (a.title.isEmpty() ? "Print" : a.title));
+            List<String> made = new ArrayList<>(); int waiting = 0, good = 0, total = 0;
+            for (Map.Entry<String, int[]> e : a.pieces.entrySet()) {
+                Projects.Part part = p.part(e.getKey()); if (part == null) continue;
+                made.add(part.name + ": " + e.getValue()[1] + " accepted, " + e.getValue()[2] + " rejected of " + e.getValue()[0] + (part.revision.isEmpty() ? "" : " (rev " + part.revision + ")"));
+                waiting += a.waiting(part.id); good += e.getValue()[1]; total += e.getValue()[0];
+            }
+            String verdict = total == 0 ? "No parts counted yet" : waiting > 0 ? waiting + " awaiting inspection" : good == total ? "All accepted" : good == 0 ? "None accepted" : "Partly accepted";
+            ui.label(card, verdict + (a.when > 0 ? " · " + java.text.DateFormat.getDateInstance(java.text.DateFormat.MEDIUM).format(new java.util.Date(a.when)) : ""), 13, waiting > 0 ? ui.teal : ui.muted, true);
+            for (String line : made) ui.label(card, line, 13, ui.ink, false);
+            if (!a.recording.isEmpty()) {
+                String line = recordingLines.get(a.recording);
+                if (line == null) missing.add(a.recording); else if (!line.isEmpty()) ui.label(card, line, 12, ui.muted, false);
+            }
+            if (!a.note.isEmpty()) ui.label(card, a.note, 13, ui.ink, false);
+            LinearLayout actions = ui.row(card);
+            ui.rowButton(actions, "Inspect…", () -> inspect(p, a), waiting > 0).setEnabled(total > 0);
+            ui.rowButton(actions, "Edit…", () -> editAttempt(p, a, a.recording, a.title), false);
+            if (!a.recording.isEmpty()) ui.rowButton(actions, "Recording", () -> {
+                File meta = new File(RecordingsActivity.directory(this), a.recording);
+                if (meta.isFile()) startActivity(new Intent(this, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, meta.getAbsolutePath())); else toast("That recording is no longer on this phone.");
+            }, false);
+        }
+        if (!missing.isEmpty()) worker.execute(() -> {
+            Map<String, String> found = new HashMap<>();
+            for (String rel : missing) {
+                File meta = new File(RecordingsActivity.directory(this), rel);
+                try { PrintRecorder.Recording r = PrintRecorder.Recording.read(meta); String j = r.journal == null ? "" : r.journal.summary(); found.put(rel, "Recorded print" + (r.outcome == null || r.outcome.isEmpty() ? "" : " · " + r.outcome) + (j.isEmpty() ? "" : " · " + j)); }
+                catch (Exception gone) { found.put(rel, "The recording is no longer on this phone."); }
+            }
+            main.post(() -> { if (!isDestroyed()) { recordingLines.putAll(found); render(); } });
+        });
+    }
+    /** The prints the app recorded, newest first, to link one to the project. */
+    private void pickRecording(Projects.Project p) {
+        worker.execute(() -> {
+            List<File> metas = new ArrayList<>(); List<String> names = new ArrayList<>();
+            File root = RecordingsActivity.directory(this); File[] all = root.listFiles();
+            List<PrintRecorder.Recording> list = new ArrayList<>();
+            if (all != null) for (File f : all) { File meta = f.isDirectory() ? new File(f, "meta.json") : f.getName().endsWith(".json") ? f : null; if (meta != null && meta.isFile()) try { list.add(PrintRecorder.Recording.read(meta)); } catch (Exception skip) { } }
+            list.sort((x, y) -> Long.compare(y.start, x.start));
+            for (PrintRecorder.Recording r : list) { metas.add(r.meta); names.add((r.file == null || r.file.isEmpty() ? "Print" : r.file) + " · " + java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(new java.util.Date(r.start))); }
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (metas.isEmpty()) { toast("No recorded prints on this phone yet. Add the print by hand instead."); return; }
+                new AlertDialog.Builder(this).setTitle("Which print?").setItems(names.subList(0, Math.min(50, names.size())).toArray(new String[0]), (d, w) -> {
+                    String rel = root.toURI().relativize(metas.get(w).toURI()).getPath();
+                    editAttempt(p, null, rel, names.get(w).replaceFirst(" · .*$", ""));
+                }).setNegativeButton("Cancel", null).show();
+            });
+        });
+    }
+    /** Adds or edits a print: its name, a note, and how many pieces of each printed part it made. */
+    private void editAttempt(Projects.Project p, Projects.Attempt existing, String recording, String title) {
+        List<Projects.Part> printed = new ArrayList<>(); for (Projects.Part part : p.parts) if (part.kind.equals(Projects.PRINTED)) printed.add(part);
+        if (printed.isEmpty()) { toast("Plan a printed part first."); return; }
+        LinearLayout body = form();
+        EditText name = field(body, "Name", existing == null ? title : existing.title, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        ui.label(body, "Pieces this print made, per part (0 for none):", 13, ui.ink, true);
+        Map<String, EditText> made = new HashMap<>();
+        for (Projects.Part part : printed) {
+            int[] c = existing == null ? null : existing.pieces.get(part.id);
+            made.put(part.id, field(body, part.name + (part.revision.isEmpty() ? "" : " (revision " + part.revision + ")"), String.valueOf(c == null ? 0 : c[0]), InputType.TYPE_CLASS_NUMBER));
+        }
+        EditText note = field(body, "Note (settings, material, what happened)", existing == null ? "" : existing.note, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        ui.label(body, "New pieces wait for inspection; nothing counts until you accept it.", 12, ui.muted, false);
+        AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle(existing == null ? "Add a print" : "Edit print").setView(scroll(body)).setNegativeButton("Cancel", null)
+            .setPositiveButton(existing == null ? "Add" : "Save", (d, w) -> {
+                Projects.Attempt a = existing != null ? existing : new Projects.Attempt();
+                if (existing == null) { a.recording = recording; a.when = now(); p.attempts.add(a); }
+                a.title = Automation.cap(name.getText().toString().trim(), 200); a.note = Automation.cap(note.getText().toString().trim(), 2000);
+                for (Projects.Part part : printed) {
+                    int[] old = a.pieces.get(part.id); int n = Math.max(0, number(made.get(part.id)));
+                    a.set(part.id, n, old == null ? 0 : old[1], old == null ? 0 : old[2]);
+                }
+                p.updated = now(); save(); screen = PRINTS; render();
+            });
+        if (existing != null) b.setNeutralButton("Remove…", (d, w) -> new AlertDialog.Builder(this).setTitle("Remove this print?").setMessage("Its pieces stop counting toward the project. The recording itself is kept.")
+            .setNegativeButton("Keep", null).setPositiveButton("Remove", (d2, w2) -> { p.attempts.remove(existing); p.updated = now(); save(); render(); }).show());
+        b.show();
+    }
+    /** Inspection: for each part the print made, how many are good and how many are not. Sets the numbers; never adds twice. */
+    private void inspect(Projects.Project p, Projects.Attempt a) {
+        LinearLayout body = form();
+        ui.label(body, "Judge each piece: does it fit, is it clean? Accepted pieces count toward the project; the rest wait until you decide.", 13, ui.muted, false);
+        Map<String, EditText[]> fields = new HashMap<>();
+        for (Map.Entry<String, int[]> e : a.pieces.entrySet()) {
+            Projects.Part part = p.part(e.getKey()); if (part == null) continue;
+            ui.label(body, part.name + ": " + e.getValue()[0] + " made", 14, ui.ink, true);
+            LinearLayout row = ui.row(body);
+            EditText good = inlineNumber(row, "Accepted", e.getValue()[1]), bad = inlineNumber(row, "Rejected", e.getValue()[2]);
+            fields.put(part.id, new EditText[] {good, bad});
+        }
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Inspect " + (a.title.isEmpty() ? "the print" : a.title)).setView(scroll(body)).setNegativeButton("Cancel", null).setPositiveButton("Save", null).show();
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            for (Map.Entry<String, EditText[]> e : fields.entrySet()) {
+                int[] c = a.pieces.get(e.getKey()); int good = number(e.getValue()[0]), bad = number(e.getValue()[1]);
+                if (good < 0 || bad < 0 || good + bad > c[0]) { e.getValue()[0].setError("Accepted and rejected together: at most " + c[0]); return; }
+            }
+            for (Map.Entry<String, EditText[]> e : fields.entrySet()) { int[] c = a.pieces.get(e.getKey()); a.set(e.getKey(), c[0], number(e.getValue()[0]), number(e.getValue()[1])); }
+            p.updated = now(); save(); dialog.dismiss(); render();
+        });
+    }
+    private EditText inlineNumber(LinearLayout row, String label, int value) {
+        LinearLayout box = new LinearLayout(this); box.setOrientation(LinearLayout.VERTICAL);
+        TextView l = new TextView(this); l.setText(label); l.setTextColor(ui.muted); l.setTextSize(12); box.addView(l);
+        EditText input = new EditText(this); input.setText(String.valueOf(value)); input.setInputType(InputType.TYPE_CLASS_NUMBER); input.setSingleLine(true); input.setMinHeight(ui.dp(48));
+        input.setTextColor(ui.ink); input.setContentDescription(label); box.addView(input);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, -2, 1); if (row.getChildCount() > 0) lp.leftMargin = ui.dp(12); row.addView(box, lp);
+        return input;
+    }
     // ------------------------------------------------------------------ files
 
     /** The files of a project, or of one part, with what can be done with each. */

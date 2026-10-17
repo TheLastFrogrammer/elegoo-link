@@ -117,4 +117,46 @@ public class ProjectsTest {
         String loose = "{\"format\":\"linkWorkshopProjects\",\"version\":1,\"assets\":[],\"projects\":[{\"id\":\"p\",\"title\":\"P\",\"parts\":[],\"attachments\":[{\"asset\":\"gone\",\"part\":\"nope\"}]}]}";
         assertTrue(Projects.Book.fromJson(loose).project("p").attachments.isEmpty());
     }
+
+    @Test public void inspectionSetsCountsAndNeverCountsAPieceTwice() {
+        Projects.Book book = new Projects.Book(); Projects.Project p = book.create("Lamp", 1);
+        Projects.Part clip = book.addPart(p, "Clip", Projects.PRINTED, 4, 1), frame = book.addPart(p, "Frame", Projects.PRINTED, 2, 1);
+        Projects.Attempt a = new Projects.Attempt(); a.set(clip.id, 3, 0, 0); a.set(frame.id, 1, 0, 0); p.attempts.add(a);
+        assertEquals(0, p.accepted(clip)); assertEquals(3, p.waiting(clip));
+        assertArrayEquals("made pieces do not count until accepted", new int[] {0, 6}, p.printedProgress());
+        a.set(clip.id, 3, 2, 0); a.set(clip.id, 3, 2, 0);   // the inspection saved twice
+        a.set(frame.id, 1, 0, 1);
+        assertEquals(2, p.accepted(clip)); assertEquals(1, p.waiting(clip)); assertEquals(1, p.rejected(frame)); assertEquals(0, p.waiting(frame));
+        assertArrayEquals(new int[] {2, 6}, p.printedProgress());
+        a.set(clip.id, 3, 5, 5);   // more than were made: kept within what was made
+        assertArrayEquals(new int[] {3, 3, 0}, a.pieces.get(clip.id));
+        clip.acceptedElsewhere = 4;
+        assertArrayEquals("a part counts at most what it needs", new int[] {4, 6}, p.printedProgress());
+        assertFalse(p.allAvailable());
+        a.set(frame.id, 2, 2, 0); assertTrue(p.allAvailable());
+        assertFalse("available is not assembled", p.assembled);
+    }
+
+    @Test public void theNextStepsGoFromInspectingToAssembling() throws Exception {
+        Projects.Book book = new Projects.Book(); Projects.Project p = book.create("Lamp", 1);
+        Projects.Part clip = book.addPart(p, "Clip", Projects.PRINTED, 4, 1), lid = book.addPart(p, "Lid", Projects.PRINTED, 1, 1), frame = book.addPart(p, "Frame", Projects.PRINTED, 1, 1);
+        Projects.Part screws = book.addPart(p, "Screws", Projects.PURCHASED, 6, 1);
+        frame.design = "revise"; frame.notes = "Card binds";
+        book.attach(p, copy(book, "clip.stl", "c").id, clip.id); book.attach(p, copy(book, "lid sketch.jpg", "s").id, lid.id);
+        Projects.Attempt a = new Projects.Attempt(); a.set(clip.id, 3, 2, 0); p.attempts.add(a);
+        java.util.List<String> titles = new java.util.ArrayList<>(); for (ProjectsActivity.Step s : ProjectsActivity.steps(book, p)) titles.add(s.title + " | " + s.detail);
+        assertEquals(Arrays.asList("Review 1 printed clip | Confirm fit before adding to your count", "Revise the frame | Card binds", "Design the lid | Planned part · sketch attached",
+            "Print 1 more clip | 2 of 4 accepted", "Get 6 Screws | 0 of 6 at hand"), titles);
+        assertEquals("In progress", ProjectsActivity.status(p));
+        a.set(clip.id, 4, 4, 0); frame.design = "ready"; screws.have = 6;
+        book.attach(p, copy(book, "lid.stl", "l").id, lid.id); book.attach(p, copy(book, "frame.stl", "f").id, frame.id);
+        Projects.Attempt b = new Projects.Attempt(); b.set(lid.id, 1, 1, 0); b.set(frame.id, 1, 1, 0); p.attempts.add(b);
+        assertEquals(Arrays.asList("Assemble and check it"), Arrays.asList(ProjectsActivity.steps(book, p).get(0).title));
+        assertEquals("All parts available", ProjectsActivity.status(p));
+        p.assembled = true; assertTrue(ProjectsActivity.steps(book, p).isEmpty()); assertEquals("Assembled", ProjectsActivity.status(p));
+        // Everything survives saving and loading.
+        Projects.save(dir, book); Projects.Project read = Projects.load(dir).project(p.id);
+        assertTrue(read.assembled); assertEquals(2, read.attempts.size()); assertEquals(4, read.accepted(read.part(clip.id)));
+        assertEquals("ready", read.part(frame.id).design);
+    }
 }

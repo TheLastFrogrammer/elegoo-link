@@ -189,6 +189,8 @@ final class ProjectArchive {
             Map<String, String> partIds = new HashMap<>();
             for (Projects.Part old : source.parts) {
                 Projects.Part part = new Projects.Part(); part.name = old.name; part.kind = old.kind; part.notes = old.notes; part.quantity = old.quantity; part.have = old.have; part.done = old.done;
+                // The plan travels (group, revision, how far the design is); counts of pieces made stay with the phone that made them.
+                part.group = old.group; part.revision = old.revision; part.design = old.design;
                 partIds.put(old.id, part.id); p.parts.add(part);
             }
             for (Projects.Attachment a : source.attachments) {

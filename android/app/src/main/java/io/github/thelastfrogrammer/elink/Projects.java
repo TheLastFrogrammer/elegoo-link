@@ -73,15 +73,56 @@ final class Projects {
         int have;
         /** Tasks: done or not. */
         boolean done;
+        /** An optional group in the outline ("Housing", "Mounting"), a design revision label ("C") and how far the design is. */
+        String group = "", revision = "", design = "";
+        /** Printed parts: good pieces made outside the prints recorded here (before the app, another printer), entered by hand. */
+        int acceptedElsewhere;
 
         boolean counted() { return kind.equals(PRINTED) || kind.equals(PURCHASED); }
         JSONObject toJson() throws JSONException {
-            return new JSONObject().put("id", id).put("name", name).put("kind", kind).put("notes", notes).put("quantity", quantity).put("have", have).put("done", done);
+            return new JSONObject().put("id", id).put("name", name).put("kind", kind).put("notes", notes).put("quantity", quantity).put("have", have).put("done", done)
+                .put("group", group).put("revision", revision).put("design", design).put("accepted_elsewhere", acceptedElsewhere);
         }
         static Part fromJson(JSONObject o) throws JSONException {
             Part p = new Part(); p.id = need(o, "id"); p.name = Automation.cap(o.optString("name"), 120); p.kind = known(KINDS, o.optString("kind"), PRINTED);
             p.notes = Automation.cap(o.optString("notes"), 4000); p.quantity = clamp(o.optInt("quantity", 1)); p.have = Math.max(0, Math.min(MAX_QUANTITY, o.optInt("have")));
-            p.done = o.optBoolean("done"); return p;
+            p.done = o.optBoolean("done"); p.group = Automation.cap(o.optString("group").trim(), 40); p.revision = Automation.cap(o.optString("revision").trim(), 20);
+            p.design = known(DESIGN, o.optString("design"), ""); p.acceptedElsewhere = Math.max(0, Math.min(MAX_QUANTITY, o.optInt("accepted_elsewhere")));
+            return p;
+        }
+    }
+    /** How far a printed part's design is: separate from how many good pieces exist. */
+    static final String[][] DESIGN = {{"", "Not set"}, {"planned", "Planned"}, {"modeling", "Being designed"}, {"ready", "Ready to print"}, {"revise", "Needs a revision"}};
+
+    /**
+     * One print for the project: a recorded print (its recording's id) or one entered by hand, with for each part how many
+     * pieces it made and how many of those were judged good or bad. Inspection sets these numbers (never adds to them), so
+     * opening it again cannot count a piece twice; pieces not yet judged are waiting for inspection.
+     */
+    static final class Attempt {
+        String id = UUID.randomUUID().toString(), recording = "", title = "", note = "";
+        long when;
+        /** partId -> {made, accepted, rejected}. */
+        final java.util.Map<String, int[]> pieces = new java.util.LinkedHashMap<>();
+        int waiting(String partId) { int[] c = pieces.get(partId); return c == null ? 0 : Math.max(0, c[0] - c[1] - c[2]); }
+        /** Sets one part's numbers, kept consistent: accepted and rejected never exceed what was made. */
+        void set(String partId, int made, int accepted, int rejected) {
+            int m = Math.max(0, Math.min(MAX_QUANTITY, made)), a = Math.max(0, Math.min(m, accepted)), r = Math.max(0, Math.min(m - a, rejected));
+            if (m == 0) pieces.remove(partId); else pieces.put(partId, new int[] {m, a, r});
+        }
+        JSONObject toJson() throws JSONException {
+            JSONObject counts = new JSONObject(); for (java.util.Map.Entry<String, int[]> e : pieces.entrySet()) counts.put(e.getKey(), new JSONArray().put(e.getValue()[0]).put(e.getValue()[1]).put(e.getValue()[2]));
+            return new JSONObject().put("id", id).put("recording", recording).put("title", title).put("note", note).put("when", when).put("pieces", counts);
+        }
+        static Attempt fromJson(JSONObject o, Project project) throws JSONException {
+            Attempt a = new Attempt(); a.id = need(o, "id"); a.recording = Automation.cap(o.optString("recording"), 200); a.title = Automation.cap(o.optString("title"), 200);
+            a.note = Automation.cap(o.optString("note"), 2000); a.when = o.optLong("when");
+            JSONObject counts = o.optJSONObject("pieces");
+            if (counts != null) for (java.util.Iterator<String> it = counts.keys(); it.hasNext(); ) {
+                String part = it.next(); JSONArray c = counts.optJSONArray(part);
+                if (c != null && project.part(part) != null) a.set(part, c.optInt(0), c.optInt(1), c.optInt(2));
+            }
+            return a;
         }
     }
 
@@ -98,6 +139,30 @@ final class Projects {
         JSONObject cover = new JSONObject();
         final List<Part> parts = new ArrayList<>();
         final List<Attachment> attachments = new ArrayList<>();
+        final List<Attempt> attempts = new ArrayList<>();
+        /** "Assembled and checked": the person's own word, separate from every part being available. */
+        boolean assembled;
+
+        Attempt attempt(String id) { for (Attempt a : attempts) if (a.id.equals(id)) return a; return null; }
+        /** Good pieces of a printed part: judged good in its prints, plus those entered by hand. */
+        int accepted(Part part) { int n = part.acceptedElsewhere; for (Attempt a : attempts) { int[] c = a.pieces.get(part.id); if (c != null) n += c[1]; } return n; }
+        int waiting(Part part) { int n = 0; for (Attempt a : attempts) n += a.waiting(part.id); return n; }
+        int rejected(Part part) { int n = 0; for (Attempt a : attempts) { int[] c = a.pieces.get(part.id); if (c != null) n += c[2]; } return n; }
+        /** Printed pieces: good ones (each part counted up to what it needs) and how many are needed in all. */
+        int[] printedProgress() {
+            int good = 0, needed = 0;
+            for (Part p : parts) if (p.kind.equals(PRINTED)) { needed += p.quantity; good += Math.min(p.quantity, accepted(p)); }
+            return new int[] {good, needed};
+        }
+        /** Every printed part has its good pieces and every purchased part is at hand: what "all parts available" means. */
+        boolean allAvailable() {
+            boolean any = false;
+            for (Part p : parts) {
+                if (p.kind.equals(PRINTED)) { any = true; if (accepted(p) < p.quantity) return false; }
+                if (p.kind.equals(PURCHASED)) { any = true; if (p.have < p.quantity) return false; }
+            }
+            return any;
+        }
 
         Part part(String partId) { for (Part p : parts) if (p.id.equals(partId)) return p; return null; }
         /** The files on a part, or on the project itself with "", in the order they were added. */
@@ -110,7 +175,10 @@ final class Projects {
             JSONArray partList = new JSONArray(); for (Part p : parts) partList.put(p.toJson());
             JSONArray links = new JSONArray(); for (Attachment a : attachments) links.put(new JSONObject().put("asset", a.assetId).put("part", a.partId));
             return new JSONObject().put("id", id).put("title", title).put("description", description).put("archived", archived)
-                .put("created", created).put("updated", updated).put("parts", partList).put("attachments", links).put("cover", cover);
+                .put("created", created).put("updated", updated).put("parts", partList).put("attachments", links).put("cover", cover).put("assembled", assembled)
+                .put("attempts", attemptList());
+        }
+        private JSONArray attemptList() throws JSONException { JSONArray out = new JSONArray(); for (Attempt a : attempts) out.put(a.toJson()); return out;
         }
         static Project fromJson(JSONObject o) throws JSONException {
             Project p = new Project(); p.id = need(o, "id"); p.title = Automation.cap(o.optString("title"), 120); p.description = Automation.cap(o.optString("description"), 4000);
@@ -123,6 +191,8 @@ final class Projects {
                 if (!part.isEmpty() && p.part(part) == null) part = "";   // its part is gone: the file stays with the project
                 p.attachments.add(new Attachment(need(a, "asset"), part));
             }
+            p.assembled = o.optBoolean("assembled");
+            JSONArray attempts = o.optJSONArray("attempts"); for (int i = 0; attempts != null && i < attempts.length() && i < 500; i++) p.attempts.add(Attempt.fromJson(attempts.getJSONObject(i), p));
             return p;
         }
     }
@@ -152,6 +222,7 @@ final class Projects {
         /** Removes a planned part. Its files stay with the project (not deleted, not taken from other parts or projects). */
         void removePart(Project project, String partId) {
             project.parts.removeIf(p -> p.id.equals(partId));
+            for (Attempt a : project.attempts) a.pieces.remove(partId);
             List<Attachment> moved = new ArrayList<>();
             for (Attachment a : project.attachments) moved.add(a.partId.equals(partId) ? new Attachment(a.assetId, "") : a);
             project.attachments.clear();
