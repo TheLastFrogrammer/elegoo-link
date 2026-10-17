@@ -59,7 +59,7 @@ jobs:
           tar -xzf "$RUNNER_TEMP/musl-1.2.6.tar.gz" -C "$RUNNER_TEMP"
           cd "$RUNNER_TEMP/musl-1.2.6"
           CC=arm-linux-gnueabihf-gcc CFLAGS='-Os -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard' \
-            ./configure --target=arm-linux-musleabihf --prefix="$RUNNER_TEMP/cc2-musl" --disable-shared
+            ./configure --target=arm-linux-musleabihf --prefix="$RUNNER_TEMP/cc2-musl" --disable-shared --enable-wrapper=gcc
           make -j2 AR=arm-linux-gnueabihf-ar RANLIB=arm-linux-gnueabihf-ranlib
           make install AR=arm-linux-gnueabihf-ar RANLIB=arm-linux-gnueabihf-ranlib
           printf 'CC2_MUSL_PREFIX=%s\n' "$RUNNER_TEMP/cc2-musl" >> "$GITHUB_ENV"
