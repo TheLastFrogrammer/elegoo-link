@@ -1,0 +1,296 @@
+{
+  "recorded_date": "2026-10-17",
+  "scope": "Read-only offline analysis of pinned stock 02.01.01.07; no firmware execution or printer contact",
+  "rootfs_sha256": "20375a79e1ee2748f43fd39a62e5a48b23b945ed048dbe52a54d0a1f37b1acae",
+  "busybox": {
+    "path": "/bin/busybox",
+    "sha256": "f5c1bd1509e6b04e9268c367923161136cdf69d68e9577be53838c59e3bcf5a7",
+    "version_string": "BusyBox v1.27.2 ()",
+    "applet_table_offset": 384347,
+    "applet_table_bytes": 712,
+    "applet_count": 121,
+    "applets": [
+      "[",
+      "[[",
+      "ash",
+      "awk",
+      "basename",
+      "brctl",
+      "bunzip2",
+      "bzcat",
+      "cat",
+      "chgrp",
+      "chmod",
+      "chown",
+      "chroot",
+      "clear",
+      "cmp",
+      "cp",
+      "crond",
+      "crontab",
+      "cut",
+      "date",
+      "dd",
+      "df",
+      "diff",
+      "dirname",
+      "dmesg",
+      "du",
+      "echo",
+      "egrep",
+      "env",
+      "expr",
+      "false",
+      "fgrep",
+      "find",
+      "flock",
+      "free",
+      "fsync",
+      "grep",
+      "gunzip",
+      "gzip",
+      "halt",
+      "head",
+      "hexdump",
+      "hostname",
+      "hwclock",
+      "id",
+      "ifconfig",
+      "ip",
+      "kill",
+      "killall",
+      "less",
+      "ln",
+      "lock",
+      "logger",
+      "login",
+      "ls",
+      "md5sum",
+      "mkdir",
+      "mkfifo",
+      "mkfs.vfat",
+      "mknod",
+      "mkswap",
+      "mktemp",
+      "mount",
+      "mv",
+      "nc",
+      "netmsg",
+      "netstat",
+      "nice",
+      "nslookup",
+      "ntpd",
+      "passwd",
+      "pgrep",
+      "pidof",
+      "ping",
+      "ping6",
+      "pivot_root",
+      "poweroff",
+      "printf",
+      "ps",
+      "pwd",
+      "readlink",
+      "reboot",
+      "reset",
+      "rm",
+      "rmdir",
+      "route",
+      "sed",
+      "seq",
+      "sh",
+      "sha256sum",
+      "sleep",
+      "sort",
+      "start-stop-daemon",
+      "strings",
+      "switch_root",
+      "sync",
+      "sysctl",
+      "tail",
+      "tar",
+      "tee",
+      "test",
+      "time",
+      "top",
+      "touch",
+      "tr",
+      "traceroute",
+      "traceroute6",
+      "true",
+      "udhcpc",
+      "umount",
+      "uname",
+      "uniq",
+      "uptime",
+      "usleep",
+      "vi",
+      "wc",
+      "wget",
+      "which",
+      "xargs",
+      "yes",
+      "zcat"
+    ],
+    "transfer_path_checks": {
+      "/usr/bin/printf": {
+        "present": true,
+        "symlink_target": "../../bin/busybox"
+      },
+      "/usr/bin/sha256sum": {
+        "present": true,
+        "symlink_target": "../../bin/busybox"
+      },
+      "/usr/bin/hexdump": {
+        "present": true,
+        "symlink_target": "../../bin/busybox"
+      },
+      "/usr/bin/wc": {
+        "present": true,
+        "symlink_target": "../../bin/busybox"
+      },
+      "/bin/cat": {
+        "present": true,
+        "symlink_target": "busybox"
+      },
+      "/bin/dd": {
+        "present": true,
+        "symlink_target": "busybox"
+      },
+      "/bin/mkdir": {
+        "present": true,
+        "symlink_target": "busybox"
+      },
+      "/bin/chmod": {
+        "present": true,
+        "symlink_target": "busybox"
+      },
+      "/bin/sed": {
+        "present": true,
+        "symlink_target": "busybox"
+      },
+      "/usr/bin/od": {
+        "present": false,
+        "symlink_target": null
+      },
+      "/bin/stty": {
+        "present": false,
+        "symlink_target": null
+      },
+      "/usr/bin/timeout": {
+        "present": false,
+        "symlink_target": null
+      }
+    },
+    "not_in_applet_table": [
+      "base64",
+      "uuencode",
+      "uudecode",
+      "od",
+      "stty",
+      "timeout"
+    ],
+    "qualification": "Applet-name table and filesystem links are verified in the inspected image; runtime formatting, shell settings and physical transfer remain device acceptance checks."
+  },
+  "kernel": {
+    "package_member_sha256": "e1ca036e667f1976fb1a1944b6922df8a1c26d5870912dd8273e0fcc3bb4efec",
+    "plain_bytes": 10730880,
+    "plain_sha256": "31720d80c127ef1de2872493047dc0fe234ea22f60f84dcbb27960c4277eee52",
+    "plain_file_va_base": "0xc0008000",
+    "recovered_symbol_entries": 31563,
+    "symbol_recovery": {
+      "project": "https://github.com/marin-m/vmlinux-to-elf",
+      "commit": "2d094bc9c220b6b50f8215cbc3c9e581210ce1a6",
+      "version": "1.3.6",
+      "command": "python -m vmlinux_to_elf.scripts.kallsyms_finder kernel-analysis-plain --bit-size 32 --output kernel-symbols",
+      "qualification": "The tool warns about absolute-looking offsets. The base is its recovered relative-base value, not the first printed _stext address. It was cross-checked against coherent function instructions, branch targets and exact literal strings. These are recovered symbols, not vendor debug information."
+    },
+    "functions": {
+      "sw_uart_probe": {
+        "va_start": "0xc03903ac",
+        "va_end_exclusive": "0xc0390a00",
+        "sha256_including_literal_pool": "52bddcd1f2830082354cf6c30a1dcea4fbde623b16d40f3d2b663164568ae922"
+      },
+      "sw_is_console_port": {
+        "va_start": "0xc038ebe4",
+        "va_end_exclusive": "0xc038ec08",
+        "sha256_including_literal_pool": "5a43196dd4b428d7bf718c753f7702235c74bf36f3d08b3631049accc53f6ca9"
+      },
+      "sw_console_get_port": {
+        "va_start": "0xc038edf4",
+        "va_end_exclusive": "0xc038ee50",
+        "sha256_including_literal_pool": "db9b63dc9d95831245ca9cb07639ca59310837ff06a05a30d843881dbdc5c902"
+      },
+      "sw_console_setup": {
+        "va_start": "0xc038fa30",
+        "va_end_exclusive": "0xc038fb48",
+        "sha256_including_literal_pool": "4fd1aa3740a05ed392618c90923884c965953a32d6e01fb7c7d1e4c1553cdd55"
+      },
+      "sunxi_pmx_request": {
+        "va_start": "0xc03411bc",
+        "va_end_exclusive": "0xc0341424",
+        "sha256_including_literal_pool": "fff63b99b6b556812d3300edaff22a9621663fc469f0d5dad46086a4c8af62c8"
+      },
+      "sunxi_pinctrl_set_io_bias_cfg": {
+        "va_start": "0xc033f790",
+        "va_end_exclusive": "0xc033f950",
+        "sha256_including_literal_pool": "934a92289d8d520592e44ee0a341537874280d4c88038f5733914c2f4376f1b9"
+      }
+    },
+    "trace_observations": [
+      {
+        "at": "0xc03903f8",
+        "operation": "sw_uart_probe calls of_alias_get_id with serial, then selects state using alias * 0x1b4"
+      },
+      {
+        "at": "0xc0390724..0xc0390750",
+        "operation": "Formats uart%d_port from hardware alias and reads u32 into 0xc0a5874c + alias*0x1b4 + 0xc8; read error takes probe failure branch"
+      },
+      {
+        "at": "0xc038ee08..0xc038ee28",
+        "operation": "sw_console_get_port loops six enabled UART entries; compares field +0xc8 of matching state with console index at +0x2a"
+      },
+      {
+        "at": "0xc038fa48..0xc038fa60",
+        "operation": "sw_console_setup defaults baud to 0x1c200 (115200), bits8, parity n, flow n before optional uart_parse_options"
+      },
+      {
+        "at": "0xc0341270..0xc0341290",
+        "operation": "sunxi_pmx_request formats vcc-p%c from bank number and requests ordinary regulator"
+      },
+      {
+        "at": "0xc03412c8..0xc0341308",
+        "operation": "Bank5/PF plus descriptor byte flag at +0x1c selects optional vcc-pfo regulator request"
+      },
+      {
+        "at": "0xc0341344..0xc0341388",
+        "operation": "Enables ordinary and conditionally optional PF regulators"
+      },
+      {
+        "at": "0xc03413b0..0xc03413dc",
+        "operation": "Conditionally calls voltage-dependent sunxi_pinctrl_set_io_bias_cfg; does not expose measured pin voltage"
+      }
+    ],
+    "interpretation": "Hardware alias and console index can differ through uartN_port. Embedded UART0 value is empty; a live fixup/mapping is unverified. PF/PFO driver paths do not independently resolve header signal voltage."
+  },
+  "uboot": {
+    "sha256": "769d55b96ed4dff486ff5b79f35d61a36d68c444f49f19e44059e2472d468f72",
+    "console_ttyS0_string_offset": "0xaa761",
+    "context": "bootdelay=0; bootcmd=run sunxi_sprite_test; console=ttyS0,115200; sunxi_sprite_test=sprite_test read",
+    "interpretation": "Factory/sprite environment context, not proof of normal Linux console selection"
+  },
+  "reproduction": [
+    "Verify package/component hashes using baseline/evidence/VERIFICATION.json.",
+    "Read the SquashFS image without executing any payload; inspect /bin/busybox applet table at the pinned offset and resolve the listed symlinks.",
+    "Recover kernel gzip/config as in UART-DT-FOLLOWUP.json; verify plain-kernel hash, recover kallsyms using the pinned tool, and disassemble ARM little-endian bytes at VA minus 0xc0008000.",
+    "For function hashes include the range up to the next symbol, including trailing literal pools; do not treat decoded literal-pool words as instructions.",
+    "Follow cited branch/call targets and literal pointers to confirm UART/PF observations. Compare embedded FDT properties separately from the unknown live boot-patched tree."
+  ],
+  "unresolved": [
+    "Exact owner firmware and executable fingerprint",
+    "Physical UART header mapping and signal voltage/RX tolerance",
+    "Actual Linux askfirst prompt and UID",
+    "Phone adapter enumeration, paced text send and private complete log export",
+    "Native executable startup, inventory response and WAN monitoring on actual hardware"
+  ]
+}

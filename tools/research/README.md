@@ -1,5 +1,7 @@
 # Offline CC2 capture inspector
 
+For a stock owner shell without Python, use the [native first-contact recorder](NATIVE-FIRST-PROBE.md) and optional [checksummed paced-text transfer](SERIAL-TRANSFER.md). Both are preparation tools; physical access and actual printer acceptance remain pending.
+
 For an independently established stock console, see the separate [bounded console recorder](CONSOLE-CAPTURE.md). It does not create shell access; Python availability on stock firmware is not established. The offline inspector below remains suitable for already exported files on a workstation or Termux.
 
 `cc2_capture_inspect.py` summarizes files the owner has already exported. It never connects to a printer or cloud account, executes G-code, enables services or changes printer firmware. Python 3.10+ with the standard library is sufficient; no pip dependencies are needed. It can run on a workstation or in Termux with Python available.

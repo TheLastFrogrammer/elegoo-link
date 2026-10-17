@@ -4,6 +4,8 @@ This is a small C recorder for the **existing local Unix socket on a printer wit
 
 The pinned stock CC2 02.01.01.07 BusyBox executable is ELF32 little-endian ARM, EABI5 hard-float, ARMv7-A with VFPv3/NEON attributes. This probe is built for ARMv7-A/VFPv3-D16 hard-float and linked statically so it does not depend on stock shared libraries or a Python installation. Matching these attributes and passing QEMU tests does **not** qualify an executable on the owner's unspecified current firmware, kernel or physical printer.
 
+For temporary UART-only transfer, the artifact now includes ready-generated `uart-transfer/` staging and export snippets plus an offline [serial transfer tool](SERIAL-TRANSFER.md). This uses confirmed stock applets, verifies the binary hash before enabling execution and recovers the fixed capture files with size/hash checks. It still requires an established owner shell and a qualified paced-text terminal; it does not create access.
+
 ## Build and qualification
 
 The [research workflow](https://github.com/TheLastFrogrammer/elegoo-link/blob/claude/dreamy-hypatia-4ru1wu/.github/workflows/research-tools.yml) builds pinned musl 1.2.6 with `arm-linux-gnueabihf-gcc`, links through its `musl-gcc` wrapper, checks the ELF class/machine/ABI and absence of dynamic loader/segments, and exercises the ARM executable with `qemu-arm -cpu cortex-a7`. It publishes the `cc2-native-first-probe-armv7` artifact only after the host test matrix and ARM checks pass. `BUILD-MANIFEST.json` records the source commit, source/binary hashes, compiler and emulator versions. The package includes the library/runtime copyright notices. No firmware package, daemon or automatic installer is produced.

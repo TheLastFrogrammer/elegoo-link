@@ -8,6 +8,7 @@ Current checkpoint: 17 October 2026. The owner has Termux/Python, limited conven
 - Retain the existing stock firmware and Matrix/cloud binding. Do not downgrade, install patched firmware, or change LAN/WAN mode to bootstrap a shell.
 - Review the [CC2-specific board picture](https://docs.opencentauri.cc/hardware/CC2/mainboard/) and [access analysis](OWNER-ACCESS-ROUTES.md). UART is the strongest remaining lead, with physical mapping and actual shell privilege still unverified.
 - Software preparation now includes the [native first-contact probe](../../../tools/research/NATIVE-FIRST-PROBE.md). It needs no printer-side Python but still needs a shell and a qualified way to copy one executable to a temporary location. Preparing it does not create access from the phone.
+- A [firmware-driven transfer and sourcing pass](CONNECTION-SOURCING.md) now supplies a checksummed paced-text staging/export option, plus exact adapter candidates. The CI artifact includes ready-generated snippets for its actual ARM binary; a separate USB drive is no longer the only prepared transfer candidate.
 
 ## 2. Qualify a minimal phone kit
 
@@ -21,6 +22,8 @@ Current checkpoint: 17 October 2026. The owner has Termux/Python, limited conven
 
 An adapter with a 5-V supply pin is not necessarily a 5-V logic adapter. A common CP2102/FT232/CH340 name is not enough to select an exact board. Match both the adapter's transmitted voltage and the printer receiver's tolerance before enabling transmit. Avoid PC RS-232 voltage-level adapters. The phone gets USB-device access through Android's permission API; a Termux process should not be assumed to see `/dev/ttyUSB0`.
 
+The current inexpensive candidate is **DFRobot FIT0416** (documented selectable 1.8/3.3/5-V TTL signals, $10.90 at check time), with exact distributor links and USB-cable qualifications in the [sourcing guide](CONNECTION-SOURCING.md). Qualify phone enumeration and an adapter-only loopback before printer wiring. Do not select the signal voltage from the UART label.
+
 A plain USB cable is not a qualified mainboard shell path. The printer's toolhead USB-C connection is documented as carrying **24 V** and must not be connected to the phone or laptop.
 
 A USB keyboard is not a qualified shortcut either. Although init includes a tty1 shell, the pinned kernel's embedded configuration disables `CONFIG_HID`, `CONFIG_USB_HID` and `CONFIG_FRAMEBUFFER_CONSOLE`. Gadget-side `CONFIG_USB_CONFIGFS_F_HID` being enabled does not make the printer a USB keyboard host. See the [configuration fingerprint and selected options](access/evidence/UART-DT-FOLLOWUP.json).
@@ -30,6 +33,8 @@ A USB keyboard is not a qualified shortcut either. Although init includes a tty1
 Before pin-by-pin wiring, obtain a clear picture showing the actual mainboard revision, the header and its surrounding orientation. The reference identifies EF-M5-V1.0.073 and a UART0/DSP 2x4 header; that does not establish the owner's revision or the physical mapping to Linux `ttyS2`.
 
 A deeper [embedded-device-tree check](access/evidence/UART-DT-FOLLOWUP.json) reinforces that distinction. One stock U-Boot-embedded tree names `console=ttyS2`, enables hardware UART0 on PF2/PF4, and marks hardware UART2 disabled. Its PF/PFO supplies reference both 1.8-V and 3.3-V fixed regulators. This is not the live boot-patched device tree or an electrical measurement: neither the console naming discrepancy nor the actual header signal voltage is resolved. Do not pick a 3.3-V-only adapter from the UART label or change boot arguments to force the names to agree.
+
+The [subsequent kernel trace](access/evidence/STOCK-CONNECTION-FOLLOWUP.json) shows a separate `uartN_port` field used to match the Linux console index. Hardware UART0 could therefore serve ttyS2, but the embedded UART0 property is empty and its live value remains unknown. The driver also has a conditional separate PF optional-regulator path. These findings narrow the explanation without resolving the actual header or its electrical level.
 
 Power off/unplug before opening or attaching leads; keep clear of the PSU/mains area. After mapping/levels are verified, secure only printer GND to adapter GND and printer TX to adapter RX. Leave adapter VCC and printer RX disconnected. Use the printer's normal power for the normal boot after leads are secured.
 
@@ -56,6 +61,8 @@ Record the actual UID, prompt, terminal evidence and installed firmware. If `sha
 ## 5. Run the prepared inventory experiment, then file/log work
 
 After temporary executable transfer/startup is separately qualified, run the native probe once on the idle printer. Copy its private capture to the phone and inspect it offline using the packaged Python scripts. The [probe guide](../../../tools/research/NATIVE-FIRST-PROBE.md) specifies exact commands, limits and the distinction between a finished window and a verified response.
+
+The [paced-text transfer guide](../../../tools/research/SERIAL-TRANSFER.md) provides the staging, manual version/inventory commands and explicit private export. It uses applets confirmed in the stock rootfs, checks a full binary digest before enabling execution, and checks sizes/digests again during local recovery. It needs a terminal with qualified paced sending and intact text-log export. Host shell tests are complete; actual stock BusyBox/terminal operation is still a device acceptance check.
 
 Record normal WAN status before and after the run in the [owner worksheet](OWNER-CAPTURE-WORKSHEET.md). A matching inventory reply is the next meaningful deliverable. Help/output subscriptions, consistent records/log export and recovery of one known cloud G-code file follow as separate experiments. Active-print file reading, an authenticated companion transport and persistence remain later qualification stages. Keep camera maintenance separate from mainboard shell access.
 

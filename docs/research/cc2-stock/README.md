@@ -17,11 +17,13 @@ The second follow-on is implemented in Android v0.65.0 source: [retained-file id
 
 Console preparation now includes an [owner UART/shell worksheet](OWNER-CAPTURE-WORKSHEET.md) and a [bounded console reference recorder](../../../tools/research/CONSOLE-CAPTURE.md). The recorder needs an established local access path and Python 3.10+; a Python runtime is not confirmed in the stock image. Protocol/fixture validation is separate from printer qualification.
 
-The [owner-access route analysis](OWNER-ACCESS-ROUTES.md) now verifies the stock askfirst executable's direct shell-launch behavior and compares historical SSH, current UART, USB/ADB and recovery leads. Start with the installed firmware version and a bounded SSH-banner check before opening the printer.
+The [owner-access route analysis](OWNER-ACCESS-ROUTES.md) now verifies the stock askfirst executable's direct shell-launch behavior and compares historical SSH, current UART, USB/ADB and recovery leads. The owner's SSH check has since returned refusal; preserve that result and start the remaining physical stage with exact firmware/header identification.
 
 The [phone/UART next-step sequence](PHONE-UART-NEXT-STEPS.md) now incorporates the owner's completed network checks and missing adapter. A [native first-contact probe](../../../tools/research/NATIVE-FIRST-PROBE.md) prepares one fixed endpoint-inventory request without printer-side Python, with private bounded raw capture and strict offline inspection. Its ARM build/emulator qualification is separate from physical printer acceptance and owner bootstrap.
 
 Native qualification checkpoint: [run 39039995345](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39039995345) passed all 67 research tests on each host Python version and all 22 native-probe tests with the actual static ARM executable under QEMU, with zero skips. The executable is 25,852 bytes; its downloadable artifact includes source, inspector, instructions, manifest and checksums. [Validation record](NATIVE-PROBE-VALIDATION.json). No physical printer qualification or owner bootstrap is implied.
+
+The [deeper stock connection and sourcing pass](CONNECTION-SOURCING.md) recovers kernel UART numbering/baud behavior, the conditional PF regulator path and exact BusyBox transfer applets. A new [serial transfer tool](../../../tools/research/SERIAL-TRANSFER.md) prepares a temporary native-probe upload and recovers the three fixed capture files with printer-side size/hash checks. The CI bundle includes ready-generated snippets for its actual ARM binary. The guide also compares exact adapter SKUs, prices and phone connection requirements.
 
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 

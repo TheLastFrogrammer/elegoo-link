@@ -1,0 +1,35 @@
+{
+  "recorded_date": "2026-10-17",
+  "scope": "Offline UART transfer preparation/recovery and packaging; no physical printer or stock BusyBox execution",
+  "local_validation": {
+    "command": "python -m unittest discover -s tools/research/tests -v",
+    "tests_total": 80,
+    "passed": 75,
+    "skipped": 5,
+    "skip_reason": "Workspace disallows native Unix sockets; actual native Unix connector checks run in Linux CI.",
+    "new_transfer_tests": 13,
+    "new_transfer_tests_passed": 13,
+    "generated_shells": "Actual host /bin/sh, /usr/bin/printf and hexdump; not stock firmware applets"
+  },
+  "actual_binary_preparation": {
+    "source_run": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39039995345",
+    "binary_bytes": 25852,
+    "binary_sha256": "523dac21dee64fa942ff4fcd9514925c08915d80ef62b68da877f3515f6d76ad",
+    "upload_ascii_bytes": 135556,
+    "longest_upload_line_bytes": 667,
+    "prepare_succeeded": true,
+    "binary_executed": false
+  },
+  "ci_validation": {
+    "status": "pending new packaged workflow run"
+  },
+  "device_qualification": {
+    "owner_shell": false,
+    "phone_adapter": false,
+    "physical_voltage_mapping": false,
+    "paced_terminal": false,
+    "stock_shell_transfer": false,
+    "native_printer_execution": false,
+    "wan_coexistence": false
+  }
+}
