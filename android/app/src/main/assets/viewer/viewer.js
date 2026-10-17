@@ -166,7 +166,7 @@
   // ---------------------------------------------------------------- state
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
-    nozzleSize: 16, nozzleAlpha: 1, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false,
+    nozzleSize: 16, nozzleAlpha: 1, supportAlpha: 0.35, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false,
     headSize: { w: 70, d: 80, h: 80, block: 24, offset: 0 }, headShow: false, headLook: "mask" };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
@@ -517,8 +517,23 @@
     const solid = a > 0.99 && b > 0.99;
     if (!solid) gl.depthMask(false);
     gl.bindVertexArray(beadVao); bindInstances(first);
+    // Supports are see-through (view.supportAlpha): a sparse support's walls, seen side on, would otherwise read as a solid
+    // block hiding the model. They are drawn after everything else, without writing depth, so what is behind them shows.
+    const mask = supportMask(), seeThrough = !ghost && mask && view.supportAlpha < 0.99 && (view.hidden & mask) !== mask;
+    if (seeThrough) gl.uniform1i(bead.u.uHidden, view.hidden | mask);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, beadVertices.length / 6, end - first);
+    if (seeThrough) {
+      const k = Math.max(0.05, view.supportAlpha);
+      gl.uniform1i(bead.u.uHidden, view.hidden | ~mask); gl.uniform1f(bead.u.uAlpha, a * k); gl.uniform1f(bead.u.uBelowAlpha, b * k);
+      gl.depthMask(false); gl.drawArraysInstanced(gl.TRIANGLES, 0, beadVertices.length / 6, end - first); gl.depthMask(solid);
+    }
     if (!solid) gl.depthMask(true);
+  }
+  /** The feature types that are support (by name from the toolpath), as a bit mask. */
+  function supportMask() {
+    const names = data.meta && data.meta.features; if (!names) return 0;
+    let mask = 0; names.forEach((name, i) => { if (i < 31 && /^support/i.test(name)) mask |= 1 << i; });
+    return mask;
   }
 
   function render() {

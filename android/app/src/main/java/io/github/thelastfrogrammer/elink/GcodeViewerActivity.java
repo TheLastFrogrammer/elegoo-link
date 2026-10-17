@@ -1248,7 +1248,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                     .put("fan", new JSONObject().put("on", viewerPrefs().getBoolean("fanOn", false)).put("x", viewerPrefs().getInt("fanX", -45)).put("y", viewerPrefs().getInt("fanY", 0))
                         .put("z", viewerPrefs().getInt("fanZ", 10)).put("w", viewerPrefs().getInt("fanW", 20)).put("d", viewerPrefs().getInt("fanD", 50)).put("h", viewerPrefs().getInt("fanH", 50))
                         .put("mirror", viewerPrefs().getBoolean("fanMirror", false))))
-                .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0);
+                .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0)
+                .put("supportAlpha", viewerPrefs().getInt("supportOpacity", 35) / 100.0);
             if (smoothNext > 0 && viewerPrefs().getBoolean("smoothLive", true)) state.put("smoothMs", smoothNext);
             if (liveAt > 0) { state.put("at", liveAt); liveAt = 0; }
             smoothNext = 0;
@@ -1459,6 +1460,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         groupHeading(body, "Layers");
         styleSlider(body, "This layer: opacity", "layerOpacity", 5, 100, 100, "%", this::pushView);
         styleSlider(body, "Layers below: opacity", "belowOpacity", 5, 100, 100, "%", this::pushView);
+        styleSlider(body, "Supports: opacity (see-through, so the model shows)", "supportOpacity", 5, 100, 35, "%", this::pushView);
         android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
         only.setText("Show only the current layer");
         only.setChecked(viewerPrefs().getBoolean("layerOnly", false));

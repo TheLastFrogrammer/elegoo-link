@@ -80,8 +80,22 @@ public class PlateDialogsTest {
         more().performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : buttons(d)) names.add(b.getText().toString());
-        assertEquals(Arrays.asList("Select a model…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Hide the handles", "Hide where supports go", "Reset view", "Close"), names);
-        for (String name : names.subList(0, 11)) assertTrue(name, button(d, name).isEnabled());
+        assertEquals(Arrays.asList("Select a model…", "Support blockers and enforcers…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…", "Hide the handles", "Hide where supports go", "Reset view", "Close"), names);
+        for (String name : names.subList(0, 12)) assertTrue(name, button(d, name).isEnabled());
+    }
+
+    @Test public void supportBoxesCanBeAddedAndSupportsTurnedOnForThem() throws Exception {
+        java.lang.reflect.Method open = PlateActivity.class.getDeclaredMethod("supportsDialog"); open.setAccessible(true); open.invoke(activity); idle();
+        AlertDialog d = dialog();
+        button(d, "Add a blocker (no supports here)"); button(d, "Add an enforcer (supports here)");
+        button(d, "Change the Supports setting…").performClick(); idle();
+        AlertDialog choice = dialog();
+        assertEquals("Only where enforced (normal)", choice.getListView().getItemAtPosition(0));
+        org.robolectric.shadows.ShadowAlertDialog shadow = org.robolectric.shadow.api.Shadow.extract(choice); shadow.clickOnItem(0); idle();
+        android.content.Intent result = org.robolectric.Shadows.shadowOf(activity).getResultIntent();
+        assertEquals(4, result.getIntExtra(PlateActivity.EXTRA_SUPPORT_CHOICE, -1));
+        assertEquals("[]", result.getStringExtra(PlateActivity.EXTRA_SUPPORTS));
+        assertTrue(((TextView) get("status")).getText().toString().contains("only where enforced"));
     }
 
     @Test public void eachModelCanHaveItsOwnFilament() throws Exception {

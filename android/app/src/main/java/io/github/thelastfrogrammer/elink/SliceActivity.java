@@ -81,6 +81,9 @@ public final class SliceActivity extends Activity {
     // Settings for single objects, keyed "file,object" (0-based), from the settings screen in object mode.
     private final Map<String, Map<String, String>> objectSettings = new LinkedHashMap<>();
     private org.json.JSONArray placements;    // the plate view's layout, or null to arrange automatically
+    private org.json.JSONArray supportBoxes;  // the plate view's support blockers and enforcers (with its layout only)
+    /** The Supports choices; the last two make supports only inside enforcers added in the Layout screen. */
+    static final String[] SUPPORT_CHOICES = {"Preset", "Off", "Normal (auto)", "Tree (auto)", "Normal, only where enforced", "Tree, only where enforced"};
     private String calibration;               // a calibration print instead of models (engine mode), or null
     private double[] calibrationRange = new double[3];
     private TextView calibrationLabel;
@@ -307,6 +310,7 @@ public final class SliceActivity extends Activity {
         catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
         state.putString("objectSettings", perObject.toString());
         if (placements != null) state.putString("placements", placements.toString());
+        if (supportBoxes != null) state.putString("supportBoxes", supportBoxes.toString());
         if (!slicing && !busy) state.putString("status", status.getText().toString());
     }
 
@@ -348,6 +352,7 @@ public final class SliceActivity extends Activity {
         try {
             if (saved.getString("inspected") != null) inspected = new org.json.JSONObject(saved.getString("inspected"));
             if (saved.getString("placements") != null) placements = new org.json.JSONArray(saved.getString("placements"));
+            if (saved.getString("supportBoxes") != null) supportBoxes = new org.json.JSONArray(saved.getString("supportBoxes"));
             org.json.JSONObject custom = new org.json.JSONObject(saved.getString("customOverrides", "{}"));
             for (Iterator<String> keys = custom.keys(); keys.hasNext(); ) { String key = keys.next(); customOverrides.put(key, custom.getString(key)); }
             org.json.JSONObject perObject = new org.json.JSONObject(saved.getString("objectSettings", "{}"));
@@ -396,7 +401,7 @@ public final class SliceActivity extends Activity {
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         editPlate = button(modelCard, "Edit layout…", this::openPlate, false);
-        autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; showLayout(); }, false);
+        autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; supportBoxes = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
         arrangeOptions = button(modelCard, "", this::arrangeDialog, false); showArrangeOptions();
         // Rarely needed: per-model settings and calibration prints. Opens by itself while either is in use.
@@ -430,7 +435,7 @@ public final class SliceActivity extends Activity {
         infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
         infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setMinHeight(dp(52)); settingsCard.addView(infill, new LinearLayout.LayoutParams(-1, -2));
         label(settingsCard, "Supports", 12, muted, false);
-        supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList("Preset", "Off", "Normal (auto)", "Tree (auto)"), "Preset");
+        supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList(SUPPORT_CHOICES), "Preset");
         label(settingsCard, "Brim", 12, muted, false);
         brimSpinner = spinner(settingsCard); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
         settingsSummary = label(settingsCard, "", 13, muted, false);
@@ -541,6 +546,8 @@ public final class SliceActivity extends Activity {
             case 1: overrides.put("enable_support", "0"); break;
             case 2: overrides.put("enable_support", "1"); overrides.put("support_type", "normal(auto)"); break;
             case 3: overrides.put("enable_support", "1"); overrides.put("support_type", "tree(auto)"); break;
+            case 4: overrides.put("enable_support", "1"); overrides.put("support_type", "normal(manual)"); break;
+            case 5: overrides.put("enable_support", "1"); overrides.put("support_type", "tree(manual)"); break;
             default: break;
         }
         switch (brimSpinner.getSelectedItemPosition()) {
@@ -563,6 +570,8 @@ public final class SliceActivity extends Activity {
         if ("0".equals(support) && type == null) supportChoice = 1;
         else if ("1".equals(support) && "normal(auto)".equals(type)) supportChoice = 2;
         else if ("1".equals(support) && "tree(auto)".equals(type)) supportChoice = 3;
+        else if ("1".equals(support) && "normal(manual)".equals(type)) supportChoice = 4;
+        else if ("1".equals(support) && "tree(manual)".equals(type)) supportChoice = 5;
         if (supportChoice > 0) { customOverrides.remove("enable_support"); customOverrides.remove("support_type"); }
         supportSpinner.setSelection(supportChoice);
         int brimChoice = Arrays.asList("", "no_brim", "auto_brim", "outer_only").indexOf(customOverrides.getOrDefault("brim_type", ""));
@@ -606,7 +615,22 @@ public final class SliceActivity extends Activity {
                     stretch == null ? 1 : stretch.optDouble(0, 1), stretch == null ? 1 : stretch.optDouble(1, 1), stretch == null ? 1 : stretch.optDouble(2, 1),
                     Math.min(p.optInt("slot", 0), slots.size())});
             }
+        if (withPlacements && placements != null && supportBoxes != null) selection.supportBoxes.addAll(supportBoxes(supportBoxes));
         return selection;
+    }
+
+    /** The plate view's boxes as the engine's {enforcer, center x, y, z, size x, y, z}; malformed ones are left out. */
+    static List<double[]> supportBoxes(org.json.JSONArray boxes) {
+        List<double[]> out = new ArrayList<>();
+        for (int i = 0; boxes != null && i < boxes.length(); i++) {
+            org.json.JSONObject b = boxes.optJSONObject(i); if (b == null) continue;
+            org.json.JSONArray c = b.optJSONArray("center"), k = b.optJSONArray("size");
+            if (c == null || k == null || c.length() != 3 || k.length() != 3) continue;
+            double[] box = {"enforcer".equals(b.optString("kind")) ? 1 : 0, c.optDouble(0), c.optDouble(1), c.optDouble(2), k.optDouble(0), k.optDouble(1), k.optDouble(2)};
+            boolean fine = true; for (int j = 1; j < 7; j++) fine &= Double.isFinite(box[j]) && (j < 4 || box[j] >= 0.1);
+            if (fine) out.add(box);
+        }
+        return out;
     }
 
     /** Rough peak memory of this slice, or null before the models were inspected. */
@@ -843,6 +867,10 @@ public final class SliceActivity extends Activity {
         }
         if (request == PLATE) {
             try { placements = new org.json.JSONArray(data.getStringExtra(PlateActivity.EXTRA_PLACEMENTS)); } catch (org.json.JSONException | NullPointerException ignored) { }
+            try { supportBoxes = data.hasExtra(PlateActivity.EXTRA_SUPPORTS) ? new org.json.JSONArray(data.getStringExtra(PlateActivity.EXTRA_SUPPORTS)) : supportBoxes; } catch (org.json.JSONException | NullPointerException ignored) { }
+            if (supportBoxes != null && supportBoxes.length() == 0) supportBoxes = null;
+            int mode = data.getIntExtra(PlateActivity.EXTRA_SUPPORT_CHOICE, -1);
+            if (mode > 0 && mode < SUPPORT_CHOICES.length) supportSpinner.setSelection(mode);
             showLayout();
             int[] edit = data.getIntArrayExtra(PlateActivity.EXTRA_EDIT_OBJECT);
             if (edit != null && edit.length == 2) openObjectSettings(edit[0], edit[1], data.getStringExtra(PlateActivity.EXTRA_EDIT_NAME));
@@ -1036,7 +1064,7 @@ public final class SliceActivity extends Activity {
                 // Earlier models keep their place, filament and per-object settings; a hand-made layout starts again so the new ones are placed too.
                 boolean added = !models.isEmpty();
                 if (!added) { plate = 0; projectSettings = true; objectSettings.clear(); }
-                inspected = shownRead; placements = null; showObjectSettings();
+                inspected = shownRead; placements = null; supportBoxes = null; showObjectSettings();
                 models.clear(); models.addAll(all); showModels(); showProject(); showLayout();
                 String done = added ? "Added " + imported.size() + " model file" + (imported.size() == 1 ? "" : "s") + "; " + models.size() + " in all." + (customLayout ? " The layout is arranged automatically again; edit it to place the new ones." : "") : "Ready.";
                 status.setText(shownProblem != null ? shownProblem : done); status.setTextColor(shownProblem != null ? error : ink);
@@ -1065,7 +1093,7 @@ public final class SliceActivity extends Activity {
                 List<File> keep = new ArrayList<>(); List<Integer> keepSlots = new ArrayList<>();
                 for (int i = 0; i < chosen.length; i++) if (!chosen[i]) { keep.add(models.get(i)); if (i < modelSlots.size()) keepSlots.add(modelSlots.get(i)); }
                 if (keep.size() == models.size()) return;
-                placements = null; objectSettings.clear(); showObjectSettings();
+                placements = null; supportBoxes = null; objectSettings.clear(); showObjectSettings();
                 if (keep.isEmpty()) { models.clear(); modelSlots.clear(); inspected = null; plate = 0; showModels(); showProject(); showLayout(); status.setText(""); updateButtons(); return; }
                 busy = true; status.setText("Reading the remaining models…"); status.setTextColor(ink); updateButtons();
                 File meshRoot = new File(getCacheDir(), "slice-meshes"), meshDir = new File(meshRoot, Long.toString(System.nanoTime()));
@@ -1172,7 +1200,7 @@ public final class SliceActivity extends Activity {
             plates_.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
                 @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
                     int chosen = position == names.size() - 1 ? ALL_PLATES : position + 1;
-                    if (chosen != (plate == 0 ? 1 : plate)) { plate = chosen; placements = null; showLayout(); }
+                    if (chosen != (plate == 0 ? 1 : plate)) { plate = chosen; placements = null; supportBoxes = null; showLayout(); }
                     updateButtons();
                 }
                 @Override public void onNothingSelected(AdapterView<?> p) { }
@@ -1249,7 +1277,9 @@ public final class SliceActivity extends Activity {
     private void showLayout() {
         boolean custom = placements != null;
         layoutLabel.setVisibility(models.isEmpty() ? View.GONE : View.VISIBLE);
+        int boxes = custom && supportBoxes != null ? supportBoxes.length() : 0;
         layoutLabel.setText(custom ? "Your layout: " + placements.length() + " cop" + (placements.length() == 1 ? "y" : "ies") + " placed in the Layout screen."
+            + (boxes == 0 ? "" : " " + boxes + " support blocker" + (boxes == 1 ? "" : "s") + "/enforcer" + (boxes == 1 ? "" : "s") + ".")
             : project() != null && models.size() == 1 ? "Placed as in the project." : "Placed automatically.");
         layoutLabel.setTextColor(custom ? teal : muted);
         autoLayout.setVisibility(custom ? View.VISIBLE : View.GONE);
@@ -1264,6 +1294,8 @@ public final class SliceActivity extends Activity {
         Intent intent = new Intent(this, PlateActivity.class).putExtra(PlateActivity.EXTRA_MODELS, paths).putExtra(PlateActivity.EXTRA_SELECTION, selection.toJson())
             .putExtra(PlateActivity.EXTRA_INSPECTED, inspected.toString()).putExtra(PlateActivity.EXTRA_COLOURS, colours).putExtra(PlateActivity.EXTRA_SLOTS, selection.modelFilaments);
         if (placements != null) intent.putExtra(PlateActivity.EXTRA_PLACEMENTS, placements.toString());
+        if (placements != null && supportBoxes != null) intent.putExtra(PlateActivity.EXTRA_SUPPORTS, supportBoxes.toString());
+        intent.putExtra(PlateActivity.EXTRA_SUPPORT_CHOICE, supportSpinner.getSelectedItemPosition());
         startActivityForResult(intent, PLATE);
     }
 
@@ -1390,7 +1422,7 @@ public final class SliceActivity extends Activity {
 
     private String[] calibrationSpec;
     private void startCalibration(String mode, double[] range, String[] spec) {
-        calibration = mode; calibrationRange = range; calibrationSpec = spec; placements = null;
+        calibration = mode; calibrationRange = range; calibrationSpec = spec; placements = null; supportBoxes = null;
         showCalibration(); updateButtons();
         status.setText("Ready to slice the " + spec[1].toLowerCase(Locale.ROOT) + "."); status.setTextColor(ink);
     }

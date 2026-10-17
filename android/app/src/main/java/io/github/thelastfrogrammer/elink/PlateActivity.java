@@ -21,11 +21,13 @@ import org.json.JSONObject;
 
 /**
  * The plate before slicing (assets/plate): the models on the bed as the engine would place them, to move by dragging,
- * turn, scale, copy and remove. Returns the copies as EXTRA_PLACEMENTS (the engine's placement JSON).
+ * turn, scale, copy and remove, and to add support blockers and enforcers. Returns the copies as EXTRA_PLACEMENTS (the engine's
+ * placement JSON), the boxes as EXTRA_SUPPORTS and, when the person turned supports on here, the Slice screen's new Supports
+ * choice as EXTRA_SUPPORT_CHOICE (an index into SliceActivity.SUPPORT_CHOICES).
  */
 public final class PlateActivity extends Activity {
     static final String EXTRA_MODELS = "models", EXTRA_SELECTION = "selection", EXTRA_INSPECTED = "inspected",
-        EXTRA_PLACEMENTS = "placements", EXTRA_COLOURS = "colours", EXTRA_SLOTS = "slots",
+        EXTRA_PLACEMENTS = "placements", EXTRA_COLOURS = "colours", EXTRA_SLOTS = "slots", EXTRA_SUPPORTS = "supports", EXTRA_SUPPORT_CHOICE = "supportChoice",
         /** Result: the Slice screen should open the settings for this object ({file, object}) after taking the layout. */
         EXTRA_EDIT_OBJECT = "editObject", EXTRA_EDIT_NAME = "editName";
     private static final String ORIGIN = "https://appassets.androidplatform.net";
@@ -43,8 +45,10 @@ public final class PlateActivity extends Activity {
     private JSONObject inspected;
     private byte[] scene;
     private final List<File> meshes = new ArrayList<>();
-    private JSONArray placements = new JSONArray();
-    private int selected = -1;
+    private JSONArray placements = new JSONArray(), supports = new JSONArray();
+    private int selected = -1, selectedBox = -1, looseBoxes;
+    /** The Slice screen's Supports choice, and whether it was changed here. */
+    private int supportChoice; private boolean supportChoiceChanged;
     private boolean pageReady, sceneReady;
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -57,6 +61,10 @@ public final class PlateActivity extends Activity {
         if (paths == null || selection == null) { finish(); return; }
         for (String path : paths) models.add(new File(path));
         String start = saved != null ? saved.getString(EXTRA_PLACEMENTS) : getIntent().getStringExtra(EXTRA_PLACEMENTS);
+        String boxes = saved != null ? saved.getString(EXTRA_SUPPORTS) : getIntent().getStringExtra(EXTRA_SUPPORTS);
+        try { if (boxes != null) supports = new JSONArray(boxes); } catch (JSONException ignored) { }
+        supportChoice = saved != null ? saved.getInt(EXTRA_SUPPORT_CHOICE, 0) : getIntent().getIntExtra(EXTRA_SUPPORT_CHOICE, 0);
+        supportChoiceChanged = saved != null && saved.getBoolean("supportChoiceChanged");
 
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(ui.background); root.setFitsSystemWindows(true);
         web = new WebView(this); web.setBackgroundColor(ui.background);
@@ -76,7 +84,7 @@ public final class PlateActivity extends Activity {
         float panelText = 12 * getResources().getDisplayMetrics().density * Math.min(1.3f, getResources().getConfiguration().fontScale);
         for (Button b : new Button[] {rotateLeft, rotateRight, copyButton, more}) { b.setPadding(ui.dp(2), ui.dp(8), ui.dp(2), ui.dp(8)); b.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, panelText); }
         rotateLeft.setContentDescription("Turn 15 degrees left"); rotateRight.setContentDescription("Turn 15 degrees right");
-        copyButton.setContentDescription("Copy the selected model"); more.setContentDescription("More: select a model, move, several copies, turn 45 degrees, lay flat, scale, remove, model settings, reset view");
+        copyButton.setContentDescription("Copy the selected model"); more.setContentDescription("More: select a model, support blockers and enforcers, move, several copies, turn 45 degrees, lay flat, scale, remove, model settings, reset view");
         LinearLayout finish = ui.row(panel);
         arrange = ui.rowButton(finish, "Arrange all", this::arrangeAll, false);
         done = ui.rowButton(finish, "Done · back to Slice", this::finishWithResult, true);
@@ -100,7 +108,15 @@ public final class PlateActivity extends Activity {
 
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
-        state.putString(EXTRA_PLACEMENTS, placements.toString());
+        state.putString(EXTRA_PLACEMENTS, placements.toString()); state.putString(EXTRA_SUPPORTS, supports.toString());
+        state.putInt(EXTRA_SUPPORT_CHOICE, supportChoice); state.putBoolean("supportChoiceChanged", supportChoiceChanged);
+    }
+
+    /** The result: the layout, its boxes and, if changed here, the Supports choice. */
+    private Intent result() {
+        Intent data = new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()).putExtra(EXTRA_SUPPORTS, supports.toString());
+        if (supportChoiceChanged) data.putExtra(EXTRA_SUPPORT_CHOICE, supportChoice);
+        return data;
     }
 
     @Override protected void onDestroy() { if (web != null) web.destroy(); super.onDestroy(); }
@@ -117,7 +133,7 @@ public final class PlateActivity extends Activity {
 
     private void leave() {
         if (placements.length() == 0) { status.setText("Put at least one model in the layout, or go back to the Slice screen with Arrange."); status.setTextColor(ui.error); return; }
-        setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
+        setResult(RESULT_OK, result());
         finish();
     }
 
@@ -125,7 +141,7 @@ public final class PlateActivity extends Activity {
     private void editSelectedSettings() {
         if (selected < 0 || selected >= placements.length() || placements.length() == 0) return;
         JSONObject p = placements.optJSONObject(selected);
-        setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString())
+        setResult(RESULT_OK, result()
             .putExtra(EXTRA_EDIT_OBJECT, new int[] {p.optInt("file"), p.optInt("object")}).putExtra(EXTRA_EDIT_NAME, name(selected)));
         finish();
     }
@@ -144,7 +160,9 @@ public final class PlateActivity extends Activity {
                 // The support settings this slice will use, for shading the faces that will need support.
                 try {
                     JSONObject chosen = new JSONObject(selection), overrides = chosen.optJSONObject("overrides");
-                    JSONObject described = engine.describeJson(models, chosen.put("placements", new JSONArray()).toString(), java.util.Arrays.asList("enable_support", "support_threshold_angle"));
+                    JSONObject described = engine.describeJson(models, chosen.put("placements", new JSONArray()).toString(), java.util.Arrays.asList("enable_support", "support_threshold_angle", "support_type"));
+                    String type = overrides != null && overrides.has("support_type") ? overrides.optString("support_type") : described.optJSONObject("support_type") == null ? "" : described.optJSONObject("support_type").optString("preset");
+                    supportTree = type.startsWith("tree"); supportManual = type.endsWith("(manual)");
                     String on = overrides != null && overrides.has("enable_support") ? overrides.optString("enable_support") : described.optJSONObject("enable_support") == null ? "" : described.optJSONObject("enable_support").optString("preset");
                     String angle = overrides != null && overrides.has("support_threshold_angle") ? overrides.optString("support_threshold_angle") : described.optJSONObject("support_threshold_angle") == null ? "" : described.optJSONObject("support_threshold_angle").optString("preset");
                     supportOn = "1".equals(on) || "true".equals(on);
@@ -187,7 +205,7 @@ public final class PlateActivity extends Activity {
         String[] colours = getIntent().getStringArrayExtra(EXTRA_COLOURS);
         JSONArray colourList = new JSONArray(); if (colours != null) for (String colour : colours) colourList.put(colour);
         JSONObject json = new JSONObject().put("bed", layout.optJSONArray("bed")).put("excluded", layout.optJSONArray("excluded"))
-            .put("height", layout.optDouble("height", 256)).put("objects", objects).put("placements", initial).put("colours", colourList);
+            .put("height", layout.optDouble("height", 256)).put("objects", objects).put("placements", initial).put("colours", colourList).put("supports", supports);
         if (layout.has("tower")) json.put("tower", layout.getJSONArray("tower"));
         return json.toString().getBytes(StandardCharsets.UTF_8);
     }
@@ -209,7 +227,7 @@ public final class PlateActivity extends Activity {
         applyViewChoices();
     }
     /** Support angle and whether supports are on for this slice (from the engine and the Slice screen's changes). */
-    private double supportAngle = 30; private boolean supportOn;
+    private double supportAngle = 30; private boolean supportOn, supportTree, supportManual;
     private android.content.SharedPreferences viewChoices() { return getSharedPreferences("plate-view", MODE_PRIVATE); }
     private void applyViewChoices() {
         js("plate.setGimbal(" + viewChoices().getBoolean("handles", true) + ")");
@@ -350,14 +368,15 @@ public final class PlateActivity extends Activity {
     /** The less used actions on the selected model, kept out of the panel so the 3D view stays large. */
     private void moreDialog() {
         if (laying) { laying = false; js("plate.setLayMode(false)"); more.setText("More…"); status.setText("Lay flat cancelled."); status.setTextColor(ui.muted); return; }
+        if (selectedBox >= 0 && selectedBox < supports.length()) { boxDialog(selectedBox); return; }
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
         boolean handles = viewChoices().getBoolean("handles", true), supports = viewChoices().getBoolean("supports", true);
-        String[] names = {"Select a model…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…",
+        String[] names = {"Select a model…", "Support blockers and enforcers…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…",
             handles ? "Hide the handles" : "Show the handles (move, turn, tilt, scale)",
             supports ? "Hide where supports go" : "Show where supports go", "Reset view"};
-        Runnable[] actions = {this::selectDialog, this::moveDialog, this::copiesDialog, this::filamentDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
+        Runnable[] actions = {this::selectDialog, this::supportsDialog, this::moveDialog, this::copiesDialog, this::filamentDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
                 status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
             () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings,
             () -> { viewChoices().edit().putBoolean("handles", !handles).apply(); applyViewChoices(); },
@@ -367,11 +386,93 @@ public final class PlateActivity extends Activity {
         for (int i = 0; i < names.length; i++) {
             Runnable action = actions[i];
             Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
-            b.setEnabled(i == 0 ? placements.length() > 0 : i >= names.length - 3 || on);
+            b.setEnabled(i <= 1 ? placements.length() > 0 : i >= names.length - 3 || on);
         }
         if (!on) ui.label(body, "Pick a model first: tap it on the plate, or use Select a model…", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
+    }
+
+    /** Support blockers (no supports inside) and enforcers (supports inside): add one, or pick one to change. */
+    private void supportsDialog() {
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
+        android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
+        ui.label(body, "Boxes on the plate. A blocker (orange) keeps supports out of it; an enforcer (purple) puts supports under the overhangs inside it. "
+            + "Each is added " + (selected >= 0 ? "on " + name(selected) : "on the first model") + ", half its size: drag it into place, then use More… to size it. A box over a model moves with it.", 13, ui.muted, false);
+        ui.label(body, supportLine(), 13, supportOn ? ui.muted : ui.error, false);
+        ui.button(body, "Add a blocker (no supports here)", () -> { dialog[0].dismiss(); addBox("blocker"); }, false);
+        ui.button(body, "Add an enforcer (supports here)", () -> { dialog[0].dismiss(); addBox("enforcer"); }, false);
+        for (int i = 0; i < supports.length(); i++) {
+            int index = i;
+            ui.button(body, boxName(i) + " · " + boxSize(supports.optJSONObject(i)), () -> { dialog[0].dismiss(); js("plate.selectBox(" + index + ")"); }, false);
+        }
+        if (!supportOn || supportManual) ui.button(body, "Change the Supports setting…", () -> { dialog[0].dismiss(); supportChoiceDialog(); }, false);
+        dialog[0] = new android.app.AlertDialog.Builder(this).setTitle("Support blockers and enforcers").setView(scrollOf(body)).setNegativeButton("Close", null).show();
+    }
+    private String supportLine() {
+        if (!supportOn) return "Supports are off for this slice, so blockers and enforcers change nothing until they are on.";
+        return supportManual ? "Supports are on only where enforcers are: without one, nothing gets supports." : "Supports are on: blockers take them away, enforcers add them.";
+    }
+    private void addBox(String kind) {
+        web.evaluateJavascript("plate.addSupport('" + kind + "')", value -> {
+            if (!supportOn && "enforcer".equals(kind)) supportChoiceDialog();
+            else { status.setText("enforcer".equals(kind) ? "Enforcer added: drag it under the overhang that needs support." : "Blocker added: drag it over the place that should stay free of supports."); status.setTextColor(ui.teal); }
+        });
+    }
+    /** Turns supports on for the slice: only inside enforcers, or everywhere (enforcers adding to them). */
+    private void supportChoiceDialog() {
+        int tree = supportTree ? 1 : 0;
+        String[] items = {"Only where enforced (" + (supportTree ? "tree" : "normal") + ")", "Everywhere they are needed, plus the enforcers (" + (supportTree ? "tree" : "normal") + ")", "Off"};
+        int[] choices = {4 + tree, 2 + tree, 1};
+        new android.app.AlertDialog.Builder(this).setTitle("Supports for this slice")
+            .setItems(items, (d, which) -> {
+                supportChoice = choices[which]; supportChoiceChanged = true; supportOn = which < 2; supportManual = which == 0;
+                setResult(RESULT_OK, result());
+                status.setText("Supports: " + SliceActivity.SUPPORT_CHOICES[supportChoice] + ", set on the Slice screen when you go back."); status.setTextColor(ui.teal);
+            }).setNegativeButton("Cancel", null).show();
+    }
+    private String boxName(int index) {
+        JSONObject b = supports.optJSONObject(index);
+        return (b != null && "enforcer".equals(b.optString("kind")) ? "Enforcer " : "Blocker ") + (index + 1);
+    }
+    private static String boxSize(JSONObject b) {
+        JSONArray c = b == null ? null : b.optJSONArray("center"), k = b == null ? null : b.optJSONArray("size");
+        if (c == null || k == null) return "";
+        double bottom = c.optDouble(2) - k.optDouble(2) / 2;
+        return mm(k.optDouble(0)) + " × " + mm(k.optDouble(1)) + " × " + mm(k.optDouble(2)) + " mm, from " + mm(Math.max(0, bottom)) + " to " + mm(bottom + k.optDouble(2)) + " mm up";
+    }
+    /** One box: its size and height above the bed typed in, blocker or enforcer, or removed. */
+    private void boxDialog(int index) {
+        JSONObject b = supports.optJSONObject(index); if (b == null) return;
+        JSONArray c = b.optJSONArray("center"), k = b.optJSONArray("size"); if (c == null || k == null) return;
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8));
+        android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
+        ui.label(body, "Drag the box on the plate to move it. Sizes in millimetres, along the bed (X across, Y front to back).", 13, ui.muted, false);
+        String[] names = {"Width (X), mm", "Depth (Y), mm", "Height, mm", "Bottom above the bed, mm"};
+        double[] values = {k.optDouble(0), k.optDouble(1), k.optDouble(2), Math.max(0, c.optDouble(2) - k.optDouble(2) / 2)};
+        EditText[] fields = new EditText[4];
+        for (int i = 0; i < 4; i++) { fields[i] = percentField(body, names[i], values[i]); fields[i].setContentDescription(names[i]); }
+        boolean enforcer = "enforcer".equals(b.optString("kind"));
+        ui.button(body, enforcer ? "Make it a blocker" : "Make it an enforcer", () -> { dialog[0].dismiss();
+            js("plate.setBoxKind(" + index + ",'" + (enforcer ? "blocker" : "enforcer") + "')");
+            if (!enforcer && !supportOn) supportChoiceDialog(); }, false);
+        ui.button(body, "Remove this box", () -> { dialog[0].dismiss(); js("plate.removeBox(" + index + ")"); }, false);
+        ui.button(body, "Add another…", () -> { dialog[0].dismiss(); js("plate.selectBox(-1)"); supportsDialog(); }, false);
+        dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(boxName(index)).setView(scrollOf(body)).setNegativeButton("Cancel", null)
+            .setPositiveButton("Set", (d, w) -> {
+                double[] typed = new double[4];
+                try { for (int i = 0; i < 4; i++) typed[i] = Double.parseDouble(fields[i].getText().toString().trim()); }
+                catch (NumberFormatException e) { status.setText("Enter sizes in millimetres, such as 20 or 7.5."); status.setTextColor(ui.error); return; }
+                String script = boxScript(index, c.optDouble(0), c.optDouble(1), typed);
+                if (script == null) { status.setText("Sizes from 0.5 to 2000 mm, and the bottom at 0 mm or above."); status.setTextColor(ui.error); return; }
+                js(script);
+            }).show();
+    }
+    /** The page call that sizes box `index` from typed width, depth, height and bottom; null when out of range. */
+    static String boxScript(int index, double x, double y, double[] typed) {
+        for (int i = 0; i < 3; i++) if (!(typed[i] >= 0.5 && typed[i] <= 2000)) return null;
+        if (!(typed[3] >= 0 && typed[3] <= 2000)) return null;
+        return "plate.setBox(" + index + ",[" + number(x) + "," + number(y) + "," + number(typed[3] + typed[2] / 2) + "],[" + number(typed[0]) + "," + number(typed[1]) + "," + number(typed[2]) + "])";
     }
 
     /** The models on the plate by name, to pick one without touching the 3D view. */
@@ -483,21 +584,28 @@ public final class PlateActivity extends Activity {
         }
         @JavascriptInterface public void onError(String message) { main.post(() -> { status.setText(message); status.setTextColor(ui.error); }); }
         @JavascriptInterface public void onSelect(int index) { main.post(() -> { selected = index; showSelected(); setButtons(); }); }
+        @JavascriptInterface public void onBoxSelect(int index) { main.post(() -> { selectedBox = index; showSelected(); setButtons(); }); }
         @JavascriptInterface public void onChanged(String json) {
             main.post(() -> {
                 try {
                     JSONObject state = new JSONObject(json);
                     placements = state.getJSONArray("placements"); selected = state.optInt("selected", -1);
+                    if (state.has("supports")) supports = state.getJSONArray("supports");
+                    selectedBox = state.optInt("selectedBox", -1);
+                    JSONArray loose = state.optJSONArray("loose"); looseBoxes = loose == null ? 0 : loose.length();
                     // Kept current, so leaving with Back (or a back gesture) keeps the layout too.
-                    if (placements.length() > 0) setResult(RESULT_OK, new Intent().putExtra(EXTRA_PLACEMENTS, placements.toString()));
+                    if (placements.length() > 0) setResult(RESULT_OK, result());
                     JSONArray problems = state.getJSONArray("problems");
                     List<List<String>> found = new ArrayList<>();
                     for (int i = 0; i < problems.length(); i++) found.add(toList(problems.getJSONArray(i)));
                     String summary = summarize(found);
                     problemCount = 0; for (List<String> issues : found) if (!issues.isEmpty()) problemCount++;
                     int n = placements.length();
-                    status.setText(summary != null ? summary : n == 1 ? "1 model in the layout, inside the bed." : n + " models in the layout, all inside the bed and apart.");
-                    status.setTextColor(summary != null ? ui.error : ui.muted);
+                    String line = summary != null ? summary : n == 1 ? "1 model in the layout, inside the bed." : n + " models in the layout, all inside the bed and apart.";
+                    if (looseBoxes > 0) line += " " + (looseBoxes == 1 ? "1 support box touches" : looseBoxes + " support boxes touch") + " no model and will do nothing.";
+                    else if (supports.length() > 0 && !supportOn) line += " Supports are off, so the support boxes do nothing (More… > Support blockers and enforcers).";
+                    status.setText(line);
+                    status.setTextColor(summary != null || looseBoxes > 0 ? ui.error : ui.muted);
                     showSelected(); setButtons();
                 } catch (JSONException ignored) { }
             });
@@ -531,6 +639,9 @@ public final class PlateActivity extends Activity {
     }
 
     private void showSelected() {
+        if (selectedBox >= 0 && selectedBox < supports.length()) {
+            selectedLabel.setText("Selected: " + boxName(selectedBox) + " · " + boxSize(supports.optJSONObject(selectedBox)) + ". Drag to move; More… to size or remove it."); return;
+        }
         if (selected < 0 || selected >= placements.length()) { selectedLabel.setText("Tap a model to select it."); return; }
         JSONObject p = placements.optJSONObject(selected);
         scalePercent = p.optDouble("scale", 1) * 100;

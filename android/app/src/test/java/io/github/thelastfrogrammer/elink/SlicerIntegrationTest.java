@@ -57,6 +57,80 @@ public class SlicerIntegrationTest {
         return file;
     }
 
+    /** An ASCII STL of solid boxes {x0, y0, z0, x1, y1, z1} in one object. */
+    private static File boxes(double[]... parts) throws IOException {
+        int[][] faces = {{0,2,1},{0,3,2},{4,5,6},{4,6,7},{0,1,5},{0,5,4},{1,2,6},{1,6,5},{2,3,7},{2,7,6},{3,0,4},{3,4,7}};
+        StringBuilder stl = new StringBuilder("solid parts\n");
+        for (double[] b : parts) {
+            double[][] v = {{b[0],b[1],b[2]},{b[3],b[1],b[2]},{b[3],b[4],b[2]},{b[0],b[4],b[2]},{b[0],b[1],b[5]},{b[3],b[1],b[5]},{b[3],b[4],b[5]},{b[0],b[4],b[5]}};
+            for (int[] f : faces) {
+                stl.append("facet normal 0 0 0\nouter loop\n");
+                for (int i : f) stl.append(String.format(Locale.ROOT, "vertex %f %f %f\n", v[i][0], v[i][1], v[i][2]));
+                stl.append("endloop\nendfacet\n");
+            }
+        }
+        stl.append("endsolid parts\n");
+        File file = File.createTempFile("parts", ".stl");
+        Files.write(file.toPath(), stl.toString().getBytes(StandardCharsets.US_ASCII));
+        return file;
+    }
+    private static int supportLines(File gcode) throws IOException {
+        int count = 0; boolean support = false;
+        for (String line : Files.readAllLines(gcode.toPath())) {
+            if (line.startsWith(";TYPE:")) support = line.contains("Support") && !line.contains("interface") || line.contains("Support interface");
+            else if (support && line.startsWith("G1 ") && line.contains(" E")) count++;
+        }
+        return count;
+    }
+
+    /** Blockers stop supports where they are; enforcers add them, also with supports only where enforced. */
+    @Test public void supportBlockersAndEnforcers() throws Exception {
+        // A shelf: a 10 mm pillar under the left end of a 40 x 20 mm slab 10 mm up; the rest overhangs. Placed at (100, 100): bed x 80..120.
+        List<File> model = Collections.singletonList(boxes(new double[] {0, 0, 0, 10, 20, 10}, new double[] {0, 0, 10, 40, 20, 14}));
+        File output = new File(context().getCacheDir(), "supports.gcode");
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            selection.overrides.put("enable_support", "1"); selection.overrides.put("support_type", "normal(auto)");
+            selection.placements.add(new double[] {0, 0, 100, 100, 0, 1});
+            slicer.slice(model, selection, output, null);
+            int automatic = supportLines(output);
+            assertTrue("the overhang gets supports: " + automatic, automatic > 50);
+
+            double[] underOverhang = {0, 106, 100, 5, 34, 30, 12};
+            selection.supportBoxes.add(underOverhang.clone()); underOverhang[0] = 0;
+            slicer.slice(model, selection, output, null);
+            int blocked = supportLines(output);
+            assertTrue("blocked: " + automatic + " -> " + blocked, blocked < automatic / 10);
+
+            // Supports only where enforced: none without an enforcer, some with one under half the overhang.
+            selection.supportBoxes.clear(); selection.overrides.put("support_type", "normal(manual)");
+            slicer.slice(model, selection, output, null);
+            assertEquals(0, supportLines(output));
+            selection.supportBoxes.add(new double[] {1, 112, 100, 7, 16, 30, 16});
+            slicer.slice(model, selection, output, null);
+            int enforced = supportLines(output);
+            assertTrue("enforced: " + enforced + " of " + automatic, enforced > 10 && enforced < automatic);
+
+            // Two copies, a blocker on one: that copy alone loses its supports.
+            selection.supportBoxes.clear(); selection.overrides.put("support_type", "normal(auto)");
+            selection.placements.add(new double[] {0, 0, 100, 150, 0, 1});
+            slicer.slice(model, selection, output, null);
+            int both = supportLines(output);
+            selection.supportBoxes.add(new double[] {0, 106, 100, 5, 34, 30, 12});
+            slicer.slice(model, selection, output, null);
+            int one = supportLines(output);
+            assertTrue("one of two blocked: " + both + " -> " + one, one > both / 3 && one < both * 2 / 3);
+
+            // A box away from every model is refused, and boxes need a layout.
+            selection.supportBoxes.clear(); selection.supportBoxes.add(new double[] {0, 20, 20, 5, 10, 10, 10});
+            try { slicer.slice(model, selection, output, null); fail("expected a refusal"); }
+            catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("touches a model")); }
+            selection.placements.clear(); selection.supportBoxes.add(new double[] {0, 100, 100, 5, 10, 10, 10});
+            try { slicer.slice(model, selection, output, null); fail("expected a refusal"); }
+            catch (IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("need a layout")); }
+        }
+    }
+
     @Test public void listsTheCentauriCarbon2Presets() throws Exception {
         assertTrue(NativeSlicer.available(context()));
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {

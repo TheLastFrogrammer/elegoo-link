@@ -4,8 +4,10 @@
 // "LKM1", uint32 triangle count, float32 xyz per corner, uint8 filament per triangle; centered on X/Y, base at Z 0).
 // A placement is {file, object, x, y, rotation, scale, stretch?}: the copy's footprint center on the bed, degrees about Z,
 // a uniform scale and an optional per-axis stretch [x, y, z] of the laid-down copy before it is turned, as the engine applies them. The app drives the page through window.plate and hears back through
-// Android.onReady(), onSelect(index), onChanged(json) and onError(text). onChanged's json is
-// {placements, problems, advice, selected}: problems[i] lists the issue keys of copy i ("off the bed", ...) and
+// Android.onReady(), onSelect(index), onBoxSelect(index), onChanged(json) and onError(text). onChanged's json is
+// {placements, supports, loose, problems, advice, selected, selectedBox}: supports are the support blockers and enforcers,
+// boxes on the bed along its axes ({kind: "blocker" or "enforcer", center: [x, y, z], size: [w, d, h]}, z up from the bed),
+// loose the indices of boxes that touch no model; problems[i] lists the issue keys of copy i ("off the bed", ...) and
 // advice[i] the same issues as sentences saying what to do. The page also draws its own labels over the models
 // (name of the selected one, what is wrong with a problem one) and a short how-to hint on the first runs.
 "use strict";
@@ -22,10 +24,10 @@
 
   const theme = { background: [0.95, 0.96, 0.965], plate: [0.86, 0.89, 0.9, 1], grid: [0.7, 0.75, 0.77, 1],
     excluded: [0.85, 0.3, 0.25, 0.35], tower: [0.4, 0.45, 0.5, 0.45], selected: [0.0, 0.47, 0.42], problem: [0.86, 0.2, 0.16],
-    support: [0.55, 0.2, 0.85] };
+    support: [0.55, 0.2, 0.85], blocker: [0.95, 0.5, 0.1] };
   const camera = { yaw: -60, pitch: 38, distance: 420, target: [128, 128, 0], fov: 35 };
-  const scene = { bed: null, excluded: null, tower: null, height: 256, objects: [], placements: [], colours: [] };
-  let selected = -1, dirty = false;
+  const scene = { bed: null, excluded: null, tower: null, height: 256, objects: [], placements: [], colours: [], supports: [] };
+  let selected = -1, selectedBox = -1, dirty = false;
 
   // ---------------------------------------------------------------- shaders
   function compile(type, source) {
@@ -233,7 +235,56 @@
     redraw();
     const found = problems();
     if (android && android.onChanged) android.onChanged(JSON.stringify({ placements: scene.placements, problems: found,
-      advice: found.map((list) => list.map((issue) => { const a = advice(issue, 1); return a[1] ? a[0] + ": " + a[1] : a[0]; })), selected }));
+      advice: found.map((list) => list.map((issue) => { const a = advice(issue, 1); return a[1] ? a[0] + ": " + a[1] : a[0]; })), selected,
+      supports: scene.supports, loose: scene.supports.map((b, i) => touching(b) ? -1 : i).filter((i) => i >= 0), selectedBox }));
+  }
+
+  // ---------------------------------------------------------------- support blockers and enforcers
+  // The engine adds each box to the copies it touches. A box whose middle is over a copy rides with it: moved, arranged,
+  // copied and removed with it.
+  function bounds(b) { return [0, 1, 2].map((k) => b.center[k] - b.size[k] / 2).concat([0, 1, 2].map((k) => b.center[k] + b.size[k] / 2)); }
+  function touching(b) {
+    const q = bounds(b);
+    return scene.placements.some((p) => { if (!objectOf(p)) return false; const r = rect(p); return q[0] <= r[2] && r[0] <= q[3] && q[1] <= r[3] && r[1] <= q[4] && q[2] <= r[4] && q[5] >= 0; });
+  }
+  /** The copy a box rides with: the one under its middle (the nearest middle if several), or -1. */
+  function owner(b) {
+    let best = -1, bestDistance = Infinity;
+    scene.placements.forEach((p, i) => {
+      if (!objectOf(p)) return; const r = rect(p);
+      if (b.center[0] < r[0] || b.center[0] > r[2] || b.center[1] < r[1] || b.center[1] > r[3]) return;
+      const d = Math.hypot(b.center[0] - p.x, b.center[1] - p.y); if (d < bestDistance) { bestDistance = d; best = i; }
+    });
+    return best;
+  }
+  function riders(index) {
+    const p = scene.placements[index]; if (!p) return [];
+    return scene.supports.filter((b) => owner(b) === index).map((b) => ({ b, x: b.center[0], y: b.center[1], px: p.x, py: p.y }));
+  }
+  function carry(list, p) { for (const r of list) { r.b.center[0] = Math.round((r.x + p.x - r.px) * 10) / 10; r.b.center[1] = Math.round((r.y + p.y - r.py) * 10) / 10; } }
+  function copyBox(b) { return { kind: b.kind, center: b.center.slice(), size: b.size.slice() }; }
+  function validBox(b) {
+    return b && (b.kind === "blocker" || b.kind === "enforcer") && Array.isArray(b.center) && Array.isArray(b.size) && b.center.length === 3 && b.size.length === 3
+      && b.center.every((v) => isFinite(v)) && b.size.every((v) => v >= 0.5 && v <= 2000);
+  }
+  function selectBox(index) {
+    selectedBox = index >= 0 && index < scene.supports.length ? index : -1;
+    if (selectedBox >= 0 && selected >= 0) select(-1); else redraw();
+    if (android && android.onBoxSelect) android.onBoxSelect(selectedBox);
+  }
+  /** The nearest box the ray passes through, with its distance along the ray: [index, t]. */
+  function pickBox(clientX, clientY) {
+    const r = ray(clientX, clientY); let best = -1, bestT = Infinity;
+    scene.supports.forEach((b, i) => {
+      const q = bounds(b); let t0 = -Infinity, t1 = Infinity;
+      for (let k = 0; k < 3; k++) {
+        if (Math.abs(r.direction[k]) < 1e-12) { if (r.origin[k] < q[k] || r.origin[k] > q[k + 3]) return; continue; }
+        let a = (q[k] - r.origin[k]) / r.direction[k], c = (q[k + 3] - r.origin[k]) / r.direction[k]; if (a > c) [a, c] = [c, a];
+        t0 = Math.max(t0, a); t1 = Math.min(t1, c); if (t0 > t1) return;
+      }
+      if (t1 >= 0 && t0 < bestT) { bestT = t0; best = i; }
+    });
+    return [best, bestT];
   }
 
   // ---------------------------------------------------------------- labels over the models
@@ -436,6 +487,7 @@
       if (issues[i].length > 0) ring(r, 3.5, 1.8, theme.problem);
       if (i === selected) ring(r, 1.2, 1.8, theme.selected);
     });
+    drawBoxes(viewProj);
     drawGimbal(viewProj);
     gl.bindVertexArray(null);
     updateTags(issues, viewProj);
@@ -454,6 +506,31 @@
     gl.disable(gl.DEPTH_TEST); gl.drawArrays(gl.TRIANGLES, 0, 24); gl.enable(gl.DEPTH_TEST);
   }
   function redraw() { if (!dirty) { dirty = true; requestAnimationFrame(render); } }
+  let boxVao, boxBuffer;
+  // Each box see-through (orange: blocker, purple: enforcer, as the support shading), with its edges; the selected one's edges
+  // in the selection colour, drawn over everything so a box inside a model can still be found.
+  function drawBoxes(viewProj) {
+    if (!scene.supports.length) return;
+    if (!boxVao) {
+      boxVao = gl.createVertexArray(); gl.bindVertexArray(boxVao);
+      boxBuffer = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, boxBuffer); gl.bufferData(gl.ARRAY_BUFFER, 60 * 3 * 4, gl.DYNAMIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 12, 0);
+    }
+    gl.useProgram(flat.p); gl.uniformMatrix4fv(flat.u.uViewProj, false, viewProj); gl.bindVertexArray(boxVao); gl.bindBuffer(gl.ARRAY_BUFFER, boxBuffer);
+    scene.supports.forEach((b, i) => {
+      const q = bounds(b), c = (k) => [k & 1 ? q[3] : q[0], k & 2 ? q[4] : q[1], k & 4 ? q[5] : Math.max(q[2], 0.1)];
+      const faces = [[0, 1, 3, 2], [4, 5, 7, 6], [0, 1, 5, 4], [2, 3, 7, 6], [0, 2, 6, 4], [1, 3, 7, 5]], v = [];
+      for (const f of faces) for (const k of [f[0], f[1], f[2], f[0], f[2], f[3]]) v.push(...c(k));
+      for (const [a, e] of [[0, 1], [1, 3], [3, 2], [2, 0], [4, 5], [5, 7], [7, 6], [6, 4], [0, 4], [1, 5], [2, 6], [3, 7]]) v.push(...c(a), ...c(e));
+      gl.bufferSubData(gl.ARRAY_BUFFER, 0, new Float32Array(v));
+      const colour = b.kind === "enforcer" ? theme.support : theme.blocker, mine = i === selectedBox;
+      gl.depthMask(false); gl.uniform4f(flat.u.uColor, colour[0], colour[1], colour[2], mine ? 0.4 : 0.28); gl.drawArrays(gl.TRIANGLES, 0, 36); gl.depthMask(true);
+      const edge = mine ? theme.selected : colour;
+      if (mine) gl.disable(gl.DEPTH_TEST);
+      gl.uniform4f(flat.u.uColor, edge[0], edge[1], edge[2], 1); gl.drawArrays(gl.LINES, 36, 24);
+      if (mine) gl.enable(gl.DEPTH_TEST);
+    });
+  }
 
   // ---------------------------------------------------------------- gimbal
   // Handles on the selected model: arrows on the bed move it along X (red) or Y (green), the ring on the bed turns it about
@@ -592,7 +669,7 @@
     const start = Object.assign({}, p); if (p.down) start.down = p.down.slice(); if (p.stretch) start.stretch = p.stretch.slice();
     const reading = gimbalReading(kind, p, h, clientX, clientY);
     if (reading === null) return false;
-    gimbalDrag = { kind, start, reading, h };
+    gimbalDrag = { kind, start, reading, h, riders: kind === "x" || kind === "y" ? riders(selected) : [] };
     return true;
   }
   function gimbalMove(clientX, clientY) {
@@ -600,8 +677,8 @@
     const { kind, start, reading, h } = gimbalDrag, now = gimbalReading(kind, start, h, clientX, clientY);
     if (now === null) return;
     let text = "";
-    if (kind === "x") { p.x = Math.round((start.x + now[0] - reading[0]) * 10) / 10; p.y = start.y; text = "X " + p.x.toFixed(1) + " mm"; }
-    else if (kind === "y") { p.y = Math.round((start.y + now[1] - reading[1]) * 10) / 10; p.x = start.x; text = "Y " + p.y.toFixed(1) + " mm"; }
+    if (kind === "x") { p.x = Math.round((start.x + now[0] - reading[0]) * 10) / 10; p.y = start.y; text = "X " + p.x.toFixed(1) + " mm"; carry(gimbalDrag.riders, p); }
+    else if (kind === "y") { p.y = Math.round((start.y + now[1] - reading[1]) * 10) / 10; p.x = start.x; text = "Y " + p.y.toFixed(1) + " mm"; carry(gimbalDrag.riders, p); }
     else if (kind === "z") { const turn = Math.round(wrap(now - reading) / 5) * 5; p.rotation = wrap(start.rotation + turn); text = "Turn " + turn + "°"; }
     else if (kind === "s") {
       if (reading < 1) return;
@@ -673,6 +750,7 @@
   }
   function select(index) {
     selected = index; redraw();
+    if (index >= 0 && selectedBox >= 0) { selectedBox = -1; if (android && android.onBoxSelect) android.onBoxSelect(-1); }
     if (android && android.onSelect) android.onSelect(index);
   }
 
@@ -685,15 +763,19 @@
       tapStart = { x: e.clientX, y: e.clientY, t: Date.now() };
       const handle = gimbalAt(e.clientX, e.clientY);
       if (handle && gimbalStart(handle, e.clientX, e.clientY)) { drag = null; redraw(); return; }
-      const hit = pick(e.clientX, e.clientY), point = onBed(e.clientX, e.clientY);
-      if (hit >= 0 && point) {
+      const hit = pick(e.clientX, e.clientY), point = onBed(e.clientX, e.clientY), [box] = pickBox(e.clientX, e.clientY);
+      // A box wins over a model behind or around it: boxes often sit inside a model's outline, and the model can be tapped beside it.
+      if (box >= 0 && point) {
+        if (box !== selectedBox) selectBox(box);
+        drag = { box, dx: scene.supports[box].center[0] - point[0], dy: scene.supports[box].center[1] - point[1] };
+      } else if (hit >= 0 && point) {
         if (hit !== selected) select(hit);
-        drag = { index: hit, dx: scene.placements[hit].x - point[0], dy: scene.placements[hit].y - point[1] };
+        drag = { index: hit, dx: scene.placements[hit].x - point[0], dy: scene.placements[hit].y - point[1], riders: riders(hit) };
       } else drag = null;
     } else { drag = null; tapStart = null; if (gimbalDrag) cancelGimbal(); }
   });
   function cancelGimbal() {
-    const p = current(); if (p && gimbalDrag) { Object.keys(p).forEach((k) => delete p[k]); Object.assign(p, gimbalDrag.start); }
+    const p = current(); if (p && gimbalDrag) { Object.keys(p).forEach((k) => delete p[k]); Object.assign(p, gimbalDrag.start); carry(gimbalDrag.riders, p); }
     gimbalDrag = null; showMode(""); redraw();
   }
   canvas.addEventListener("pointermove", (e) => {
@@ -706,8 +788,14 @@
     if (after.length === 1 && drag) {
       if (!moved) return;
       const point = onBed(e.clientX, e.clientY); if (!point) return;
+      if (drag.box !== undefined) {
+        const b = scene.supports[drag.box]; if (!b) return;
+        b.center[0] = Math.round((point[0] + drag.dx) * 10) / 10; b.center[1] = Math.round((point[1] + drag.dy) * 10) / 10;
+        showMode((b.kind === "enforcer" ? "Enforcer" : "Blocker") + " at X " + b.center[0].toFixed(1) + ", Y " + b.center[1].toFixed(1) + " mm"); redraw(); return;
+      }
       const p = scene.placements[drag.index];
       p.x = Math.round((point[0] + drag.dx) * 10) / 10; p.y = Math.round((point[1] + drag.dy) * 10) / 10;
+      carry(drag.riders, p);
       redraw(); return;
     }
     if (after.length === 1) {
@@ -737,15 +825,15 @@
       if (was && android && android.onGimbal) android.onGimbal(was.kind);
       return;
     }
-    if (drag && moved) changed();
-    else if (tapStart && !moved && Date.now() - tapStart.t < 400) {
+    if (drag && moved) { if (drag.box !== undefined) showMode(""); changed(); }
+    else if (tapStart && !moved && Date.now() - tapStart.t < 400 && !(drag && drag.box !== undefined)) {
       const hit = pick(e.clientX, e.clientY);
       if (layMode && hit >= 0) {
         const normal = faceAt(e.clientX, e.clientY, hit);
         if (normal) { scene.placements[hit].down = normal; scene.placements[hit].rotation = 0; layMode = false; showMode(""); select(hit); changed();
           if (android && android.onLayDone) android.onLayDone(true); }
       } else if (hit < 0) {
-        select(-1);
+        select(-1); if (selectedBox >= 0) selectBox(-1);
         const now = Date.now(); if (now - lastTap < 350) resetView(); lastTap = now; redraw();
       }
     }
@@ -761,7 +849,7 @@
     try {
       const data = await fetch("/data/scene.json").then((r) => r.json());
       Object.assign(scene, { bed: data.bed, excluded: data.excluded, tower: data.tower || null, height: data.height || 256,
-        colours: data.colours || [], placements: data.placements || [] });
+        colours: data.colours || [], placements: data.placements || [], supports: (data.supports || []).filter(validBox) });
       scene.objects = data.objects.map((o) => Object.assign({}, o, { footprints: {} }));
       await Promise.all(scene.objects.map((o, i) => fetch("/data/mesh/" + i).then((r) => r.arrayBuffer()).then((b) => setupMesh(o, b))));
       setupBed(); select(scene.placements.length === 1 ? 0 : -1); changed(); showHint();
@@ -773,11 +861,22 @@
     load,
     setTheme(next) { for (const key of Object.keys(next)) if (key in theme) theme[key] = next[key];
       document.body.style.setProperty("--bg", "rgb(" + theme.background.map((c) => Math.round(c * 255)).join(",") + ")"); redraw(); },
-    setPlacements(list) { scene.placements = list; if (selected >= list.length) selected = -1; select(selected); changed(); },
+    setPlacements(list) {
+      // Arranged: each box goes where its copy went, turned with it.
+      const before = scene.placements, rides = scene.supports.map((b) => { const i = owner(b); return i >= 0 ? { b, i, p: Object.assign({}, before[i]) } : null; }).filter(Boolean);
+      scene.placements = list;
+      if (list.length === before.length) for (const r of rides) {
+        const q = list[r.i]; if (!q || q.file !== r.p.file || q.object !== r.p.object) continue;
+        const t = ((q.rotation || 0) - (r.p.rotation || 0)) * Math.PI / 180, dx = r.b.center[0] - r.p.x, dy = r.b.center[1] - r.p.y;
+        r.b.center[0] = Math.round((q.x + dx * Math.cos(t) - dy * Math.sin(t)) * 10) / 10; r.b.center[1] = Math.round((q.y + dx * Math.sin(t) + dy * Math.cos(t)) * 10) / 10;
+        if (Math.abs(Math.sin(t)) > 0.7) r.b.size = [r.b.size[1], r.b.size[0], r.b.size[2]];
+      }
+      if (selected >= list.length) selected = -1; select(selected); changed();
+    },
     setColours(list) { scene.colours = list; redraw(); },
     select(index) { select(index); },
     /** Moves the selected model by a distance in mm, as dragging does: rounded to 0.1 mm, problems checked by changed(). */
-    move(dx, dy) { const p = current(); if (!p || !isFinite(dx) || !isFinite(dy)) return; p.x = Math.round((p.x + dx) * 10) / 10; p.y = Math.round((p.y + dy) * 10) / 10; changed(); },
+    move(dx, dy) { const p = current(); if (!p || !isFinite(dx) || !isFinite(dy)) return; const list = riders(selected); p.x = Math.round((p.x + dx) * 10) / 10; p.y = Math.round((p.y + dy) * 10) / 10; carry(list, p); changed(); },
     rotate(degrees) { const p = current(); if (!p) return; p.rotation = ((p.rotation + degrees) % 360 + 540) % 360 - 180; changed(); },
     setScale(scale) { const p = current(); if (!p || !(scale > 0.001)) return; p.scale = scale; changed(); },
     /** Per-axis stretch of the selected copy (1 = as is); all three at 1 removes it. */
@@ -808,9 +907,35 @@
       if (p.stretch) copy.stretch = p.stretch.slice(); if (p.down) copy.down = p.down.slice();
       const bed = boxOf(scene.bed);
       if (bed && copy.x + (r[2] - r[0]) / 2 > bed[2]) { copy.x = p.x; copy.y = p.y - (r[3] - r[1]) - 5; }
+      const list = riders(selected).map((rider) => Object.assign({}, rider, { b: copyBox(rider.b) }));
+      carry(list, copy); for (const rider of list) scene.supports.push(rider.b);
       scene.placements.push(copy); select(scene.placements.length - 1); changed();
     },
-    remove() { if (!current()) return; scene.placements.splice(selected, 1); select(-1); changed(); },
+    remove() {
+      if (!current()) return;
+      const gone = new Set(riders(selected).map((r) => r.b)); scene.supports = scene.supports.filter((b) => !gone.has(b));
+      scene.placements.splice(selected, 1); select(-1); changed();
+    },
+    /** Adds a support blocker or enforcer on the selected copy (or the first): half its width and depth, its full height. Returns its index. */
+    addSupport(kind) {
+      if (kind !== "blocker" && kind !== "enforcer") return -1;
+      const p = current() || scene.placements.find((q) => objectOf(q)); if (!p) return -1;
+      const r = rect(p), w = Math.max(2, Math.round((r[2] - r[0]) / 2)), d = Math.max(2, Math.round((r[3] - r[1]) / 2)), h = Math.max(1, Math.round(r[4] * 10) / 10 + 1);
+      scene.supports.push({ kind, center: [p.x, p.y, h / 2], size: [w, d, h] });
+      selectBox(scene.supports.length - 1); changed(); return scene.supports.length - 1;
+    },
+    selectBox(index) { selectBox(index); },
+    /** Sets a box's middle and size (mm); refused when out of range. */
+    setBox(index, center, size) {
+      const b = scene.supports[index]; if (!b) return false;
+      const next = { kind: b.kind, center: center.map(Number), size: size.map(Number) };
+      if (!validBox(next) || next.center[2] - next.size[2] / 2 < -0.01) return false;
+      b.center = next.center; b.size = next.size; changed(); return true;
+    },
+    setBoxKind(index, kind) { const b = scene.supports[index]; if (!b || (kind !== "blocker" && kind !== "enforcer")) return; b.kind = kind; changed(); },
+    removeBox(index) { if (!scene.supports[index]) return; scene.supports.splice(index, 1); selectBox(-1); changed(); },
+    /** Where a box's middle is on screen (CSS px), or null: for checks. */
+    boxPoint(index) { const b = scene.supports[index]; return b ? screenPoint(b.center, matrices().viewProj) : null; },
     setLayMode(on) { layMode = !!on; showMode(layMode ? "Tap the face of the model that should lie flat on the bed" : ""); },
     upright() { const p = current(); if (!p) return; delete p.down; p.rotation = 0; changed(); },
     resetCamera() { resetView(); redraw(); },

@@ -69,6 +69,8 @@ final class NativeSlicer implements AutoCloseable {
         boolean projectSettings;
         /** One per copy: {file, object, x, y, rotation, scale[, down x, y, z[, stretch x, y, z[, filament slot]]]}; empty lets the engine arrange. */
         final List<double[]> placements = new ArrayList<>();
+        /** Support blockers and enforcers on the bed: {enforcer 0 or 1, center x, y, z, size x, y, z} in mm; they need placements. */
+        final List<double[]> supportBoxes = new ArrayList<>();
         /** Per filament slot: setting key -> value for that slot only. */
         final List<Map<String, String>> filamentOverrides = new ArrayList<>();
         /** Per object and all its copies, keyed "file,object" (0-based): setting key -> value (object settings only). */
@@ -98,6 +100,11 @@ final class NativeSlicer implements AutoCloseable {
                     places.put(place);
                 }
                 json.put("placements", places);
+                JSONArray boxes = new JSONArray();
+                for (double[] b : supportBoxes)
+                    boxes.put(new JSONObject().put("kind", b[0] > 0 ? "enforcer" : "blocker").put("center", new JSONArray().put(b[1]).put(b[2]).put(b[3]))
+                        .put("size", new JSONArray().put(b[4]).put(b[5]).put(b[6])));
+                if (boxes.length() > 0) json.put("support_boxes", boxes);
                 json.put("arrange", new JSONObject().put("rotate", arrangeRotate).put("shrink", arrangeShrink).put("min_scale", arrangeMinScale).put("spacing", arrangeSpacing));
                 JSONArray perSlot = new JSONArray();
                 for (Map<String, String> slot : filamentOverrides) { JSONObject one = new JSONObject(); for (Map.Entry<String, String> e : slot.entrySet()) one.put(e.getKey(), e.getValue()); perSlot.put(one); }
