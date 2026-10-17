@@ -1,0 +1,139 @@
+{
+  "function": "znp::V4L2::RestartStreaming()",
+  "va": "0x14624c",
+  "size": 460,
+  "calls": [
+    {
+      "at": "0x14626c",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x14628c",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x1462a8",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x1462d8",
+      "target": "0x843bc",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x1462e8",
+      "target": "0x145c24",
+      "name": "znp::V4L2::StopStreaming()"
+    },
+    {
+      "at": "0x1462f0",
+      "target": "0x146020",
+      "name": "znp::V4L2::RequeueAllBuffers()"
+    },
+    {
+      "at": "0x1462f8",
+      "target": "0x145a34",
+      "name": "znp::V4L2::StartStreaming()"
+    },
+    {
+      "at": "0x146310",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x146330",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x146348",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x146384",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x146390",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x1463b0",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x1463c8",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x146404",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x14627c",
+      "va": "0x1bda3c",
+      "string": "RestartStreaming"
+    },
+    {
+      "at": "0x146288",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x146294",
+      "va": "0x1bdd4c",
+      "string": "Fd error!"
+    },
+    {
+      "at": "0x146320",
+      "va": "0x1bda3c",
+      "string": "RestartStreaming"
+    },
+    {
+      "at": "0x14632c",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x146338",
+      "va": "0x1bdfa0",
+      "string": "V4L2 [{}] restart streaming failed"
+    },
+    {
+      "at": "0x146344",
+      "va": "0x1bdfa0",
+      "string": "V4L2 [{}] restart streaming failed"
+    },
+    {
+      "at": "0x1463a0",
+      "va": "0x1bda3c",
+      "string": "RestartStreaming"
+    },
+    {
+      "at": "0x1463ac",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x1463b8",
+      "va": "0x1bdfc4",
+      "string": "V4L2 [{}] streaming restarted by watchdog"
+    },
+    {
+      "at": "0x1463c4",
+      "va": "0x1bdfc4",
+      "string": "V4L2 [{}] streaming restarted by watchdog"
+    }
+  ]
+}

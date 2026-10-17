@@ -1,0 +1,933 @@
+znp::V4L2::GetFramesThread()
+00146990: push     {r4, r5, r6, fp, lr}
+00146994: add      fp, sp, #0x10
+00146998: sub      sp, sp, #0x314
+0014699c: str      r0, [fp, #-0x2f8]
+001469a0: ldr      r3, [fp, #-0x2f8]
+001469a4: ldr      r3, [r3]
+001469a8: cmp      r3, #0
+001469ac: bge      #0x146a24
+001469b0: bl       #0x88808 ; spdlog::default_logger_raw()
+001469b4: mov      r4, r0
+001469b8: sub      r0, fp, #0x270
+001469bc: movw     r3, #0xda60
+001469c0: movt     r3, #0x1b ; 'GetFramesThread'
+001469c4: movw     r2, #0x1de
+001469c8: movw     r1, #0xdaac
+001469cc: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001469d0: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001469d4: movw     r3, #0xdd4c
+001469d8: movt     r3, #0x1b ; 'Fd error!'
+001469dc: str      r3, [fp, #-0x34]
+001469e0: ldr      r3, [fp, #-0x34]
+001469e4: str      r3, [fp, #-0x264]
+001469e8: ldr      r0, [fp, #-0x34]
+001469ec: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001469f0: mov      r3, r0
+001469f4: str      r3, [fp, #-0x260]
+001469f8: add      r2, sp, #4
+001469fc: sub      r3, fp, #0x264
+00146a00: ldm      r3, {r0, r1}
+00146a04: stm      r2, {r0, r1}
+00146a08: mov      r3, #4
+00146a0c: str      r3, [sp]
+00146a10: sub      r3, fp, #0x270
+00146a14: ldm      r3, {r1, r2, r3}
+00146a18: mov      r0, r4
+00146a1c: bl       #0x843bc ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+00146a20: b        #0x147818
+00146a24: bl       #0x88808 ; spdlog::default_logger_raw()
+00146a28: mov      r4, r0
+00146a2c: sub      r0, fp, #0x25c
+00146a30: movw     r3, #0xda60
+00146a34: movt     r3, #0x1b ; 'GetFramesThread'
+00146a38: movw     r2, #0x1e2
+00146a3c: movw     r1, #0xdaac
+00146a40: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146a44: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146a48: movw     r3, #0xe108
+00146a4c: movt     r3, #0x1b ; 'start GetFramesThread!'
+00146a50: str      r3, [fp, #-0x38]
+00146a54: ldr      r3, [fp, #-0x38]
+00146a58: str      r3, [fp, #-0x250]
+00146a5c: ldr      r0, [fp, #-0x38]
+00146a60: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146a64: mov      r3, r0
+00146a68: str      r3, [fp, #-0x24c]
+00146a6c: add      r2, sp, #4
+00146a70: sub      r3, fp, #0x250
+00146a74: ldm      r3, {r0, r1}
+00146a78: stm      r2, {r0, r1}
+00146a7c: mov      r3, #2
+00146a80: str      r3, [sp]
+00146a84: sub      r3, fp, #0x25c
+00146a88: ldm      r3, {r1, r2, r3}
+00146a8c: mov      r0, r4
+00146a90: bl       #0x843bc ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+00146a94: movw     r3, #0xbb8
+00146a98: str      r3, [fp, #-0x1c]
+00146a9c: mov      r3, #3
+00146aa0: str      r3, [fp, #-0x20]
+00146aa4: mov      r3, #8
+00146aa8: str      r3, [fp, #-0x24]
+00146aac: movw     r3, #0x2710
+00146ab0: str      r3, [fp, #-0x28]
+00146ab4: sub      r3, fp, #0x2b4
+00146ab8: sub      r3, r3, #8
+00146abc: mov      r0, r3
+00146ac0: bl       #0x7c2a4 ; _ZNSt6chrono3_V212steady_clock3nowEv
+00146ac4: sub      r3, fp, #0x2c4
+00146ac8: mov      r1, r3
+00146acc: mov      r2, #0
+00146ad0: mov      r3, #0
+00146ad4: strd     r2, r3, [r1]
+00146ad8: sub      r3, fp, #0x2c4
+00146adc: mov      r1, r3
+00146ae0: mov      r2, #0
+00146ae4: mov      r3, #0
+00146ae8: strd     r2, r3, [r1, #-8]
+00146aec: mov      r3, #0
+00146af0: str      r3, [fp, #-0x2d0]
+00146af4: mov      r3, #0
+00146af8: strb     r3, [fp, #-0x15]
+00146afc: ldr      r3, [fp, #-0x2f8]
+00146b00: add      r3, r3, #0x80
+00146b04: mov      r0, r3
+00146b08: bl       #0xec3fc ; std::atomic<bool>::operator bool() const
+00146b0c: mov      r3, r0
+00146b10: cmp      r3, #0
+00146b14: beq      #0x147670
+00146b18: mov      r3, #0
+00146b1c: strb     r3, [fp, #-0x16]
+00146b20: sub      r3, fp, #0x2b4
+00146b24: mov      r2, #0x44
+00146b28: mov      r1, #0
+00146b2c: mov      r0, r3
+00146b30: bl       #0x7c280 ; memset
+00146b34: mov      r3, #1
+00146b38: str      r3, [fp, #-0x2b0]
+00146b3c: mov      r3, #1
+00146b40: str      r3, [fp, #-0x284]
+00146b44: ldr      r3, [fp, #-0x2f8]
+00146b48: add      r2, r3, #0xac
+00146b4c: sub      r3, fp, #0x2d4
+00146b50: mov      r1, r2
+00146b54: mov      r0, r3
+00146b58: bl       #0x88b2c ; std::lock_guard<std::mutex>::lock_guard(std::mutex&)
+00146b5c: ldr      r3, [fp, #-0x2f8]
+00146b60: ldr      r3, [r3]
+00146b64: sub      r2, fp, #0x2b4
+00146b68: movw     r1, #0x5611
+00146b6c: movt     r1, #0xc044
+00146b70: mov      r0, r3
+00146b74: bl       #0x7c61c ; ioctl
+00146b78: mov      r3, r0
+00146b7c: lsr      r3, r3, #0x1f
+00146b80: uxtb     r3, r3
+00146b84: cmp      r3, #0
+00146b88: beq      #0x146cc0
+00146b8c: bl       #0x7bb48 ; __errno_location
+00146b90: mov      r3, r0
+00146b94: ldr      r3, [r3]
+00146b98: str      r3, [fp, #-0x2c]
+00146b9c: ldr      r3, [fp, #-0x2c]
+00146ba0: cmp      r3, #0xb
+00146ba4: beq      #0x146ff0
+00146ba8: sub      r3, fp, #0x2c4
+00146bac: ldrd     r2, r3, [r3]
+00146bb0: adds     r2, r2, #1
+00146bb4: adc      r3, r3, #0
+00146bb8: sub      r1, fp, #0x2c4
+00146bbc: strd     r2, r3, [r1]
+00146bc0: sub      r3, fp, #0x2c4
+00146bc4: ldrd     r2, r3, [r3]
+00146bc8: cmp      r3, #0
+00146bcc: cmpeq    r2, #1
+00146bd0: beq      #0x146bf0
+00146bd4: sub      r3, fp, #0x2c4
+00146bd8: ldrd     r0, r1, [r3]
+00146bdc: mov      r2, #0x64
+00146be0: mov      r3, #0
+00146be4: bl       #0x7b830 ; __aeabi_uldivmod
+00146be8: orrs     r3, r2, r3
+00146bec: bne      #0x146ff0
+00146bf0: bl       #0x88808 ; spdlog::default_logger_raw()
+00146bf4: mov      r5, r0
+00146bf8: sub      r0, fp, #0x248
+00146bfc: movw     r3, #0xda60
+00146c00: movt     r3, #0x1b ; 'GetFramesThread'
+00146c04: mov      r2, #0x200
+00146c08: movw     r1, #0xdaac
+00146c0c: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146c10: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146c14: movw     r3, #0xe120
+00146c18: movt     r3, #0x1b ; 'V4L2 [{}] DQBUF failed(x{}): {}'
+00146c1c: str      r3, [fp, #-0x23c]
+00146c20: movw     r0, #0xe120
+00146c24: movt     r0, #0x1b ; 'V4L2 [{}] DQBUF failed(x{}): {}'
+00146c28: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146c2c: mov      r3, r0
+00146c30: str      r3, [fp, #-0x238]
+00146c34: ldr      r3, [fp, #-0x2f8]
+00146c38: add      r4, r3, #4
+00146c3c: ldr      r0, [fp, #-0x2c]
+00146c40: bl       #0x7ba10 ; strerror
+00146c44: mov      r6, r0
+00146c48: sub      r3, fp, #0x21c
+00146c4c: mov      r0, r3
+00146c50: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+00146c54: sub      r2, fp, #0x21c
+00146c58: sub      r3, fp, #0x234
+00146c5c: mov      r1, r6
+00146c60: mov      r0, r3
+00146c64: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00146c68: sub      r3, fp, #0x234
+00146c6c: str      r3, [sp, #0x14]
+00146c70: sub      r3, fp, #0x2c4
+00146c74: str      r3, [sp, #0x10]
+00146c78: str      r4, [sp, #0xc]
+00146c7c: add      r2, sp, #4
+00146c80: sub      r3, fp, #0x23c
+00146c84: ldm      r3, {r0, r1}
+00146c88: stm      r2, {r0, r1}
+00146c8c: mov      r3, #4
+00146c90: str      r3, [sp]
+00146c94: sub      r3, fp, #0x248
+00146c98: ldm      r3, {r1, r2, r3}
+00146c9c: mov      r0, r5
+00146ca0: bl       #0x1496b4 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned long long&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<unsigned long long&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned long long&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+00146ca4: sub      r3, fp, #0x234
+00146ca8: mov      r0, r3
+00146cac: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00146cb0: sub      r3, fp, #0x21c
+00146cb4: mov      r0, r3
+00146cb8: bl       #0x7c658 ; _ZNSaIcED1Ev
+00146cbc: b        #0x146ff0
+00146cc0: ldr      r3, [fp, #-0x2ac]
+00146cc4: cmp      r3, #0
+00146cc8: bne      #0x146ea0
+00146ccc: sub      r3, fp, #0x2c4
+00146cd0: ldrd     r2, r3, [r3, #-8]
+00146cd4: adds     r2, r2, #1
+00146cd8: adc      r3, r3, #0
+00146cdc: sub      r1, fp, #0x2c4
+00146ce0: strd     r2, r3, [r1, #-8]
+00146ce4: sub      r3, fp, #0x2c4
+00146ce8: ldrd     r2, r3, [r3, #-8]
+00146cec: cmp      r3, #0
+00146cf0: cmpeq    r2, #1
+00146cf4: beq      #0x146d14
+00146cf8: sub      r3, fp, #0x2c4
+00146cfc: ldrd     r0, r1, [r3, #-8]
+00146d00: mov      r2, #0x64
+00146d04: mov      r3, #0
+00146d08: bl       #0x7b830 ; __aeabi_uldivmod
+00146d0c: orrs     r3, r2, r3
+00146d10: bne      #0x146d9c
+00146d14: bl       #0x88808 ; spdlog::default_logger_raw()
+00146d18: mov      r4, r0
+00146d1c: sub      r0, fp, #0x218
+00146d20: movw     r3, #0xda60
+00146d24: movt     r3, #0x1b ; 'GetFramesThread'
+00146d28: movw     r2, #0x207
+00146d2c: movw     r1, #0xdaac
+00146d30: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146d34: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146d38: movw     r3, #0xe140
+00146d3c: movt     r3, #0x1b ; 'V4L2 [{}] got empty frame(x{}), index[{}]'
+00146d40: str      r3, [fp, #-0x20c]
+00146d44: movw     r0, #0xe140
+00146d48: movt     r0, #0x1b ; 'V4L2 [{}] got empty frame(x{}), index[{}]'
+00146d4c: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146d50: mov      r3, r0
+00146d54: str      r3, [fp, #-0x208]
+00146d58: ldr      r3, [fp, #-0x2f8]
+00146d5c: add      r3, r3, #4
+00146d60: sub      r2, fp, #0x2b4
+00146d64: str      r2, [sp, #0x14]
+00146d68: sub      r2, fp, #0x2cc
+00146d6c: str      r2, [sp, #0x10]
+00146d70: str      r3, [sp, #0xc]
+00146d74: add      r2, sp, #4
+00146d78: sub      r3, fp, #0x20c
+00146d7c: ldm      r3, {r0, r1}
+00146d80: stm      r2, {r0, r1}
+00146d84: mov      r3, #3
+00146d88: str      r3, [sp]
+00146d8c: sub      r3, fp, #0x218
+00146d90: ldm      r3, {r1, r2, r3}
+00146d94: mov      r0, r4
+00146d98: bl       #0x149740 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned long long&, unsigned int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<unsigned long long&>::type, fmt::v10::type_identity<unsigned int&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned long long&, unsigned int&)
+00146d9c: ldr      r3, [fp, #-0x2f8]
+00146da0: ldr      r3, [r3]
+00146da4: sub      r2, fp, #0x2b4
+00146da8: movw     r1, #0x560f
+00146dac: movt     r1, #0xc044
+00146db0: mov      r0, r3
+00146db4: bl       #0x7c61c ; ioctl
+00146db8: mov      r3, r0
+00146dbc: lsr      r3, r3, #0x1f
+00146dc0: uxtb     r3, r3
+00146dc4: cmp      r3, #0
+00146dc8: beq      #0x146ff0
+00146dcc: bl       #0x88808 ; spdlog::default_logger_raw()
+00146dd0: mov      r5, r0
+00146dd4: sub      r0, fp, #0x204
+00146dd8: movw     r3, #0xda60
+00146ddc: movt     r3, #0x1b ; 'GetFramesThread'
+00146de0: movw     r2, #0x20a
+00146de4: movw     r1, #0xdaac
+00146de8: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146dec: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146df0: movw     r3, #0xe16c
+00146df4: movt     r3, #0x1b ; 'V4L2 [{}] Requeue buffer failed: {}'
+00146df8: str      r3, [fp, #-0x1f8]
+00146dfc: movw     r0, #0xe16c
+00146e00: movt     r0, #0x1b ; 'V4L2 [{}] Requeue buffer failed: {}'
+00146e04: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146e08: mov      r3, r0
+00146e0c: str      r3, [fp, #-0x1f4]
+00146e10: ldr      r3, [fp, #-0x2f8]
+00146e14: add      r4, r3, #4
+00146e18: bl       #0x7bb48 ; __errno_location
+00146e1c: mov      r3, r0
+00146e20: ldr      r3, [r3]
+00146e24: mov      r0, r3
+00146e28: bl       #0x7ba10 ; strerror
+00146e2c: mov      r6, r0
+00146e30: sub      r3, fp, #0x1d8
+00146e34: mov      r0, r3
+00146e38: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+00146e3c: sub      r2, fp, #0x1d8
+00146e40: sub      r3, fp, #0x1f0
+00146e44: mov      r1, r6
+00146e48: mov      r0, r3
+00146e4c: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00146e50: sub      r3, fp, #0x1f0
+00146e54: str      r3, [sp, #0x10]
+00146e58: str      r4, [sp, #0xc]
+00146e5c: add      r2, sp, #4
+00146e60: sub      r3, fp, #0x1f8
+00146e64: ldm      r3, {r0, r1}
+00146e68: stm      r2, {r0, r1}
+00146e6c: mov      r3, #4
+00146e70: str      r3, [sp]
+00146e74: sub      r3, fp, #0x204
+00146e78: ldm      r3, {r1, r2, r3}
+00146e7c: mov      r0, r5
+00146e80: bl       #0x1497cc ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+00146e84: sub      r3, fp, #0x1f0
+00146e88: mov      r0, r3
+00146e8c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00146e90: sub      r3, fp, #0x1d8
+00146e94: mov      r0, r3
+00146e98: bl       #0x7c658 ; _ZNSaIcED1Ev
+00146e9c: b        #0x146ff0
+00146ea0: mov      r3, #1
+00146ea4: strb     r3, [fp, #-0x16]
+00146ea8: ldr      r3, [fp, #-0x2f8]
+00146eac: add      r3, r3, #0x88
+00146eb0: mov      r0, r3
+00146eb4: bl       #0x149848 ; std::function<void (unsigned char*, int)>::operator bool() const
+00146eb8: mov      r3, r0
+00146ebc: cmp      r3, #0
+00146ec0: beq      #0x146ef0
+00146ec4: ldr      r3, [fp, #-0x2f8]
+00146ec8: add      r0, r3, #0x88
+00146ecc: ldr      r3, [fp, #-0x2b4]
+00146ed0: ldr      r2, [fp, #-0x2f8]
+00146ed4: add      r3, r3, #0xa
+00146ed8: lsl      r3, r3, #2
+00146edc: add      r3, r2, r3
+00146ee0: ldr      r3, [r3, #4]
+00146ee4: ldr      r2, [fp, #-0x2ac]
+00146ee8: mov      r1, r3
+00146eec: bl       #0x14987c ; std::function<void (unsigned char*, int)>::operator()(unsigned char*, int) const
+00146ef0: ldr      r3, [fp, #-0x2f8]
+00146ef4: ldr      r3, [r3]
+00146ef8: sub      r2, fp, #0x2b4
+00146efc: movw     r1, #0x560f
+00146f00: movt     r1, #0xc044
+00146f04: mov      r0, r3
+00146f08: bl       #0x7c61c ; ioctl
+00146f0c: mov      r3, r0
+00146f10: lsr      r3, r3, #0x1f
+00146f14: uxtb     r3, r3
+00146f18: cmp      r3, #0
+00146f1c: beq      #0x146ff0
+00146f20: bl       #0x88808 ; spdlog::default_logger_raw()
+00146f24: mov      r5, r0
+00146f28: sub      r0, fp, #0x1d4
+00146f2c: movw     r3, #0xda60
+00146f30: movt     r3, #0x1b ; 'GetFramesThread'
+00146f34: movw     r2, #0x212
+00146f38: movw     r1, #0xdaac
+00146f3c: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146f40: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146f44: movw     r3, #0xe16c
+00146f48: movt     r3, #0x1b ; 'V4L2 [{}] Requeue buffer failed: {}'
+00146f4c: str      r3, [fp, #-0x1c8]
+00146f50: movw     r0, #0xe16c
+00146f54: movt     r0, #0x1b ; 'V4L2 [{}] Requeue buffer failed: {}'
+00146f58: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146f5c: mov      r3, r0
+00146f60: str      r3, [fp, #-0x1c4]
+00146f64: ldr      r3, [fp, #-0x2f8]
+00146f68: add      r4, r3, #4
+00146f6c: bl       #0x7bb48 ; __errno_location
+00146f70: mov      r3, r0
+00146f74: ldr      r3, [r3]
+00146f78: mov      r0, r3
+00146f7c: bl       #0x7ba10 ; strerror
+00146f80: mov      r6, r0
+00146f84: sub      r3, fp, #0x1a8
+00146f88: mov      r0, r3
+00146f8c: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+00146f90: sub      r2, fp, #0x1a8
+00146f94: sub      r3, fp, #0x1c0
+00146f98: mov      r1, r6
+00146f9c: mov      r0, r3
+00146fa0: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00146fa4: sub      r3, fp, #0x1c0
+00146fa8: str      r3, [sp, #0x10]
+00146fac: str      r4, [sp, #0xc]
+00146fb0: add      r2, sp, #4
+00146fb4: sub      r3, fp, #0x1c8
+00146fb8: ldm      r3, {r0, r1}
+00146fbc: stm      r2, {r0, r1}
+00146fc0: mov      r3, #4
+00146fc4: str      r3, [sp]
+00146fc8: sub      r3, fp, #0x1d4
+00146fcc: ldm      r3, {r1, r2, r3}
+00146fd0: mov      r0, r5
+00146fd4: bl       #0x1497cc ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+00146fd8: sub      r3, fp, #0x1c0
+00146fdc: mov      r0, r3
+00146fe0: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00146fe4: sub      r3, fp, #0x1a8
+00146fe8: mov      r0, r3
+00146fec: bl       #0x7c658 ; _ZNSaIcED1Ev
+00146ff0: ldrb     r3, [fp, #-0x16]
+00146ff4: cmp      r3, #0
+00146ff8: beq      #0x1471ec
+00146ffc: sub      r3, fp, #0x2b4
+00147000: mov      r4, r3
+00147004: sub      r3, fp, #0x304
+00147008: mov      r0, r3
+0014700c: bl       #0x7c2a4 ; _ZNSt6chrono3_V212steady_clock3nowEv
+00147010: sub      r3, fp, #0x304
+00147014: ldrd     r2, r3, [r3]
+00147018: strd     r2, r3, [r4, #-8]
+0014701c: ldrb     r3, [fp, #-0x15]
+00147020: eor      r3, r3, #1
+00147024: uxtb     r3, r3
+00147028: cmp      r3, #0
+0014702c: beq      #0x1470bc
+00147030: mov      r3, #1
+00147034: strb     r3, [fp, #-0x15]
+00147038: bl       #0x88808 ; spdlog::default_logger_raw()
+0014703c: mov      r4, r0
+00147040: sub      r0, fp, #0x1a4
+00147044: movw     r3, #0xda60
+00147048: movt     r3, #0x1b ; 'GetFramesThread'
+0014704c: movw     r2, #0x21b
+00147050: movw     r1, #0xdaac
+00147054: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00147058: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0014705c: movw     r3, #0xe190
+00147060: movt     r3, #0x1b ; 'V4L2 [{}] first frame received, size {} bytes'
+00147064: str      r3, [fp, #-0x198]
+00147068: movw     r0, #0xe190
+0014706c: movt     r0, #0x1b ; 'V4L2 [{}] first frame received, size {} bytes'
+00147070: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00147074: mov      r3, r0
+00147078: str      r3, [fp, #-0x194]
+0014707c: ldr      r3, [fp, #-0x2f8]
+00147080: add      r3, r3, #4
+00147084: sub      r2, fp, #0x2b4
+00147088: add      r2, r2, #8
+0014708c: str      r2, [sp, #0x10]
+00147090: str      r3, [sp, #0xc]
+00147094: add      r2, sp, #4
+00147098: sub      r3, fp, #0x198
+0014709c: ldm      r3, {r0, r1}
+001470a0: stm      r2, {r0, r1}
+001470a4: mov      r3, #2
+001470a8: str      r3, [sp]
+001470ac: sub      r3, fp, #0x1a4
+001470b0: ldm      r3, {r1, r2, r3}
+001470b4: mov      r0, r4
+001470b8: bl       #0x1498f4 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<unsigned int&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned int&)
+001470bc: ldr      r3, [fp, #-0x2d0]
+001470c0: cmp      r3, #0
+001470c4: ble      #0x1471e0
+001470c8: bl       #0x88808 ; spdlog::default_logger_raw()
+001470cc: mov      r4, r0
+001470d0: sub      r0, fp, #0x190
+001470d4: movw     r3, #0xda60
+001470d8: movt     r3, #0x1b ; 'GetFramesThread'
+001470dc: movw     r2, #0x21f
+001470e0: movw     r1, #0xdaac
+001470e4: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001470e8: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001470ec: movw     r3, #0xe1c0
+001470f0: movt     r3, #0x1b ; 'V4L2 [{}] camera recovered, frames resumed'
+001470f4: str      r3, [fp, #-0x184]
+001470f8: movw     r0, #0xe1c0
+001470fc: movt     r0, #0x1b ; 'V4L2 [{}] camera recovered, frames resumed'
+00147100: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00147104: mov      r3, r0
+00147108: str      r3, [fp, #-0x180]
+0014710c: ldr      r3, [fp, #-0x2f8]
+00147110: add      r3, r3, #4
+00147114: str      r3, [sp, #0xc]
+00147118: add      r2, sp, #4
+0014711c: sub      r3, fp, #0x184
+00147120: ldm      r3, {r0, r1}
+00147124: stm      r2, {r0, r1}
+00147128: mov      r3, #3
+0014712c: str      r3, [sp]
+00147130: sub      r3, fp, #0x190
+00147134: ldm      r3, {r1, r2, r3}
+00147138: mov      r0, r4
+0014713c: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+00147140: sub      r3, fp, #0x164
+00147144: mov      r0, r3
+00147148: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+0014714c: sub      r2, fp, #0x164
+00147150: sub      r3, fp, #0x17c
+00147154: movw     r1, #0xe1dc
+00147158: movt     r1, #0x1b ; 'frames resumed'
+0014715c: mov      r0, r3
+00147160: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00147164: sub      r3, fp, #0x17c
+00147168: mov      r2, r3
+0014716c: mov      r1, #3
+00147170: ldr      r0, [fp, #-0x2f8]
+00147174: bl       #0x144510 ; znp::V4L2::ReportHealth(znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00147178: sub      r3, fp, #0x17c
+0014717c: mov      r0, r3
+00147180: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147184: sub      r3, fp, #0x164
+00147188: mov      r0, r3
+0014718c: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147190: sub      r3, fp, #0x148
+00147194: mov      r0, r3
+00147198: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+0014719c: sub      r2, fp, #0x148
+001471a0: sub      r3, fp, #0x160
+001471a4: movw     r1, #0xe1ec
+001471a8: movt     r1, #0x1b ; 'streaming'
+001471ac: mov      r0, r3
+001471b0: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+001471b4: sub      r3, fp, #0x160
+001471b8: mov      r2, r3
+001471bc: mov      r1, #0
+001471c0: ldr      r0, [fp, #-0x2f8]
+001471c4: bl       #0x144510 ; znp::V4L2::ReportHealth(znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+001471c8: sub      r3, fp, #0x160
+001471cc: mov      r0, r3
+001471d0: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001471d4: sub      r3, fp, #0x148
+001471d8: mov      r0, r3
+001471dc: bl       #0x7c658 ; _ZNSaIcED1Ev
+001471e0: mov      r3, #0
+001471e4: str      r3, [fp, #-0x2d0]
+001471e8: b        #0x1475d4
+001471ec: ldr      r3, [fp, #-0x2d0]
+001471f0: cmp      r3, #7
+001471f4: ble      #0x147200
+001471f8: movw     r3, #0x2710
+001471fc: b        #0x147204
+00147200: movw     r3, #0xbb8
+00147204: str      r3, [fp, #-0x30]
+00147208: sub      r3, fp, #0x134
+0014720c: mov      r0, r3
+00147210: bl       #0x7c2a4 ; _ZNSt6chrono3_V212steady_clock3nowEv
+00147214: sub      r3, fp, #0x134
+00147218: sub      r3, r3, #8
+0014721c: sub      r2, fp, #0x2bc
+00147220: sub      r1, fp, #0x134
+00147224: mov      r0, r3
+00147228: bl       #0x148d24 ; std::common_type<std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> >, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > >::type std::chrono::operator-<std::chrono::_V2::steady_clock, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> >, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > >(std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > > const&, std::chrono::time_point<std::chrono::_V2::steady_clock, std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > > const&)
+0014722c: sub      r3, fp, #0x144
+00147230: mov      r2, r3
+00147234: sub      r3, fp, #0x13c
+00147238: mov      r1, r3
+0014723c: mov      r0, r2
+00147240: bl       #0x8c65c ; std::enable_if<std::chrono::__is_duration<std::chrono::duration<long long, std::ratio<1ll, 1000ll> > >::value, std::chrono::duration<long long, std::ratio<1ll, 1000ll> > >::type std::chrono::duration_cast<std::chrono::duration<long long, std::ratio<1ll, 1000ll> >, long long, std::ratio<1ll, 1000000000ll> >(std::chrono::duration<long long, std::ratio<1ll, 1000000000ll> > const&)
+00147244: sub      r3, fp, #0x144
+00147248: mov      r0, r3
+0014724c: bl       #0x7e0c0 ; std::chrono::duration<long long, std::ratio<1ll, 1000ll> >::count() const
+00147250: mov      r2, r0
+00147254: mov      r3, r1
+00147258: sub      r1, fp, #0x2d4
+0014725c: strd     r2, r3, [r1, #-8]
+00147260: ldr      r3, [fp, #-0x30]
+00147264: mov      r0, r3
+00147268: asr      r1, r0, #0x1f
+0014726c: sub      r3, fp, #0x2d4
+00147270: ldrd     r2, r3, [r3, #-8]
+00147274: cmp      r0, r2
+00147278: sbcs     r3, r1, r3
+0014727c: bge      #0x1475d4
+00147280: ldr      r3, [fp, #-0x2d0]
+00147284: add      r3, r3, #1
+00147288: str      r3, [fp, #-0x2d0]
+0014728c: ldr      r3, [fp, #-0x2f8]
+00147290: str      r3, [fp, #-0x12c]
+00147294: sub      r3, fp, #0x2f4
+00147298: sub      r2, fp, #0x12c
+0014729c: mov      r1, r2
+001472a0: mov      r0, r3
+001472a4: bl       #0x14690c ; znp::V4L2::GetFramesThread()::{lambda()#1}::operator()() const
+001472a8: ldr      r3, [fp, #-0x2d0]
+001472ac: cmp      r3, #3
+001472b0: bgt      #0x1473a8
+001472b4: bl       #0x88808 ; spdlog::default_logger_raw()
+001472b8: mov      r4, r0
+001472bc: sub      r0, fp, #0x128
+001472c0: movw     r3, #0xda60
+001472c4: movt     r3, #0x1b ; 'GetFramesThread'
+001472c8: movw     r2, #0x231
+001472cc: movw     r1, #0xdaac
+001472d0: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001472d4: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001472d8: movw     r3, #0xe1f8
+001472dc: movt     r3, #0x1b ; 'V4L2 [{}] no valid frame for {} ms (dqbuf_fail={}, empty={}), light restart (attempt {})'
+001472e0: str      r3, [fp, #-0x11c]
+001472e4: movw     r0, #0xe1f8
+001472e8: movt     r0, #0x1b ; 'V4L2 [{}] no valid frame for {} ms (dqbuf_fail={}, empty={}), light restart (attempt {})'
+001472ec: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001472f0: mov      r3, r0
+001472f4: str      r3, [fp, #-0x118]
+001472f8: ldr      r3, [fp, #-0x2f8]
+001472fc: add      r3, r3, #4
+00147300: sub      r2, fp, #0x2d0
+00147304: str      r2, [sp, #0x1c]
+00147308: sub      r2, fp, #0x2cc
+0014730c: str      r2, [sp, #0x18]
+00147310: sub      r2, fp, #0x2c4
+00147314: str      r2, [sp, #0x14]
+00147318: sub      r2, fp, #0x2dc
+0014731c: str      r2, [sp, #0x10]
+00147320: str      r3, [sp, #0xc]
+00147324: add      r2, sp, #4
+00147328: sub      r3, fp, #0x11c
+0014732c: ldm      r3, {r0, r1}
+00147330: stm      r2, {r0, r1}
+00147334: mov      r3, #3
+00147338: str      r3, [sp]
+0014733c: sub      r3, fp, #0x128
+00147340: ldm      r3, {r1, r2, r3}
+00147344: mov      r0, r4
+00147348: bl       #0x149970 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, long long&, unsigned long long&, unsigned long long&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<long long&>::type, fmt::v10::type_identity<unsigned long long&>::type, fmt::v10::type_identity<unsigned long long&>::type, fmt::v10::type_identity<int&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, long long&, unsigned long long&, unsigned long long&, int&)
+0014734c: sub      r3, fp, #0xfc
+00147350: mov      r0, r3
+00147354: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+00147358: sub      r2, fp, #0xfc
+0014735c: sub      r3, fp, #0x114
+00147360: movw     r1, #0xe254
+00147364: movt     r1, #0x1b ; 'light restart'
+00147368: mov      r0, r3
+0014736c: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00147370: sub      r3, fp, #0x114
+00147374: mov      r2, r3
+00147378: mov      r1, #1
+0014737c: ldr      r0, [fp, #-0x2f8]
+00147380: bl       #0x144510 ; znp::V4L2::ReportHealth(znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00147384: sub      r3, fp, #0x114
+00147388: mov      r0, r3
+0014738c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147390: sub      r3, fp, #0xfc
+00147394: mov      r0, r3
+00147398: bl       #0x7c658 ; _ZNSaIcED1Ev
+0014739c: ldr      r0, [fp, #-0x2f8]
+001473a0: bl       #0x14624c ; znp::V4L2::RestartStreaming()
+001473a4: b        #0x147498
+001473a8: bl       #0x88808 ; spdlog::default_logger_raw()
+001473ac: mov      r4, r0
+001473b0: sub      r0, fp, #0xf8
+001473b4: movw     r3, #0xda60
+001473b8: movt     r3, #0x1b ; 'GetFramesThread'
+001473bc: mov      r2, #0x238
+001473c0: movw     r1, #0xdaac
+001473c4: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001473c8: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001473cc: movw     r3, #0xe264
+001473d0: movt     r3, #0x1b ; 'V4L2 [{}] no valid frame for {} ms (dqbuf_fail={}, empty={}), full reopen (attempt {})'
+001473d4: str      r3, [fp, #-0xec]
+001473d8: movw     r0, #0xe264
+001473dc: movt     r0, #0x1b ; 'V4L2 [{}] no valid frame for {} ms (dqbuf_fail={}, empty={}), full reopen (attempt {})'
+001473e0: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001473e4: mov      r3, r0
+001473e8: str      r3, [fp, #-0xe8]
+001473ec: ldr      r3, [fp, #-0x2f8]
+001473f0: add      r3, r3, #4
+001473f4: sub      r2, fp, #0x2d0
+001473f8: str      r2, [sp, #0x1c]
+001473fc: sub      r2, fp, #0x2cc
+00147400: str      r2, [sp, #0x18]
+00147404: sub      r2, fp, #0x2c4
+00147408: str      r2, [sp, #0x14]
+0014740c: sub      r2, fp, #0x2dc
+00147410: str      r2, [sp, #0x10]
+00147414: str      r3, [sp, #0xc]
+00147418: add      r2, sp, #4
+0014741c: sub      r3, fp, #0xec
+00147420: ldm      r3, {r0, r1}
+00147424: stm      r2, {r0, r1}
+00147428: mov      r3, #3
+0014742c: str      r3, [sp]
+00147430: sub      r3, fp, #0xf8
+00147434: ldm      r3, {r1, r2, r3}
+00147438: mov      r0, r4
+0014743c: bl       #0x149970 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, long long&, unsigned long long&, unsigned long long&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<long long&>::type, fmt::v10::type_identity<unsigned long long&>::type, fmt::v10::type_identity<unsigned long long&>::type, fmt::v10::type_identity<int&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, long long&, unsigned long long&, unsigned long long&, int&)
+00147440: sub      r3, fp, #0xcc
+00147444: mov      r0, r3
+00147448: bl       #0x7c2d4 ; _ZNSaIcEC1Ev
+0014744c: sub      r2, fp, #0xcc
+00147450: sub      r3, fp, #0xe4
+00147454: movw     r1, #0xe2bc
+00147458: movt     r1, #0x1b ; 'full reopen'
+0014745c: mov      r0, r3
+00147460: bl       #0x7c0a0 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00147464: sub      r3, fp, #0xe4
+00147468: mov      r2, r3
+0014746c: mov      r1, #1
+00147470: ldr      r0, [fp, #-0x2f8]
+00147474: bl       #0x144510 ; znp::V4L2::ReportHealth(znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00147478: sub      r3, fp, #0xe4
+0014747c: mov      r0, r3
+00147480: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147484: sub      r3, fp, #0xcc
+00147488: mov      r0, r3
+0014748c: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147490: ldr      r0, [fp, #-0x2f8]
+00147494: bl       #0x146418 ; znp::V4L2::ReopenDevice()
+00147498: ldr      r3, [fp, #-0x2d0]
+0014749c: cmp      r3, #8
+001474a0: bne      #0x1475a8
+001474a4: bl       #0x88808 ; spdlog::default_logger_raw()
+001474a8: mov      r4, r0
+001474ac: sub      r0, fp, #0xc8
+001474b0: movw     r3, #0xda60
+001474b4: movt     r3, #0x1b ; 'GetFramesThread'
+001474b8: movw     r2, #0x241
+001474bc: movw     r1, #0xdaac
+001474c0: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001474c4: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001474c8: movw     r3, #0xe2c8
+001474cc: movt     r3, #0x1b ; "V4L2 [{}] camera not delivering '{}' frames after {} recovery attempts, suspected hardware/firmware fault"
+001474d0: str      r3, [fp, #-0xbc]
+001474d4: movw     r0, #0xe2c8
+001474d8: movt     r0, #0x1b ; "V4L2 [{}] camera not delivering '{}' frames after {} recovery attempts, suspected hardware/firmware fault"
+001474dc: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001474e0: mov      r3, r0
+001474e4: str      r3, [fp, #-0xb8]
+001474e8: ldr      r3, [fp, #-0x2f8]
+001474ec: add      r3, r3, #4
+001474f0: sub      r2, fp, #0x2d0
+001474f4: str      r2, [sp, #0x14]
+001474f8: sub      r2, fp, #0x2f4
+001474fc: str      r2, [sp, #0x10]
+00147500: str      r3, [sp, #0xc]
+00147504: add      r2, sp, #4
+00147508: sub      r3, fp, #0xbc
+0014750c: ldm      r3, {r0, r1}
+00147510: stm      r2, {r0, r1}
+00147514: mov      r3, #4
+00147518: str      r3, [sp]
+0014751c: sub      r3, fp, #0xc8
+00147520: ldm      r3, {r1, r2, r3}
+00147524: mov      r0, r4
+00147528: bl       #0x149a1c ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<int&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int&)
+0014752c: ldr      r2, [fp, #-0x2d0]
+00147530: sub      r3, fp, #0x84
+00147534: mov      r1, r2
+00147538: mov      r0, r3
+0014753c: bl       #0xeb500 ; std::__cxx11::to_string(int)
+00147540: sub      r3, fp, #0x9c
+00147544: sub      r2, fp, #0x84
+00147548: movw     r1, #0xe334
+0014754c: movt     r1, #0x1b ; 'no frame after '
+00147550: mov      r0, r3
+00147554: bl       #0x11da8c ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+00147558: sub      r3, fp, #0xb4
+0014755c: sub      r1, fp, #0x9c
+00147560: movw     r2, #0xe344
+00147564: movt     r2, #0x1b ; ' recovery attempts'
+00147568: mov      r0, r3
+0014756c: bl       #0x11e3dc ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+00147570: sub      r3, fp, #0xb4
+00147574: mov      r2, r3
+00147578: mov      r1, #2
+0014757c: ldr      r0, [fp, #-0x2f8]
+00147580: bl       #0x144510 ; znp::V4L2::ReportHealth(znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00147584: sub      r3, fp, #0xb4
+00147588: mov      r0, r3
+0014758c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147590: sub      r3, fp, #0x9c
+00147594: mov      r0, r3
+00147598: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+0014759c: sub      r3, fp, #0x84
+001475a0: mov      r0, r3
+001475a4: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001475a8: sub      r3, fp, #0x2b4
+001475ac: mov      r4, r3
+001475b0: sub      r3, fp, #0x304
+001475b4: mov      r0, r3
+001475b8: bl       #0x7c2a4 ; _ZNSt6chrono3_V212steady_clock3nowEv
+001475bc: sub      r3, fp, #0x304
+001475c0: ldrd     r2, r3, [r3]
+001475c4: strd     r2, r3, [r4, #-8]
+001475c8: sub      r3, fp, #0x2f4
+001475cc: mov      r0, r3
+001475d0: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001475d4: sub      r3, fp, #0x2d4
+001475d8: mov      r0, r3
+001475dc: bl       #0x88b6c ; std::lock_guard<std::mutex>::~lock_guard()
+001475e0: ldrb     r3, [fp, #-0x16]
+001475e4: cmp      r3, #0
+001475e8: beq      #0x147644
+001475ec: ldr      r3, [fp, #-0x2f8]
+001475f0: ldr      r3, [r3, #0x24]
+001475f4: cmp      r3, #0
+001475f8: ble      #0x147618
+001475fc: ldr      r3, [fp, #-0x2f8]
+00147600: ldr      r3, [r3, #0x24]
+00147604: mov      r1, r3
+00147608: mov      r0, #0x3e8
+0014760c: bl       #0x7c088 ; __aeabi_idiv
+00147610: mov      r3, r0
+00147614: b        #0x14761c
+00147618: mov      r3, #0x32
+0014761c: str      r3, [fp, #-0x60]
+00147620: sub      r2, fp, #0x60
+00147624: sub      r3, fp, #0x6c
+00147628: mov      r1, r2
+0014762c: mov      r0, r3
+00147630: bl       #0x148cb0 ; std::chrono::duration<long long, std::ratio<1ll, 1000ll> >::duration<int, void>(int const&)
+00147634: sub      r3, fp, #0x6c
+00147638: mov      r0, r3
+0014763c: bl       #0x11e028 ; void std::this_thread::sleep_for<long long, std::ratio<1ll, 1000ll> >(std::chrono::duration<long long, std::ratio<1ll, 1000ll> > const&)
+00147640: b        #0x146afc
+00147644: mov      r3, #0xa
+00147648: str      r3, [fp, #-0x54]
+0014764c: sub      r2, fp, #0x54
+00147650: sub      r3, fp, #0x5c
+00147654: mov      r1, r2
+00147658: mov      r0, r3
+0014765c: bl       #0x148cb0 ; std::chrono::duration<long long, std::ratio<1ll, 1000ll> >::duration<int, void>(int const&)
+00147660: sub      r3, fp, #0x5c
+00147664: mov      r0, r3
+00147668: bl       #0x11e028 ; void std::this_thread::sleep_for<long long, std::ratio<1ll, 1000ll> >(std::chrono::duration<long long, std::ratio<1ll, 1000ll> > const&)
+0014766c: b        #0x146afc
+00147670: bl       #0x88808 ; spdlog::default_logger_raw()
+00147674: mov      r4, r0
+00147678: sub      r0, fp, #0x50
+0014767c: movw     r3, #0xda60
+00147680: movt     r3, #0x1b ; 'GetFramesThread'
+00147684: movw     r2, #0x252
+00147688: movw     r1, #0xdaac
+0014768c: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00147690: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00147694: movw     r3, #0xe358
+00147698: movt     r3, #0x1b ; 'GetFramesThread Over!'
+0014769c: str      r3, [fp, #-0x3c]
+001476a0: ldr      r3, [fp, #-0x3c]
+001476a4: str      r3, [fp, #-0x44]
+001476a8: ldr      r0, [fp, #-0x3c]
+001476ac: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001476b0: mov      r3, r0
+001476b4: str      r3, [fp, #-0x40]
+001476b8: add      r2, sp, #4
+001476bc: sub      r3, fp, #0x44
+001476c0: ldm      r3, {r0, r1}
+001476c4: stm      r2, {r0, r1}
+001476c8: mov      r3, #2
+001476cc: str      r3, [sp]
+001476d0: sub      r3, fp, #0x50
+001476d4: ldm      r3, {r1, r2, r3}
+001476d8: mov      r0, r4
+001476dc: bl       #0x843bc ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+001476e0: b        #0x147818
+001476e4: sub      r3, fp, #0x234
+001476e8: mov      r0, r3
+001476ec: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001476f0: b        #0x1476f4
+001476f4: sub      r3, fp, #0x21c
+001476f8: mov      r0, r3
+001476fc: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147700: b        #0x147808
+00147704: sub      r3, fp, #0x1f0
+00147708: mov      r0, r3
+0014770c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147710: b        #0x147714
+00147714: sub      r3, fp, #0x1d8
+00147718: mov      r0, r3
+0014771c: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147720: b        #0x147808
+00147724: sub      r3, fp, #0x1c0
+00147728: mov      r0, r3
+0014772c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147730: b        #0x147734
+00147734: sub      r3, fp, #0x1a8
+00147738: mov      r0, r3
+0014773c: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147740: b        #0x147808
+00147744: sub      r3, fp, #0x17c
+00147748: mov      r0, r3
+0014774c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147750: b        #0x147754
+00147754: sub      r3, fp, #0x164
+00147758: mov      r0, r3
+0014775c: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147760: b        #0x147808
+00147764: sub      r3, fp, #0x160
+00147768: mov      r0, r3
+0014776c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147770: b        #0x147774
+00147774: sub      r3, fp, #0x148
+00147778: mov      r0, r3
+0014777c: bl       #0x7c658 ; _ZNSaIcED1Ev
+00147780: b        #0x147808
+00147784: sub      r3, fp, #0x114
+00147788: mov      r0, r3
+0014778c: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147790: b        #0x147794
+00147794: sub      r3, fp, #0xfc
+00147798: mov      r0, r3
+0014779c: bl       #0x7c658 ; _ZNSaIcED1Ev
+001477a0: b        #0x1477f4
+001477a4: sub      r3, fp, #0xe4
+001477a8: mov      r0, r3
+001477ac: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001477b0: b        #0x1477b4
+001477b4: sub      r3, fp, #0xcc
+001477b8: mov      r0, r3
+001477bc: bl       #0x7c658 ; _ZNSaIcED1Ev
+001477c0: b        #0x1477f4
+001477c4: sub      r3, fp, #0xb4
+001477c8: mov      r0, r3
+001477cc: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001477d0: b        #0x1477d4
+001477d4: sub      r3, fp, #0x9c
+001477d8: mov      r0, r3
+001477dc: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001477e0: b        #0x1477e4
+001477e4: sub      r3, fp, #0x84
+001477e8: mov      r0, r3
+001477ec: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+001477f0: b        #0x1477f4
+001477f4: sub      r3, fp, #0x2f4
+001477f8: mov      r0, r3
+001477fc: bl       #0x7bfa4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00147800: b        #0x147808
+00147804: b        #0x147808
+00147808: sub      r3, fp, #0x2d4
+0014780c: mov      r0, r3
+00147810: bl       #0x88b6c ; std::lock_guard<std::mutex>::~lock_guard()
+00147814: bl       #0x7c2f8 ; __cxa_end_cleanup
+00147818: sub      sp, fp, #0x10
+0014781c: pop      {r4, r5, r6, fp, pc}

@@ -1,0 +1,297 @@
+communication::HTTPServer::start()
+0084d7b8: push     {r4, fp, lr}
+0084d7bc: add      fp, sp, #8
+0084d7c0: sub      sp, sp, #0x84
+0084d7c4: str      r0, [fp, #-0x70]
+0084d7c8: bl       #0xcf64c ; spdlog::default_logger_raw()
+0084d7cc: mov      r4, r0
+0084d7d0: sub      r0, fp, #0x60
+0084d7d4: movw     r3, #0x64fc
+0084d7d8: movt     r3, #0xbb ; 'start'
+0084d7dc: mov      r2, #0x96
+0084d7e0: movw     r1, #0x8c24
+0084d7e4: movt     r1, #0xbb ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp'
+0084d7e8: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0084d7ec: movw     r3, #0x8d68
+0084d7f0: movt     r3, #0xbb ; 'Starting HTTP server on port {}'
+0084d7f4: str      r3, [fp, #-0x54]
+0084d7f8: movw     r0, #0x8d68
+0084d7fc: movt     r0, #0xbb ; 'Starting HTTP server on port {}'
+0084d800: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0084d804: mov      r3, r0
+0084d808: str      r3, [fp, #-0x50]
+0084d80c: ldr      r3, [fp, #-0x70]
+0084d810: add      r3, r3, #0x370
+0084d814: str      r3, [sp, #0xc]
+0084d818: add      r2, sp, #4
+0084d81c: sub      r3, fp, #0x54
+0084d820: ldm      r3, {r0, r1}
+0084d824: stm      r2, {r0, r1}
+0084d828: mov      r3, #2
+0084d82c: str      r3, [sp]
+0084d830: sub      r3, fp, #0x60
+0084d834: ldm      r3, {r1, r2, r3}
+0084d838: mov      r0, r4
+0084d83c: bl       #0xdb430 ; void spdlog::logger::log<int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type>, int&)
+0084d840: ldr      r3, [fp, #-0x70]
+0084d844: add      r0, r3, #0x2cc
+0084d848: ldr      r3, [fp, #-0x70]
+0084d84c: ldr      r3, [r3, #0x370]
+0084d850: mov      r2, #0
+0084d854: mov      r1, r3
+0084d858: bl       #0x857858 ; hv::HttpServer::setPort(int, int)
+0084d85c: ldr      r3, [fp, #-0x70]
+0084d860: str      r3, [fp, #-0x64]
+0084d864: ldr      r3, [fp, #-0x70]
+0084d868: ldr      r2, [fp, #-0x70]
+0084d86c: movw     r1, #0x8d88
+0084d870: movt     r1, #0xbb ; '/download'
+0084d874: mov      r0, r3
+0084d878: bl       #0x852954 ; void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#2}>(char const*, communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#2})
+0084d87c: sub      r3, fp, #0x64
+0084d880: movw     r2, #0x8d94
+0084d884: movt     r2, #0xbb ; 'GET, OPTIONS'
+0084d888: movw     r1, #0x8d88
+0084d88c: movt     r1, #0xbb ; '/download'
+0084d890: mov      r0, r3
+0084d894: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d898: ldr      r3, [fp, #-0x70]
+0084d89c: ldr      r2, [fp, #-0x70]
+0084d8a0: movw     r1, #0x8da4
+0084d8a4: movt     r1, #0xbb ; '/download/udisk'
+0084d8a8: mov      r0, r3
+0084d8ac: bl       #0x852990 ; void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#3}>(char const*, communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#3})
+0084d8b0: sub      r3, fp, #0x64
+0084d8b4: movw     r2, #0x8d94
+0084d8b8: movt     r2, #0xbb ; 'GET, OPTIONS'
+0084d8bc: movw     r1, #0x8da4
+0084d8c0: movt     r1, #0xbb ; '/download/udisk'
+0084d8c4: mov      r0, r3
+0084d8c8: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d8cc: ldr      r3, [fp, #-0x70]
+0084d8d0: ldr      r2, [fp, #-0x70]
+0084d8d4: movw     r1, #0x8db4
+0084d8d8: movt     r1, #0xbb ; '/download/sdcard'
+0084d8dc: mov      r0, r3
+0084d8e0: bl       #0x8529cc ; void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#4}>(char const*, communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#4})
+0084d8e4: ldr      r3, [fp, #-0x70]
+0084d8e8: ldr      r2, [fp, #-0x70]
+0084d8ec: movw     r1, #0x8dc8
+0084d8f0: movt     r1, #0xbb ; '/upload'
+0084d8f4: mov      r0, r3
+0084d8f8: bl       #0x852a08 ; void hv::HttpService::PUT<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#5}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#5})
+0084d8fc: sub      r3, fp, #0x64
+0084d900: movw     r2, #0x8dd0
+0084d904: movt     r2, #0xbb ; 'PUT, OPTIONS'
+0084d908: movw     r1, #0x8dc8
+0084d90c: movt     r1, #0xbb ; '/upload'
+0084d910: mov      r0, r3
+0084d914: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d918: ldr      r3, [fp, #-0x70]
+0084d91c: ldr      r2, [fp, #-0x70]
+0084d920: movw     r1, #0x8de0
+0084d924: movt     r1, #0xbb ; '/upload/udisk'
+0084d928: mov      r0, r3
+0084d92c: bl       #0x852a44 ; void hv::HttpService::PUT<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#6}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#6})
+0084d930: sub      r3, fp, #0x64
+0084d934: movw     r2, #0x8dd0
+0084d938: movt     r2, #0xbb ; 'PUT, OPTIONS'
+0084d93c: movw     r1, #0x8de0
+0084d940: movt     r1, #0xbb ; '/upload/udisk'
+0084d944: mov      r0, r3
+0084d948: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d94c: ldr      r3, [fp, #-0x70]
+0084d950: ldr      r2, [fp, #-0x70]
+0084d954: movw     r1, #0x8df0
+0084d958: movt     r1, #0xbb ; '/upload/sdcard'
+0084d95c: mov      r0, r3
+0084d960: bl       #0x852a80 ; void hv::HttpService::PUT<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#7}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#7})
+0084d964: sub      r3, fp, #0x64
+0084d968: movw     r2, #0x8dd0
+0084d96c: movt     r2, #0xbb ; 'PUT, OPTIONS'
+0084d970: movw     r1, #0x8df0
+0084d974: movt     r1, #0xbb ; '/upload/sdcard'
+0084d978: mov      r0, r3
+0084d97c: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d980: ldr      r3, [fp, #-0x70]
+0084d984: ldr      r2, [fp, #-0x70]
+0084d988: movw     r1, #0x8e00
+0084d98c: movt     r1, #0xbb ; '/transfer/cancel'
+0084d990: mov      r0, r3
+0084d994: bl       #0x852abc ; void hv::HttpService::POST<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#8}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#8})
+0084d998: sub      r3, fp, #0x64
+0084d99c: movw     r2, #0x8e14
+0084d9a0: movt     r2, #0xbb ; 'POST, OPTIONS'
+0084d9a4: movw     r1, #0x8e00
+0084d9a8: movt     r1, #0xbb ; '/transfer/cancel'
+0084d9ac: mov      r0, r3
+0084d9b0: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d9b4: ldr      r3, [fp, #-0x70]
+0084d9b8: ldr      r2, [fp, #-0x70]
+0084d9bc: movw     r1, #0x8e24
+0084d9c0: movt     r1, #0xbb ; '/transfer/cancel/udisk'
+0084d9c4: mov      r0, r3
+0084d9c8: bl       #0x852af8 ; void hv::HttpService::POST<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#9}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#9})
+0084d9cc: sub      r3, fp, #0x64
+0084d9d0: movw     r2, #0x8e14
+0084d9d4: movt     r2, #0xbb ; 'POST, OPTIONS'
+0084d9d8: movw     r1, #0x8e24
+0084d9dc: movt     r1, #0xbb ; '/transfer/cancel/udisk'
+0084d9e0: mov      r0, r3
+0084d9e4: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084d9e8: ldr      r3, [fp, #-0x70]
+0084d9ec: ldr      r2, [fp, #-0x70]
+0084d9f0: movw     r1, #0x8e3c
+0084d9f4: movt     r1, #0xbb ; '/transfer/cancel/sdcard'
+0084d9f8: mov      r0, r3
+0084d9fc: bl       #0x852b34 ; void hv::HttpService::POST<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#10}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#10})
+0084da00: sub      r3, fp, #0x64
+0084da04: movw     r2, #0x8e14
+0084da08: movt     r2, #0xbb ; 'POST, OPTIONS'
+0084da0c: movw     r1, #0x8e3c
+0084da10: movt     r1, #0xbb ; '/transfer/cancel/sdcard'
+0084da14: mov      r0, r3
+0084da18: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084da1c: ldr      r3, [fp, #-0x70]
+0084da20: ldr      r2, [fp, #-0x70]
+0084da24: movw     r1, #0x8e54
+0084da28: movt     r1, #0xbb ; '/system/info'
+0084da2c: mov      r0, r3
+0084da30: bl       #0x852b70 ; void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#11}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#11})
+0084da34: sub      r3, fp, #0x64
+0084da38: movw     r2, #0x8d94
+0084da3c: movt     r2, #0xbb ; 'GET, OPTIONS'
+0084da40: movw     r1, #0x8e54
+0084da44: movt     r1, #0xbb ; '/system/info'
+0084da48: mov      r0, r3
+0084da4c: bl       #0x84d4f4 ; communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const
+0084da50: ldr      r3, [fp, #-0x70]
+0084da54: add      r3, r3, #0x2cc
+0084da58: ldr      r2, [fp, #-0x70]
+0084da5c: mov      r1, r2
+0084da60: mov      r0, r3
+0084da64: bl       #0x8577ec ; hv::HttpServer::registerHttpService(hv::HttpService*)
+0084da68: ldr      r3, [fp, #-0x70]
+0084da6c: add      r2, r3, #0x2cc
+0084da70: ldr      r3, [fp, #-0x70]
+0084da74: ldr      r3, [r3, #0x36c]
+0084da78: mov      r1, r3
+0084da7c: mov      r0, r2
+0084da80: bl       #0x8578b0 ; hv::HttpServer::setThreadNum(int)
+0084da84: bl       #0xcf64c ; spdlog::default_logger_raw()
+0084da88: mov      r4, r0
+0084da8c: sub      r0, fp, #0x4c
+0084da90: movw     r3, #0x64fc
+0084da94: movt     r3, #0xbb ; 'start'
+0084da98: mov      r2, #0xd0
+0084da9c: movw     r1, #0x8c24
+0084daa0: movt     r1, #0xbb ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp'
+0084daa4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0084daa8: movw     r3, #0x8e64
+0084daac: movt     r3, #0xbb ; 'HTTP server is running on address {} port {}'
+0084dab0: str      r3, [fp, #-0x40]
+0084dab4: movw     r0, #0x8e64
+0084dab8: movt     r0, #0xbb ; 'HTTP server is running on address {} port {}'
+0084dabc: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0084dac0: mov      r3, r0
+0084dac4: str      r3, [fp, #-0x3c]
+0084dac8: ldr      r3, [fp, #-0x70]
+0084dacc: add      r3, r3, #0x2cc
+0084dad0: ldr      r2, [fp, #-0x70]
+0084dad4: add      r2, r2, #0x370
+0084dad8: str      r2, [sp, #0x10]
+0084dadc: str      r3, [sp, #0xc]
+0084dae0: add      r2, sp, #4
+0084dae4: sub      r3, fp, #0x40
+0084dae8: ldm      r3, {r0, r1}
+0084daec: stm      r2, {r0, r1}
+0084daf0: mov      r3, #2
+0084daf4: str      r3, [sp]
+0084daf8: sub      r3, fp, #0x4c
+0084dafc: ldm      r3, {r1, r2, r3}
+0084db00: mov      r0, r4
+0084db04: bl       #0x85897c ; void spdlog::logger::log<char (&) [64], int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char (&) [64]>::type, fmt::v10::type_identity<int&>::type>, char (&) [64], int&)
+0084db08: ldr      r3, [fp, #-0x70]
+0084db0c: add      r3, r3, #0x2cc
+0084db10: mov      r2, #1
+0084db14: mov      r1, #0
+0084db18: mov      r0, r3
+0084db1c: bl       #0x85790c ; hv::HttpServer::run(char const*, bool)
+0084db20: mov      r3, r0
+0084db24: str      r3, [fp, #-0x68]
+0084db28: ldr      r3, [fp, #-0x70]
+0084db2c: add      r3, r3, #0x364
+0084db30: mov      r1, #0
+0084db34: mov      r0, r3
+0084db38: bl       #0xc4f10 ; std::atomic<bool>::operator=(bool)
+0084db3c: ldr      r3, [fp, #-0x70]
+0084db40: add      r3, r3, #0x368
+0084db44: mov      r1, #0
+0084db48: mov      r0, r3
+0084db4c: bl       #0x840df0 ; std::__atomic_base<int>::operator=(int)
+0084db50: movw     r0, #0x93c
+0084db54: movt     r0, #0xcf
+0084db58: bl       #0x858954 ; std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::shared_ptr<HV_MD5_CTX>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::shared_ptr<HV_MD5_CTX> > > >::clear()
+0084db5c: ldr      r3, [fp, #-0x68]
+0084db60: cmp      r3, #0
+0084db64: beq      #0x84dbe0
+0084db68: bl       #0xcf64c ; spdlog::default_logger_raw()
+0084db6c: mov      r4, r0
+0084db70: sub      r0, fp, #0x38
+0084db74: movw     r3, #0x64fc
+0084db78: movt     r3, #0xbb ; 'start'
+0084db7c: mov      r2, #0xd7
+0084db80: movw     r1, #0x8c24
+0084db84: movt     r1, #0xbb ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp'
+0084db88: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0084db8c: movw     r3, #0x8e94
+0084db90: movt     r3, #0xbb ; 'Failed to start HTTP server: {}'
+0084db94: str      r3, [fp, #-0x2c]
+0084db98: movw     r0, #0x8e94
+0084db9c: movt     r0, #0xbb ; 'Failed to start HTTP server: {}'
+0084dba0: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0084dba4: mov      r3, r0
+0084dba8: str      r3, [fp, #-0x28]
+0084dbac: sub      r3, fp, #0x68
+0084dbb0: str      r3, [sp, #0xc]
+0084dbb4: add      r2, sp, #4
+0084dbb8: sub      r3, fp, #0x2c
+0084dbbc: ldm      r3, {r0, r1}
+0084dbc0: stm      r2, {r0, r1}
+0084dbc4: mov      r3, #4
+0084dbc8: str      r3, [sp]
+0084dbcc: sub      r3, fp, #0x38
+0084dbd0: ldm      r3, {r1, r2, r3}
+0084dbd4: mov      r0, r4
+0084dbd8: bl       #0xdb430 ; void spdlog::logger::log<int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type>, int&)
+0084dbdc: b        #0x84dc50
+0084dbe0: bl       #0xcf64c ; spdlog::default_logger_raw()
+0084dbe4: mov      r4, r0
+0084dbe8: sub      r0, fp, #0x24
+0084dbec: movw     r3, #0x64fc
+0084dbf0: movt     r3, #0xbb ; 'start'
+0084dbf4: mov      r2, #0xda
+0084dbf8: movw     r1, #0x8c24
+0084dbfc: movt     r1, #0xbb ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp'
+0084dc00: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0084dc04: movw     r3, #0x8eb4
+0084dc08: movt     r3, #0xbb ; 'HTTP server thread exited.'
+0084dc0c: str      r3, [fp, #-0x10]
+0084dc10: ldr      r3, [fp, #-0x10]
+0084dc14: str      r3, [fp, #-0x18]
+0084dc18: ldr      r0, [fp, #-0x10]
+0084dc1c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0084dc20: mov      r3, r0
+0084dc24: str      r3, [fp, #-0x14]
+0084dc28: add      r2, sp, #4
+0084dc2c: sub      r3, fp, #0x18
+0084dc30: ldm      r3, {r0, r1}
+0084dc34: stm      r2, {r0, r1}
+0084dc38: mov      r3, #2
+0084dc3c: str      r3, [sp]
+0084dc40: sub      r3, fp, #0x24
+0084dc44: ldm      r3, {r1, r2, r3}
+0084dc48: mov      r0, r4
+0084dc4c: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+0084dc50: sub      sp, fp, #8
+0084dc54: pop      {r4, fp, pc}

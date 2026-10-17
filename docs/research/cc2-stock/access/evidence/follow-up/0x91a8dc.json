@@ -1,0 +1,89 @@
+{
+  "function": "api_module::SQLDatabase::upsert_cloud_file_cache(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+  "va": "0x91a8dc",
+  "size": 352,
+  "calls": [
+    {
+      "at": "0x91a8f8",
+      "target": "0xc00f0",
+      "name": "time"
+    },
+    {
+      "at": "0x91a924",
+      "target": "0x149b20",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x91a93c",
+      "target": "0x149ba4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)"
+    },
+    {
+      "at": "0x91a948",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91a958",
+      "target": "0x91aed4",
+      "name": "api_module::SqlValue::SqlValue(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x91a96c",
+      "target": "0x91aed4",
+      "name": "api_module::SqlValue::SqlValue(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x91a980",
+      "target": "0x91ae3c",
+      "name": "api_module::SqlValue::SqlValue(long long)"
+    },
+    {
+      "at": "0x91a99c",
+      "target": "0x91b568",
+      "name": "std::allocator<api_module::SqlValue>::allocator()"
+    },
+    {
+      "at": "0x91a9b8",
+      "target": "0x91b648",
+      "name": "std::vector<api_module::SqlValue, std::allocator<api_module::SqlValue> >::vector(std::initializer_list<api_module::SqlValue>, std::allocator<api_module::SqlValue> const&)"
+    },
+    {
+      "at": "0x91a9cc",
+      "target": "0x918a70",
+      "name": "api_module::SQLDatabase::execute(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::vector<api_module::SqlValue, std::allocator<api_module::SqlValue> > const&)"
+    },
+    {
+      "at": "0x91a9e0",
+      "target": "0x91b23c",
+      "name": "std::vector<api_module::SqlValue, std::allocator<api_module::SqlValue> >::~vector()"
+    },
+    {
+      "at": "0x91a9ec",
+      "target": "0x91b590",
+      "name": "std::allocator<api_module::SqlValue>::~allocator()"
+    },
+    {
+      "at": "0x91aa14",
+      "target": "0x91af18",
+      "name": "api_module::SqlValue::~SqlValue()"
+    },
+    {
+      "at": "0x91aa28",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x91a91c",
+      "va": "0xbdf5b0",
+      "string": "INSERT INTO "
+    },
+    {
+      "at": "0x91a934",
+      "va": "0xbe0818",
+      "string": " (filename, slice_url, update_time) VALUES (?, ?, ?) ON CONFLICT(filename) DO UPDATE SET slice_url=excluded.slice_url, update_time=excluded.update_time;"
+    }
+  ]
+}

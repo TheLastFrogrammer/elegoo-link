@@ -1,0 +1,199 @@
+{
+  "function": "GCodeHelper::handle_script(std::shared_ptr<WebRequest>)",
+  "va": "0x2d93c0",
+  "size": 612,
+  "calls": [
+    {
+      "at": "0x2d93dc",
+      "target": "0x2eb218",
+      "name": "std::__shared_ptr<WebRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d93ec",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d9404",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d9410",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d9428",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d943c",
+      "target": "0x2d34f0",
+      "name": "WebRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x2d9448",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9454",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9460",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d946c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9484",
+      "target": "0xbf8d4",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4findEPKcj"
+    },
+    {
+      "at": "0x2d94b8",
+      "target": "0xbf8d4",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4findEPKcj"
+    },
+    {
+      "at": "0x2d94d8",
+      "target": "0x2e8344",
+      "name": "api_module::TimerManager::getInstance()"
+    },
+    {
+      "at": "0x2d94f0",
+      "target": "0x2df5d4",
+      "name": "std::function<void ()>::function<GCodeHelper::handle_script(std::shared_ptr<WebRequest>)::{lambda()#1}, void, void>(GCodeHelper::handle_script(std::shared_ptr<WebRequest>)::{lambda()#1})"
+    },
+    {
+      "at": "0x2d94fc",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d9514",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d9530",
+      "target": "0x93d274",
+      "name": "api_module::TimerManager::add_timer_task(std::function<void ()>, int, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x2d953c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9548",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9554",
+      "target": "0x1b8fb0",
+      "name": "std::function<void ()>::~function()"
+    },
+    {
+      "at": "0x2d9564",
+      "target": "0x14bde8",
+      "name": "std::__shared_ptr<GCodeDispatch, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d9578",
+      "target": "0x1a0284",
+      "name": "GCodeDispatch::run_script_from_command(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x2d958c",
+      "target": "0x14bde8",
+      "name": "std::__shared_ptr<GCodeDispatch, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d95a0",
+      "target": "0x1a03c4",
+      "name": "GCodeDispatch::run_script(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x2d95ac",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d95bc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d95cc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d95d8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d95e8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d95ec",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    },
+    {
+      "at": "0x2d95f8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9604",
+      "target": "0x1b8fb0",
+      "name": "std::function<void ()>::~function()"
+    },
+    {
+      "at": "0x2d9614",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9618",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x2d93fc",
+      "va": "0xa87944",
+      "string": "script"
+    },
+    {
+      "at": "0x2d947c",
+      "va": "0xa8794c",
+      "string": "SET_PIN PIN=led_pin"
+    },
+    {
+      "at": "0x2d94b0",
+      "va": "0xb6c14c",
+      "string": "VALUE=0"
+    },
+    {
+      "at": "0x2d950c",
+      "va": "0xa87960",
+      "string": "close_ai_detection"
+    }
+  ]
+}

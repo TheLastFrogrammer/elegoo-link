@@ -1,0 +1,48 @@
+{
+  "function": "api_module::DeviceStatus::get_storage_path(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)",
+  "va": "0x891274",
+  "size": 220,
+  "calls": [
+    {
+      "at": "0x8912a0",
+      "target": "0x89a22c",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >::find(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) const"
+    },
+    {
+      "at": "0x8912bc",
+      "target": "0x89a260",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >::end() const"
+    },
+    {
+      "at": "0x8912d8",
+      "target": "0x1baf00",
+      "name": "bool std::__detail::operator!=<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, true>(std::__detail::_Node_iterator_base<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, true> const&, std::__detail::_Node_iterator_base<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, true> const&)"
+    },
+    {
+      "at": "0x8912fc",
+      "target": "0x899e48",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > > > >::at(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&) const"
+    },
+    {
+      "at": "0x89130c",
+      "target": "0xbeb18",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_"
+    },
+    {
+      "at": "0x89131c",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x891334",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x891340",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    }
+  ],
+  "strings": []
+}

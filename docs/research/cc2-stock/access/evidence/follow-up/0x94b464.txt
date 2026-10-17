@@ -1,0 +1,491 @@
+api_module::LogExport::log_export(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+0094b464: push     {r4, fp, lr}
+0094b468: add      fp, sp, #8
+0094b46c: sub      sp, sp, #0x2280
+0094b470: sub      sp, sp, #0x3c
+0094b474: sub      r3, fp, #0x2000
+0094b478: sub      r3, r3, #0xc
+0094b47c: str      r0, [r3, #-0x29c]
+0094b480: sub      r3, fp, #0x2000
+0094b484: sub      r3, r3, #0xc
+0094b488: str      r1, [r3, #-0x2a0]
+0094b48c: mov      r3, #0x80
+0094b490: str      r3, [fp, #-0x18]
+0094b494: mov      r3, #0
+0094b498: str      r3, [fp, #-0x1c]
+0094b49c: mov      r3, #0
+0094b4a0: str      r3, [fp, #-0xa0]
+0094b4a4: sub      r3, fp, #0x120
+0094b4a8: mov      r2, #0x80
+0094b4ac: mov      r1, #0
+0094b4b0: mov      r0, r3
+0094b4b4: bl       #0xbf37c ; memset
+0094b4b8: sub      r3, fp, #0x1a0
+0094b4bc: mov      r2, #0x80
+0094b4c0: mov      r1, #0
+0094b4c4: mov      r0, r3
+0094b4c8: bl       #0xbf37c ; memset
+0094b4cc: sub      r3, fp, #0x2000
+0094b4d0: sub      r3, r3, #0xc
+0094b4d4: sub      r3, r3, #0x194
+0094b4d8: mov      r2, #0x2000
+0094b4dc: mov      r1, #0
+0094b4e0: mov      r0, r3
+0094b4e4: bl       #0xbf37c ; memset
+0094b4e8: sub      r3, fp, #0x2000
+0094b4ec: sub      r3, r3, #0xc
+0094b4f0: sub      r3, r3, #0x294
+0094b4f4: mov      r2, #0x100
+0094b4f8: mov      r1, #0
+0094b4fc: mov      r0, r3
+0094b500: bl       #0xbf37c ; memset
+0094b504: mov      r3, #0
+0094b508: str      r3, [fp, #-0x10]
+0094b50c: ldr      r3, [fp, #-0x10]
+0094b510: cmp      r3, #0x3f
+0094b514: bgt      #0x94b578
+0094b518: ldr      r2, [fp, #-0x10]
+0094b51c: sub      r3, fp, #0x2280
+0094b520: sub      r3, r3, #0xc
+0094b524: sub      r3, r3, #0x14
+0094b528: mov      r1, r2
+0094b52c: mov      r0, r3
+0094b530: bl       #0x94cb14 ; std::array<char*, 64u>::operator[](unsigned int)
+0094b534: mov      r4, r0
+0094b538: ldr      r2, [fp, #-0x10]
+0094b53c: sub      r3, fp, #0x2180
+0094b540: sub      r3, r3, #0xc
+0094b544: sub      r3, r3, #0x14
+0094b548: mov      r1, r2
+0094b54c: mov      r0, r3
+0094b550: bl       #0x94cb7c ; std::array<std::array<char, 128u>, 64u>::operator[](unsigned int)
+0094b554: mov      r3, r0
+0094b558: mov      r0, r3
+0094b55c: bl       #0x94cbd4 ; std::array<char, 128u>::data()
+0094b560: mov      r3, r0
+0094b564: str      r3, [r4]
+0094b568: ldr      r3, [fp, #-0x10]
+0094b56c: add      r3, r3, #1
+0094b570: str      r3, [fp, #-0x10]
+0094b574: b        #0x94b50c
+0094b578: sub      r1, fp, #0x120
+0094b57c: sub      r3, fp, #0x2000
+0094b580: sub      r3, r3, #0xc
+0094b584: mov      r2, #0x80
+0094b588: ldr      r0, [r3, #-0x29c]
+0094b58c: bl       #0x94c4ac ; api_module::LogExport::format_current_time(char*, unsigned int)
+0094b590: mov      r3, r0
+0094b594: cmp      r3, #0
+0094b598: movne    r3, #1
+0094b59c: moveq    r3, #0
+0094b5a0: uxtb     r3, r3
+0094b5a4: cmp      r3, #0
+0094b5a8: beq      #0x94b61c
+0094b5ac: bl       #0xcf64c ; spdlog::default_logger_raw()
+0094b5b0: mov      r4, r0
+0094b5b4: sub      r0, fp, #0x9c
+0094b5b8: movw     r3, #0x8f8c
+0094b5bc: movt     r3, #0xbf ; 'log_export'
+0094b5c0: mov      r2, #0x5e
+0094b5c4: movw     r1, #0x9310
+0094b5c8: movt     r1, #0xbf ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp'
+0094b5cc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0094b5d0: movw     r3, #0x93f4
+0094b5d4: movt     r3, #0xbf ; 'format_current_time error'
+0094b5d8: str      r3, [fp, #-0x24]
+0094b5dc: ldr      r3, [fp, #-0x24]
+0094b5e0: str      r3, [fp, #-0x90]
+0094b5e4: ldr      r0, [fp, #-0x24]
+0094b5e8: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0094b5ec: mov      r3, r0
+0094b5f0: str      r3, [fp, #-0x8c]
+0094b5f4: add      r2, sp, #4
+0094b5f8: sub      r3, fp, #0x90
+0094b5fc: ldm      r3, {r0, r1}
+0094b600: stm      r2, {r0, r1}
+0094b604: mov      r3, #4
+0094b608: str      r3, [sp]
+0094b60c: sub      r3, fp, #0x9c
+0094b610: ldm      r3, {r1, r2, r3}
+0094b614: mov      r0, r4
+0094b618: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+0094b61c: movw     r3, #0xd238
+0094b620: movt     r3, #0xce
+0094b624: ldr      r2, [r3]
+0094b628: sub      r0, fp, #0x1a0
+0094b62c: sub      r3, fp, #0x120
+0094b630: str      r3, [sp]
+0094b634: mov      r3, r2
+0094b638: movw     r2, #0x93a4
+0094b63c: movt     r2, #0xbf ; '%s/%s'
+0094b640: mov      r1, #0x80
+0094b644: bl       #0xc0024 ; snprintf
+0094b648: bl       #0xcf64c ; spdlog::default_logger_raw()
+0094b64c: mov      r4, r0
+0094b650: sub      r0, fp, #0x88
+0094b654: movw     r3, #0x8f8c
+0094b658: movt     r3, #0xbf ; 'log_export'
+0094b65c: mov      r2, #0x62
+0094b660: movw     r1, #0x9310
+0094b664: movt     r1, #0xbf ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp'
+0094b668: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0094b66c: movw     r3, #0x9410
+0094b670: movt     r3, #0xbf ; 'out_file_path:{}, src_file_path:{}'
+0094b674: str      r3, [fp, #-0x7c]
+0094b678: movw     r0, #0x9410
+0094b67c: movt     r0, #0xbf ; 'out_file_path:{}, src_file_path:{}'
+0094b680: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0094b684: mov      r3, r0
+0094b688: str      r3, [fp, #-0x78]
+0094b68c: sub      r3, fp, #0x1a0
+0094b690: str      r3, [sp, #0x10]
+0094b694: sub      r3, fp, #0x120
+0094b698: str      r3, [sp, #0xc]
+0094b69c: add      r2, sp, #4
+0094b6a0: sub      r3, fp, #0x7c
+0094b6a4: ldm      r3, {r0, r1}
+0094b6a8: stm      r2, {r0, r1}
+0094b6ac: mov      r3, #2
+0094b6b0: str      r3, [sp]
+0094b6b4: sub      r3, fp, #0x88
+0094b6b8: ldm      r3, {r1, r2, r3}
+0094b6bc: mov      r0, r4
+0094b6c0: bl       #0x8416a4 ; void spdlog::logger::log<char (&) [128], char (&) [128]>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char (&) [128]>::type, fmt::v10::type_identity<char (&) [128]>::type>, char (&) [128], char (&) [128])
+0094b6c4: sub      r2, fp, #0x1a0
+0094b6c8: sub      r3, fp, #0x2000
+0094b6cc: sub      r3, r3, #0xc
+0094b6d0: mov      r1, r2
+0094b6d4: ldr      r0, [r3, #-0x2a0]
+0094b6d8: bl       #0xbede8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEPKc
+0094b6dc: movw     r3, #0xd230
+0094b6e0: movt     r3, #0xce
+0094b6e4: ldr      r4, [r3]
+0094b6e8: sub      r3, fp, #0x2280
+0094b6ec: sub      r3, r3, #0xc
+0094b6f0: sub      r3, r3, #0x14
+0094b6f4: mov      r0, r3
+0094b6f8: bl       #0x94cc24 ; std::array<char*, 64u>::data()
+0094b6fc: mov      r1, r0
+0094b700: ldr      r2, [fp, #-0xa0]
+0094b704: sub      r3, fp, #0x2000
+0094b708: sub      r3, r3, #0xc
+0094b70c: mov      r0, r3
+0094b710: mov      r3, #0x40
+0094b714: str      r3, [sp]
+0094b718: mov      r3, r2
+0094b71c: mov      r2, r1
+0094b720: mov      r1, r4
+0094b724: ldr      r0, [r0, #-0x29c]
+0094b728: bl       #0x94b088 ; api_module::LogExport::get_logs_counts(char const*, char**, int, int)
+0094b72c: mov      r3, r0
+0094b730: str      r3, [fp, #-0x1c]
+0094b734: ldr      r2, [fp, #-0xa0]
+0094b738: ldr      r3, [fp, #-0x1c]
+0094b73c: add      r3, r2, r3
+0094b740: str      r3, [fp, #-0xa0]
+0094b744: movw     r3, #0xd23c
+0094b748: movt     r3, #0xce
+0094b74c: ldr      r4, [r3]
+0094b750: sub      r3, fp, #0x2280
+0094b754: sub      r3, r3, #0xc
+0094b758: sub      r3, r3, #0x14
+0094b75c: mov      r0, r3
+0094b760: bl       #0x94cc24 ; std::array<char*, 64u>::data()
+0094b764: mov      r1, r0
+0094b768: ldr      r2, [fp, #-0xa0]
+0094b76c: sub      r3, fp, #0x2000
+0094b770: sub      r3, r3, #0xc
+0094b774: mov      r0, r3
+0094b778: mov      r3, #0x40
+0094b77c: str      r3, [sp]
+0094b780: mov      r3, r2
+0094b784: mov      r2, r1
+0094b788: mov      r1, r4
+0094b78c: ldr      r0, [r0, #-0x29c]
+0094b790: bl       #0x94b088 ; api_module::LogExport::get_logs_counts(char const*, char**, int, int)
+0094b794: mov      r3, r0
+0094b798: str      r3, [fp, #-0x1c]
+0094b79c: ldr      r2, [fp, #-0xa0]
+0094b7a0: ldr      r3, [fp, #-0x1c]
+0094b7a4: add      r3, r2, r3
+0094b7a8: str      r3, [fp, #-0xa0]
+0094b7ac: movw     r3, #0xd244
+0094b7b0: movt     r3, #0xce
+0094b7b4: ldr      r4, [r3]
+0094b7b8: sub      r3, fp, #0x2280
+0094b7bc: sub      r3, r3, #0xc
+0094b7c0: sub      r3, r3, #0x14
+0094b7c4: mov      r0, r3
+0094b7c8: bl       #0x94cc24 ; std::array<char*, 64u>::data()
+0094b7cc: mov      r1, r0
+0094b7d0: ldr      r2, [fp, #-0xa0]
+0094b7d4: sub      r3, fp, #0x2000
+0094b7d8: sub      r3, r3, #0xc
+0094b7dc: mov      r0, r3
+0094b7e0: mov      r3, #0x40
+0094b7e4: str      r3, [sp]
+0094b7e8: mov      r3, r2
+0094b7ec: mov      r2, r1
+0094b7f0: mov      r1, r4
+0094b7f4: ldr      r0, [r0, #-0x29c]
+0094b7f8: bl       #0x94b088 ; api_module::LogExport::get_logs_counts(char const*, char**, int, int)
+0094b7fc: mov      r3, r0
+0094b800: str      r3, [fp, #-0x1c]
+0094b804: ldr      r2, [fp, #-0xa0]
+0094b808: ldr      r3, [fp, #-0x1c]
+0094b80c: add      r3, r2, r3
+0094b810: str      r3, [fp, #-0xa0]
+0094b814: movw     r3, #0xd240
+0094b818: movt     r3, #0xce
+0094b81c: ldr      r4, [r3]
+0094b820: sub      r3, fp, #0x2280
+0094b824: sub      r3, r3, #0xc
+0094b828: sub      r3, r3, #0x14
+0094b82c: mov      r0, r3
+0094b830: bl       #0x94cc24 ; std::array<char*, 64u>::data()
+0094b834: mov      r1, r0
+0094b838: ldr      r2, [fp, #-0xa0]
+0094b83c: sub      r3, fp, #0x2000
+0094b840: sub      r3, r3, #0xc
+0094b844: mov      r0, r3
+0094b848: mov      r3, #0x40
+0094b84c: str      r3, [sp]
+0094b850: mov      r3, r2
+0094b854: mov      r2, r1
+0094b858: mov      r1, r4
+0094b85c: ldr      r0, [r0, #-0x29c]
+0094b860: bl       #0x94b088 ; api_module::LogExport::get_logs_counts(char const*, char**, int, int)
+0094b864: mov      r3, r0
+0094b868: str      r3, [fp, #-0x1c]
+0094b86c: ldr      r2, [fp, #-0xa0]
+0094b870: ldr      r3, [fp, #-0x1c]
+0094b874: add      r3, r2, r3
+0094b878: str      r3, [fp, #-0xa0]
+0094b87c: ldr      r3, [fp, #-0xa0]
+0094b880: add      r2, r3, #1
+0094b884: sub      r3, fp, #0x2000
+0094b888: sub      r3, r3, #0xc
+0094b88c: ldr      r3, [r3, #-0x29c]
+0094b890: str      r2, [r3]
+0094b894: bl       #0xcf64c ; spdlog::default_logger_raw()
+0094b898: mov      r4, r0
+0094b89c: sub      r0, fp, #0x74
+0094b8a0: movw     r3, #0x8f8c
+0094b8a4: movt     r3, #0xbf ; 'log_export'
+0094b8a8: mov      r2, #0x71
+0094b8ac: movw     r1, #0x9310
+0094b8b0: movt     r1, #0xbf ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp'
+0094b8b4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0094b8b8: movw     r3, #0x9434
+0094b8bc: movt     r3, #0xbf ; 'src_file_count:{}, total_files_:{}'
+0094b8c0: str      r3, [fp, #-0x68]
+0094b8c4: movw     r0, #0x9434
+0094b8c8: movt     r0, #0xbf ; 'src_file_count:{}, total_files_:{}'
+0094b8cc: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0094b8d0: mov      r3, r0
+0094b8d4: str      r3, [fp, #-0x64]
+0094b8d8: sub      r3, fp, #0x2000
+0094b8dc: sub      r3, r3, #0xc
+0094b8e0: ldr      r3, [r3, #-0x29c]
+0094b8e4: str      r3, [sp, #0x10]
+0094b8e8: sub      r3, fp, #0xa0
+0094b8ec: str      r3, [sp, #0xc]
+0094b8f0: add      r2, sp, #4
+0094b8f4: sub      r3, fp, #0x68
+0094b8f8: ldm      r3, {r0, r1}
+0094b8fc: stm      r2, {r0, r1}
+0094b900: mov      r3, #2
+0094b904: str      r3, [sp]
+0094b908: sub      r3, fp, #0x74
+0094b90c: ldm      r3, {r1, r2, r3}
+0094b910: mov      r0, r4
+0094b914: bl       #0x3d0f20 ; void spdlog::logger::log<int&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type, fmt::v10::type_identity<int&>::type>, int&, int&)
+0094b918: sub      r3, fp, #0x1a0
+0094b91c: mov      r1, #0
+0094b920: mov      r0, r3
+0094b924: bl       #0xbfa24 ; zipOpen
+0094b928: mov      r3, r0
+0094b92c: str      r3, [fp, #-0x20]
+0094b930: ldr      r3, [fp, #-0x20]
+0094b934: cmp      r3, #0
+0094b938: bne      #0x94b9c0
+0094b93c: bl       #0xcf64c ; spdlog::default_logger_raw()
+0094b940: mov      r4, r0
+0094b944: sub      r0, fp, #0x60
+0094b948: movw     r3, #0x8f8c
+0094b94c: movt     r3, #0xbf ; 'log_export'
+0094b950: mov      r2, #0x75
+0094b954: movw     r1, #0x9310
+0094b958: movt     r1, #0xbf ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp'
+0094b95c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0094b960: movw     r3, #0x9458
+0094b964: movt     r3, #0xbf ; 'zipOpen error : total_files_:{}'
+0094b968: str      r3, [fp, #-0x54]
+0094b96c: movw     r0, #0x9458
+0094b970: movt     r0, #0xbf ; 'zipOpen error : total_files_:{}'
+0094b974: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0094b978: mov      r3, r0
+0094b97c: str      r3, [fp, #-0x50]
+0094b980: sub      r3, fp, #0x2000
+0094b984: sub      r3, r3, #0xc
+0094b988: ldr      r3, [r3, #-0x29c]
+0094b98c: str      r3, [sp, #0xc]
+0094b990: add      r2, sp, #4
+0094b994: sub      r3, fp, #0x54
+0094b998: ldm      r3, {r0, r1}
+0094b99c: stm      r2, {r0, r1}
+0094b9a0: mov      r3, #4
+0094b9a4: str      r3, [sp]
+0094b9a8: sub      r3, fp, #0x60
+0094b9ac: ldm      r3, {r1, r2, r3}
+0094b9b0: mov      r0, r4
+0094b9b4: bl       #0xdb430 ; void spdlog::logger::log<int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type>, int&)
+0094b9b8: movw     r3, #0x407
+0094b9bc: b        #0x94bc00
+0094b9c0: mov      r3, #0
+0094b9c4: str      r3, [fp, #-0x14]
+0094b9c8: ldr      r3, [fp, #-0xa0]
+0094b9cc: ldr      r2, [fp, #-0x14]
+0094b9d0: cmp      r2, r3
+0094b9d4: bge      #0x94bbf0
+0094b9d8: ldr      r2, [fp, #-0x14]
+0094b9dc: sub      r3, fp, #0x2280
+0094b9e0: sub      r3, r3, #0xc
+0094b9e4: sub      r3, r3, #0x14
+0094b9e8: mov      r1, r2
+0094b9ec: mov      r0, r3
+0094b9f0: bl       #0x94cb14 ; std::array<char*, 64u>::operator[](unsigned int)
+0094b9f4: mov      r3, r0
+0094b9f8: ldr      r3, [r3]
+0094b9fc: cmp      r3, #0
+0094ba00: beq      #0x94ba34
+0094ba04: ldr      r2, [fp, #-0x14]
+0094ba08: sub      r3, fp, #0x2280
+0094ba0c: sub      r3, r3, #0xc
+0094ba10: sub      r3, r3, #0x14
+0094ba14: mov      r1, r2
+0094ba18: mov      r0, r3
+0094ba1c: bl       #0x94cb14 ; std::array<char*, 64u>::operator[](unsigned int)
+0094ba20: mov      r3, r0
+0094ba24: ldr      r3, [r3]
+0094ba28: ldrb     r3, [r3]
+0094ba2c: cmp      r3, #0
+0094ba30: bne      #0x94ba3c
+0094ba34: mov      r3, #1
+0094ba38: b        #0x94ba40
+0094ba3c: mov      r3, #0
+0094ba40: cmp      r3, #0
+0094ba44: bne      #0x94bbdc
+0094ba48: ldr      r2, [fp, #-0x14]
+0094ba4c: sub      r3, fp, #0x2280
+0094ba50: sub      r3, r3, #0xc
+0094ba54: sub      r3, r3, #0x14
+0094ba58: mov      r1, r2
+0094ba5c: mov      r0, r3
+0094ba60: bl       #0x94cb14 ; std::array<char*, 64u>::operator[](unsigned int)
+0094ba64: mov      r3, r0
+0094ba68: ldr      r2, [r3]
+0094ba6c: sub      r3, fp, #0x2000
+0094ba70: sub      r3, r3, #0xc
+0094ba74: ldr      r1, [fp, #-0x20]
+0094ba78: ldr      r0, [r3, #-0x29c]
+0094ba7c: bl       #0x94c0f0 ; api_module::LogExport::set_add_file_to_zip(void*, char const*)
+0094ba80: mov      r2, r0
+0094ba84: sub      r3, fp, #0x2000
+0094ba88: sub      r3, r3, #0xc
+0094ba8c: str      r2, [r3, #-0x298]
+0094ba90: sub      r3, fp, #0x2000
+0094ba94: sub      r3, r3, #0xc
+0094ba98: ldr      r3, [r3, #-0x298]
+0094ba9c: cmp      r3, #0
+0094baa0: bne      #0x94bb38
+0094baa4: bl       #0xcf64c ; spdlog::default_logger_raw()
+0094baa8: mov      r4, r0
+0094baac: sub      r0, fp, #0x4c
+0094bab0: movw     r3, #0x8f8c
+0094bab4: movt     r3, #0xbf ; 'log_export'
+0094bab8: mov      r2, #0x7f
+0094babc: movw     r1, #0x9310
+0094bac0: movt     r1, #0xbf ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp'
+0094bac4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0094bac8: movw     r3, #0x9478
+0094bacc: movt     r3, #0xbf ; 'successful:add {} to zip'
+0094bad0: str      r3, [fp, #-0x40]
+0094bad4: movw     r0, #0x9478
+0094bad8: movt     r0, #0xbf ; 'successful:add {} to zip'
+0094badc: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0094bae0: mov      r3, r0
+0094bae4: str      r3, [fp, #-0x3c]
+0094bae8: ldr      r2, [fp, #-0x14]
+0094baec: sub      r3, fp, #0x2280
+0094baf0: sub      r3, r3, #0xc
+0094baf4: sub      r3, r3, #0x14
+0094baf8: mov      r1, r2
+0094bafc: mov      r0, r3
+0094bb00: bl       #0x94cb14 ; std::array<char*, 64u>::operator[](unsigned int)
+0094bb04: mov      r3, r0
+0094bb08: str      r3, [sp, #0xc]
+0094bb0c: add      r2, sp, #4
+0094bb10: sub      r3, fp, #0x40
+0094bb14: ldm      r3, {r0, r1}
+0094bb18: stm      r2, {r0, r1}
+0094bb1c: mov      r3, #2
+0094bb20: str      r3, [sp]
+0094bb24: sub      r3, fp, #0x4c
+0094bb28: ldm      r3, {r1, r2, r3}
+0094bb2c: mov      r0, r4
+0094bb30: bl       #0x91afa8 ; void spdlog::logger::log<char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char*&>::type>, char*&)
+0094bb34: b        #0x94bbe0
+0094bb38: bl       #0xcf64c ; spdlog::default_logger_raw()
+0094bb3c: mov      r4, r0
+0094bb40: sub      r0, fp, #0x38
+0094bb44: movw     r3, #0x8f8c
+0094bb48: movt     r3, #0xbf ; 'log_export'
+0094bb4c: mov      r2, #0x81
+0094bb50: movw     r1, #0x9310
+0094bb54: movt     r1, #0xbf ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp'
+0094bb58: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0094bb5c: movw     r3, #0x9494
+0094bb60: movt     r3, #0xbf ; 'failed:add: {} to zip, errno {}'
+0094bb64: str      r3, [fp, #-0x2c]
+0094bb68: movw     r0, #0x9494
+0094bb6c: movt     r0, #0xbf ; 'failed:add: {} to zip, errno {}'
+0094bb70: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0094bb74: mov      r3, r0
+0094bb78: str      r3, [fp, #-0x28]
+0094bb7c: ldr      r2, [fp, #-0x14]
+0094bb80: sub      r3, fp, #0x2280
+0094bb84: sub      r3, r3, #0xc
+0094bb88: sub      r3, r3, #0x14
+0094bb8c: mov      r1, r2
+0094bb90: mov      r0, r3
+0094bb94: bl       #0x94cb14 ; std::array<char*, 64u>::operator[](unsigned int)
+0094bb98: mov      r2, r0
+0094bb9c: sub      r3, fp, #0x2280
+0094bba0: sub      r3, r3, #0xc
+0094bba4: sub      r3, r3, #0x18
+0094bba8: str      r3, [sp, #0x10]
+0094bbac: str      r2, [sp, #0xc]
+0094bbb0: add      r2, sp, #4
+0094bbb4: sub      r3, fp, #0x2c
+0094bbb8: ldm      r3, {r0, r1}
+0094bbbc: stm      r2, {r0, r1}
+0094bbc0: mov      r3, #4
+0094bbc4: str      r3, [sp]
+0094bbc8: sub      r3, fp, #0x38
+0094bbcc: ldm      r3, {r1, r2, r3}
+0094bbd0: mov      r0, r4
+0094bbd4: bl       #0x94cc50 ; void spdlog::logger::log<char*&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char*&>::type, fmt::v10::type_identity<int&>::type>, char*&, int&)
+0094bbd8: b        #0x94bbe0
+0094bbdc: nop
+0094bbe0: ldr      r3, [fp, #-0x14]
+0094bbe4: add      r3, r3, #1
+0094bbe8: str      r3, [fp, #-0x14]
+0094bbec: b        #0x94b9c8
+0094bbf0: mov      r1, #0
+0094bbf4: ldr      r0, [fp, #-0x20]
+0094bbf8: bl       #0xbf4c0 ; zipClose
+0094bbfc: mov      r3, #0
+0094bc00: mov      r0, r3
+0094bc04: sub      sp, fp, #8
+0094bc08: pop      {r4, fp, pc}

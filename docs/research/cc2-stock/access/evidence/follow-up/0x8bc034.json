@@ -1,0 +1,284 @@
+{
+  "function": "api_module::APIPrinter::handle_get_file_info(std::shared_ptr<api_module::APIRequest>)",
+  "va": "0x8bc034",
+  "size": 820,
+  "calls": [
+    {
+      "at": "0x8bc050",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8bc060",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8bc078",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8bc084",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8bc09c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8bc0b0",
+      "target": "0x8ae048",
+      "name": "api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8bc0bc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc0c8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc0d4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc0e0",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc0ec",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8bc0fc",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8bc114",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8bc120",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8bc138",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8bc14c",
+      "target": "0x8ae048",
+      "name": "api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8bc158",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc164",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc170",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc17c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc18c",
+      "target": "0xdb888",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json(decltype(nullptr))"
+    },
+    {
+      "at": "0x8bc1a8",
+      "target": "0x1498d8",
+      "name": "bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)"
+    },
+    {
+      "at": "0x8bc1b8",
+      "target": "0x87ab00",
+      "name": "api_module::DeviceStatus::getInstance()"
+    },
+    {
+      "at": "0x8bc1d0",
+      "target": "0xbeb18",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_"
+    },
+    {
+      "at": "0x8bc1e4",
+      "target": "0x88b514",
+      "name": "api_module::DeviceStatus::get_local_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)"
+    },
+    {
+      "at": "0x8bc1f4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc20c",
+      "target": "0x1498d8",
+      "name": "bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)"
+    },
+    {
+      "at": "0x8bc21c",
+      "target": "0x87ab00",
+      "name": "api_module::DeviceStatus::getInstance()"
+    },
+    {
+      "at": "0x8bc234",
+      "target": "0xbeb18",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_"
+    },
+    {
+      "at": "0x8bc248",
+      "target": "0x88c534",
+      "name": "api_module::DeviceStatus::get_udisk_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)"
+    },
+    {
+      "at": "0x8bc258",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc264",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8bc274",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8bc280",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8bc294",
+      "target": "0x8af188",
+      "name": "api_module::APIRequest::send(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)"
+    },
+    {
+      "at": "0x8bc2a0",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x8bc2ac",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc2b8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc2c8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc2d8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc2e4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc2f4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc2f8",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    },
+    {
+      "at": "0x8bc304",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc314",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc320",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc330",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8bc340",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x8bc34c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc358",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8bc35c",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x8bc070",
+      "va": "0xba18b0",
+      "string": "storage_media"
+    },
+    {
+      "at": "0x8bc10c",
+      "va": "0xae2f5c",
+      "string": "filename"
+    },
+    {
+      "at": "0x8bc1a0",
+      "va": "0xba16fc",
+      "string": "local"
+    },
+    {
+      "at": "0x8bc204",
+      "va": "0xbcb6a8",
+      "string": "u-disk"
+    }
+  ]
+}

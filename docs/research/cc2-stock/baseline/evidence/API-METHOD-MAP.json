@@ -1,0 +1,332 @@
+[
+  {
+    "method": 1001,
+    "lambda": 1,
+    "handler": "handle_get_system_info",
+    "lambda_va": "0x8b09dc"
+  },
+  {
+    "method": 1002,
+    "lambda": 2,
+    "handler": "handle_get_base_info",
+    "lambda_va": "0x8b0a40"
+  },
+  {
+    "method": 1003,
+    "lambda": 3,
+    "handler": "handle_get_machine_status",
+    "lambda_va": "0x8b0aa4"
+  },
+  {
+    "method": 1004,
+    "lambda": 4,
+    "handler": "handle_get_fans_info",
+    "lambda_va": "0x8b0b08"
+  },
+  {
+    "method": 1005,
+    "lambda": 5,
+    "handler": "handle_get_prints_info",
+    "lambda_va": "0x8b0b6c"
+  },
+  {
+    "method": 1006,
+    "lambda": 6,
+    "handler": "handle_get_toolhead_info",
+    "lambda_va": "0x8b0bd0"
+  },
+  {
+    "method": 1007,
+    "lambda": 7,
+    "handler": "handle_emergency_stop",
+    "lambda_va": "0x8b0c34"
+  },
+  {
+    "method": 1019,
+    "lambda": 8,
+    "handler": "handle_set_print_config",
+    "lambda_va": "0x8b0c98"
+  },
+  {
+    "method": 1020,
+    "lambda": 9,
+    "handler": "handle_start_print",
+    "lambda_va": "0x8b0cfc"
+  },
+  {
+    "method": 1021,
+    "lambda": 10,
+    "handler": "handle_pause_print",
+    "lambda_va": "0x8b0d60"
+  },
+  {
+    "method": 1022,
+    "lambda": 11,
+    "handler": "handle_cancel_print",
+    "lambda_va": "0x8b0dc4"
+  },
+  {
+    "method": 1023,
+    "lambda": 12,
+    "handler": "handle_resume_print",
+    "lambda_va": "0x8b0e28"
+  },
+  {
+    "method": 1024,
+    "lambda": 13,
+    "handler": "handle_load_filament",
+    "lambda_va": "0x8b0e8c"
+  },
+  {
+    "method": 1025,
+    "lambda": 14,
+    "handler": "handle_unload_filament",
+    "lambda_va": "0x8b0ef0"
+  },
+  {
+    "method": 1026,
+    "lambda": 15,
+    "handler": "handle_ctrl_home",
+    "lambda_va": "0x8b0f54"
+  },
+  {
+    "method": 1027,
+    "lambda": 16,
+    "handler": "handle_move_axes",
+    "lambda_va": "0x8b0fb8"
+  },
+  {
+    "method": 1028,
+    "lambda": 17,
+    "handler": "handle_set_temperature",
+    "lambda_va": "0x8b101c"
+  },
+  {
+    "method": 1029,
+    "lambda": 18,
+    "handler": "handle_led_control",
+    "lambda_va": "0x8b1080"
+  },
+  {
+    "method": 1030,
+    "lambda": 19,
+    "handler": "handle_set_fan",
+    "lambda_va": "0x8b10e4"
+  },
+  {
+    "method": 1031,
+    "lambda": 20,
+    "handler": "handle_set_print_speed",
+    "lambda_va": "0x8b1148"
+  },
+  {
+    "method": 1032,
+    "lambda": 21,
+    "handler": "handle_auto_leveling",
+    "lambda_va": "0x8b11ac"
+  },
+  {
+    "method": 1033,
+    "lambda": 22,
+    "handler": "handle_ringing_optimize",
+    "lambda_va": "0x8b1210"
+  },
+  {
+    "method": 1034,
+    "lambda": 23,
+    "handler": "handle_pid_check",
+    "lambda_va": "0x8b1274"
+  },
+  {
+    "method": 1035,
+    "lambda": 24,
+    "handler": "handle_auto_diagnostics",
+    "lambda_va": "0x8b12d8"
+  },
+  {
+    "method": 1036,
+    "lambda": 25,
+    "handler": "handle_get_history_task",
+    "lambda_va": "0x8b133c"
+  },
+  {
+    "method": 1038,
+    "lambda": 26,
+    "handler": "handle_delete_tasks",
+    "lambda_va": "0x8b13a0"
+  },
+  {
+    "method": 1039,
+    "lambda": 27,
+    "handler": "handle_ota_upgrading",
+    "lambda_va": "0x8b1404"
+  },
+  {
+    "method": 1042,
+    "lambda": 28,
+    "handler": "handle_get_monitor_url",
+    "lambda_va": "0x8b1468"
+  },
+  {
+    "method": 1043,
+    "lambda": 29,
+    "handler": "handle_set_machine_name",
+    "lambda_va": "0x8b14cc"
+  },
+  {
+    "method": 1044,
+    "lambda": 30,
+    "handler": "handle_get_files",
+    "lambda_va": "0x8b1530"
+  },
+  {
+    "method": 1046,
+    "lambda": 31,
+    "handler": "handle_get_file_info",
+    "lambda_va": "0x8b1594"
+  },
+  {
+    "method": 1045,
+    "lambda": 32,
+    "handler": "handle_get_file_thumbnail",
+    "lambda_va": "0x8b15f8"
+  },
+  {
+    "method": 1047,
+    "lambda": 33,
+    "handler": "handle_del_file",
+    "lambda_va": "0x8b165c"
+  },
+  {
+    "method": 1048,
+    "lambda": 34,
+    "handler": "handle_get_disk_volume",
+    "lambda_va": "0x8b16c0"
+  },
+  {
+    "method": 1049,
+    "lambda": 35,
+    "handler": "handle_modify_token",
+    "lambda_va": "0x8b1724"
+  },
+  {
+    "method": 1050,
+    "lambda": 36,
+    "handler": "handle_get_token",
+    "lambda_va": "0x8b1788"
+  },
+  {
+    "method": 1051,
+    "lambda": 37,
+    "handler": "handle_export_timelapse_video",
+    "lambda_va": "0x8b17ec"
+  },
+  {
+    "method": 1053,
+    "lambda": 38,
+    "handler": "handle_set_token_switch",
+    "lambda_va": "0x8b1850"
+  },
+  {
+    "method": 1054,
+    "lambda": 39,
+    "handler": "handle_ctrl_live_stream",
+    "lambda_va": "0x8b18b4"
+  },
+  {
+    "method": 1055,
+    "lambda": 40,
+    "handler": "handle_set_mono_filament_info",
+    "lambda_va": "0x8b1918"
+  },
+  {
+    "method": 1056,
+    "lambda": 41,
+    "handler": "handle_extruder_filament",
+    "lambda_va": "0x8b197c"
+  },
+  {
+    "method": 2001,
+    "lambda": 42,
+    "handler": "handle_canvas_load_filament",
+    "lambda_va": "0x8b19e0"
+  },
+  {
+    "method": 2002,
+    "lambda": 43,
+    "handler": "handle_canvas_unload_filament",
+    "lambda_va": "0x8b1a44"
+  },
+  {
+    "method": 2003,
+    "lambda": 44,
+    "handler": "handle_canvas_edit_filament",
+    "lambda_va": "0x8b1aa8"
+  },
+  {
+    "method": 2004,
+    "lambda": 45,
+    "handler": "handle_canvas_auto_in_filament",
+    "lambda_va": "0x8b1b0c"
+  },
+  {
+    "method": 2005,
+    "lambda": 46,
+    "handler": "handle_canvas_get_channel_info",
+    "lambda_va": "0x8b1b70"
+  },
+  {
+    "method": 1057,
+    "lambda": 47,
+    "handler": "handle_set_download_file_url",
+    "lambda_va": "0x8b1bd4"
+  },
+  {
+    "method": 1058,
+    "lambda": 48,
+    "handler": "handle_cancel_download_file",
+    "lambda_va": "0x8b1c38"
+  },
+  {
+    "method": 1059,
+    "lambda": 49,
+    "handler": "handle_upload_log_file",
+    "lambda_va": "0x8b1c9c"
+  },
+  {
+    "method": 1060,
+    "lambda": 50,
+    "handler": "handle_get_download_file_task",
+    "lambda_va": "0x8b1d00"
+  },
+  {
+    "method": 1061,
+    "lambda": 51,
+    "handler": "handle_get_mono_filament_info",
+    "lambda_va": "0x8b1d64"
+  },
+  {
+    "method": 1062,
+    "lambda": 52,
+    "handler": "handle_get_ai_detection_status",
+    "lambda_va": "0x8b1dc8"
+  },
+  {
+    "method": 1063,
+    "lambda": 53,
+    "handler": "handle_set_ai_detection_status",
+    "lambda_va": "0x8b1e2c"
+  },
+  {
+    "method": 11020,
+    "lambda": 54,
+    "handler": "handle_internal_start_print",
+    "lambda_va": "0x8b1e90"
+  },
+  {
+    "method": 11030,
+    "lambda": 55,
+    "handler": "handle_internal_set_fan",
+    "lambda_va": "0x8b1ef4"
+  }
+]

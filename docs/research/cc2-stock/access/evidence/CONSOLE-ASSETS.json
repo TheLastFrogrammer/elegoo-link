@@ -1,0 +1,18 @@
+{
+  "opt/bin/debug_window": {
+    "sha256": "261811fae877e558e79953a5729b4f7bf611367ebb5eaa0c7a63b91672e6f917",
+    "bytes": 613976
+  },
+  "bin/setusbconfig": {
+    "sha256": "25de77a641e8683d9dc55d1e3a75f68af3196df9b72cd83e4a7ee7803e8b2889",
+    "bytes": 13586
+  },
+  "etc/inittab": {
+    "sha256": "e27a334193973696bc63468c9c7df8b61da3509b6c8c158bcd105f182f6c3cea",
+    "bytes": 169
+  },
+  "opt/bin/run_printer.sh": {
+    "sha256": "c26d495c6ea4870cb36a42c0e291db59caf2a9cfaa8782a3befeb766106581e0",
+    "bytes": 2172
+  }
+}

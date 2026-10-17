@@ -1,0 +1,121 @@
+api_module::DeviceStatus::get_local_files_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)
+0088cd30: push     {r4, fp, lr}
+0088cd34: add      fp, sp, #8
+0088cd38: sub      sp, sp, #0x84
+0088cd3c: str      r0, [fp, #-0x70]
+0088cd40: str      r1, [fp, #-0x74]
+0088cd44: str      r2, [fp, #-0x78]
+0088cd48: ldr      r0, [fp, #-0x74]
+0088cd4c: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+0088cd50: mov      r3, r0
+0088cd54: cmp      r3, #0
+0088cd58: beq      #0x88cdd4
+0088cd5c: bl       #0xcf64c ; spdlog::default_logger_raw()
+0088cd60: mov      r4, r0
+0088cd64: sub      r0, fp, #0x54
+0088cd68: movw     r3, #0x9928
+0088cd6c: movt     r3, #0xbc ; 'get_local_files_thumbnail'
+0088cd70: mov      r2, #0x660
+0088cd74: movw     r1, #0xb6d4
+0088cd78: movt     r1, #0xbc ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/device_status.cpp'
+0088cd7c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0088cd80: movw     r3, #0xc410
+0088cd84: movt     r3, #0xbc ; 'file name is empty'
+0088cd88: str      r3, [fp, #-0x14]
+0088cd8c: ldr      r3, [fp, #-0x14]
+0088cd90: str      r3, [fp, #-0x48]
+0088cd94: ldr      r0, [fp, #-0x14]
+0088cd98: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0088cd9c: mov      r3, r0
+0088cda0: str      r3, [fp, #-0x44]
+0088cda4: add      r2, sp, #4
+0088cda8: sub      r3, fp, #0x48
+0088cdac: ldm      r3, {r0, r1}
+0088cdb0: stm      r2, {r0, r1}
+0088cdb4: mov      r3, #4
+0088cdb8: str      r3, [sp]
+0088cdbc: sub      r3, fp, #0x54
+0088cdc0: ldm      r3, {r1, r2, r3}
+0088cdc4: mov      r0, r4
+0088cdc8: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+0088cdcc: movw     r4, #0x3eb
+0088cdd0: b        #0x88cf00
+0088cdd4: sub      r3, fp, #0x40
+0088cdd8: mov      r0, r3
+0088cddc: bl       #0xbf388 ; _ZNSaIcEC1Ev
+0088cde0: sub      r2, fp, #0x40
+0088cde4: sub      r3, fp, #0x6c
+0088cde8: movw     r1, #0x44
+0088cdec: movt     r1, #0xac
+0088cdf0: mov      r0, r3
+0088cdf4: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+0088cdf8: sub      r3, fp, #0x40
+0088cdfc: mov      r0, r3
+0088ce00: bl       #0xbe944 ; _ZNSaIcED1Ev
+0088ce04: bl       #0x8ec260 ; api_module::RecordManager::getInstance()
+0088ce08: sub      r3, fp, #0x6c
+0088ce0c: mov      r2, r3
+0088ce10: ldr      r1, [fp, #-0x74]
+0088ce14: bl       #0x8f1f50 ; api_module::RecordManager::get_thumbnail_by_filename(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+0088ce18: str      r0, [fp, #-0x10]
+0088ce1c: ldr      r3, [fp, #-0x10]
+0088ce20: cmp      r3, #0
+0088ce24: beq      #0x88ceac
+0088ce28: bl       #0xcf64c ; spdlog::default_logger_raw()
+0088ce2c: mov      r4, r0
+0088ce30: sub      r0, fp, #0x3c
+0088ce34: movw     r3, #0x9928
+0088ce38: movt     r3, #0xbc ; 'get_local_files_thumbnail'
+0088ce3c: movw     r2, #0x667
+0088ce40: movw     r1, #0xb6d4
+0088ce44: movt     r1, #0xbc ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/device_status.cpp'
+0088ce48: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0088ce4c: movw     r3, #0xc424
+0088ce50: movt     r3, #0xbc ; 'get thumbnail failed, error code: {}'
+0088ce54: str      r3, [fp, #-0x30]
+0088ce58: movw     r0, #0xc424
+0088ce5c: movt     r0, #0xbc ; 'get thumbnail failed, error code: {}'
+0088ce60: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0088ce64: mov      r3, r0
+0088ce68: str      r3, [fp, #-0x2c]
+0088ce6c: ldr      r3, [fp, #-0x10]
+0088ce70: str      r3, [fp, #-0x28]
+0088ce74: sub      r3, fp, #0x28
+0088ce78: str      r3, [sp, #0xc]
+0088ce7c: add      r2, sp, #4
+0088ce80: sub      r3, fp, #0x30
+0088ce84: ldm      r3, {r0, r1}
+0088ce88: stm      r2, {r0, r1}
+0088ce8c: mov      r3, #4
+0088ce90: str      r3, [sp]
+0088ce94: sub      r3, fp, #0x3c
+0088ce98: ldm      r3, {r1, r2, r3}
+0088ce9c: mov      r0, r4
+0088cea0: bl       #0x2ef72c ; void spdlog::logger::log<int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int>::type>, int&&)
+0088cea4: ldr      r4, [fp, #-0x10]
+0088cea8: b        #0x88cef4
+0088ceac: movw     r1, #0xc44c
+0088ceb0: movt     r1, #0xbc ; 'thumbnail'
+0088ceb4: ldr      r0, [fp, #-0x78]
+0088ceb8: bl       #0xdadbc ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>& nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::operator[]<char const>(char const*)
+0088cebc: mov      r4, r0
+0088cec0: sub      r2, fp, #0x6c
+0088cec4: sub      r3, fp, #0x24
+0088cec8: mov      r1, r2
+0088cecc: mov      r0, r3
+0088ced0: bl       #0x21ae1c ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, 0>(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+0088ced4: sub      r3, fp, #0x24
+0088ced8: mov      r1, r3
+0088cedc: mov      r0, r4
+0088cee0: bl       #0xdafa0 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::operator=(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>)
+0088cee4: sub      r3, fp, #0x24
+0088cee8: mov      r0, r3
+0088ceec: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+0088cef0: mov      r4, #0
+0088cef4: sub      r3, fp, #0x6c
+0088cef8: mov      r0, r3
+0088cefc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+0088cf00: mov      r3, r4
+0088cf04: mov      r0, r3
+0088cf08: sub      sp, fp, #8
+0088cf0c: pop      {r4, fp, pc}

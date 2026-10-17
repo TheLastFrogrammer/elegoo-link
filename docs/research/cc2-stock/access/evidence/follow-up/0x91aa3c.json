@@ -1,0 +1,134 @@
+{
+  "function": "api_module::SQLDatabase::get_cloud_file_url(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)",
+  "va": "0x91aa3c",
+  "size": 548,
+  "calls": [
+    {
+      "at": "0x91aa68",
+      "target": "0xd12e0",
+      "name": "std::lock_guard<std::mutex>::lock_guard(std::mutex&)"
+    },
+    {
+      "at": "0x91aa84",
+      "target": "0x149b20",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x91aa9c",
+      "target": "0x149ba4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)"
+    },
+    {
+      "at": "0x91aaa8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91aac4",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x91aae4",
+      "target": "0x9f80d0",
+      "name": "sqlite3_prepare_v2"
+    },
+    {
+      "at": "0x91ab04",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x91ab24",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x91ab3c",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x91ab54",
+      "target": "0xa3c4c4",
+      "name": "sqlite3_errmsg"
+    },
+    {
+      "at": "0x91ab8c",
+      "target": "0x257718",
+      "name": "void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)"
+    },
+    {
+      "at": "0x91aba0",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x91abbc",
+      "target": "0x9a2e8c",
+      "name": "sqlite3_bind_text"
+    },
+    {
+      "at": "0x91abd0",
+      "target": "0x9a17a8",
+      "name": "sqlite3_step"
+    },
+    {
+      "at": "0x91abfc",
+      "target": "0x9a23fc",
+      "name": "sqlite3_column_text"
+    },
+    {
+      "at": "0x91ac1c",
+      "target": "0xbede8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEPKc"
+    },
+    {
+      "at": "0x91ac30",
+      "target": "0x9a0324",
+      "name": "sqlite3_finalize"
+    },
+    {
+      "at": "0x91ac40",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91ac4c",
+      "target": "0xd1320",
+      "name": "std::lock_guard<std::mutex>::~lock_guard()"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x91aa7c",
+      "va": "0xbe08b4",
+      "string": "SELECT slice_url FROM "
+    },
+    {
+      "at": "0x91aa94",
+      "va": "0xbe08cc",
+      "string": " WHERE filename = ? LIMIT 1;"
+    },
+    {
+      "at": "0x91ab14",
+      "va": "0xbdf2d0",
+      "string": "get_cloud_file_url"
+    },
+    {
+      "at": "0x91ab20",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x91ab2c",
+      "va": "0xbe08ec",
+      "string": "get_cloud_file_url: prepare failed: {}"
+    },
+    {
+      "at": "0x91ab38",
+      "va": "0xbe08ec",
+      "string": "get_cloud_file_url: prepare failed: {}"
+    }
+  ]
+}

@@ -1,0 +1,609 @@
+api_module::SQLDatabase::SQLDatabase()
+0090ff44: push     {r4, fp, lr}
+0090ff48: add      fp, sp, #8
+0090ff4c: sub      sp, sp, #0x354
+0090ff50: str      r0, [fp, #-0x340]
+0090ff54: ldr      r3, [fp, #-0x340]
+0090ff58: mov      r2, #0
+0090ff5c: str      r2, [r3]
+0090ff60: ldr      r3, [fp, #-0x340]
+0090ff64: add      r4, r3, #4
+0090ff68: sub      r3, fp, #0x118
+0090ff6c: mov      r0, r3
+0090ff70: bl       #0xbf388 ; _ZNSaIcEC1Ev
+0090ff74: sub      r3, fp, #0x118
+0090ff78: mov      r2, r3
+0090ff7c: movw     r1, #0xf2e4
+0090ff80: movt     r1, #0xbd ; '/opt/usr/record/elegoo.db'
+0090ff84: mov      r0, r4
+0090ff88: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+0090ff8c: sub      r3, fp, #0x118
+0090ff90: mov      r0, r3
+0090ff94: bl       #0xbe944 ; _ZNSaIcED1Ev
+0090ff98: ldr      r3, [fp, #-0x340]
+0090ff9c: add      r4, r3, #0x1c
+0090ffa0: sub      r3, fp, #0x114
+0090ffa4: mov      r0, r3
+0090ffa8: bl       #0xbf388 ; _ZNSaIcEC1Ev
+0090ffac: sub      r3, fp, #0x114
+0090ffb0: mov      r2, r3
+0090ffb4: movw     r1, #0xf300
+0090ffb8: movt     r1, #0xbd ; 'task_record'
+0090ffbc: mov      r0, r4
+0090ffc0: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+0090ffc4: sub      r3, fp, #0x114
+0090ffc8: mov      r0, r3
+0090ffcc: bl       #0xbe944 ; _ZNSaIcED1Ev
+0090ffd0: ldr      r3, [fp, #-0x340]
+0090ffd4: add      r4, r3, #0x34
+0090ffd8: sub      r3, fp, #0x110
+0090ffdc: mov      r0, r3
+0090ffe0: bl       #0xbf388 ; _ZNSaIcEC1Ev
+0090ffe4: sub      r3, fp, #0x110
+0090ffe8: mov      r2, r3
+0090ffec: movw     r1, #0xf30c
+0090fff0: movt     r1, #0xbd ; 'file_details'
+0090fff4: mov      r0, r4
+0090fff8: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+0090fffc: sub      r3, fp, #0x110
+00910000: mov      r0, r3
+00910004: bl       #0xbe944 ; _ZNSaIcED1Ev
+00910008: ldr      r3, [fp, #-0x340]
+0091000c: add      r4, r3, #0x4c
+00910010: sub      r3, fp, #0x10c
+00910014: mov      r0, r3
+00910018: bl       #0xbf388 ; _ZNSaIcEC1Ev
+0091001c: sub      r3, fp, #0x10c
+00910020: mov      r2, r3
+00910024: movw     r1, #0xf31c
+00910028: movt     r1, #0xbd ; 'file_thumbnail'
+0091002c: mov      r0, r4
+00910030: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00910034: sub      r3, fp, #0x10c
+00910038: mov      r0, r3
+0091003c: bl       #0xbe944 ; _ZNSaIcED1Ev
+00910040: ldr      r3, [fp, #-0x340]
+00910044: add      r4, r3, #0x64
+00910048: sub      r3, fp, #0x108
+0091004c: mov      r0, r3
+00910050: bl       #0xbf388 ; _ZNSaIcEC1Ev
+00910054: sub      r3, fp, #0x108
+00910058: mov      r2, r3
+0091005c: movw     r1, #0xf32c
+00910060: movt     r1, #0xbd ; 'delete_file'
+00910064: mov      r0, r4
+00910068: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+0091006c: sub      r3, fp, #0x108
+00910070: mov      r0, r3
+00910074: bl       #0xbe944 ; _ZNSaIcED1Ev
+00910078: ldr      r3, [fp, #-0x340]
+0091007c: add      r4, r3, #0x7c
+00910080: sub      r3, fp, #0x104
+00910084: mov      r0, r3
+00910088: bl       #0xbf388 ; _ZNSaIcEC1Ev
+0091008c: sub      r3, fp, #0x104
+00910090: mov      r2, r3
+00910094: movw     r1, #0xf338
+00910098: movt     r1, #0xbd ; 'user_avatar'
+0091009c: mov      r0, r4
+009100a0: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+009100a4: sub      r3, fp, #0x104
+009100a8: mov      r0, r3
+009100ac: bl       #0xbe944 ; _ZNSaIcED1Ev
+009100b0: ldr      r3, [fp, #-0x340]
+009100b4: add      r4, r3, #0x94
+009100b8: sub      r3, fp, #0x100
+009100bc: mov      r0, r3
+009100c0: bl       #0xbf388 ; _ZNSaIcEC1Ev
+009100c4: sub      r3, fp, #0x100
+009100c8: mov      r2, r3
+009100cc: movw     r1, #0xf344
+009100d0: movt     r1, #0xbd ; 'exception_message'
+009100d4: mov      r0, r4
+009100d8: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+009100dc: sub      r3, fp, #0x100
+009100e0: mov      r0, r3
+009100e4: bl       #0xbe944 ; _ZNSaIcED1Ev
+009100e8: ldr      r3, [fp, #-0x340]
+009100ec: add      r4, r3, #0xac
+009100f0: sub      r3, fp, #0xfc
+009100f4: mov      r0, r3
+009100f8: bl       #0xbf388 ; _ZNSaIcEC1Ev
+009100fc: sub      r3, fp, #0xfc
+00910100: mov      r2, r3
+00910104: movw     r1, #0xf358
+00910108: movt     r1, #0xbd ; 'cloud_file_cache'
+0091010c: mov      r0, r4
+00910110: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+00910114: sub      r3, fp, #0xfc
+00910118: mov      r0, r3
+0091011c: bl       #0xbe944 ; _ZNSaIcED1Ev
+00910120: ldr      r3, [fp, #-0x340]
+00910124: add      r3, r3, #0xc4
+00910128: mov      r0, r3
+0091012c: bl       #0xcacac ; std::mutex::mutex()
+00910130: ldr      r3, [fp, #-0x340]
+00910134: mov      r2, #9
+00910138: str      r2, [r3, #0xdc]
+0091013c: mov      r0, #1
+00910140: bl       #0xa390d8 ; sqlite3_config
+00910144: mov      r3, r0
+00910148: cmp      r3, #0
+0091014c: movne    r3, #1
+00910150: moveq    r3, #0
+00910154: uxtb     r3, r3
+00910158: cmp      r3, #0
+0091015c: beq      #0x9101d4
+00910160: bl       #0xcf64c ; spdlog::default_logger_raw()
+00910164: mov      r4, r0
+00910168: sub      r0, fp, #0xf8
+0091016c: movw     r3, #0xedf0
+00910170: movt     r3, #0xbd ; 'SQLDatabase'
+00910174: mov      r2, #0x13
+00910178: movw     r1, #0xf36c
+0091017c: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00910180: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00910184: movw     r3, #0xf3bc
+00910188: movt     r3, #0xbd ; 'Failed to configure SQLite single-thread mode'
+0091018c: str      r3, [fp, #-0x14]
+00910190: ldr      r3, [fp, #-0x14]
+00910194: str      r3, [fp, #-0xec]
+00910198: ldr      r0, [fp, #-0x14]
+0091019c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+009101a0: mov      r3, r0
+009101a4: str      r3, [fp, #-0xe8]
+009101a8: add      r2, sp, #4
+009101ac: sub      r3, fp, #0xec
+009101b0: ldm      r3, {r0, r1}
+009101b4: stm      r2, {r0, r1}
+009101b8: mov      r3, #4
+009101bc: str      r3, [sp]
+009101c0: sub      r3, fp, #0xf8
+009101c4: ldm      r3, {r1, r2, r3}
+009101c8: mov      r0, r4
+009101cc: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+009101d0: b        #0x91077c
+009101d4: bl       #0xa38d14 ; sqlite3_initialize
+009101d8: mov      r3, r0
+009101dc: cmp      r3, #0
+009101e0: movne    r3, #1
+009101e4: moveq    r3, #0
+009101e8: uxtb     r3, r3
+009101ec: cmp      r3, #0
+009101f0: beq      #0x910268
+009101f4: bl       #0xcf64c ; spdlog::default_logger_raw()
+009101f8: mov      r4, r0
+009101fc: sub      r0, fp, #0xe4
+00910200: movw     r3, #0xedf0
+00910204: movt     r3, #0xbd ; 'SQLDatabase'
+00910208: mov      r2, #0x18
+0091020c: movw     r1, #0xf36c
+00910210: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00910214: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00910218: movw     r3, #0xf3ec
+0091021c: movt     r3, #0xbd ; 'Failed to initialize SQLite'
+00910220: str      r3, [fp, #-0x18]
+00910224: ldr      r3, [fp, #-0x18]
+00910228: str      r3, [fp, #-0xd8]
+0091022c: ldr      r0, [fp, #-0x18]
+00910230: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00910234: mov      r3, r0
+00910238: str      r3, [fp, #-0xd4]
+0091023c: add      r2, sp, #4
+00910240: sub      r3, fp, #0xd8
+00910244: ldm      r3, {r0, r1}
+00910248: stm      r2, {r0, r1}
+0091024c: mov      r3, #4
+00910250: str      r3, [sp]
+00910254: sub      r3, fp, #0xe4
+00910258: ldm      r3, {r1, r2, r3}
+0091025c: mov      r0, r4
+00910260: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+00910264: b        #0x91077c
+00910268: ldr      r3, [fp, #-0x340]
+0091026c: add      r3, r3, #4
+00910270: mov      r0, r3
+00910274: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00910278: ldr      r1, [fp, #-0x340]
+0091027c: movw     r3, #0xf408
+00910280: movt     r3, #0xbd ; 'unix-none'
+00910284: mov      r2, #6
+00910288: bl       #0xa3dda8 ; sqlite3_open_v2
+0091028c: mov      r3, r0
+00910290: cmp      r3, #0
+00910294: movne    r3, #1
+00910298: moveq    r3, #0
+0091029c: uxtb     r3, r3
+009102a0: cmp      r3, #0
+009102a4: beq      #0x910338
+009102a8: bl       #0xcf64c ; spdlog::default_logger_raw()
+009102ac: mov      r4, r0
+009102b0: sub      r0, fp, #0xd0
+009102b4: movw     r3, #0xedf0
+009102b8: movt     r3, #0xbd ; 'SQLDatabase'
+009102bc: mov      r2, #0x1d
+009102c0: movw     r1, #0xf36c
+009102c4: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+009102c8: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+009102cc: movw     r3, #0xf414
+009102d0: movt     r3, #0xbd ; 'Failed to open database: {}'
+009102d4: str      r3, [fp, #-0xc4]
+009102d8: movw     r0, #0xf414
+009102dc: movt     r0, #0xbd ; 'Failed to open database: {}'
+009102e0: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+009102e4: mov      r3, r0
+009102e8: str      r3, [fp, #-0xc0]
+009102ec: ldr      r3, [fp, #-0x340]
+009102f0: add      r3, r3, #4
+009102f4: mov      r0, r3
+009102f8: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+009102fc: mov      r3, r0
+00910300: str      r3, [fp, #-0xbc]
+00910304: sub      r3, fp, #0xbc
+00910308: str      r3, [sp, #0xc]
+0091030c: add      r2, sp, #4
+00910310: sub      r3, fp, #0xc4
+00910314: ldm      r3, {r0, r1}
+00910318: stm      r2, {r0, r1}
+0091031c: mov      r3, #4
+00910320: str      r3, [sp]
+00910324: sub      r3, fp, #0xd0
+00910328: ldm      r3, {r1, r2, r3}
+0091032c: mov      r0, r4
+00910330: bl       #0x257718 ; void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)
+00910334: b        #0x91077c
+00910338: sub      r2, fp, #0x338
+0091033c: movw     r3, #0xf430
+00910340: movt     r3, #0xbd ; 'CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);'
+00910344: mov      r0, r2
+00910348: mov      r1, r3
+0091034c: mov      r3, #0x49
+00910350: mov      r2, r3
+00910354: bl       #0xbfc58 ; memcpy
+00910358: mov      r3, #0
+0091035c: str      r3, [fp, #-0x11c]
+00910360: ldr      r3, [fp, #-0x340]
+00910364: ldr      r0, [r3]
+00910368: sub      r1, fp, #0x338
+0091036c: sub      r3, fp, #0x11c
+00910370: str      r3, [sp]
+00910374: mov      r3, #0
+00910378: mov      r2, #0
+0091037c: bl       #0x9ef0e0 ; sqlite3_exec
+00910380: mov      r3, r0
+00910384: str      r3, [fp, #-0x10]
+00910388: ldr      r3, [fp, #-0x10]
+0091038c: cmp      r3, #0
+00910390: beq      #0x910418
+00910394: bl       #0xcf64c ; spdlog::default_logger_raw()
+00910398: mov      r4, r0
+0091039c: sub      r0, fp, #0xb8
+009103a0: movw     r3, #0xedf0
+009103a4: movt     r3, #0xbd ; 'SQLDatabase'
+009103a8: mov      r2, #0x28
+009103ac: movw     r1, #0xf36c
+009103b0: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+009103b4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+009103b8: movw     r3, #0xf47c
+009103bc: movt     r3, #0xbd ; 'Failed to create table: schema_version SQL error: {}'
+009103c0: str      r3, [fp, #-0xac]
+009103c4: movw     r0, #0xf47c
+009103c8: movt     r0, #0xbd ; 'Failed to create table: schema_version SQL error: {}'
+009103cc: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+009103d0: mov      r3, r0
+009103d4: str      r3, [fp, #-0xa8]
+009103d8: sub      r3, fp, #0x11c
+009103dc: str      r3, [sp, #0xc]
+009103e0: add      r2, sp, #4
+009103e4: sub      r3, fp, #0xac
+009103e8: ldm      r3, {r0, r1}
+009103ec: stm      r2, {r0, r1}
+009103f0: mov      r3, #4
+009103f4: str      r3, [sp]
+009103f8: sub      r3, fp, #0xb8
+009103fc: ldm      r3, {r1, r2, r3}
+00910400: mov      r0, r4
+00910404: bl       #0x91afa8 ; void spdlog::logger::log<char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char*&>::type>, char*&)
+00910408: ldr      r3, [fp, #-0x11c]
+0091040c: mov      r0, r3
+00910410: bl       #0x9593a8 ; sqlite3_free
+00910414: b        #0x91077c
+00910418: ldr      r0, [fp, #-0x340]
+0091041c: bl       #0x918d88 ; api_module::SQLDatabase::get_db_version()
+00910420: mov      r3, r0
+00910424: str      r3, [fp, #-0x120]
+00910428: ldr      r3, [fp, #-0x340]
+0091042c: ldr      r2, [r3, #0xdc]
+00910430: ldr      r3, [fp, #-0x120]
+00910434: cmp      r2, r3
+00910438: beq      #0x9104cc
+0091043c: bl       #0xcf64c ; spdlog::default_logger_raw()
+00910440: mov      r4, r0
+00910444: sub      r0, fp, #0xa4
+00910448: movw     r3, #0xedf0
+0091044c: movt     r3, #0xbd ; 'SQLDatabase'
+00910450: mov      r2, #0x30
+00910454: movw     r1, #0xf36c
+00910458: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+0091045c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00910460: movw     r3, #0xf4b4
+00910464: movt     r3, #0xbd ; 'Database version mismatch, db_version {} updating to version {}'
+00910468: str      r3, [fp, #-0x98]
+0091046c: movw     r0, #0xf4b4
+00910470: movt     r0, #0xbd ; 'Database version mismatch, db_version {} updating to version {}'
+00910474: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00910478: mov      r3, r0
+0091047c: str      r3, [fp, #-0x94]
+00910480: ldr      r3, [fp, #-0x340]
+00910484: add      r3, r3, #0xdc
+00910488: str      r3, [sp, #0x10]
+0091048c: sub      r3, fp, #0x120
+00910490: str      r3, [sp, #0xc]
+00910494: add      r2, sp, #4
+00910498: sub      r3, fp, #0x98
+0091049c: ldm      r3, {r0, r1}
+009104a0: stm      r2, {r0, r1}
+009104a4: mov      r3, #2
+009104a8: str      r3, [sp]
+009104ac: sub      r3, fp, #0xa4
+009104b0: ldm      r3, {r1, r2, r3}
+009104b4: mov      r0, r4
+009104b8: bl       #0x91b014 ; void spdlog::logger::log<int&, int const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type, fmt::v10::type_identity<int const&>::type>, int&, int const&)
+009104bc: ldr      r0, [fp, #-0x340]
+009104c0: bl       #0x919c20 ; api_module::SQLDatabase::init_database()
+009104c4: ldr      r0, [fp, #-0x340]
+009104c8: bl       #0x918f44 ; api_module::SQLDatabase::set_db_version()
+009104cc: ldr      r0, [fp, #-0x340]
+009104d0: bl       #0x91a69c ; api_module::SQLDatabase::remove_duplicate_files()
+009104d4: ldr      r0, [fp, #-0x340]
+009104d8: bl       #0x91a7bc ; api_module::SQLDatabase::remove_duplicate_thumbnails()
+009104dc: ldr      r3, [fp, #-0x340]
+009104e0: add      r2, r3, #0x34
+009104e4: sub      r3, fp, #0x90
+009104e8: movw     r1, #0xf4f4
+009104ec: movt     r1, #0xbd ; 'CREATE UNIQUE INDEX IF NOT EXISTS idx_filename ON '
+009104f0: mov      r0, r3
+009104f4: bl       #0x149b20 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+009104f8: sub      r3, fp, #0x138
+009104fc: sub      r1, fp, #0x90
+00910500: movw     r2, #0xf528
+00910504: movt     r2, #0xbd ; ' (filename);'
+00910508: mov      r0, r3
+0091050c: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+00910510: sub      r3, fp, #0x90
+00910514: mov      r0, r3
+00910518: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+0091051c: ldr      r3, [fp, #-0x340]
+00910520: ldr      r4, [r3]
+00910524: sub      r3, fp, #0x138
+00910528: mov      r0, r3
+0091052c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00910530: mov      r1, r0
+00910534: sub      r3, fp, #0x11c
+00910538: str      r3, [sp]
+0091053c: mov      r3, #0
+00910540: mov      r2, #0
+00910544: mov      r0, r4
+00910548: bl       #0x9ef0e0 ; sqlite3_exec
+0091054c: mov      r3, r0
+00910550: cmp      r3, #0
+00910554: movne    r3, #1
+00910558: moveq    r3, #0
+0091055c: uxtb     r3, r3
+00910560: cmp      r3, #0
+00910564: beq      #0x910610
+00910568: bl       #0xcf64c ; spdlog::default_logger_raw()
+0091056c: mov      r4, r0
+00910570: sub      r0, fp, #0x78
+00910574: movw     r3, #0xedf0
+00910578: movt     r3, #0xbd ; 'SQLDatabase'
+0091057c: mov      r2, #0x3d
+00910580: movw     r1, #0xf36c
+00910584: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00910588: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0091058c: movw     r3, #0xf538
+00910590: movt     r3, #0xbd ; 'Failed to add unique index to table: {} SQL error: {}'
+00910594: str      r3, [fp, #-0x6c]
+00910598: movw     r0, #0xf538
+0091059c: movt     r0, #0xbd ; 'Failed to add unique index to table: {} SQL error: {}'
+009105a0: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+009105a4: mov      r3, r0
+009105a8: str      r3, [fp, #-0x68]
+009105ac: ldr      r3, [fp, #-0x340]
+009105b0: add      r3, r3, #0x34
+009105b4: mov      r0, r3
+009105b8: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+009105bc: mov      r3, r0
+009105c0: str      r3, [fp, #-0x64]
+009105c4: sub      r3, fp, #0x11c
+009105c8: str      r3, [sp, #0x10]
+009105cc: sub      r3, fp, #0x64
+009105d0: str      r3, [sp, #0xc]
+009105d4: add      r2, sp, #4
+009105d8: sub      r3, fp, #0x6c
+009105dc: ldm      r3, {r0, r1}
+009105e0: stm      r2, {r0, r1}
+009105e4: mov      r3, #4
+009105e8: str      r3, [sp]
+009105ec: sub      r3, fp, #0x78
+009105f0: ldm      r3, {r1, r2, r3}
+009105f4: mov      r0, r4
+009105f8: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+009105fc: ldr      r3, [fp, #-0x11c]
+00910600: mov      r0, r3
+00910604: bl       #0x9593a8 ; sqlite3_free
+00910608: mov      r4, #0
+0091060c: b        #0x910768
+00910610: ldr      r3, [fp, #-0x340]
+00910614: add      r2, r3, #0x4c
+00910618: sub      r3, fp, #0x48
+0091061c: movw     r1, #0xf570
+00910620: movt     r1, #0xbd ; 'CREATE UNIQUE INDEX IF NOT EXISTS idx_thumbnail_filename ON '
+00910624: mov      r0, r3
+00910628: bl       #0x149b20 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0091062c: sub      r3, fp, #0x60
+00910630: sub      r1, fp, #0x48
+00910634: movw     r2, #0xf528
+00910638: movt     r2, #0xbd ; ' (filename);'
+0091063c: mov      r0, r3
+00910640: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+00910644: sub      r2, fp, #0x60
+00910648: sub      r3, fp, #0x138
+0091064c: mov      r1, r2
+00910650: mov      r0, r3
+00910654: bl       #0xbfc40 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_
+00910658: sub      r3, fp, #0x60
+0091065c: mov      r0, r3
+00910660: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910664: sub      r3, fp, #0x48
+00910668: mov      r0, r3
+0091066c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910670: ldr      r3, [fp, #-0x340]
+00910674: ldr      r4, [r3]
+00910678: sub      r3, fp, #0x138
+0091067c: mov      r0, r3
+00910680: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00910684: mov      r1, r0
+00910688: sub      r3, fp, #0x11c
+0091068c: str      r3, [sp]
+00910690: mov      r3, #0
+00910694: mov      r2, #0
+00910698: mov      r0, r4
+0091069c: bl       #0x9ef0e0 ; sqlite3_exec
+009106a0: mov      r3, r0
+009106a4: cmp      r3, #0
+009106a8: movne    r3, #1
+009106ac: moveq    r3, #0
+009106b0: uxtb     r3, r3
+009106b4: cmp      r3, #0
+009106b8: beq      #0x910764
+009106bc: bl       #0xcf64c ; spdlog::default_logger_raw()
+009106c0: mov      r4, r0
+009106c4: sub      r0, fp, #0x30
+009106c8: movw     r3, #0xedf0
+009106cc: movt     r3, #0xbd ; 'SQLDatabase'
+009106d0: mov      r2, #0x44
+009106d4: movw     r1, #0xf36c
+009106d8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+009106dc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+009106e0: movw     r3, #0xf538
+009106e4: movt     r3, #0xbd ; 'Failed to add unique index to table: {} SQL error: {}'
+009106e8: str      r3, [fp, #-0x24]
+009106ec: movw     r0, #0xf538
+009106f0: movt     r0, #0xbd ; 'Failed to add unique index to table: {} SQL error: {}'
+009106f4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+009106f8: mov      r3, r0
+009106fc: str      r3, [fp, #-0x20]
+00910700: ldr      r3, [fp, #-0x340]
+00910704: add      r3, r3, #0x4c
+00910708: mov      r0, r3
+0091070c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00910710: mov      r3, r0
+00910714: str      r3, [fp, #-0x1c]
+00910718: sub      r3, fp, #0x11c
+0091071c: str      r3, [sp, #0x10]
+00910720: sub      r3, fp, #0x1c
+00910724: str      r3, [sp, #0xc]
+00910728: add      r2, sp, #4
+0091072c: sub      r3, fp, #0x24
+00910730: ldm      r3, {r0, r1}
+00910734: stm      r2, {r0, r1}
+00910738: mov      r3, #4
+0091073c: str      r3, [sp]
+00910740: sub      r3, fp, #0x30
+00910744: ldm      r3, {r1, r2, r3}
+00910748: mov      r0, r4
+0091074c: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+00910750: ldr      r3, [fp, #-0x11c]
+00910754: mov      r0, r3
+00910758: bl       #0x9593a8 ; sqlite3_free
+0091075c: mov      r4, #0
+00910760: b        #0x910768
+00910764: mov      r4, #1
+00910768: sub      r3, fp, #0x138
+0091076c: mov      r0, r3
+00910770: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910774: cmp      r4, #1
+00910778: nop
+0091077c: ldr      r3, [fp, #-0x340]
+00910780: b        #0x9108b8
+00910784: sub      r3, fp, #0x118
+00910788: mov      r0, r3
+0091078c: bl       #0xbe944 ; _ZNSaIcED1Ev
+00910790: bl       #0xbf3f4 ; __cxa_end_cleanup
+00910794: sub      r3, fp, #0x114
+00910798: mov      r0, r3
+0091079c: bl       #0xbe944 ; _ZNSaIcED1Ev
+009107a0: b        #0x9108a4
+009107a4: sub      r3, fp, #0x110
+009107a8: mov      r0, r3
+009107ac: bl       #0xbe944 ; _ZNSaIcED1Ev
+009107b0: b        #0x910894
+009107b4: sub      r3, fp, #0x10c
+009107b8: mov      r0, r3
+009107bc: bl       #0xbe944 ; _ZNSaIcED1Ev
+009107c0: b        #0x910884
+009107c4: sub      r3, fp, #0x108
+009107c8: mov      r0, r3
+009107cc: bl       #0xbe944 ; _ZNSaIcED1Ev
+009107d0: b        #0x910874
+009107d4: sub      r3, fp, #0x104
+009107d8: mov      r0, r3
+009107dc: bl       #0xbe944 ; _ZNSaIcED1Ev
+009107e0: b        #0x910864
+009107e4: sub      r3, fp, #0x100
+009107e8: mov      r0, r3
+009107ec: bl       #0xbe944 ; _ZNSaIcED1Ev
+009107f0: b        #0x910854
+009107f4: sub      r3, fp, #0xfc
+009107f8: mov      r0, r3
+009107fc: bl       #0xbe944 ; _ZNSaIcED1Ev
+00910800: b        #0x910844
+00910804: sub      r3, fp, #0x90
+00910808: mov      r0, r3
+0091080c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910810: b        #0x910834
+00910814: sub      r3, fp, #0x48
+00910818: mov      r0, r3
+0091081c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910820: b        #0x910824
+00910824: sub      r3, fp, #0x138
+00910828: mov      r0, r3
+0091082c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910830: b        #0x910834
+00910834: ldr      r3, [fp, #-0x340]
+00910838: add      r3, r3, #0xac
+0091083c: mov      r0, r3
+00910840: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910844: ldr      r3, [fp, #-0x340]
+00910848: add      r3, r3, #0x94
+0091084c: mov      r0, r3
+00910850: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910854: ldr      r3, [fp, #-0x340]
+00910858: add      r3, r3, #0x7c
+0091085c: mov      r0, r3
+00910860: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910864: ldr      r3, [fp, #-0x340]
+00910868: add      r3, r3, #0x64
+0091086c: mov      r0, r3
+00910870: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910874: ldr      r3, [fp, #-0x340]
+00910878: add      r3, r3, #0x4c
+0091087c: mov      r0, r3
+00910880: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910884: ldr      r3, [fp, #-0x340]
+00910888: add      r3, r3, #0x34
+0091088c: mov      r0, r3
+00910890: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00910894: ldr      r3, [fp, #-0x340]
+00910898: add      r3, r3, #0x1c
+0091089c: mov      r0, r3
+009108a0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+009108a4: ldr      r3, [fp, #-0x340]
+009108a8: add      r3, r3, #4
+009108ac: mov      r0, r3
+009108b0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+009108b4: bl       #0xbf3f4 ; __cxa_end_cleanup
+009108b8: mov      r0, r3
+009108bc: sub      sp, fp, #8
+009108c0: pop      {r4, fp, pc}

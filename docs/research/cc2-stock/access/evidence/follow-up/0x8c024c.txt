@@ -1,0 +1,319 @@
+api_module::APIPrinter::handle_export_timelapse_video(std::shared_ptr<api_module::APIRequest>)
+008c024c: push     {r4, fp, lr}
+008c0250: add      fp, sp, #8
+008c0254: sub      sp, sp, #0x16c
+008c0258: str      r0, [fp, #-0x160]
+008c025c: str      r1, [fp, #-0x164]
+008c0260: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c0264: mov      r2, r0
+008c0268: sub      r3, fp, #0x128
+008c026c: mov      r1, r2
+008c0270: mov      r0, r3
+008c0274: bl       #0x8926a0 ; api_module::DeviceStatus::get_machine_status()
+008c0278: ldr      r3, [fp, #-0x128]
+008c027c: cmp      r3, #1
+008c0280: beq      #0x8c02a8
+008c0284: ldr      r3, [fp, #-0x164]
+008c0288: mov      r0, r3
+008c028c: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c0290: mov      r3, r0
+008c0294: movw     r1, #0x3f1
+008c0298: mov      r0, r3
+008c029c: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c02a0: mov      r4, #0
+008c02a4: b        #0x8c0648
+008c02a8: ldr      r3, [fp, #-0x164]
+008c02ac: mov      r0, r3
+008c02b0: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c02b4: mov      r4, r0
+008c02b8: sub      r3, fp, #0xf4
+008c02bc: mov      r0, r3
+008c02c0: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c02c4: sub      r2, fp, #0xf4
+008c02c8: sub      r3, fp, #0x10c
+008c02cc: movw     r1, #0x5960
+008c02d0: movt     r1, #0xb8 ; 'url'
+008c02d4: mov      r0, r3
+008c02d8: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c02dc: sub      r3, fp, #0xd8
+008c02e0: mov      r0, r3
+008c02e4: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c02e8: sub      r2, fp, #0xd8
+008c02ec: sub      r3, fp, #0xf0
+008c02f0: movw     r1, #0x44
+008c02f4: movt     r1, #0xac
+008c02f8: mov      r0, r3
+008c02fc: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c0300: sub      r0, fp, #0x140
+008c0304: sub      r3, fp, #0xf0
+008c0308: sub      r2, fp, #0x10c
+008c030c: mov      r1, r4
+008c0310: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c0314: sub      r3, fp, #0xf0
+008c0318: mov      r0, r3
+008c031c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c0320: sub      r3, fp, #0xd8
+008c0324: mov      r0, r3
+008c0328: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c032c: sub      r3, fp, #0x10c
+008c0330: mov      r0, r3
+008c0334: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c0338: sub      r3, fp, #0xf4
+008c033c: mov      r0, r3
+008c0340: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c0344: sub      r3, fp, #0x140
+008c0348: mov      r0, r3
+008c034c: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008c0350: mov      r3, r0
+008c0354: cmp      r3, #0
+008c0358: beq      #0x8c03f0
+008c035c: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c0360: mov      r4, r0
+008c0364: sub      r0, fp, #0xd4
+008c0368: movw     r3, #0x7c3c
+008c036c: movt     r3, #0xbd ; 'handle_export_timelapse_video'
+008c0370: movw     r2, #0x6ee
+008c0374: movw     r1, #0x83b8
+008c0378: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c037c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c0380: movw     r3, #0x9000
+008c0384: movt     r3, #0xbd ; 'Timelapse video URL is empty'
+008c0388: str      r3, [fp, #-0x14]
+008c038c: ldr      r3, [fp, #-0x14]
+008c0390: str      r3, [fp, #-0xc8]
+008c0394: ldr      r0, [fp, #-0x14]
+008c0398: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c039c: mov      r3, r0
+008c03a0: str      r3, [fp, #-0xc4]
+008c03a4: add      r2, sp, #4
+008c03a8: sub      r3, fp, #0xc8
+008c03ac: ldm      r3, {r0, r1}
+008c03b0: stm      r2, {r0, r1}
+008c03b4: mov      r3, #4
+008c03b8: str      r3, [sp]
+008c03bc: sub      r3, fp, #0xd4
+008c03c0: ldm      r3, {r1, r2, r3}
+008c03c4: mov      r0, r4
+008c03c8: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c03cc: ldr      r3, [fp, #-0x164]
+008c03d0: mov      r0, r3
+008c03d4: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c03d8: mov      r3, r0
+008c03dc: movw     r1, #0x3eb
+008c03e0: mov      r0, r3
+008c03e4: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c03e8: mov      r4, #0
+008c03ec: b        #0x8c0624
+008c03f0: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c03f4: mov      r4, r0
+008c03f8: sub      r0, fp, #0xc0
+008c03fc: movw     r3, #0x7c3c
+008c0400: movt     r3, #0xbd ; 'handle_export_timelapse_video'
+008c0404: movw     r2, #0x6f3
+008c0408: movw     r1, #0x83b8
+008c040c: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c0410: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c0414: movw     r3, #0x9020
+008c0418: movt     r3, #0xbd ; 'Exporting timelapse video from URL: {}'
+008c041c: str      r3, [fp, #-0xb4]
+008c0420: movw     r0, #0x9020
+008c0424: movt     r0, #0xbd ; 'Exporting timelapse video from URL: {}'
+008c0428: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c042c: mov      r3, r0
+008c0430: str      r3, [fp, #-0xb0]
+008c0434: sub      r3, fp, #0x140
+008c0438: str      r3, [sp, #0xc]
+008c043c: add      r2, sp, #4
+008c0440: sub      r3, fp, #0xb4
+008c0444: ldm      r3, {r0, r1}
+008c0448: stm      r2, {r0, r1}
+008c044c: mov      r3, #2
+008c0450: str      r3, [sp]
+008c0454: sub      r3, fp, #0xc0
+008c0458: ldm      r3, {r1, r2, r3}
+008c045c: mov      r0, r4
+008c0460: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c0464: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c0468: mov      r2, r0
+008c046c: sub      r3, fp, #0x140
+008c0470: mov      r1, r3
+008c0474: mov      r0, r2
+008c0478: bl       #0x891130 ; api_module::DeviceStatus::export_timelapse_video(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c047c: str      r0, [fp, #-0x10]
+008c0480: sub      r2, fp, #0x140
+008c0484: sub      r3, fp, #0x158
+008c0488: mov      r1, r2
+008c048c: mov      r0, r3
+008c0490: bl       #0xbeb18 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_
+008c0494: sub      r0, fp, #0xac
+008c0498: sub      r1, fp, #0x140
+008c049c: mov      r3, #8
+008c04a0: mov      r2, #0
+008c04a4: bl       #0xbeb90 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6substrEjj
+008c04a8: sub      r3, fp, #0xac
+008c04ac: mov      r1, r3
+008c04b0: movw     r0, #0x9048
+008c04b4: movt     r0, #0xbd ; 'picture'
+008c04b8: bl       #0x806ea4 ; bool std::operator!=<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008c04bc: mov      r3, r0
+008c04c0: mov      r4, r3
+008c04c4: sub      r3, fp, #0xac
+008c04c8: mov      r0, r3
+008c04cc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c04d0: cmp      r4, #0
+008c04d4: beq      #0x8c050c
+008c04d8: sub      r3, fp, #0x94
+008c04dc: sub      r2, fp, #0x140
+008c04e0: ldr      r1, [fp, #-0x160]
+008c04e4: mov      r0, r3
+008c04e8: bl       #0x8bf890 ; api_module::APIPrinter::convert_picture_path_to_video_path(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008c04ec: sub      r2, fp, #0x94
+008c04f0: sub      r3, fp, #0x158
+008c04f4: mov      r1, r2
+008c04f8: mov      r0, r3
+008c04fc: bl       #0xbfc40 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_
+008c0500: sub      r3, fp, #0x94
+008c0504: mov      r0, r3
+008c0508: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c050c: ldr      r3, [fp, #-0x164]
+008c0510: mov      r0, r3
+008c0514: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c0518: mov      r3, r0
+008c051c: ldr      r1, [fp, #-0x10]
+008c0520: mov      r0, r3
+008c0524: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c0528: ldr      r3, [fp, #-0x164]
+008c052c: mov      r0, r3
+008c0530: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c0534: mov      r4, r0
+008c0538: sub      r3, fp, #0x44
+008c053c: movw     r1, #0x5960
+008c0540: movt     r1, #0xb8 ; 'url'
+008c0544: mov      r0, r3
+008c0548: bl       #0x7d5ef4 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [4], 0>(char const (&) [4])
+008c054c: sub      r2, fp, #0x158
+008c0550: sub      r3, fp, #0x44
+008c0554: add      r3, r3, #0x18
+008c0558: mov      r1, r2
+008c055c: mov      r0, r3
+008c0560: bl       #0x2ed984 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, 0>(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c0564: sub      r3, fp, #0x44
+008c0568: str      r3, [fp, #-0x4c]
+008c056c: mov      r3, #2
+008c0570: str      r3, [fp, #-0x48]
+008c0574: sub      r0, fp, #0x64
+008c0578: sub      r3, fp, #0x4c
+008c057c: ldm      r3, {r1, r2}
+008c0580: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c0584: sub      r3, fp, #0x64
+008c0588: str      r3, [fp, #-0x6c]
+008c058c: mov      r3, #1
+008c0590: str      r3, [fp, #-0x68]
+008c0594: sub      r0, fp, #0x7c
+008c0598: sub      r3, fp, #0x6c
+008c059c: ldm      r3, {r1, r2}
+008c05a0: bl       #0x149874 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c05a4: sub      r3, fp, #0x7c
+008c05a8: mov      r1, r3
+008c05ac: mov      r0, r4
+008c05b0: bl       #0x8af188 ; api_module::APIRequest::send(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)
+008c05b4: sub      r3, fp, #0x7c
+008c05b8: mov      r0, r3
+008c05bc: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c05c0: sub      r4, fp, #0x64
+008c05c4: add      r4, r4, #0x18
+008c05c8: sub      r3, fp, #0x64
+008c05cc: cmp      r4, r3
+008c05d0: beq      #0x8c05e4
+008c05d4: sub      r4, r4, #0x18
+008c05d8: mov      r0, r4
+008c05dc: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c05e0: b        #0x8c05c8
+008c05e4: nop
+008c05e8: sub      r4, fp, #0x44
+008c05ec: add      r4, r4, #0x30
+008c05f0: sub      r3, fp, #0x44
+008c05f4: cmp      r4, r3
+008c05f8: beq      #0x8c0610
+008c05fc: nop
+008c0600: sub      r4, r4, #0x18
+008c0604: mov      r0, r4
+008c0608: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c060c: b        #0x8c05f0
+008c0610: nop
+008c0614: sub      r3, fp, #0x158
+008c0618: mov      r0, r3
+008c061c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c0620: mov      r4, #1
+008c0624: sub      r3, fp, #0x140
+008c0628: mov      r0, r3
+008c062c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c0630: cmp      r4, #1
+008c0634: beq      #0x8c0640
+008c0638: mov      r4, #0
+008c063c: b        #0x8c0648
+008c0640: nop
+008c0644: mov      r4, #1
+008c0648: sub      r3, fp, #0x128
+008c064c: mov      r0, r3
+008c0650: bl       #0x39de6c ; api_module::MachineStatus::~MachineStatus()
+008c0654: cmp      r4, #1
+008c0658: b        #0x8c073c
+008c065c: sub      r3, fp, #0xf0
+008c0660: mov      r0, r3
+008c0664: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c0668: b        #0x8c066c
+008c066c: sub      r3, fp, #0xd8
+008c0670: mov      r0, r3
+008c0674: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c0678: sub      r3, fp, #0x10c
+008c067c: mov      r0, r3
+008c0680: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c0684: b        #0x8c0688
+008c0688: sub      r3, fp, #0xf4
+008c068c: mov      r0, r3
+008c0690: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c0694: b        #0x8c072c
+008c0698: sub      r3, fp, #0xac
+008c069c: mov      r0, r3
+008c06a0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c06a4: b        #0x8c0710
+008c06a8: sub      r3, fp, #0x7c
+008c06ac: mov      r0, r3
+008c06b0: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c06b4: b        #0x8c06b8
+008c06b8: sub      r4, fp, #0x64
+008c06bc: add      r4, r4, #0x18
+008c06c0: sub      r3, fp, #0x64
+008c06c4: cmp      r4, r3
+008c06c8: beq      #0x8c06dc
+008c06cc: sub      r4, r4, #0x18
+008c06d0: mov      r0, r4
+008c06d4: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c06d8: b        #0x8c06c0
+008c06dc: nop
+008c06e0: sub      r4, fp, #0x44
+008c06e4: add      r4, r4, #0x30
+008c06e8: sub      r3, fp, #0x44
+008c06ec: cmp      r4, r3
+008c06f0: beq      #0x8c070c
+008c06f4: nop
+008c06f8: sub      r4, r4, #0x18
+008c06fc: mov      r0, r4
+008c0700: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c0704: b        #0x8c06e8
+008c0708: b        #0x8c0710
+008c070c: nop
+008c0710: sub      r3, fp, #0x158
+008c0714: mov      r0, r3
+008c0718: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c071c: b        #0x8c0720
+008c0720: sub      r3, fp, #0x140
+008c0724: mov      r0, r3
+008c0728: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c072c: sub      r3, fp, #0x128
+008c0730: mov      r0, r3
+008c0734: bl       #0x39de6c ; api_module::MachineStatus::~MachineStatus()
+008c0738: bl       #0xbf3f4 ; __cxa_end_cleanup
+008c073c: sub      sp, fp, #8
+008c0740: pop      {r4, fp, pc}

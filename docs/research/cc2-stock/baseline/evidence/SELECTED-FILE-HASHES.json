@@ -1,0 +1,42 @@
+[
+  {
+    "path": "/opt/bin/elegoo_printer",
+    "size": 29274740,
+    "sha256": "8039081f9c4b01e720d838d4ab6e4515a8979b9a71a33bd4164321c282e06074"
+  },
+  {
+    "path": "/opt/bin/run_printer.sh",
+    "size": 2172,
+    "sha256": "c26d495c6ea4870cb36a42c0e291db59caf2a9cfaa8782a3befeb766106581e0"
+  },
+  {
+    "path": "/etc/inittab",
+    "size": 169,
+    "sha256": "e27a334193973696bc63468c9c7df8b61da3509b6c8c158bcd105f182f6c3cea"
+  },
+  {
+    "path": "/etc/init_dir.sh",
+    "size": 2763,
+    "sha256": "1378bf0a4ab4750485d984260f622b3b9e0288cc7e23fd7d4885b3b072983633"
+  },
+  {
+    "path": "/etc/config/fstab",
+    "size": 1375,
+    "sha256": "391fd974dcd7e9e8c313777959b6c24a5e887466b428e7ccfb40ee0620d3ac5a"
+  },
+  {
+    "path": "/opt/inst/mosquitto.conf",
+    "size": 129,
+    "sha256": "f0c4934c40b82d87202ef9fbf64985e87f465551c3fa534c4182cd3d8795f609"
+  },
+  {
+    "path": "/etc/init.d/printer",
+    "size": 4318,
+    "sha256": "6e7c875d40386854028779fdd1573c45a5ce4a69aba828227fff1bb568f7020f"
+  },
+  {
+    "path": "/sbin/rsync",
+    "size": 462668,
+    "sha256": "acc11756ab79b14ef45f15d67b93f324c82daf1ee563b4bafff4cd819acc9e9e"
+  }
+]

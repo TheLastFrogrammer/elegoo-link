@@ -1,0 +1,339 @@
+{
+  "function": "znp::V4L2::ReopenDevice()",
+  "va": "0x146418",
+  "size": 1116,
+  "calls": [
+    {
+      "at": "0x146428",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x146448",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x146460",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x14649c",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x1464a4",
+      "target": "0x145c24",
+      "name": "znp::V4L2::StopStreaming()"
+    },
+    {
+      "at": "0x1464ac",
+      "target": "0x1456dc",
+      "name": "znp::V4L2::UnmapBuffers()"
+    },
+    {
+      "at": "0x1464b4",
+      "target": "0x144788",
+      "name": "znp::V4L2::CloseDevice()"
+    },
+    {
+      "at": "0x1464d0",
+      "target": "0x148cb0",
+      "name": "std::chrono::duration<long long, std::ratio<1ll, 1000ll> >::duration<int, void>(int const&)"
+    },
+    {
+      "at": "0x1464dc",
+      "target": "0x11e028",
+      "name": "void std::this_thread::sleep_for<long long, std::ratio<1ll, 1000ll> >(std::chrono::duration<long long, std::ratio<1ll, 1000ll> > const&)"
+    },
+    {
+      "at": "0x1464e4",
+      "target": "0x1445a8",
+      "name": "znp::V4L2::OpenDevice()"
+    },
+    {
+      "at": "0x1464fc",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x14651c",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x146534",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x146570",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x146580",
+      "target": "0x144a34",
+      "name": "znp::V4L2::SetFormat()"
+    },
+    {
+      "at": "0x146598",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x1465b8",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x1465d0",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x14660c",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x14661c",
+      "target": "0x144f4c",
+      "name": "znp::V4L2::RequestBuffers()"
+    },
+    {
+      "at": "0x146634",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x146654",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x14666c",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x1466a8",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x1466b8",
+      "target": "0x145140",
+      "name": "znp::V4L2::MapBuffers()"
+    },
+    {
+      "at": "0x1466d0",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x1466f0",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x146708",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x146744",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x146754",
+      "target": "0x145a34",
+      "name": "znp::V4L2::StartStreaming()"
+    },
+    {
+      "at": "0x14676c",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x14678c",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x1467a4",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x1467e0",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x1467ec",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x14680c",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x146824",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x146860",
+      "target": "0x12d988",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x146438",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x146444",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x146450",
+      "va": "0x1bdff0",
+      "string": "V4L2 [{}] reopening device (full close/open) ..."
+    },
+    {
+      "at": "0x14645c",
+      "va": "0x1bdff0",
+      "string": "V4L2 [{}] reopening device (full close/open) ..."
+    },
+    {
+      "at": "0x14650c",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x146518",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x146524",
+      "va": "0x1be024",
+      "string": "V4L2 [{}] reopen: OpenDevice failed"
+    },
+    {
+      "at": "0x146530",
+      "va": "0x1be024",
+      "string": "V4L2 [{}] reopen: OpenDevice failed"
+    },
+    {
+      "at": "0x1465a8",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x1465b4",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x1465c0",
+      "va": "0x1be048",
+      "string": "V4L2 [{}] reopen: SetFormat failed"
+    },
+    {
+      "at": "0x1465cc",
+      "va": "0x1be048",
+      "string": "V4L2 [{}] reopen: SetFormat failed"
+    },
+    {
+      "at": "0x146644",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x146650",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x14665c",
+      "va": "0x1be06c",
+      "string": "V4L2 [{}] reopen: RequestBuffers failed"
+    },
+    {
+      "at": "0x146668",
+      "va": "0x1be06c",
+      "string": "V4L2 [{}] reopen: RequestBuffers failed"
+    },
+    {
+      "at": "0x1466e0",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x1466ec",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x1466f8",
+      "va": "0x1be094",
+      "string": "V4L2 [{}] reopen: MapBuffers failed"
+    },
+    {
+      "at": "0x146704",
+      "va": "0x1be094",
+      "string": "V4L2 [{}] reopen: MapBuffers failed"
+    },
+    {
+      "at": "0x14677c",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x146788",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x146794",
+      "va": "0x1be0b8",
+      "string": "V4L2 [{}] reopen: StartStreaming failed"
+    },
+    {
+      "at": "0x1467a0",
+      "va": "0x1be0b8",
+      "string": "V4L2 [{}] reopen: StartStreaming failed"
+    },
+    {
+      "at": "0x1467fc",
+      "va": "0x1bda50",
+      "string": "ReopenDevice"
+    },
+    {
+      "at": "0x146808",
+      "va": "0x1bdaac",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp"
+    },
+    {
+      "at": "0x146814",
+      "va": "0x1be0e0",
+      "string": "V4L2 [{}] device reopened successfully"
+    },
+    {
+      "at": "0x146820",
+      "va": "0x1be0e0",
+      "string": "V4L2 [{}] device reopened successfully"
+    }
+  ]
+}

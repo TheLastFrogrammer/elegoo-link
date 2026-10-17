@@ -1,0 +1,142 @@
+GCodeHelper::handle_subscribe_output(std::shared_ptr<WebRequest>)
+002d9e28: push     {r4, fp, lr}
+002d9e2c: add      fp, sp, #8
+002d9e30: sub      sp, sp, #0x7c
+002d9e34: str      r0, [fp, #-0x80]
+002d9e38: str      r1, [fp, #-0x84]
+002d9e3c: ldr      r3, [fp, #-0x84]
+002d9e40: mov      r0, r3
+002d9e44: bl       #0x2eb218 ; std::__shared_ptr<WebRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+002d9e48: mov      r2, r0
+002d9e4c: sub      r3, fp, #0x68
+002d9e50: mov      r1, r2
+002d9e54: mov      r0, r3
+002d9e58: bl       #0x2d33fc ; WebRequest::get_client_connection() const
+002d9e5c: ldr      r3, [fp, #-0x84]
+002d9e60: mov      r0, r3
+002d9e64: bl       #0x2eb218 ; std::__shared_ptr<WebRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+002d9e68: mov      r4, r0
+002d9e6c: sub      r3, fp, #0x48
+002d9e70: mov      r0, r3
+002d9e74: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d9e78: sub      r2, fp, #0x48
+002d9e7c: sub      r3, fp, #0x60
+002d9e80: movw     r1, #0x7760
+002d9e84: movt     r1, #0xa8 ; 'response_template'
+002d9e88: mov      r0, r3
+002d9e8c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d9e90: sub      r3, fp, #0x2c
+002d9e94: str      r3, [fp, #-0x34]
+002d9e98: mov      r3, #0
+002d9e9c: str      r3, [fp, #-0x30]
+002d9ea0: sub      r0, fp, #0x44
+002d9ea4: sub      r3, fp, #0x34
+002d9ea8: ldm      r3, {r1, r2}
+002d9eac: bl       #0x149874 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+002d9eb0: sub      r0, fp, #0x7c
+002d9eb4: sub      r3, fp, #0x44
+002d9eb8: sub      r2, fp, #0x60
+002d9ebc: mov      r1, r4
+002d9ec0: bl       #0x2d3698 ; WebRequest::get_dict(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>)
+002d9ec4: sub      r3, fp, #0x44
+002d9ec8: mov      r0, r3
+002d9ecc: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+002d9ed0: sub      r4, fp, #0x2c
+002d9ed4: sub      r3, fp, #0x2c
+002d9ed8: cmp      r4, r3
+002d9edc: beq      #0x2d9ef0
+002d9ee0: sub      r4, r4, #0x18
+002d9ee4: mov      r0, r4
+002d9ee8: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+002d9eec: b        #0x2d9ed4
+002d9ef0: sub      r3, fp, #0x60
+002d9ef4: mov      r0, r3
+002d9ef8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d9efc: sub      r3, fp, #0x48
+002d9f00: mov      r0, r3
+002d9f04: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d9f08: ldr      r3, [fp, #-0x80]
+002d9f0c: add      r3, r3, #0x14
+002d9f10: sub      r2, fp, #0x68
+002d9f14: mov      r1, r2
+002d9f18: mov      r0, r3
+002d9f1c: bl       #0x2ee6bc ; std::unordered_map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::hash<std::shared_ptr<ClientConnection> >, std::equal_to<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >::operator[](std::shared_ptr<ClientConnection> const&)
+002d9f20: mov      r4, r0
+002d9f24: sub      r2, fp, #0x7c
+002d9f28: sub      r3, fp, #0x2c
+002d9f2c: mov      r1, r2
+002d9f30: mov      r0, r3
+002d9f34: bl       #0xdb05c ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)
+002d9f38: sub      r3, fp, #0x2c
+002d9f3c: mov      r1, r3
+002d9f40: mov      r0, r4
+002d9f44: bl       #0xdafa0 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::operator=(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>)
+002d9f48: sub      r3, fp, #0x2c
+002d9f4c: mov      r0, r3
+002d9f50: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+002d9f54: ldr      r3, [fp, #-0x80]
+002d9f58: ldrb     r3, [r3, #0x10]
+002d9f5c: eor      r3, r3, #1
+002d9f60: uxtb     r3, r3
+002d9f64: cmp      r3, #0
+002d9f68: beq      #0x2d9fbc
+002d9f6c: ldr      r3, [fp, #-0x80]
+002d9f70: add      r3, r3, #8
+002d9f74: mov      r0, r3
+002d9f78: bl       #0x14bde8 ; std::__shared_ptr<GCodeDispatch, (__gnu_cxx::_Lock_policy)2>::operator->() const
+002d9f7c: mov      r4, r0
+002d9f80: ldr      r2, [fp, #-0x80]
+002d9f84: sub      r3, fp, #0x1c
+002d9f88: mov      r1, r2
+002d9f8c: mov      r0, r3
+002d9f90: bl       #0x2df69c ; std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>::function<GCodeHelper::handle_subscribe_output(std::shared_ptr<WebRequest>)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)#1}, void, void>(GCodeHelper::handle_subscribe_output(std::shared_ptr<WebRequest>)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)#1})
+002d9f94: sub      r3, fp, #0x1c
+002d9f98: mov      r1, r3
+002d9f9c: mov      r0, r4
+002d9fa0: bl       #0x1a022c ; GCodeDispatch::register_output_handler(std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>)
+002d9fa4: sub      r3, fp, #0x1c
+002d9fa8: mov      r0, r3
+002d9fac: bl       #0x1db24c ; std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>::~function()
+002d9fb0: ldr      r3, [fp, #-0x80]
+002d9fb4: mov      r2, #1
+002d9fb8: strb     r2, [r3, #0x10]
+002d9fbc: sub      r3, fp, #0x7c
+002d9fc0: mov      r0, r3
+002d9fc4: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+002d9fc8: sub      r3, fp, #0x68
+002d9fcc: mov      r0, r3
+002d9fd0: bl       #0x2687bc ; std::shared_ptr<ClientConnection>::~shared_ptr()
+002d9fd4: b        #0x2da054
+002d9fd8: sub      r3, fp, #0x44
+002d9fdc: mov      r0, r3
+002d9fe0: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+002d9fe4: b        #0x2d9fe8
+002d9fe8: sub      r4, fp, #0x2c
+002d9fec: sub      r3, fp, #0x2c
+002d9ff0: cmp      r4, r3
+002d9ff4: beq      #0x2da008
+002d9ff8: sub      r4, r4, #0x18
+002d9ffc: mov      r0, r4
+002da000: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+002da004: b        #0x2d9fec
+002da008: sub      r3, fp, #0x60
+002da00c: mov      r0, r3
+002da010: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002da014: b        #0x2da018
+002da018: sub      r3, fp, #0x48
+002da01c: mov      r0, r3
+002da020: bl       #0xbe944 ; _ZNSaIcED1Ev
+002da024: b        #0x2da044
+002da028: sub      r3, fp, #0x1c
+002da02c: mov      r0, r3
+002da030: bl       #0x1db24c ; std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>::~function()
+002da034: b        #0x2da038
+002da038: sub      r3, fp, #0x7c
+002da03c: mov      r0, r3
+002da040: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+002da044: sub      r3, fp, #0x68
+002da048: mov      r0, r3
+002da04c: bl       #0x2687bc ; std::shared_ptr<ClientConnection>::~shared_ptr()
+002da050: bl       #0xbf3f4 ; __cxa_end_cleanup
+002da054: sub      sp, fp, #8
+002da058: pop      {r4, fp, pc}

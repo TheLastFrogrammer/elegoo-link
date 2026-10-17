@@ -1,0 +1,475 @@
+api_module::SQLDatabase::init_database()
+00919c20: push     {r4, fp, lr}
+00919c24: add      fp, sp, #8
+00919c28: sub      sp, sp, #0x2d4
+00919c2c: str      r0, [fp, #-0x2c0]
+00919c30: mov      r3, #0
+00919c34: str      r3, [fp, #-0x2b8]
+00919c38: ldr      r3, [fp, #-0x2c0]
+00919c3c: add      r3, r3, #0x94
+00919c40: mov      r0, r3
+00919c44: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919c48: mov      r3, r0
+00919c4c: sub      r0, fp, #0x2b4
+00919c50: movw     r2, #0x158
+00919c54: movt     r2, #0xbe ; 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT NOT NULL, timestamp TIMESTAMP NOT NULL, level INTEGER NOT NULL, upload_flag INTEGER);'
+00919c58: mov      r1, #0x200
+00919c5c: bl       #0xc0024 ; snprintf
+00919c60: ldr      r3, [fp, #-0x2c0]
+00919c64: ldr      r0, [r3]
+00919c68: sub      r1, fp, #0x2b4
+00919c6c: sub      r3, fp, #0x2b8
+00919c70: str      r3, [sp]
+00919c74: mov      r3, #0
+00919c78: mov      r2, #0
+00919c7c: bl       #0x9ef0e0 ; sqlite3_exec
+00919c80: mov      r3, r0
+00919c84: cmp      r3, #0
+00919c88: movne    r3, #1
+00919c8c: moveq    r3, #0
+00919c90: uxtb     r3, r3
+00919c94: cmp      r3, #0
+00919c98: beq      #0x919d40
+00919c9c: bl       #0xcf64c ; spdlog::default_logger_raw()
+00919ca0: mov      r4, r0
+00919ca4: sub      r0, fp, #0xb4
+00919ca8: movw     r3, #0xf27c
+00919cac: movt     r3, #0xbd ; 'init_database'
+00919cb0: movw     r2, #0x424
+00919cb4: movw     r1, #0xf36c
+00919cb8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00919cbc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00919cc0: movw     r3, #0x200
+00919cc4: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919cc8: str      r3, [fp, #-0xa8]
+00919ccc: movw     r0, #0x200
+00919cd0: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919cd4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00919cd8: mov      r3, r0
+00919cdc: str      r3, [fp, #-0xa4]
+00919ce0: ldr      r3, [fp, #-0x2c0]
+00919ce4: add      r3, r3, #0x94
+00919ce8: mov      r0, r3
+00919cec: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919cf0: mov      r3, r0
+00919cf4: str      r3, [fp, #-0xa0]
+00919cf8: sub      r3, fp, #0x2b8
+00919cfc: str      r3, [sp, #0x10]
+00919d00: sub      r3, fp, #0xa0
+00919d04: str      r3, [sp, #0xc]
+00919d08: add      r2, sp, #4
+00919d0c: sub      r3, fp, #0xa8
+00919d10: ldm      r3, {r0, r1}
+00919d14: stm      r2, {r0, r1}
+00919d18: mov      r3, #4
+00919d1c: str      r3, [sp]
+00919d20: sub      r3, fp, #0xb4
+00919d24: ldm      r3, {r1, r2, r3}
+00919d28: mov      r0, r4
+00919d2c: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+00919d30: ldr      r3, [fp, #-0x2b8]
+00919d34: mov      r0, r3
+00919d38: bl       #0x9593a8 ; sqlite3_free
+00919d3c: b        #0x91a380
+00919d40: ldr      r3, [fp, #-0x2c0]
+00919d44: add      r3, r3, #0x1c
+00919d48: mov      r0, r3
+00919d4c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919d50: mov      r3, r0
+00919d54: sub      r0, fp, #0x2b4
+00919d58: movw     r2, #0x22c
+00919d5c: movt     r2, #0xbe ; "CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id TEXT NOT NULL, task_name TEXT NOT NULL,  begin_time TIMESTAMP, end_time TIMESTAMP, task_status INTEGER NOT NULL, time_lapse_video_status INTEGER, time_lapse_video_url TEXT, time_lapse_video_size INTEGER, time_lapse_video_duration INTEGER, upload_flag INTEGER, file_create_time TIMESTAMP, print_task_id TEXT DEFAULT '');"
+00919d60: mov      r1, #0x200
+00919d64: bl       #0xc0024 ; snprintf
+00919d68: ldr      r3, [fp, #-0x2c0]
+00919d6c: ldr      r0, [r3]
+00919d70: sub      r1, fp, #0x2b4
+00919d74: sub      r3, fp, #0x2b8
+00919d78: str      r3, [sp]
+00919d7c: mov      r3, #0
+00919d80: mov      r2, #0
+00919d84: bl       #0x9ef0e0 ; sqlite3_exec
+00919d88: mov      r3, r0
+00919d8c: cmp      r3, #0
+00919d90: movne    r3, #1
+00919d94: moveq    r3, #0
+00919d98: uxtb     r3, r3
+00919d9c: cmp      r3, #0
+00919da0: beq      #0x919e48
+00919da4: bl       #0xcf64c ; spdlog::default_logger_raw()
+00919da8: mov      r4, r0
+00919dac: sub      r0, fp, #0x9c
+00919db0: movw     r3, #0xf27c
+00919db4: movt     r3, #0xbd ; 'init_database'
+00919db8: movw     r2, #0x434
+00919dbc: movw     r1, #0xf36c
+00919dc0: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00919dc4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00919dc8: movw     r3, #0x200
+00919dcc: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919dd0: str      r3, [fp, #-0x90]
+00919dd4: movw     r0, #0x200
+00919dd8: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919ddc: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00919de0: mov      r3, r0
+00919de4: str      r3, [fp, #-0x8c]
+00919de8: ldr      r3, [fp, #-0x2c0]
+00919dec: add      r3, r3, #0x1c
+00919df0: mov      r0, r3
+00919df4: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919df8: mov      r3, r0
+00919dfc: str      r3, [fp, #-0x88]
+00919e00: sub      r3, fp, #0x2b8
+00919e04: str      r3, [sp, #0x10]
+00919e08: sub      r3, fp, #0x88
+00919e0c: str      r3, [sp, #0xc]
+00919e10: add      r2, sp, #4
+00919e14: sub      r3, fp, #0x90
+00919e18: ldm      r3, {r0, r1}
+00919e1c: stm      r2, {r0, r1}
+00919e20: mov      r3, #4
+00919e24: str      r3, [sp]
+00919e28: sub      r3, fp, #0x9c
+00919e2c: ldm      r3, {r1, r2, r3}
+00919e30: mov      r0, r4
+00919e34: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+00919e38: ldr      r3, [fp, #-0x2b8]
+00919e3c: mov      r0, r3
+00919e40: bl       #0x9593a8 ; sqlite3_free
+00919e44: b        #0x91a380
+00919e48: ldr      r3, [fp, #-0x2c0]
+00919e4c: add      r3, r3, #0x34
+00919e50: mov      r0, r3
+00919e54: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919e58: mov      r3, r0
+00919e5c: sub      r0, fp, #0x2b4
+00919e60: movw     r2, #0x3bc
+00919e64: movt     r2, #0xbe ; 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT, print_time TIMESTAMP, layer INTEGER, size INTEGER, create_time TIMESTAMP, total_filament_used REAL, total_print_times INTEGER, last_print_time TIMESTAMP, color_map TEXT, upload_flag INTEGER);'
+00919e68: mov      r1, #0x200
+00919e6c: bl       #0xc0024 ; snprintf
+00919e70: ldr      r3, [fp, #-0x2c0]
+00919e74: ldr      r0, [r3]
+00919e78: sub      r1, fp, #0x2b4
+00919e7c: sub      r3, fp, #0x2b8
+00919e80: str      r3, [sp]
+00919e84: mov      r3, #0
+00919e88: mov      r2, #0
+00919e8c: bl       #0x9ef0e0 ; sqlite3_exec
+00919e90: mov      r3, r0
+00919e94: cmp      r3, #0
+00919e98: movne    r3, #1
+00919e9c: moveq    r3, #0
+00919ea0: uxtb     r3, r3
+00919ea4: cmp      r3, #0
+00919ea8: beq      #0x919f50
+00919eac: bl       #0xcf64c ; spdlog::default_logger_raw()
+00919eb0: mov      r4, r0
+00919eb4: sub      r0, fp, #0x84
+00919eb8: movw     r3, #0xf27c
+00919ebc: movt     r3, #0xbd ; 'init_database'
+00919ec0: movw     r2, #0x442
+00919ec4: movw     r1, #0xf36c
+00919ec8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00919ecc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00919ed0: movw     r3, #0x200
+00919ed4: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919ed8: str      r3, [fp, #-0x78]
+00919edc: movw     r0, #0x200
+00919ee0: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919ee4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00919ee8: mov      r3, r0
+00919eec: str      r3, [fp, #-0x74]
+00919ef0: ldr      r3, [fp, #-0x2c0]
+00919ef4: add      r3, r3, #0x34
+00919ef8: mov      r0, r3
+00919efc: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919f00: mov      r3, r0
+00919f04: str      r3, [fp, #-0x70]
+00919f08: sub      r3, fp, #0x2b8
+00919f0c: str      r3, [sp, #0x10]
+00919f10: sub      r3, fp, #0x70
+00919f14: str      r3, [sp, #0xc]
+00919f18: add      r2, sp, #4
+00919f1c: sub      r3, fp, #0x78
+00919f20: ldm      r3, {r0, r1}
+00919f24: stm      r2, {r0, r1}
+00919f28: mov      r3, #4
+00919f2c: str      r3, [sp]
+00919f30: sub      r3, fp, #0x84
+00919f34: ldm      r3, {r1, r2, r3}
+00919f38: mov      r0, r4
+00919f3c: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+00919f40: ldr      r3, [fp, #-0x2b8]
+00919f44: mov      r0, r3
+00919f48: bl       #0x9593a8 ; sqlite3_free
+00919f4c: b        #0x91a380
+00919f50: ldr      r3, [fp, #-0x2c0]
+00919f54: add      r3, r3, #0x4c
+00919f58: mov      r0, r3
+00919f5c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00919f60: mov      r3, r0
+00919f64: sub      r0, fp, #0x2b4
+00919f68: movw     r2, #0x4d0
+00919f6c: movt     r2, #0xbe ; 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL, thumbnail TEXT, upload_flag INTEGER NOT NULL);'
+00919f70: mov      r1, #0x200
+00919f74: bl       #0xc0024 ; snprintf
+00919f78: ldr      r3, [fp, #-0x2c0]
+00919f7c: ldr      r0, [r3]
+00919f80: sub      r1, fp, #0x2b4
+00919f84: sub      r3, fp, #0x2b8
+00919f88: str      r3, [sp]
+00919f8c: mov      r3, #0
+00919f90: mov      r2, #0
+00919f94: bl       #0x9ef0e0 ; sqlite3_exec
+00919f98: mov      r3, r0
+00919f9c: cmp      r3, #0
+00919fa0: movne    r3, #1
+00919fa4: moveq    r3, #0
+00919fa8: uxtb     r3, r3
+00919fac: cmp      r3, #0
+00919fb0: beq      #0x91a058
+00919fb4: bl       #0xcf64c ; spdlog::default_logger_raw()
+00919fb8: mov      r4, r0
+00919fbc: sub      r0, fp, #0x6c
+00919fc0: movw     r3, #0xf27c
+00919fc4: movt     r3, #0xbd ; 'init_database'
+00919fc8: movw     r2, #0x44d
+00919fcc: movw     r1, #0xf36c
+00919fd0: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+00919fd4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00919fd8: movw     r3, #0x200
+00919fdc: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919fe0: str      r3, [fp, #-0x60]
+00919fe4: movw     r0, #0x200
+00919fe8: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+00919fec: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00919ff0: mov      r3, r0
+00919ff4: str      r3, [fp, #-0x5c]
+00919ff8: ldr      r3, [fp, #-0x2c0]
+00919ffc: add      r3, r3, #0x4c
+0091a000: mov      r0, r3
+0091a004: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a008: mov      r3, r0
+0091a00c: str      r3, [fp, #-0x58]
+0091a010: sub      r3, fp, #0x2b8
+0091a014: str      r3, [sp, #0x10]
+0091a018: sub      r3, fp, #0x58
+0091a01c: str      r3, [sp, #0xc]
+0091a020: add      r2, sp, #4
+0091a024: sub      r3, fp, #0x60
+0091a028: ldm      r3, {r0, r1}
+0091a02c: stm      r2, {r0, r1}
+0091a030: mov      r3, #4
+0091a034: str      r3, [sp]
+0091a038: sub      r3, fp, #0x6c
+0091a03c: ldm      r3, {r1, r2, r3}
+0091a040: mov      r0, r4
+0091a044: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+0091a048: ldr      r3, [fp, #-0x2b8]
+0091a04c: mov      r0, r3
+0091a050: bl       #0x9593a8 ; sqlite3_free
+0091a054: b        #0x91a380
+0091a058: ldr      r3, [fp, #-0x2c0]
+0091a05c: add      r3, r3, #0x64
+0091a060: mov      r0, r3
+0091a064: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a068: mov      r3, r0
+0091a06c: sub      r0, fp, #0x2b4
+0091a070: movw     r2, #0x55c
+0091a074: movt     r2, #0xbe ; 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, filename TEXT NOT NULL);'
+0091a078: mov      r1, #0x200
+0091a07c: bl       #0xc0024 ; snprintf
+0091a080: ldr      r3, [fp, #-0x2c0]
+0091a084: ldr      r0, [r3]
+0091a088: sub      r1, fp, #0x2b4
+0091a08c: sub      r3, fp, #0x2b8
+0091a090: str      r3, [sp]
+0091a094: mov      r3, #0
+0091a098: mov      r2, #0
+0091a09c: bl       #0x9ef0e0 ; sqlite3_exec
+0091a0a0: mov      r3, r0
+0091a0a4: cmp      r3, #0
+0091a0a8: movne    r3, #1
+0091a0ac: moveq    r3, #0
+0091a0b0: uxtb     r3, r3
+0091a0b4: cmp      r3, #0
+0091a0b8: beq      #0x91a160
+0091a0bc: bl       #0xcf64c ; spdlog::default_logger_raw()
+0091a0c0: mov      r4, r0
+0091a0c4: sub      r0, fp, #0x54
+0091a0c8: movw     r3, #0xf27c
+0091a0cc: movt     r3, #0xbd ; 'init_database'
+0091a0d0: movw     r2, #0x458
+0091a0d4: movw     r1, #0xf36c
+0091a0d8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+0091a0dc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0091a0e0: movw     r3, #0x200
+0091a0e4: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+0091a0e8: str      r3, [fp, #-0x48]
+0091a0ec: movw     r0, #0x200
+0091a0f0: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+0091a0f4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0091a0f8: mov      r3, r0
+0091a0fc: str      r3, [fp, #-0x44]
+0091a100: ldr      r3, [fp, #-0x2c0]
+0091a104: add      r3, r3, #0x64
+0091a108: mov      r0, r3
+0091a10c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a110: mov      r3, r0
+0091a114: str      r3, [fp, #-0x40]
+0091a118: sub      r3, fp, #0x2b8
+0091a11c: str      r3, [sp, #0x10]
+0091a120: sub      r3, fp, #0x40
+0091a124: str      r3, [sp, #0xc]
+0091a128: add      r2, sp, #4
+0091a12c: sub      r3, fp, #0x48
+0091a130: ldm      r3, {r0, r1}
+0091a134: stm      r2, {r0, r1}
+0091a138: mov      r3, #4
+0091a13c: str      r3, [sp]
+0091a140: sub      r3, fp, #0x54
+0091a144: ldm      r3, {r1, r2, r3}
+0091a148: mov      r0, r4
+0091a14c: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+0091a150: ldr      r3, [fp, #-0x2b8]
+0091a154: mov      r0, r3
+0091a158: bl       #0x9593a8 ; sqlite3_free
+0091a15c: b        #0x91a380
+0091a160: ldr      r0, [fp, #-0x2c0]
+0091a164: bl       #0x919240 ; api_module::SQLDatabase::migrate_delete_file_table()
+0091a168: ldr      r0, [fp, #-0x2c0]
+0091a16c: bl       #0x919848 ; api_module::SQLDatabase::migrate_task_record_table()
+0091a170: ldr      r3, [fp, #-0x2c0]
+0091a174: add      r3, r3, #0x7c
+0091a178: mov      r0, r3
+0091a17c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a180: mov      r3, r0
+0091a184: sub      r0, fp, #0x2b4
+0091a188: movw     r2, #0x5bc
+0091a18c: movt     r2, #0xbe ; 'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER NOT NULL, avatar_md5 TEXT NOT NULL);'
+0091a190: mov      r1, #0x200
+0091a194: bl       #0xc0024 ; snprintf
+0091a198: ldr      r3, [fp, #-0x2c0]
+0091a19c: ldr      r0, [r3]
+0091a1a0: sub      r1, fp, #0x2b4
+0091a1a4: sub      r3, fp, #0x2b8
+0091a1a8: str      r3, [sp]
+0091a1ac: mov      r3, #0
+0091a1b0: mov      r2, #0
+0091a1b4: bl       #0x9ef0e0 ; sqlite3_exec
+0091a1b8: mov      r3, r0
+0091a1bc: cmp      r3, #0
+0091a1c0: movne    r3, #1
+0091a1c4: moveq    r3, #0
+0091a1c8: uxtb     r3, r3
+0091a1cc: cmp      r3, #0
+0091a1d0: beq      #0x91a278
+0091a1d4: bl       #0xcf64c ; spdlog::default_logger_raw()
+0091a1d8: mov      r4, r0
+0091a1dc: sub      r0, fp, #0x3c
+0091a1e0: movw     r3, #0xf27c
+0091a1e4: movt     r3, #0xbd ; 'init_database'
+0091a1e8: movw     r2, #0x465
+0091a1ec: movw     r1, #0xf36c
+0091a1f0: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+0091a1f4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0091a1f8: movw     r3, #0x200
+0091a1fc: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+0091a200: str      r3, [fp, #-0x30]
+0091a204: movw     r0, #0x200
+0091a208: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+0091a20c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0091a210: mov      r3, r0
+0091a214: str      r3, [fp, #-0x2c]
+0091a218: ldr      r3, [fp, #-0x2c0]
+0091a21c: add      r3, r3, #0x7c
+0091a220: mov      r0, r3
+0091a224: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a228: mov      r3, r0
+0091a22c: str      r3, [fp, #-0x28]
+0091a230: sub      r3, fp, #0x2b8
+0091a234: str      r3, [sp, #0x10]
+0091a238: sub      r3, fp, #0x28
+0091a23c: str      r3, [sp, #0xc]
+0091a240: add      r2, sp, #4
+0091a244: sub      r3, fp, #0x30
+0091a248: ldm      r3, {r0, r1}
+0091a24c: stm      r2, {r0, r1}
+0091a250: mov      r3, #4
+0091a254: str      r3, [sp]
+0091a258: sub      r3, fp, #0x3c
+0091a25c: ldm      r3, {r1, r2, r3}
+0091a260: mov      r0, r4
+0091a264: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+0091a268: ldr      r3, [fp, #-0x2b8]
+0091a26c: mov      r0, r3
+0091a270: bl       #0x9593a8 ; sqlite3_free
+0091a274: b        #0x91a380
+0091a278: ldr      r3, [fp, #-0x2c0]
+0091a27c: add      r3, r3, #0xac
+0091a280: mov      r0, r3
+0091a284: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a288: mov      r3, r0
+0091a28c: sub      r0, fp, #0x2b4
+0091a290: movw     r2, #0x638
+0091a294: movt     r2, #0xbe ; 'CREATE TABLE IF NOT EXISTS %s (filename TEXT PRIMARY KEY, slice_url TEXT NOT NULL, update_time INTEGER NOT NULL);'
+0091a298: mov      r1, #0x200
+0091a29c: bl       #0xc0024 ; snprintf
+0091a2a0: ldr      r3, [fp, #-0x2c0]
+0091a2a4: ldr      r0, [r3]
+0091a2a8: sub      r1, fp, #0x2b4
+0091a2ac: sub      r3, fp, #0x2b8
+0091a2b0: str      r3, [sp]
+0091a2b4: mov      r3, #0
+0091a2b8: mov      r2, #0
+0091a2bc: bl       #0x9ef0e0 ; sqlite3_exec
+0091a2c0: mov      r3, r0
+0091a2c4: cmp      r3, #0
+0091a2c8: movne    r3, #1
+0091a2cc: moveq    r3, #0
+0091a2d0: uxtb     r3, r3
+0091a2d4: cmp      r3, #0
+0091a2d8: beq      #0x91a380
+0091a2dc: bl       #0xcf64c ; spdlog::default_logger_raw()
+0091a2e0: mov      r4, r0
+0091a2e4: sub      r0, fp, #0x24
+0091a2e8: movw     r3, #0xf27c
+0091a2ec: movt     r3, #0xbd ; 'init_database'
+0091a2f0: movw     r2, #0x472
+0091a2f4: movw     r1, #0xf36c
+0091a2f8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+0091a2fc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0091a300: movw     r3, #0x200
+0091a304: movt     r3, #0xbe ; 'Failed to create table: {} SQL error: {}'
+0091a308: str      r3, [fp, #-0x18]
+0091a30c: movw     r0, #0x200
+0091a310: movt     r0, #0xbe ; 'Failed to create table: {} SQL error: {}'
+0091a314: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0091a318: mov      r3, r0
+0091a31c: str      r3, [fp, #-0x14]
+0091a320: ldr      r3, [fp, #-0x2c0]
+0091a324: add      r3, r3, #0xac
+0091a328: mov      r0, r3
+0091a32c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091a330: mov      r3, r0
+0091a334: str      r3, [fp, #-0x10]
+0091a338: sub      r3, fp, #0x2b8
+0091a33c: str      r3, [sp, #0x10]
+0091a340: sub      r3, fp, #0x10
+0091a344: str      r3, [sp, #0xc]
+0091a348: add      r2, sp, #4
+0091a34c: sub      r3, fp, #0x18
+0091a350: ldm      r3, {r0, r1}
+0091a354: stm      r2, {r0, r1}
+0091a358: mov      r3, #4
+0091a35c: str      r3, [sp]
+0091a360: sub      r3, fp, #0x24
+0091a364: ldm      r3, {r1, r2, r3}
+0091a368: mov      r0, r4
+0091a36c: bl       #0x91b090 ; void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)
+0091a370: ldr      r3, [fp, #-0x2b8]
+0091a374: mov      r0, r3
+0091a378: bl       #0x9593a8 ; sqlite3_free
+0091a37c: nop
+0091a380: sub      sp, fp, #8
+0091a384: pop      {r4, fp, pc}

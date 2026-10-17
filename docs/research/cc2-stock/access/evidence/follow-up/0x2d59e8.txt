@@ -1,0 +1,481 @@
+WebHooks::WebHooks(std::shared_ptr<Printer>)
+002d59e8: push     {r4, fp, lr}
+002d59ec: add      fp, sp, #8
+002d59f0: sub      sp, sp, #0x1d4
+002d59f4: str      r0, [fp, #-0x1c8]
+002d59f8: str      r1, [fp, #-0x1cc]
+002d59fc: ldr      r3, [fp, #-0x1c8]
+002d5a00: mov      r0, r3
+002d5a04: bl       #0x2e8bc4 ; std::enable_shared_from_this<WebHooks>::enable_shared_from_this()
+002d5a08: ldr      r3, [fp, #-0x1c8]
+002d5a0c: add      r3, r3, #8
+002d5a10: ldr      r1, [fp, #-0x1cc]
+002d5a14: mov      r0, r3
+002d5a18: bl       #0x148908 ; std::shared_ptr<Printer>::shared_ptr(std::shared_ptr<Printer> const&)
+002d5a1c: ldr      r3, [fp, #-0x1c8]
+002d5a20: add      r3, r3, #0x10
+002d5a24: mov      r0, r3
+002d5a28: bl       #0x2e8c2c ; std::shared_ptr<GCodeHelper>::shared_ptr()
+002d5a2c: ldr      r3, [fp, #-0x1c8]
+002d5a30: add      r3, r3, #0x18
+002d5a34: mov      r0, r3
+002d5a38: bl       #0x2e8c94 ; std::shared_ptr<QueryStatusHelper>::shared_ptr()
+002d5a3c: ldr      r3, [fp, #-0x1c8]
+002d5a40: add      r3, r3, #0x20
+002d5a44: mov      r0, r3
+002d5a48: bl       #0x2e8edc ; std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > >::unordered_map()
+002d5a4c: ldr      r3, [fp, #-0x1c8]
+002d5a50: add      r3, r3, #0x3c
+002d5a54: mov      r0, r3
+002d5a58: bl       #0x2e9124 ; std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > > > > >::unordered_map()
+002d5a5c: ldr      r3, [fp, #-0x1c8]
+002d5a60: add      r3, r3, #0x58
+002d5a64: mov      r0, r3
+002d5a68: bl       #0x2ec864 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > > > > >::map()
+002d5a6c: ldr      r3, [fp, #-0x1c8]
+002d5a70: add      r3, r3, #0x70
+002d5a74: mov      r0, r3
+002d5a78: bl       #0x2e918c ; std::shared_ptr<ServerSocket>::shared_ptr()
+002d5a7c: sub      r3, fp, #0x1a8
+002d5a80: mov      r0, r3
+002d5a84: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5a88: sub      r2, fp, #0x1a8
+002d5a8c: sub      r3, fp, #0x1c0
+002d5a90: movw     r1, #0x755c
+002d5a94: movt     r1, #0xa8 ; 'list_endpoints'
+002d5a98: mov      r0, r3
+002d5a9c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5aa0: ldr      r2, [fp, #-0x1c8]
+002d5aa4: sub      r3, fp, #0x1a4
+002d5aa8: mov      r1, r2
+002d5aac: mov      r0, r3
+002d5ab0: bl       #0x2de894 ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#1}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#1})
+002d5ab4: sub      r2, fp, #0x1a4
+002d5ab8: sub      r3, fp, #0x1c0
+002d5abc: mov      r1, r3
+002d5ac0: ldr      r0, [fp, #-0x1c8]
+002d5ac4: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5ac8: sub      r3, fp, #0x1a4
+002d5acc: mov      r0, r3
+002d5ad0: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5ad4: sub      r3, fp, #0x1c0
+002d5ad8: mov      r0, r3
+002d5adc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5ae0: sub      r3, fp, #0x1a8
+002d5ae4: mov      r0, r3
+002d5ae8: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5aec: sub      r3, fp, #0x17c
+002d5af0: mov      r0, r3
+002d5af4: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5af8: sub      r2, fp, #0x17c
+002d5afc: sub      r3, fp, #0x194
+002d5b00: movw     r1, #0x8e5c
+002d5b04: movt     r1, #0xbb ; 'info'
+002d5b08: mov      r0, r3
+002d5b0c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5b10: ldr      r2, [fp, #-0x1c8]
+002d5b14: sub      r3, fp, #0x178
+002d5b18: mov      r1, r2
+002d5b1c: mov      r0, r3
+002d5b20: bl       #0x2de95c ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#2}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#2})
+002d5b24: sub      r2, fp, #0x178
+002d5b28: sub      r3, fp, #0x194
+002d5b2c: mov      r1, r3
+002d5b30: ldr      r0, [fp, #-0x1c8]
+002d5b34: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5b38: sub      r3, fp, #0x178
+002d5b3c: mov      r0, r3
+002d5b40: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5b44: sub      r3, fp, #0x194
+002d5b48: mov      r0, r3
+002d5b4c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5b50: sub      r3, fp, #0x17c
+002d5b54: mov      r0, r3
+002d5b58: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5b5c: sub      r3, fp, #0x150
+002d5b60: mov      r0, r3
+002d5b64: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5b68: sub      r2, fp, #0x150
+002d5b6c: sub      r3, fp, #0x168
+002d5b70: movw     r1, #0x8f80
+002d5b74: movt     r1, #0xa6 ; 'emergency_stop'
+002d5b78: mov      r0, r3
+002d5b7c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5b80: ldr      r2, [fp, #-0x1c8]
+002d5b84: sub      r3, fp, #0x14c
+002d5b88: mov      r1, r2
+002d5b8c: mov      r0, r3
+002d5b90: bl       #0x2dea24 ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#3}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#3})
+002d5b94: sub      r2, fp, #0x14c
+002d5b98: sub      r3, fp, #0x168
+002d5b9c: mov      r1, r3
+002d5ba0: ldr      r0, [fp, #-0x1c8]
+002d5ba4: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5ba8: sub      r3, fp, #0x14c
+002d5bac: mov      r0, r3
+002d5bb0: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5bb4: sub      r3, fp, #0x168
+002d5bb8: mov      r0, r3
+002d5bbc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5bc0: sub      r3, fp, #0x150
+002d5bc4: mov      r0, r3
+002d5bc8: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5bcc: sub      r3, fp, #0x124
+002d5bd0: mov      r0, r3
+002d5bd4: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5bd8: sub      r2, fp, #0x124
+002d5bdc: sub      r3, fp, #0x13c
+002d5be0: movw     r1, #0x756c
+002d5be4: movt     r1, #0xa8 ; 'register_remote_method'
+002d5be8: mov      r0, r3
+002d5bec: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5bf0: ldr      r2, [fp, #-0x1c8]
+002d5bf4: sub      r3, fp, #0x120
+002d5bf8: mov      r1, r2
+002d5bfc: mov      r0, r3
+002d5c00: bl       #0x2deaec ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#4}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#4})
+002d5c04: sub      r2, fp, #0x120
+002d5c08: sub      r3, fp, #0x13c
+002d5c0c: mov      r1, r3
+002d5c10: ldr      r0, [fp, #-0x1c8]
+002d5c14: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5c18: sub      r3, fp, #0x120
+002d5c1c: mov      r0, r3
+002d5c20: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5c24: sub      r3, fp, #0x13c
+002d5c28: mov      r0, r3
+002d5c2c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5c30: sub      r3, fp, #0x124
+002d5c34: mov      r0, r3
+002d5c38: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5c3c: sub      r3, fp, #0xf8
+002d5c40: mov      r0, r3
+002d5c44: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5c48: sub      r2, fp, #0xf8
+002d5c4c: sub      r3, fp, #0x110
+002d5c50: movw     r1, #0x7408
+002d5c54: movt     r1, #0xa8 ; 'network_access_cfg'
+002d5c58: mov      r0, r3
+002d5c5c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5c60: ldr      r2, [fp, #-0x1c8]
+002d5c64: sub      r3, fp, #0xf4
+002d5c68: mov      r1, r2
+002d5c6c: mov      r0, r3
+002d5c70: bl       #0x2debb4 ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#5}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#5})
+002d5c74: sub      r2, fp, #0xf4
+002d5c78: sub      r3, fp, #0x110
+002d5c7c: mov      r1, r3
+002d5c80: ldr      r0, [fp, #-0x1c8]
+002d5c84: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5c88: sub      r3, fp, #0xf4
+002d5c8c: mov      r0, r3
+002d5c90: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5c94: sub      r3, fp, #0x110
+002d5c98: mov      r0, r3
+002d5c9c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5ca0: sub      r3, fp, #0xf8
+002d5ca4: mov      r0, r3
+002d5ca8: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5cac: sub      r3, fp, #0xcc
+002d5cb0: mov      r0, r3
+002d5cb4: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5cb8: sub      r2, fp, #0xcc
+002d5cbc: sub      r3, fp, #0xe4
+002d5cc0: movw     r1, #0x7404
+002d5cc4: movt     r1, #0xa8 ; 'get_network_access_cfg'
+002d5cc8: mov      r0, r3
+002d5ccc: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5cd0: ldr      r2, [fp, #-0x1c8]
+002d5cd4: sub      r3, fp, #0xc8
+002d5cd8: mov      r1, r2
+002d5cdc: mov      r0, r3
+002d5ce0: bl       #0x2dec7c ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#6}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#6})
+002d5ce4: sub      r2, fp, #0xc8
+002d5ce8: sub      r3, fp, #0xe4
+002d5cec: mov      r1, r3
+002d5cf0: ldr      r0, [fp, #-0x1c8]
+002d5cf4: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5cf8: sub      r3, fp, #0xc8
+002d5cfc: mov      r0, r3
+002d5d00: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5d04: sub      r3, fp, #0xe4
+002d5d08: mov      r0, r3
+002d5d0c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5d10: sub      r3, fp, #0xcc
+002d5d14: mov      r0, r3
+002d5d18: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5d1c: sub      r3, fp, #0xa0
+002d5d20: mov      r0, r3
+002d5d24: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5d28: sub      r2, fp, #0xa0
+002d5d2c: sub      r3, fp, #0xb8
+002d5d30: movw     r1, #0x741c
+002d5d34: movt     r1, #0xa8 ; 'bind_func'
+002d5d38: mov      r0, r3
+002d5d3c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5d40: ldr      r2, [fp, #-0x1c8]
+002d5d44: sub      r3, fp, #0x9c
+002d5d48: mov      r1, r2
+002d5d4c: mov      r0, r3
+002d5d50: bl       #0x2ded44 ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#7}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#7})
+002d5d54: sub      r2, fp, #0x9c
+002d5d58: sub      r3, fp, #0xb8
+002d5d5c: mov      r1, r3
+002d5d60: ldr      r0, [fp, #-0x1c8]
+002d5d64: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5d68: sub      r3, fp, #0x9c
+002d5d6c: mov      r0, r3
+002d5d70: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5d74: sub      r3, fp, #0xb8
+002d5d78: mov      r0, r3
+002d5d7c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5d80: sub      r3, fp, #0xa0
+002d5d84: mov      r0, r3
+002d5d88: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5d8c: sub      r3, fp, #0x74
+002d5d90: mov      r0, r3
+002d5d94: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5d98: sub      r2, fp, #0x74
+002d5d9c: sub      r3, fp, #0x8c
+002d5da0: movw     r1, #0x7584
+002d5da4: movt     r1, #0xa8 ; 'device_manage'
+002d5da8: mov      r0, r3
+002d5dac: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5db0: ldr      r2, [fp, #-0x1c8]
+002d5db4: sub      r3, fp, #0x70
+002d5db8: mov      r1, r2
+002d5dbc: mov      r0, r3
+002d5dc0: bl       #0x2dee0c ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#8}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#8})
+002d5dc4: sub      r2, fp, #0x70
+002d5dc8: sub      r3, fp, #0x8c
+002d5dcc: mov      r1, r3
+002d5dd0: ldr      r0, [fp, #-0x1c8]
+002d5dd4: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5dd8: sub      r3, fp, #0x70
+002d5ddc: mov      r0, r3
+002d5de0: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5de4: sub      r3, fp, #0x8c
+002d5de8: mov      r0, r3
+002d5dec: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5df0: sub      r3, fp, #0x74
+002d5df4: mov      r0, r3
+002d5df8: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5dfc: sub      r3, fp, #0x48
+002d5e00: mov      r0, r3
+002d5e04: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d5e08: sub      r2, fp, #0x48
+002d5e0c: sub      r3, fp, #0x60
+002d5e10: movw     r1, #0x7428
+002d5e14: movt     r1, #0xa8 ; 'sync_info'
+002d5e18: mov      r0, r3
+002d5e1c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d5e20: ldr      r2, [fp, #-0x1c8]
+002d5e24: sub      r3, fp, #0x44
+002d5e28: mov      r1, r2
+002d5e2c: mov      r0, r3
+002d5e30: bl       #0x2deed4 ; std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#9}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#9})
+002d5e34: sub      r2, fp, #0x44
+002d5e38: sub      r3, fp, #0x60
+002d5e3c: mov      r1, r3
+002d5e40: ldr      r0, [fp, #-0x1c8]
+002d5e44: bl       #0x2d6268 ; WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)
+002d5e48: sub      r3, fp, #0x44
+002d5e4c: mov      r0, r3
+002d5e50: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5e54: sub      r3, fp, #0x60
+002d5e58: mov      r0, r3
+002d5e5c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5e60: sub      r3, fp, #0x48
+002d5e64: mov      r0, r3
+002d5e68: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5e6c: bl       #0x2563d8 ; api_module::DeviceUiMessageHandle::get_instance()
+002d5e70: mov      r4, r0
+002d5e74: ldr      r2, [fp, #-0x1c8]
+002d5e78: sub      r3, fp, #0x34
+002d5e7c: mov      r1, r2
+002d5e80: mov      r0, r3
+002d5e84: bl       #0x2def9c ; std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)#10}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)#10})
+002d5e88: sub      r3, fp, #0x34
+002d5e8c: mov      r1, r3
+002d5e90: mov      r0, r4
+002d5e94: bl       #0x92edb4 ; api_module::DeviceUiMessageHandle::set_report_callback(std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>)
+002d5e98: sub      r3, fp, #0x34
+002d5e9c: mov      r0, r3
+002d5ea0: bl       #0xd03e4 ; std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>::~function()
+002d5ea4: bl       #0xcf64c ; spdlog::default_logger_raw()
+002d5ea8: mov      r4, r0
+002d5eac: sub      r0, fp, #0x24
+002d5eb0: movw     r3, #0x5358
+002d5eb4: movt     r3, #0xa8 ; 'WebHooks'
+002d5eb8: movw     r2, #0x263
+002d5ebc: movw     r1, #0x715c
+002d5ec0: movt     r1, #0xa8 ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/webhooks.cpp'
+002d5ec4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+002d5ec8: movw     r3, #0x7594
+002d5ecc: movt     r3, #0xa8 ; 'create WebHooks success!'
+002d5ed0: str      r3, [fp, #-0x10]
+002d5ed4: ldr      r3, [fp, #-0x10]
+002d5ed8: str      r3, [fp, #-0x18]
+002d5edc: ldr      r0, [fp, #-0x10]
+002d5ee0: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+002d5ee4: mov      r3, r0
+002d5ee8: str      r3, [fp, #-0x14]
+002d5eec: add      r2, sp, #4
+002d5ef0: sub      r3, fp, #0x18
+002d5ef4: ldm      r3, {r0, r1}
+002d5ef8: stm      r2, {r0, r1}
+002d5efc: mov      r3, #2
+002d5f00: str      r3, [sp]
+002d5f04: sub      r3, fp, #0x24
+002d5f08: ldm      r3, {r1, r2, r3}
+002d5f0c: mov      r0, r4
+002d5f10: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+002d5f14: ldr      r3, [fp, #-0x1c8]
+002d5f18: b        #0x2d615c
+002d5f1c: sub      r3, fp, #0x1a4
+002d5f20: mov      r0, r3
+002d5f24: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5f28: b        #0x2d5f2c
+002d5f2c: sub      r3, fp, #0x1c0
+002d5f30: mov      r0, r3
+002d5f34: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5f38: b        #0x2d5f3c
+002d5f3c: sub      r3, fp, #0x1a8
+002d5f40: mov      r0, r3
+002d5f44: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5f48: b        #0x2d60dc
+002d5f4c: sub      r3, fp, #0x178
+002d5f50: mov      r0, r3
+002d5f54: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5f58: b        #0x2d5f5c
+002d5f5c: sub      r3, fp, #0x194
+002d5f60: mov      r0, r3
+002d5f64: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5f68: b        #0x2d5f6c
+002d5f6c: sub      r3, fp, #0x17c
+002d5f70: mov      r0, r3
+002d5f74: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5f78: b        #0x2d60dc
+002d5f7c: sub      r3, fp, #0x14c
+002d5f80: mov      r0, r3
+002d5f84: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5f88: b        #0x2d5f8c
+002d5f8c: sub      r3, fp, #0x168
+002d5f90: mov      r0, r3
+002d5f94: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5f98: b        #0x2d5f9c
+002d5f9c: sub      r3, fp, #0x150
+002d5fa0: mov      r0, r3
+002d5fa4: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5fa8: b        #0x2d60dc
+002d5fac: sub      r3, fp, #0x120
+002d5fb0: mov      r0, r3
+002d5fb4: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5fb8: b        #0x2d5fbc
+002d5fbc: sub      r3, fp, #0x13c
+002d5fc0: mov      r0, r3
+002d5fc4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5fc8: b        #0x2d5fcc
+002d5fcc: sub      r3, fp, #0x124
+002d5fd0: mov      r0, r3
+002d5fd4: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d5fd8: b        #0x2d60dc
+002d5fdc: sub      r3, fp, #0xf4
+002d5fe0: mov      r0, r3
+002d5fe4: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d5fe8: b        #0x2d5fec
+002d5fec: sub      r3, fp, #0x110
+002d5ff0: mov      r0, r3
+002d5ff4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d5ff8: b        #0x2d5ffc
+002d5ffc: sub      r3, fp, #0xf8
+002d6000: mov      r0, r3
+002d6004: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d6008: b        #0x2d60dc
+002d600c: sub      r3, fp, #0xc8
+002d6010: mov      r0, r3
+002d6014: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d6018: b        #0x2d601c
+002d601c: sub      r3, fp, #0xe4
+002d6020: mov      r0, r3
+002d6024: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d6028: b        #0x2d602c
+002d602c: sub      r3, fp, #0xcc
+002d6030: mov      r0, r3
+002d6034: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d6038: b        #0x2d60dc
+002d603c: sub      r3, fp, #0x9c
+002d6040: mov      r0, r3
+002d6044: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d6048: b        #0x2d604c
+002d604c: sub      r3, fp, #0xb8
+002d6050: mov      r0, r3
+002d6054: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d6058: b        #0x2d605c
+002d605c: sub      r3, fp, #0xa0
+002d6060: mov      r0, r3
+002d6064: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d6068: b        #0x2d60dc
+002d606c: sub      r3, fp, #0x70
+002d6070: mov      r0, r3
+002d6074: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d6078: b        #0x2d607c
+002d607c: sub      r3, fp, #0x8c
+002d6080: mov      r0, r3
+002d6084: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d6088: b        #0x2d608c
+002d608c: sub      r3, fp, #0x74
+002d6090: mov      r0, r3
+002d6094: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d6098: b        #0x2d60dc
+002d609c: sub      r3, fp, #0x44
+002d60a0: mov      r0, r3
+002d60a4: bl       #0x2552b8 ; std::function<void (std::shared_ptr<WebRequest>)>::~function()
+002d60a8: b        #0x2d60ac
+002d60ac: sub      r3, fp, #0x60
+002d60b0: mov      r0, r3
+002d60b4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d60b8: b        #0x2d60bc
+002d60bc: sub      r3, fp, #0x48
+002d60c0: mov      r0, r3
+002d60c4: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d60c8: b        #0x2d60dc
+002d60cc: sub      r3, fp, #0x34
+002d60d0: mov      r0, r3
+002d60d4: bl       #0xd03e4 ; std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>::~function()
+002d60d8: b        #0x2d60dc
+002d60dc: ldr      r3, [fp, #-0x1c8]
+002d60e0: add      r3, r3, #0x70
+002d60e4: mov      r0, r3
+002d60e8: bl       #0x26869c ; std::shared_ptr<ServerSocket>::~shared_ptr()
+002d60ec: ldr      r3, [fp, #-0x1c8]
+002d60f0: add      r3, r3, #0x58
+002d60f4: mov      r0, r3
+002d60f8: bl       #0x268640 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > > > > >::~map()
+002d60fc: ldr      r3, [fp, #-0x1c8]
+002d6100: add      r3, r3, #0x3c
+002d6104: mov      r0, r3
+002d6108: bl       #0x268614 ; std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > > > > >::~unordered_map()
+002d610c: ldr      r3, [fp, #-0x1c8]
+002d6110: add      r3, r3, #0x20
+002d6114: mov      r0, r3
+002d6118: bl       #0x2685e8 ; std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > >::~unordered_map()
+002d611c: ldr      r3, [fp, #-0x1c8]
+002d6120: add      r3, r3, #0x18
+002d6124: mov      r0, r3
+002d6128: bl       #0x2685bc ; std::shared_ptr<QueryStatusHelper>::~shared_ptr()
+002d612c: ldr      r3, [fp, #-0x1c8]
+002d6130: add      r3, r3, #0x10
+002d6134: mov      r0, r3
+002d6138: bl       #0x268560 ; std::shared_ptr<GCodeHelper>::~shared_ptr()
+002d613c: ldr      r3, [fp, #-0x1c8]
+002d6140: add      r3, r3, #8
+002d6144: mov      r0, r3
+002d6148: bl       #0x14872c ; std::shared_ptr<Printer>::~shared_ptr()
+002d614c: ldr      r3, [fp, #-0x1c8]
+002d6150: mov      r0, r3
+002d6154: bl       #0x268950 ; std::enable_shared_from_this<WebHooks>::~enable_shared_from_this()
+002d6158: bl       #0xbf3f4 ; __cxa_end_cleanup
+002d615c: mov      r0, r3
+002d6160: sub      sp, fp, #8
+002d6164: pop      {r4, fp, pc}

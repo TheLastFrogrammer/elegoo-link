@@ -1,0 +1,280 @@
+znp::V4L2::ReopenDevice()
+00146418: push     {r4, fp, lr}
+0014641c: add      fp, sp, #8
+00146420: sub      sp, sp, #0xbc
+00146424: str      r0, [fp, #-0xb0]
+00146428: bl       #0x88808 ; spdlog::default_logger_raw()
+0014642c: mov      r4, r0
+00146430: sub      r0, fp, #0xa8
+00146434: movw     r3, #0xda50
+00146438: movt     r3, #0x1b ; 'ReopenDevice'
+0014643c: movw     r2, #0x1b3
+00146440: movw     r1, #0xdaac
+00146444: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146448: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0014644c: movw     r3, #0xdff0
+00146450: movt     r3, #0x1b ; 'V4L2 [{}] reopening device (full close/open) ...'
+00146454: str      r3, [fp, #-0x9c]
+00146458: movw     r0, #0xdff0
+0014645c: movt     r0, #0x1b ; 'V4L2 [{}] reopening device (full close/open) ...'
+00146460: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146464: mov      r3, r0
+00146468: str      r3, [fp, #-0x98]
+0014646c: ldr      r3, [fp, #-0xb0]
+00146470: add      r3, r3, #4
+00146474: str      r3, [sp, #0xc]
+00146478: add      r2, sp, #4
+0014647c: sub      r3, fp, #0x9c
+00146480: ldm      r3, {r0, r1}
+00146484: stm      r2, {r0, r1}
+00146488: mov      r3, #3
+0014648c: str      r3, [sp]
+00146490: sub      r3, fp, #0xa8
+00146494: ldm      r3, {r1, r2, r3}
+00146498: mov      r0, r4
+0014649c: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+001464a0: ldr      r0, [fp, #-0xb0]
+001464a4: bl       #0x145c24 ; znp::V4L2::StopStreaming()
+001464a8: ldr      r0, [fp, #-0xb0]
+001464ac: bl       #0x1456dc ; znp::V4L2::UnmapBuffers()
+001464b0: ldr      r0, [fp, #-0xb0]
+001464b4: bl       #0x144788 ; znp::V4L2::CloseDevice()
+001464b8: mov      r3, #0x12c
+001464bc: str      r3, [fp, #-0x88]
+001464c0: sub      r2, fp, #0x88
+001464c4: sub      r3, fp, #0x94
+001464c8: mov      r1, r2
+001464cc: mov      r0, r3
+001464d0: bl       #0x148cb0 ; std::chrono::duration<long long, std::ratio<1ll, 1000ll> >::duration<int, void>(int const&)
+001464d4: sub      r3, fp, #0x94
+001464d8: mov      r0, r3
+001464dc: bl       #0x11e028 ; void std::this_thread::sleep_for<long long, std::ratio<1ll, 1000ll> >(std::chrono::duration<long long, std::ratio<1ll, 1000ll> > const&)
+001464e0: ldr      r0, [fp, #-0xb0]
+001464e4: bl       #0x1445a8 ; znp::V4L2::OpenDevice()
+001464e8: mov      r3, r0
+001464ec: eor      r3, r3, #1
+001464f0: uxtb     r3, r3
+001464f4: cmp      r3, #0
+001464f8: beq      #0x14657c
+001464fc: bl       #0x88808 ; spdlog::default_logger_raw()
+00146500: mov      r4, r0
+00146504: sub      r0, fp, #0x84
+00146508: movw     r3, #0xda50
+0014650c: movt     r3, #0x1b ; 'ReopenDevice'
+00146510: movw     r2, #0x1bf
+00146514: movw     r1, #0xdaac
+00146518: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+0014651c: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146520: movw     r3, #0xe024
+00146524: movt     r3, #0x1b ; 'V4L2 [{}] reopen: OpenDevice failed'
+00146528: str      r3, [fp, #-0x78]
+0014652c: movw     r0, #0xe024
+00146530: movt     r0, #0x1b ; 'V4L2 [{}] reopen: OpenDevice failed'
+00146534: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146538: mov      r3, r0
+0014653c: str      r3, [fp, #-0x74]
+00146540: ldr      r3, [fp, #-0xb0]
+00146544: add      r3, r3, #4
+00146548: str      r3, [sp, #0xc]
+0014654c: add      r2, sp, #4
+00146550: sub      r3, fp, #0x78
+00146554: ldm      r3, {r0, r1}
+00146558: stm      r2, {r0, r1}
+0014655c: mov      r3, #4
+00146560: str      r3, [sp]
+00146564: sub      r3, fp, #0x84
+00146568: ldm      r3, {r1, r2, r3}
+0014656c: mov      r0, r4
+00146570: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+00146574: mov      r3, #0
+00146578: b        #0x146868
+0014657c: ldr      r0, [fp, #-0xb0]
+00146580: bl       #0x144a34 ; znp::V4L2::SetFormat()
+00146584: mov      r3, r0
+00146588: eor      r3, r3, #1
+0014658c: uxtb     r3, r3
+00146590: cmp      r3, #0
+00146594: beq      #0x146618
+00146598: bl       #0x88808 ; spdlog::default_logger_raw()
+0014659c: mov      r4, r0
+001465a0: sub      r0, fp, #0x70
+001465a4: movw     r3, #0xda50
+001465a8: movt     r3, #0x1b ; 'ReopenDevice'
+001465ac: movw     r2, #0x1c3
+001465b0: movw     r1, #0xdaac
+001465b4: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001465b8: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001465bc: movw     r3, #0xe048
+001465c0: movt     r3, #0x1b ; 'V4L2 [{}] reopen: SetFormat failed'
+001465c4: str      r3, [fp, #-0x64]
+001465c8: movw     r0, #0xe048
+001465cc: movt     r0, #0x1b ; 'V4L2 [{}] reopen: SetFormat failed'
+001465d0: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001465d4: mov      r3, r0
+001465d8: str      r3, [fp, #-0x60]
+001465dc: ldr      r3, [fp, #-0xb0]
+001465e0: add      r3, r3, #4
+001465e4: str      r3, [sp, #0xc]
+001465e8: add      r2, sp, #4
+001465ec: sub      r3, fp, #0x64
+001465f0: ldm      r3, {r0, r1}
+001465f4: stm      r2, {r0, r1}
+001465f8: mov      r3, #4
+001465fc: str      r3, [sp]
+00146600: sub      r3, fp, #0x70
+00146604: ldm      r3, {r1, r2, r3}
+00146608: mov      r0, r4
+0014660c: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+00146610: mov      r3, #0
+00146614: b        #0x146868
+00146618: ldr      r0, [fp, #-0xb0]
+0014661c: bl       #0x144f4c ; znp::V4L2::RequestBuffers()
+00146620: mov      r3, r0
+00146624: eor      r3, r3, #1
+00146628: uxtb     r3, r3
+0014662c: cmp      r3, #0
+00146630: beq      #0x1466b4
+00146634: bl       #0x88808 ; spdlog::default_logger_raw()
+00146638: mov      r4, r0
+0014663c: sub      r0, fp, #0x5c
+00146640: movw     r3, #0xda50
+00146644: movt     r3, #0x1b ; 'ReopenDevice'
+00146648: movw     r2, #0x1c7
+0014664c: movw     r1, #0xdaac
+00146650: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+00146654: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146658: movw     r3, #0xe06c
+0014665c: movt     r3, #0x1b ; 'V4L2 [{}] reopen: RequestBuffers failed'
+00146660: str      r3, [fp, #-0x50]
+00146664: movw     r0, #0xe06c
+00146668: movt     r0, #0x1b ; 'V4L2 [{}] reopen: RequestBuffers failed'
+0014666c: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146670: mov      r3, r0
+00146674: str      r3, [fp, #-0x4c]
+00146678: ldr      r3, [fp, #-0xb0]
+0014667c: add      r3, r3, #4
+00146680: str      r3, [sp, #0xc]
+00146684: add      r2, sp, #4
+00146688: sub      r3, fp, #0x50
+0014668c: ldm      r3, {r0, r1}
+00146690: stm      r2, {r0, r1}
+00146694: mov      r3, #4
+00146698: str      r3, [sp]
+0014669c: sub      r3, fp, #0x5c
+001466a0: ldm      r3, {r1, r2, r3}
+001466a4: mov      r0, r4
+001466a8: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+001466ac: mov      r3, #0
+001466b0: b        #0x146868
+001466b4: ldr      r0, [fp, #-0xb0]
+001466b8: bl       #0x145140 ; znp::V4L2::MapBuffers()
+001466bc: mov      r3, r0
+001466c0: eor      r3, r3, #1
+001466c4: uxtb     r3, r3
+001466c8: cmp      r3, #0
+001466cc: beq      #0x146750
+001466d0: bl       #0x88808 ; spdlog::default_logger_raw()
+001466d4: mov      r4, r0
+001466d8: sub      r0, fp, #0x48
+001466dc: movw     r3, #0xda50
+001466e0: movt     r3, #0x1b ; 'ReopenDevice'
+001466e4: movw     r2, #0x1cb
+001466e8: movw     r1, #0xdaac
+001466ec: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+001466f0: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+001466f4: movw     r3, #0xe094
+001466f8: movt     r3, #0x1b ; 'V4L2 [{}] reopen: MapBuffers failed'
+001466fc: str      r3, [fp, #-0x3c]
+00146700: movw     r0, #0xe094
+00146704: movt     r0, #0x1b ; 'V4L2 [{}] reopen: MapBuffers failed'
+00146708: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+0014670c: mov      r3, r0
+00146710: str      r3, [fp, #-0x38]
+00146714: ldr      r3, [fp, #-0xb0]
+00146718: add      r3, r3, #4
+0014671c: str      r3, [sp, #0xc]
+00146720: add      r2, sp, #4
+00146724: sub      r3, fp, #0x3c
+00146728: ldm      r3, {r0, r1}
+0014672c: stm      r2, {r0, r1}
+00146730: mov      r3, #4
+00146734: str      r3, [sp]
+00146738: sub      r3, fp, #0x48
+0014673c: ldm      r3, {r1, r2, r3}
+00146740: mov      r0, r4
+00146744: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+00146748: mov      r3, #0
+0014674c: b        #0x146868
+00146750: ldr      r0, [fp, #-0xb0]
+00146754: bl       #0x145a34 ; znp::V4L2::StartStreaming()
+00146758: mov      r3, r0
+0014675c: eor      r3, r3, #1
+00146760: uxtb     r3, r3
+00146764: cmp      r3, #0
+00146768: beq      #0x1467ec
+0014676c: bl       #0x88808 ; spdlog::default_logger_raw()
+00146770: mov      r4, r0
+00146774: sub      r0, fp, #0x34
+00146778: movw     r3, #0xda50
+0014677c: movt     r3, #0x1b ; 'ReopenDevice'
+00146780: movw     r2, #0x1cf
+00146784: movw     r1, #0xdaac
+00146788: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+0014678c: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146790: movw     r3, #0xe0b8
+00146794: movt     r3, #0x1b ; 'V4L2 [{}] reopen: StartStreaming failed'
+00146798: str      r3, [fp, #-0x28]
+0014679c: movw     r0, #0xe0b8
+001467a0: movt     r0, #0x1b ; 'V4L2 [{}] reopen: StartStreaming failed'
+001467a4: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+001467a8: mov      r3, r0
+001467ac: str      r3, [fp, #-0x24]
+001467b0: ldr      r3, [fp, #-0xb0]
+001467b4: add      r3, r3, #4
+001467b8: str      r3, [sp, #0xc]
+001467bc: add      r2, sp, #4
+001467c0: sub      r3, fp, #0x28
+001467c4: ldm      r3, {r0, r1}
+001467c8: stm      r2, {r0, r1}
+001467cc: mov      r3, #4
+001467d0: str      r3, [sp]
+001467d4: sub      r3, fp, #0x34
+001467d8: ldm      r3, {r1, r2, r3}
+001467dc: mov      r0, r4
+001467e0: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+001467e4: mov      r3, #0
+001467e8: b        #0x146868
+001467ec: bl       #0x88808 ; spdlog::default_logger_raw()
+001467f0: mov      r4, r0
+001467f4: sub      r0, fp, #0x20
+001467f8: movw     r3, #0xda50
+001467fc: movt     r3, #0x1b ; 'ReopenDevice'
+00146800: movw     r2, #0x1d3
+00146804: movw     r1, #0xdaac
+00146808: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_v4l2.cpp'
+0014680c: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00146810: movw     r3, #0xe0e0
+00146814: movt     r3, #0x1b ; 'V4L2 [{}] device reopened successfully'
+00146818: str      r3, [fp, #-0x14]
+0014681c: movw     r0, #0xe0e0
+00146820: movt     r0, #0x1b ; 'V4L2 [{}] device reopened successfully'
+00146824: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+00146828: mov      r3, r0
+0014682c: str      r3, [fp, #-0x10]
+00146830: ldr      r3, [fp, #-0xb0]
+00146834: add      r3, r3, #4
+00146838: str      r3, [sp, #0xc]
+0014683c: add      r2, sp, #4
+00146840: sub      r3, fp, #0x14
+00146844: ldm      r3, {r0, r1}
+00146848: stm      r2, {r0, r1}
+0014684c: mov      r3, #3
+00146850: str      r3, [sp]
+00146854: sub      r3, fp, #0x20
+00146858: ldm      r3, {r1, r2, r3}
+0014685c: mov      r0, r4
+00146860: bl       #0x12d988 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+00146864: mov      r3, #1
+00146868: mov      r0, r3
+0014686c: sub      sp, fp, #8
+00146870: pop      {r4, fp, pc}

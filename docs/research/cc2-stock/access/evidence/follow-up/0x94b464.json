@@ -1,0 +1,379 @@
+{
+  "function": "api_module::LogExport::log_export(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)",
+  "va": "0x94b464",
+  "size": 1960,
+  "calls": [
+    {
+      "at": "0x94b4b4",
+      "target": "0xbf37c",
+      "name": "memset"
+    },
+    {
+      "at": "0x94b4c8",
+      "target": "0xbf37c",
+      "name": "memset"
+    },
+    {
+      "at": "0x94b4e4",
+      "target": "0xbf37c",
+      "name": "memset"
+    },
+    {
+      "at": "0x94b500",
+      "target": "0xbf37c",
+      "name": "memset"
+    },
+    {
+      "at": "0x94b530",
+      "target": "0x94cb14",
+      "name": "std::array<char*, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94b550",
+      "target": "0x94cb7c",
+      "name": "std::array<std::array<char, 128u>, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94b55c",
+      "target": "0x94cbd4",
+      "name": "std::array<char, 128u>::data()"
+    },
+    {
+      "at": "0x94b58c",
+      "target": "0x94c4ac",
+      "name": "api_module::LogExport::format_current_time(char*, unsigned int)"
+    },
+    {
+      "at": "0x94b5ac",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x94b5cc",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x94b5e8",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x94b618",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x94b644",
+      "target": "0xc0024",
+      "name": "snprintf"
+    },
+    {
+      "at": "0x94b648",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x94b668",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x94b680",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x94b6c0",
+      "target": "0x8416a4",
+      "name": "void spdlog::logger::log<char (&) [128], char (&) [128]>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char (&) [128]>::type, fmt::v10::type_identity<char (&) [128]>::type>, char (&) [128], char (&) [128])"
+    },
+    {
+      "at": "0x94b6d8",
+      "target": "0xbede8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEPKc"
+    },
+    {
+      "at": "0x94b6f8",
+      "target": "0x94cc24",
+      "name": "std::array<char*, 64u>::data()"
+    },
+    {
+      "at": "0x94b728",
+      "target": "0x94b088",
+      "name": "api_module::LogExport::get_logs_counts(char const*, char**, int, int)"
+    },
+    {
+      "at": "0x94b760",
+      "target": "0x94cc24",
+      "name": "std::array<char*, 64u>::data()"
+    },
+    {
+      "at": "0x94b790",
+      "target": "0x94b088",
+      "name": "api_module::LogExport::get_logs_counts(char const*, char**, int, int)"
+    },
+    {
+      "at": "0x94b7c8",
+      "target": "0x94cc24",
+      "name": "std::array<char*, 64u>::data()"
+    },
+    {
+      "at": "0x94b7f8",
+      "target": "0x94b088",
+      "name": "api_module::LogExport::get_logs_counts(char const*, char**, int, int)"
+    },
+    {
+      "at": "0x94b830",
+      "target": "0x94cc24",
+      "name": "std::array<char*, 64u>::data()"
+    },
+    {
+      "at": "0x94b860",
+      "target": "0x94b088",
+      "name": "api_module::LogExport::get_logs_counts(char const*, char**, int, int)"
+    },
+    {
+      "at": "0x94b894",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x94b8b4",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x94b8cc",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x94b914",
+      "target": "0x3d0f20",
+      "name": "void spdlog::logger::log<int&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type, fmt::v10::type_identity<int&>::type>, int&, int&)"
+    },
+    {
+      "at": "0x94b924",
+      "target": "0xbfa24",
+      "name": "zipOpen"
+    },
+    {
+      "at": "0x94b93c",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x94b95c",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x94b974",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x94b9b4",
+      "target": "0xdb430",
+      "name": "void spdlog::logger::log<int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type>, int&)"
+    },
+    {
+      "at": "0x94b9f0",
+      "target": "0x94cb14",
+      "name": "std::array<char*, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94ba1c",
+      "target": "0x94cb14",
+      "name": "std::array<char*, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94ba60",
+      "target": "0x94cb14",
+      "name": "std::array<char*, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94ba7c",
+      "target": "0x94c0f0",
+      "name": "api_module::LogExport::set_add_file_to_zip(void*, char const*)"
+    },
+    {
+      "at": "0x94baa4",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x94bac4",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x94badc",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x94bb00",
+      "target": "0x94cb14",
+      "name": "std::array<char*, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94bb30",
+      "target": "0x91afa8",
+      "name": "void spdlog::logger::log<char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char*&>::type>, char*&)"
+    },
+    {
+      "at": "0x94bb38",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x94bb58",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x94bb70",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x94bb94",
+      "target": "0x94cb14",
+      "name": "std::array<char*, 64u>::operator[](unsigned int)"
+    },
+    {
+      "at": "0x94bbd4",
+      "target": "0x94cc50",
+      "name": "void spdlog::logger::log<char*&, int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char*&>::type, fmt::v10::type_identity<int&>::type>, char*&, int&)"
+    },
+    {
+      "at": "0x94bbf8",
+      "target": "0xbf4c0",
+      "name": "zipClose"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x94b5bc",
+      "va": "0xbf8f8c",
+      "string": "log_export"
+    },
+    {
+      "at": "0x94b5c8",
+      "va": "0xbf9310",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp"
+    },
+    {
+      "at": "0x94b5d4",
+      "va": "0xbf93f4",
+      "string": "format_current_time error"
+    },
+    {
+      "at": "0x94b63c",
+      "va": "0xbf93a4",
+      "string": "%s/%s"
+    },
+    {
+      "at": "0x94b658",
+      "va": "0xbf8f8c",
+      "string": "log_export"
+    },
+    {
+      "at": "0x94b664",
+      "va": "0xbf9310",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp"
+    },
+    {
+      "at": "0x94b670",
+      "va": "0xbf9410",
+      "string": "out_file_path:{}, src_file_path:{}"
+    },
+    {
+      "at": "0x94b67c",
+      "va": "0xbf9410",
+      "string": "out_file_path:{}, src_file_path:{}"
+    },
+    {
+      "at": "0x94b8a4",
+      "va": "0xbf8f8c",
+      "string": "log_export"
+    },
+    {
+      "at": "0x94b8b0",
+      "va": "0xbf9310",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp"
+    },
+    {
+      "at": "0x94b8bc",
+      "va": "0xbf9434",
+      "string": "src_file_count:{}, total_files_:{}"
+    },
+    {
+      "at": "0x94b8c8",
+      "va": "0xbf9434",
+      "string": "src_file_count:{}, total_files_:{}"
+    },
+    {
+      "at": "0x94b94c",
+      "va": "0xbf8f8c",
+      "string": "log_export"
+    },
+    {
+      "at": "0x94b958",
+      "va": "0xbf9310",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp"
+    },
+    {
+      "at": "0x94b964",
+      "va": "0xbf9458",
+      "string": "zipOpen error : total_files_:{}"
+    },
+    {
+      "at": "0x94b970",
+      "va": "0xbf9458",
+      "string": "zipOpen error : total_files_:{}"
+    },
+    {
+      "at": "0x94bab4",
+      "va": "0xbf8f8c",
+      "string": "log_export"
+    },
+    {
+      "at": "0x94bac0",
+      "va": "0xbf9310",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp"
+    },
+    {
+      "at": "0x94bacc",
+      "va": "0xbf9478",
+      "string": "successful:add {} to zip"
+    },
+    {
+      "at": "0x94bad8",
+      "va": "0xbf9478",
+      "string": "successful:add {} to zip"
+    },
+    {
+      "at": "0x94bb48",
+      "va": "0xbf8f8c",
+      "string": "log_export"
+    },
+    {
+      "at": "0x94bb54",
+      "va": "0xbf9310",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/log_export.cpp"
+    },
+    {
+      "at": "0x94bb60",
+      "va": "0xbf9494",
+      "string": "failed:add: {} to zip, errno {}"
+    },
+    {
+      "at": "0x94bb6c",
+      "va": "0xbf9494",
+      "string": "failed:add: {} to zip, errno {}"
+    }
+  ]
+}

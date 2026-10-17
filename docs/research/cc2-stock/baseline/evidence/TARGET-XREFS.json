@@ -1,0 +1,50 @@
+[
+  {
+    "call_va": "0x7cba44",
+    "target": "CloudServiceClient.upload_file",
+    "caller": "communication::UdsAICameraClient::handle_ai_detect_normal_report(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)::{lambda()#1}::operator()() const",
+    "caller_va": "0x7cb8f4"
+  },
+  {
+    "call_va": "0x7dc348",
+    "target": "IotServiceClient.get_file_upload_url",
+    "caller": "communication::CloudServiceClient::upload_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)",
+    "caller_va": "0x7dc0a8"
+  },
+  {
+    "call_va": "0x8110ec",
+    "target": "NetworkManager.set_mode",
+    "caller": "communication::NetworkManager::handle_ready()",
+    "caller_va": "0x810fd0"
+  },
+  {
+    "call_va": "0x81f01c",
+    "target": "LanStrategy.start_http_server_file",
+    "caller": "communication::LanStrategy::start()",
+    "caller_va": "0x81ef10"
+  },
+  {
+    "call_va": "0x81f860",
+    "target": "HTTPServer.start",
+    "caller": "communication::LanStrategy::start_http_server_file()::{lambda()#1}::operator()() const",
+    "caller_va": "0x81f81c"
+  },
+  {
+    "call_va": "0x8c3404",
+    "target": "CloudServiceClient.upload_file",
+    "caller": "api_module::APIPrinter::handle_upload_log_file(std::shared_ptr<api_module::APIRequest>)::{lambda(std::shared_ptr<api_module::APIRequest>)#1}::operator()(std::shared_ptr<api_module::APIRequest>) const",
+    "caller_va": "0x8c326c"
+  },
+  {
+    "call_va": "0x8f41ec",
+    "target": "CloudServiceClient.upload_file",
+    "caller": "api_module::RecordManager::upload_file_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)",
+    "caller_va": "0x8f3eb4"
+  },
+  {
+    "call_va": "0x9307dc",
+    "target": "NetworkManager.set_mode",
+    "caller": "api_module::DeviceUiMessageHandle::handle_network_switch(bool)",
+    "caller_va": "0x9306d0"
+  }
+]

@@ -1,0 +1,434 @@
+{
+  "function": "communication::HTTPServer::start()",
+  "va": "0x84d7b8",
+  "size": 1184,
+  "calls": [
+    {
+      "at": "0x84d7c8",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x84d7e8",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x84d800",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x84d83c",
+      "target": "0xdb430",
+      "name": "void spdlog::logger::log<int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type>, int&)"
+    },
+    {
+      "at": "0x84d858",
+      "target": "0x857858",
+      "name": "hv::HttpServer::setPort(int, int)"
+    },
+    {
+      "at": "0x84d878",
+      "target": "0x852954",
+      "name": "void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#2}>(char const*, communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#2})"
+    },
+    {
+      "at": "0x84d894",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d8ac",
+      "target": "0x852990",
+      "name": "void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#3}>(char const*, communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#3})"
+    },
+    {
+      "at": "0x84d8c8",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d8e0",
+      "target": "0x8529cc",
+      "name": "void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#4}>(char const*, communication::HTTPServer::start()::{lambda(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&)#4})"
+    },
+    {
+      "at": "0x84d8f8",
+      "target": "0x852a08",
+      "name": "void hv::HttpService::PUT<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#5}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#5})"
+    },
+    {
+      "at": "0x84d914",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d92c",
+      "target": "0x852a44",
+      "name": "void hv::HttpService::PUT<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#6}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#6})"
+    },
+    {
+      "at": "0x84d948",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d960",
+      "target": "0x852a80",
+      "name": "void hv::HttpService::PUT<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#7}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#7})"
+    },
+    {
+      "at": "0x84d97c",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d994",
+      "target": "0x852abc",
+      "name": "void hv::HttpService::POST<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#8}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#8})"
+    },
+    {
+      "at": "0x84d9b0",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d9c8",
+      "target": "0x852af8",
+      "name": "void hv::HttpService::POST<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#9}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#9})"
+    },
+    {
+      "at": "0x84d9e4",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84d9fc",
+      "target": "0x852b34",
+      "name": "void hv::HttpService::POST<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#10}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#10})"
+    },
+    {
+      "at": "0x84da18",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84da30",
+      "target": "0x852b70",
+      "name": "void hv::HttpService::GET<communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#11}>(char const*, communication::HTTPServer::start()::{lambda(HttpRequest*, HttpResponse*)#11})"
+    },
+    {
+      "at": "0x84da4c",
+      "target": "0x84d4f4",
+      "name": "communication::HTTPServer::start()::{lambda(char const*, char const*)#1}::operator()(char const*, char const*) const"
+    },
+    {
+      "at": "0x84da64",
+      "target": "0x8577ec",
+      "name": "hv::HttpServer::registerHttpService(hv::HttpService*)"
+    },
+    {
+      "at": "0x84da80",
+      "target": "0x8578b0",
+      "name": "hv::HttpServer::setThreadNum(int)"
+    },
+    {
+      "at": "0x84da84",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x84daa4",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x84dabc",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x84db04",
+      "target": "0x85897c",
+      "name": "void spdlog::logger::log<char (&) [64], int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char (&) [64]>::type, fmt::v10::type_identity<int&>::type>, char (&) [64], int&)"
+    },
+    {
+      "at": "0x84db1c",
+      "target": "0x85790c",
+      "name": "hv::HttpServer::run(char const*, bool)"
+    },
+    {
+      "at": "0x84db38",
+      "target": "0xc4f10",
+      "name": "std::atomic<bool>::operator=(bool)"
+    },
+    {
+      "at": "0x84db4c",
+      "target": "0x840df0",
+      "name": "std::__atomic_base<int>::operator=(int)"
+    },
+    {
+      "at": "0x84db58",
+      "target": "0x858954",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::shared_ptr<HV_MD5_CTX>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::shared_ptr<HV_MD5_CTX> > > >::clear()"
+    },
+    {
+      "at": "0x84db68",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x84db88",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x84dba0",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x84dbd8",
+      "target": "0xdb430",
+      "name": "void spdlog::logger::log<int&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type>, int&)"
+    },
+    {
+      "at": "0x84dbe0",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x84dc00",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x84dc1c",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x84dc4c",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x84d7d8",
+      "va": "0xbb64fc",
+      "string": "start"
+    },
+    {
+      "at": "0x84d7e4",
+      "va": "0xbb8c24",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp"
+    },
+    {
+      "at": "0x84d7f0",
+      "va": "0xbb8d68",
+      "string": "Starting HTTP server on port {}"
+    },
+    {
+      "at": "0x84d7fc",
+      "va": "0xbb8d68",
+      "string": "Starting HTTP server on port {}"
+    },
+    {
+      "at": "0x84d870",
+      "va": "0xbb8d88",
+      "string": "/download"
+    },
+    {
+      "at": "0x84d884",
+      "va": "0xbb8d94",
+      "string": "GET, OPTIONS"
+    },
+    {
+      "at": "0x84d88c",
+      "va": "0xbb8d88",
+      "string": "/download"
+    },
+    {
+      "at": "0x84d8a4",
+      "va": "0xbb8da4",
+      "string": "/download/udisk"
+    },
+    {
+      "at": "0x84d8b8",
+      "va": "0xbb8d94",
+      "string": "GET, OPTIONS"
+    },
+    {
+      "at": "0x84d8c0",
+      "va": "0xbb8da4",
+      "string": "/download/udisk"
+    },
+    {
+      "at": "0x84d8d8",
+      "va": "0xbb8db4",
+      "string": "/download/sdcard"
+    },
+    {
+      "at": "0x84d8f0",
+      "va": "0xbb8dc8",
+      "string": "/upload"
+    },
+    {
+      "at": "0x84d904",
+      "va": "0xbb8dd0",
+      "string": "PUT, OPTIONS"
+    },
+    {
+      "at": "0x84d90c",
+      "va": "0xbb8dc8",
+      "string": "/upload"
+    },
+    {
+      "at": "0x84d924",
+      "va": "0xbb8de0",
+      "string": "/upload/udisk"
+    },
+    {
+      "at": "0x84d938",
+      "va": "0xbb8dd0",
+      "string": "PUT, OPTIONS"
+    },
+    {
+      "at": "0x84d940",
+      "va": "0xbb8de0",
+      "string": "/upload/udisk"
+    },
+    {
+      "at": "0x84d958",
+      "va": "0xbb8df0",
+      "string": "/upload/sdcard"
+    },
+    {
+      "at": "0x84d96c",
+      "va": "0xbb8dd0",
+      "string": "PUT, OPTIONS"
+    },
+    {
+      "at": "0x84d974",
+      "va": "0xbb8df0",
+      "string": "/upload/sdcard"
+    },
+    {
+      "at": "0x84d98c",
+      "va": "0xbb8e00",
+      "string": "/transfer/cancel"
+    },
+    {
+      "at": "0x84d9a0",
+      "va": "0xbb8e14",
+      "string": "POST, OPTIONS"
+    },
+    {
+      "at": "0x84d9a8",
+      "va": "0xbb8e00",
+      "string": "/transfer/cancel"
+    },
+    {
+      "at": "0x84d9c0",
+      "va": "0xbb8e24",
+      "string": "/transfer/cancel/udisk"
+    },
+    {
+      "at": "0x84d9d4",
+      "va": "0xbb8e14",
+      "string": "POST, OPTIONS"
+    },
+    {
+      "at": "0x84d9dc",
+      "va": "0xbb8e24",
+      "string": "/transfer/cancel/udisk"
+    },
+    {
+      "at": "0x84d9f4",
+      "va": "0xbb8e3c",
+      "string": "/transfer/cancel/sdcard"
+    },
+    {
+      "at": "0x84da08",
+      "va": "0xbb8e14",
+      "string": "POST, OPTIONS"
+    },
+    {
+      "at": "0x84da10",
+      "va": "0xbb8e3c",
+      "string": "/transfer/cancel/sdcard"
+    },
+    {
+      "at": "0x84da28",
+      "va": "0xbb8e54",
+      "string": "/system/info"
+    },
+    {
+      "at": "0x84da3c",
+      "va": "0xbb8d94",
+      "string": "GET, OPTIONS"
+    },
+    {
+      "at": "0x84da44",
+      "va": "0xbb8e54",
+      "string": "/system/info"
+    },
+    {
+      "at": "0x84da94",
+      "va": "0xbb64fc",
+      "string": "start"
+    },
+    {
+      "at": "0x84daa0",
+      "va": "0xbb8c24",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp"
+    },
+    {
+      "at": "0x84daac",
+      "va": "0xbb8e64",
+      "string": "HTTP server is running on address {} port {}"
+    },
+    {
+      "at": "0x84dab8",
+      "va": "0xbb8e64",
+      "string": "HTTP server is running on address {} port {}"
+    },
+    {
+      "at": "0x84db78",
+      "va": "0xbb64fc",
+      "string": "start"
+    },
+    {
+      "at": "0x84db84",
+      "va": "0xbb8c24",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp"
+    },
+    {
+      "at": "0x84db90",
+      "va": "0xbb8e94",
+      "string": "Failed to start HTTP server: {}"
+    },
+    {
+      "at": "0x84db9c",
+      "va": "0xbb8e94",
+      "string": "Failed to start HTTP server: {}"
+    },
+    {
+      "at": "0x84dbf0",
+      "va": "0xbb64fc",
+      "string": "start"
+    },
+    {
+      "at": "0x84dbfc",
+      "va": "0xbb8c24",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp"
+    },
+    {
+      "at": "0x84dc08",
+      "va": "0xbb8eb4",
+      "string": "HTTP server thread exited."
+    }
+  ]
+}

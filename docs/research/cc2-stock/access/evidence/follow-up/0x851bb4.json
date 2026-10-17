@@ -1,0 +1,104 @@
+{
+  "function": "communication::HTTPServer::get_file_path(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, communication::FilePathType) const",
+  "va": "0x851bb4",
+  "size": 416,
+  "calls": [
+    {
+      "at": "0x851c00",
+      "target": "0x14bf84",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x851c1c",
+      "target": "0x14bf84",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x851c34",
+      "target": "0xbf838",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12find_last_ofEPKcj"
+    },
+    {
+      "at": "0x851c4c",
+      "target": "0xbeb90",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6substrEjj"
+    },
+    {
+      "at": "0x851c60",
+      "target": "0x1bf62c",
+      "name": "bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x851c74",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x851c94",
+      "target": "0x14bf84",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x851cb0",
+      "target": "0x14bf84",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x851cb8",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x851cd8",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x851cf4",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x851d24",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x851d30",
+      "target": "0xbfab4",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev"
+    },
+    {
+      "at": "0x851d40",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x851d44",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x851c5c",
+      "va": "0xbb9608",
+      "string": "mp4"
+    },
+    {
+      "at": "0x851cc8",
+      "va": "0xbb8988",
+      "string": "get_file_path"
+    },
+    {
+      "at": "0x851cd4",
+      "va": "0xbb8c24",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp"
+    },
+    {
+      "at": "0x851ce0",
+      "va": "0xbb95e8",
+      "string": "Invalid FilePathType provided."
+    }
+  ]
+}

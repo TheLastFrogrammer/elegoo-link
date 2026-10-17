@@ -1,0 +1,105 @@
+communication::HTTPServer::get_file_path(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, communication::FilePathType) const
+00851bb4: push     {r4, fp, lr}
+00851bb8: add      fp, sp, #8
+00851bbc: sub      sp, sp, #0x54
+00851bc0: str      r0, [fp, #-0x40]
+00851bc4: str      r1, [fp, #-0x44]
+00851bc8: str      r2, [fp, #-0x48]
+00851bcc: str      r3, [fp, #-0x4c]
+00851bd0: ldr      r3, [fp, #-0x4c]
+00851bd4: cmp      r3, #1
+00851bd8: beq      #0x851c08
+00851bdc: cmp      r3, #2
+00851be0: beq      #0x851c24
+00851be4: cmp      r3, #0
+00851be8: bne      #0x851cb8
+00851bec: ldr      r3, [fp, #-0x44]
+00851bf0: add      r1, r3, #0x3bc
+00851bf4: ldr      r3, [fp, #-0x40]
+00851bf8: ldr      r2, [fp, #-0x48]
+00851bfc: mov      r0, r3
+00851c00: bl       #0x14bf84 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00851c04: b        #0x851d48
+00851c08: ldr      r3, [fp, #-0x44]
+00851c0c: add      r1, r3, #0x3d4
+00851c10: ldr      r3, [fp, #-0x40]
+00851c14: ldr      r2, [fp, #-0x48]
+00851c18: mov      r0, r3
+00851c1c: bl       #0x14bf84 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00851c20: b        #0x851d48
+00851c24: mvn      r2, #0
+00851c28: movw     r1, #0xdf80
+00851c2c: movt     r1, #0xa6
+00851c30: ldr      r0, [fp, #-0x48]
+00851c34: bl       #0xbf838 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12find_last_ofEPKcj
+00851c38: mov      r3, r0
+00851c3c: add      r2, r3, #1
+00851c40: sub      r0, fp, #0x3c
+00851c44: mvn      r3, #0
+00851c48: ldr      r1, [fp, #-0x48]
+00851c4c: bl       #0xbeb90 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6substrEjj
+00851c50: sub      r3, fp, #0x3c
+00851c54: mov      r1, r3
+00851c58: movw     r0, #0x9608
+00851c5c: movt     r0, #0xbb ; 'mp4'
+00851c60: bl       #0x1bf62c ; bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00851c64: mov      r3, r0
+00851c68: mov      r4, r3
+00851c6c: sub      r3, fp, #0x3c
+00851c70: mov      r0, r3
+00851c74: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00851c78: cmp      r4, #0
+00851c7c: beq      #0x851c9c
+00851c80: ldr      r3, [fp, #-0x44]
+00851c84: add      r1, r3, #0x3a4
+00851c88: ldr      r3, [fp, #-0x40]
+00851c8c: ldr      r2, [fp, #-0x48]
+00851c90: mov      r0, r3
+00851c94: bl       #0x14bf84 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00851c98: b        #0x851d48
+00851c9c: ldr      r3, [fp, #-0x44]
+00851ca0: add      r1, r3, #0x38c
+00851ca4: ldr      r3, [fp, #-0x40]
+00851ca8: ldr      r2, [fp, #-0x48]
+00851cac: mov      r0, r3
+00851cb0: bl       #0x14bf84 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00851cb4: b        #0x851d48
+00851cb8: bl       #0xcf64c ; spdlog::default_logger_raw()
+00851cbc: mov      r4, r0
+00851cc0: sub      r0, fp, #0x24
+00851cc4: movw     r3, #0x8988
+00851cc8: movt     r3, #0xbb ; 'get_file_path'
+00851ccc: mov      r2, #0x2c8
+00851cd0: movw     r1, #0x8c24
+00851cd4: movt     r1, #0xbb ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_server.cpp'
+00851cd8: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00851cdc: movw     r3, #0x95e8
+00851ce0: movt     r3, #0xbb ; 'Invalid FilePathType provided.'
+00851ce4: str      r3, [fp, #-0x10]
+00851ce8: ldr      r3, [fp, #-0x10]
+00851cec: str      r3, [fp, #-0x18]
+00851cf0: ldr      r0, [fp, #-0x10]
+00851cf4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00851cf8: mov      r3, r0
+00851cfc: str      r3, [fp, #-0x14]
+00851d00: add      r2, sp, #4
+00851d04: sub      r3, fp, #0x18
+00851d08: ldm      r3, {r0, r1}
+00851d0c: stm      r2, {r0, r1}
+00851d10: mov      r3, #4
+00851d14: str      r3, [sp]
+00851d18: sub      r3, fp, #0x24
+00851d1c: ldm      r3, {r1, r2, r3}
+00851d20: mov      r0, r4
+00851d24: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+00851d28: nop
+00851d2c: ldr      r0, [fp, #-0x40]
+00851d30: bl       #0xbfab4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev
+00851d34: b        #0x851d48
+00851d38: sub      r3, fp, #0x3c
+00851d3c: mov      r0, r3
+00851d40: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00851d44: bl       #0xbf3f4 ; __cxa_end_cleanup
+00851d48: ldr      r0, [fp, #-0x40]
+00851d4c: sub      sp, fp, #8
+00851d50: pop      {r4, fp, pc}

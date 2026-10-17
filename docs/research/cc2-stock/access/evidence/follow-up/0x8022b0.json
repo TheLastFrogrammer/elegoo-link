@@ -1,0 +1,609 @@
+{
+  "function": "communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+  "va": "0x8022b0",
+  "size": 2292,
+  "calls": [
+    {
+      "at": "0x8022d4",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8022e8",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x802300",
+      "target": "0x149ba4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)"
+    },
+    {
+      "at": "0x802314",
+      "target": "0x1b75d8",
+      "name": "std::__cxx11::to_string(unsigned int)"
+    },
+    {
+      "at": "0x802328",
+      "target": "0x1496b4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)"
+    },
+    {
+      "at": "0x802340",
+      "target": "0x149ba4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)"
+    },
+    {
+      "at": "0x80234c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802358",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802364",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802370",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x80237c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x802388",
+      "target": "0x80538c",
+      "name": "HFile::HFile()"
+    },
+    {
+      "at": "0x80239c",
+      "target": "0xc4f10",
+      "name": "std::atomic<bool>::operator=(bool)"
+    },
+    {
+      "at": "0x8023a8",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x8023c0",
+      "target": "0x8053f0",
+      "name": "HFile::open(char const*, char const*)"
+    },
+    {
+      "at": "0x8023e4",
+      "target": "0xbed4c",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv"
+    },
+    {
+      "at": "0x802408",
+      "target": "0xbfd24",
+      "name": "HV_MD5Init"
+    },
+    {
+      "at": "0x802414",
+      "target": "0x8060f0",
+      "name": "std::shared_ptr<HttpRequest> std::make_shared<HttpRequest>()"
+    },
+    {
+      "at": "0x802420",
+      "target": "0x8061b0",
+      "name": "std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x802438",
+      "target": "0x8061b0",
+      "name": "std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x80244c",
+      "target": "0xbede8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEPKc"
+    },
+    {
+      "at": "0x802458",
+      "target": "0x8061b0",
+      "name": "std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x802480",
+      "target": "0xd12e0",
+      "name": "std::lock_guard<std::mutex>::lock_guard(std::mutex&)"
+    },
+    {
+      "at": "0x802498",
+      "target": "0x805f5c",
+      "name": "std::shared_ptr<HttpRequest>::operator=(std::shared_ptr<HttpRequest> const&)"
+    },
+    {
+      "at": "0x8024a4",
+      "target": "0xd1320",
+      "name": "std::lock_guard<std::mutex>::~lock_guard()"
+    },
+    {
+      "at": "0x8024c0",
+      "target": "0x8061b0",
+      "name": "std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x802520",
+      "target": "0x8056dc",
+      "name": "std::shared_ptr<HttpRequest>::shared_ptr(std::shared_ptr<HttpRequest> const&)"
+    },
+    {
+      "at": "0x802530",
+      "target": "0x8038bc",
+      "name": "std::enable_if<std::function<void (HttpMessage*, http_parser_state, char const*, unsigned int)>::_Callable<std::decay<communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}>::type, std::result_of<std::decay<communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}>::type& (HttpMessage*, http_parser_state, char const*, unsigned int)>::type>::value, std::function<void (HttpMessage*, http_parser_state, char const*, unsigned int)>&>::type std::function<void (HttpMessage*, http_parser_state, char const*, unsigned int)>::operator=<communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}>(communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}&&)"
+    },
+    {
+      "at": "0x80253c",
+      "target": "0x802280",
+      "name": "communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}::~http_parser_state()"
+    },
+    {
+      "at": "0x802550",
+      "target": "0x8056dc",
+      "name": "std::shared_ptr<HttpRequest>::shared_ptr(std::shared_ptr<HttpRequest> const&)"
+    },
+    {
+      "at": "0x802564",
+      "target": "0x7fdfe8",
+      "name": "requests::request(std::shared_ptr<HttpRequest>)"
+    },
+    {
+      "at": "0x802570",
+      "target": "0x7eb450",
+      "name": "std::shared_ptr<HttpRequest>::~shared_ptr()"
+    },
+    {
+      "at": "0x80257c",
+      "target": "0x80546c",
+      "name": "HFile::close()"
+    },
+    {
+      "at": "0x802594",
+      "target": "0xd12e0",
+      "name": "std::lock_guard<std::mutex>::lock_guard(std::mutex&)"
+    },
+    {
+      "at": "0x8025a4",
+      "target": "0x806de4",
+      "name": "std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::reset()"
+    },
+    {
+      "at": "0x8025b0",
+      "target": "0xd1320",
+      "name": "std::lock_guard<std::mutex>::~lock_guard()"
+    },
+    {
+      "at": "0x8025c0",
+      "target": "0x80623c",
+      "name": "bool std::operator==<HttpResponse>(std::shared_ptr<HttpResponse> const&, decltype(nullptr))"
+    },
+    {
+      "at": "0x8025d8",
+      "target": "0x806274",
+      "name": "std::__shared_ptr<HttpResponse, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x802608",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x802614",
+      "target": "0xbee78",
+      "name": "remove"
+    },
+    {
+      "at": "0x802624",
+      "target": "0x7eb47c",
+      "name": "std::atomic<bool>::operator bool() const"
+    },
+    {
+      "at": "0x802634",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x802654",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x802670",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8026a0",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x8026ac",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8026cc",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8026e4",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8026fc",
+      "target": "0x80623c",
+      "name": "bool std::operator==<HttpResponse>(std::shared_ptr<HttpResponse> const&, decltype(nullptr))"
+    },
+    {
+      "at": "0x802730",
+      "target": "0x80623c",
+      "name": "bool std::operator==<HttpResponse>(std::shared_ptr<HttpResponse> const&, decltype(nullptr))"
+    },
+    {
+      "at": "0x802750",
+      "target": "0x806274",
+      "name": "std::__shared_ptr<HttpResponse, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x802794",
+      "target": "0x7eceb4",
+      "name": "void spdlog::logger::log<char const*, int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<int>::type>, char const*&&, int&&)"
+    },
+    {
+      "at": "0x8027b4",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x8027c0",
+      "target": "0xbedf4",
+      "name": "hv_filesize"
+    },
+    {
+      "at": "0x8027f0",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x8027fc",
+      "target": "0xbee78",
+      "name": "remove"
+    },
+    {
+      "at": "0x802800",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x802820",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x802838",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x80284c",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x802858",
+      "target": "0xbedf4",
+      "name": "hv_filesize"
+    },
+    {
+      "at": "0x802898",
+      "target": "0x806e28",
+      "name": "void spdlog::logger::log<unsigned int&, unsigned int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<unsigned int&>::type, fmt::v10::type_identity<unsigned int>::type>, unsigned int&, unsigned int&&)"
+    },
+    {
+      "at": "0x8028d8",
+      "target": "0xbec14",
+      "name": "HV_MD5Final"
+    },
+    {
+      "at": "0x8028ec",
+      "target": "0xbf37c",
+      "name": "memset"
+    },
+    {
+      "at": "0x802930",
+      "target": "0xc000c",
+      "name": "sprintf"
+    },
+    {
+      "at": "0x802950",
+      "target": "0x806ea4",
+      "name": "bool std::operator!=<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x802960",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x802980",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x802998",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8029d8",
+      "target": "0x806f00",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char (&) [33]>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<char (&) [33]>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char (&) [33])"
+    },
+    {
+      "at": "0x8029e4",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x8029f0",
+      "target": "0xbee78",
+      "name": "remove"
+    },
+    {
+      "at": "0x802a04",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x802a14",
+      "target": "0xbf3d0",
+      "name": "rename"
+    },
+    {
+      "at": "0x802a18",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x802a38",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x802a50",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x802aac",
+      "target": "0x257718",
+      "name": "void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)"
+    },
+    {
+      "at": "0x802abc",
+      "target": "0x80586c",
+      "name": "std::shared_ptr<HttpResponse>::~shared_ptr()"
+    },
+    {
+      "at": "0x802ac8",
+      "target": "0x7eb450",
+      "name": "std::shared_ptr<HttpRequest>::~shared_ptr()"
+    },
+    {
+      "at": "0x802ad4",
+      "target": "0x8053c8",
+      "name": "HFile::~HFile()"
+    },
+    {
+      "at": "0x802ae0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802af4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802b04",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802b14",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802b24",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802b34",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x802b38",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    },
+    {
+      "at": "0x802b44",
+      "target": "0x802280",
+      "name": "communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}::~http_parser_state()"
+    },
+    {
+      "at": "0x802b54",
+      "target": "0x7eb450",
+      "name": "std::shared_ptr<HttpRequest>::~shared_ptr()"
+    },
+    {
+      "at": "0x802b64",
+      "target": "0x80586c",
+      "name": "std::shared_ptr<HttpResponse>::~shared_ptr()"
+    },
+    {
+      "at": "0x802b74",
+      "target": "0x7eb450",
+      "name": "std::shared_ptr<HttpRequest>::~shared_ptr()"
+    },
+    {
+      "at": "0x802b84",
+      "target": "0x8053c8",
+      "name": "HFile::~HFile()"
+    },
+    {
+      "at": "0x802b90",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x802b94",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x802338",
+      "va": "0xb93084",
+      "string": ".download"
+    },
+    {
+      "at": "0x8023b8",
+      "va": "0xb93090",
+      "string": "wb"
+    },
+    {
+      "at": "0x802644",
+      "va": "0xb92f94",
+      "string": "download_file"
+    },
+    {
+      "at": "0x802650",
+      "va": "0xb93094",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp"
+    },
+    {
+      "at": "0x80265c",
+      "va": "0xb937f8",
+      "string": "File download canceled (incomplete)"
+    },
+    {
+      "at": "0x8026bc",
+      "va": "0xb92f94",
+      "string": "download_file"
+    },
+    {
+      "at": "0x8026c8",
+      "va": "0xb93094",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp"
+    },
+    {
+      "at": "0x8026d4",
+      "va": "0xb9381c",
+      "string": "File download failed: resp={}, status={}"
+    },
+    {
+      "at": "0x8026e0",
+      "va": "0xb9381c",
+      "string": "File download failed: resp={}, status={}"
+    },
+    {
+      "at": "0x802710",
+      "va": "0xb854f4",
+      "string": "null"
+    },
+    {
+      "at": "0x80271c",
+      "va": "0xaecd18",
+      "string": "ok"
+    },
+    {
+      "at": "0x802810",
+      "va": "0xb92f94",
+      "string": "download_file"
+    },
+    {
+      "at": "0x80281c",
+      "va": "0xb93094",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp"
+    },
+    {
+      "at": "0x802828",
+      "va": "0xb93848",
+      "string": "Expected file size: {}, actual file size: {}"
+    },
+    {
+      "at": "0x802834",
+      "va": "0xb93848",
+      "string": "Expected file size: {}, actual file size: {}"
+    },
+    {
+      "at": "0x80292c",
+      "va": "0xb8660c",
+      "string": "%02x"
+    },
+    {
+      "at": "0x802970",
+      "va": "0xb92f94",
+      "string": "download_file"
+    },
+    {
+      "at": "0x80297c",
+      "va": "0xb93094",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp"
+    },
+    {
+      "at": "0x802988",
+      "va": "0xb93878",
+      "string": "MD5 mismatch! expected: {}, actual: {}"
+    },
+    {
+      "at": "0x802994",
+      "va": "0xb93878",
+      "string": "MD5 mismatch! expected: {}, actual: {}"
+    },
+    {
+      "at": "0x802a28",
+      "va": "0xb92f94",
+      "string": "download_file"
+    },
+    {
+      "at": "0x802a34",
+      "va": "0xb93094",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp"
+    },
+    {
+      "at": "0x802a40",
+      "va": "0xb938a0",
+      "string": "File downloaded{}."
+    },
+    {
+      "at": "0x802a4c",
+      "va": "0xb938a0",
+      "string": "File downloaded{}."
+    },
+    {
+      "at": "0x802a6c",
+      "va": "0xb938b4",
+      "string": " and MD5 verified"
+    }
+  ]
+}

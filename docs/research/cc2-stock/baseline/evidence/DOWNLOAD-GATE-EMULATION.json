@@ -1,0 +1,71 @@
+{
+  "binary_sha256": "8039081f9c4b01e720d838d4ab6e4515a8979b9a71a33bd4164321c282e06074",
+  "function_va": "0x84dee0",
+  "cases": [
+    {
+      "machine_state": 0,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 1,
+      "observed_gate": "admitted_to_token_check"
+    },
+    {
+      "machine_state": 2,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 3,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 4,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 5,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 6,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 7,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 8,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 9,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 10,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 11,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 12,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 13,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 14,
+      "observed_gate": "reject_busy_400_path"
+    },
+    {
+      "machine_state": 15,
+      "observed_gate": "reject_busy_400_path"
+    }
+  ],
+  "scope": "ARM admission branch only; called status/CORS/destructor functions mocked; no HTTP server, file transfer or printer executed"
+}

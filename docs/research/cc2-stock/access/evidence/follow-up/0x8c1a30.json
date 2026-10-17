@@ -1,0 +1,1069 @@
+{
+  "function": "api_module::APIPrinter::handle_set_download_file_url(std::shared_ptr<api_module::APIRequest>)",
+  "va": "0x8c1a30",
+  "size": 3780,
+  "calls": [
+    {
+      "at": "0x8c1a50",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1a60",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1a78",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1a84",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1a9c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1ab0",
+      "target": "0x8ae048",
+      "name": "api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8c1abc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1ac8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1ad4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1ae0",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1aec",
+      "target": "0xbed4c",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv"
+    },
+    {
+      "at": "0x8c1afc",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c1b1c",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c1b38",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c1b68",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x8c1b74",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1b84",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c1b98",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1ba8",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1bc0",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1bcc",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1be4",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1bf8",
+      "target": "0x8ae048",
+      "name": "api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8c1c04",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1c10",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1c1c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1c28",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1c34",
+      "target": "0xbed4c",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv"
+    },
+    {
+      "at": "0x8c1c44",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c1c64",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c1c80",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c1cb0",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x8c1cbc",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1ccc",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c1ce0",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1cf0",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1d08",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1d14",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1d2c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1d40",
+      "target": "0x8ae048",
+      "name": "api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8c1d4c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1d58",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1d64",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1d70",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1d7c",
+      "target": "0xbed4c",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv"
+    },
+    {
+      "at": "0x8c1d8c",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c1dac",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c1dc8",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c1df8",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x8c1e04",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1e14",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c1e28",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1e38",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1e50",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1e5c",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c1e74",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c1e88",
+      "target": "0x8ae048",
+      "name": "api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8c1e94",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1ea0",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1eac",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c1eb8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c1ec4",
+      "target": "0xbed4c",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv"
+    },
+    {
+      "at": "0x8c1ed4",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c1ef4",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c1f10",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c1f40",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x8c1f4c",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c1f5c",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c1f68",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c1f88",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c1fa0",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c1fd8",
+      "target": "0x1bd864",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x8c1fdc",
+      "target": "0x87ab00",
+      "name": "api_module::DeviceStatus::getInstance()"
+    },
+    {
+      "at": "0x8c1ff0",
+      "target": "0x8926a0",
+      "name": "api_module::DeviceStatus::get_machine_status()"
+    },
+    {
+      "at": "0x8c2008",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c2018",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c2024",
+      "target": "0x25606c",
+      "name": "communication::NetworkManager::get_instance()"
+    },
+    {
+      "at": "0x8c2030",
+      "target": "0x8124a0",
+      "name": "communication::NetworkManager::get_mode() const"
+    },
+    {
+      "at": "0x8c2040",
+      "target": "0x25606c",
+      "name": "communication::NetworkManager::get_instance()"
+    },
+    {
+      "at": "0x8c204c",
+      "target": "0x810e88",
+      "name": "communication::NetworkManager::normal()"
+    },
+    {
+      "at": "0x8c2078",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c2098",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c20b4",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c20e4",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x8c20f0",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c2100",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c210c",
+      "target": "0x87ab00",
+      "name": "api_module::DeviceStatus::getInstance()"
+    },
+    {
+      "at": "0x8c211c",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x8c2134",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x8c2148",
+      "target": "0x891274",
+      "name": "api_module::DeviceStatus::get_storage_path(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)"
+    },
+    {
+      "at": "0x8c215c",
+      "target": "0x14bf84",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x8c2168",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2174",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2180",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c2194",
+      "target": "0x8dcda4",
+      "name": "api_module::downloadFileInfo::downloadFileInfo()"
+    },
+    {
+      "at": "0x8c21b0",
+      "target": "0xc0384",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_"
+    },
+    {
+      "at": "0x8c21d0",
+      "target": "0xc0384",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_"
+    },
+    {
+      "at": "0x8c21f0",
+      "target": "0xc0384",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_"
+    },
+    {
+      "at": "0x8c2210",
+      "target": "0xc0384",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_"
+    },
+    {
+      "at": "0x8c2230",
+      "target": "0xc0384",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_"
+    },
+    {
+      "at": "0x8c2254",
+      "target": "0x8dcfec",
+      "name": "api_module::downloadFileTask::downloadFileTask()"
+    },
+    {
+      "at": "0x8c2278",
+      "target": "0x8dd354",
+      "name": "api_module::downloadFileInfo::operator=(api_module::downloadFileInfo const&)"
+    },
+    {
+      "at": "0x8c228c",
+      "target": "0x7eccec",
+      "name": "std::shared_ptr<communication::HTTPClient> std::make_shared<communication::HTTPClient, char const (&) [1]>(char const (&) [1])"
+    },
+    {
+      "at": "0x8c22ac",
+      "target": "0x7ecd78",
+      "name": "std::shared_ptr<communication::HTTPClient>::operator=(std::shared_ptr<communication::HTTPClient>&&)"
+    },
+    {
+      "at": "0x8c22b8",
+      "target": "0x7ebb84",
+      "name": "std::shared_ptr<communication::HTTPClient>::~shared_ptr()"
+    },
+    {
+      "at": "0x8c22c4",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c22d8",
+      "target": "0x8af4d8",
+      "name": "api_module::APIRequest::get_extra[abi:cxx11]()"
+    },
+    {
+      "at": "0x8c22f8",
+      "target": "0xbfc40",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_"
+    },
+    {
+      "at": "0x8c2304",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2310",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c2324",
+      "target": "0x8af474",
+      "name": "api_module::APIRequest::get_connector()"
+    },
+    {
+      "at": "0x8c2344",
+      "target": "0x8dd658",
+      "name": "std::shared_ptr<communication::BaseCommunication>::operator=(std::shared_ptr<communication::BaseCommunication>&&)"
+    },
+    {
+      "at": "0x8c2350",
+      "target": "0x82cf68",
+      "name": "std::shared_ptr<communication::BaseCommunication>::~shared_ptr()"
+    },
+    {
+      "at": "0x8c2368",
+      "target": "0x8de75c",
+      "name": "std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::find(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x8c2380",
+      "target": "0x8de790",
+      "name": "std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::end()"
+    },
+    {
+      "at": "0x8c239c",
+      "target": "0x8de7bc",
+      "name": "std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> >::operator!=(std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > const&) const"
+    },
+    {
+      "at": "0x8c23ac",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c23cc",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c23e4",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c241c",
+      "target": "0x1bd864",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x8c2428",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c2438",
+      "target": "0x8af158",
+      "name": "api_module::APIRequest::set_error(ErrorCode)"
+    },
+    {
+      "at": "0x8c245c",
+      "target": "0x8dd2a4",
+      "name": "api_module::downloadFileTask::downloadFileTask(api_module::downloadFileTask const&)"
+    },
+    {
+      "at": "0x8c246c",
+      "target": "0x8c28f4",
+      "name": "api_module::APIPrinter::set_download_file_task(api_module::downloadFileTask)"
+    },
+    {
+      "at": "0x8c2478",
+      "target": "0x8dd0a8",
+      "name": "api_module::downloadFileTask::~downloadFileTask()"
+    },
+    {
+      "at": "0x8c2494",
+      "target": "0x8dd2a4",
+      "name": "api_module::downloadFileTask::downloadFileTask(api_module::downloadFileTask const&)"
+    },
+    {
+      "at": "0x8c24a4",
+      "target": "0x8c199c",
+      "name": "api_module::APIPrinter::download_file(api_module::downloadFileTask)"
+    },
+    {
+      "at": "0x8c24b0",
+      "target": "0x8dd0a8",
+      "name": "api_module::downloadFileTask::~downloadFileTask()"
+    },
+    {
+      "at": "0x8c24b4",
+      "target": "0x87ab00",
+      "name": "api_module::DeviceStatus::getInstance()"
+    },
+    {
+      "at": "0x8c24c8",
+      "target": "0x88eacc",
+      "name": "api_module::DeviceStatus::set_status(api_module::EMachineStatus, api_module::EMachineSubStatus)"
+    },
+    {
+      "at": "0x8c24d4",
+      "target": "0x8ddba8",
+      "name": "std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x8c24f8",
+      "target": "0x149874",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)"
+    },
+    {
+      "at": "0x8c2508",
+      "target": "0x8af188",
+      "name": "api_module::APIRequest::send(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)"
+    },
+    {
+      "at": "0x8c2514",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x8c2538",
+      "target": "0x147d48",
+      "name": "nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()"
+    },
+    {
+      "at": "0x8c2544",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x8c2564",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x8c257c",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x8c25bc",
+      "target": "0x1bf66c",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x8c25d4",
+      "target": "0x8dd0a8",
+      "name": "api_module::downloadFileTask::~downloadFileTask()"
+    },
+    {
+      "at": "0x8c2600",
+      "target": "0x8dcf80",
+      "name": "api_module::downloadFileInfo::~downloadFileInfo()"
+    },
+    {
+      "at": "0x8c2624",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2648",
+      "target": "0x39de6c",
+      "name": "api_module::MachineStatus::~MachineStatus()"
+    },
+    {
+      "at": "0x8c266c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2690",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c26b4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c26d8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c26ec",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c26fc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c2708",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2718",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c271c",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    },
+    {
+      "at": "0x8c2728",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2738",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c2744",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2754",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c2764",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2774",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c2780",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c2790",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c27a0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c27b0",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c27bc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c27cc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c27dc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c27e8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c27f8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x8c2808",
+      "target": "0x8dd0a8",
+      "name": "api_module::downloadFileTask::~downloadFileTask()"
+    },
+    {
+      "at": "0x8c2818",
+      "target": "0x8dd0a8",
+      "name": "api_module::downloadFileTask::~downloadFileTask()"
+    },
+    {
+      "at": "0x8c2828",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x8c2850",
+      "target": "0x147d48",
+      "name": "nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()"
+    },
+    {
+      "at": "0x8c2870",
+      "target": "0x8dd0a8",
+      "name": "api_module::downloadFileTask::~downloadFileTask()"
+    },
+    {
+      "at": "0x8c2888",
+      "target": "0x8dcf80",
+      "name": "api_module::downloadFileInfo::~downloadFileInfo()"
+    },
+    {
+      "at": "0x8c2894",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c28a4",
+      "target": "0x39de6c",
+      "name": "api_module::MachineStatus::~MachineStatus()"
+    },
+    {
+      "at": "0x8c28b4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c28c4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c28d4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c28e4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x8c28e8",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x8c1a70",
+      "va": "0xb85960",
+      "string": "url"
+    },
+    {
+      "at": "0x8c1b0c",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c1b18",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c1b24",
+      "va": "0xbd921c",
+      "string": "Download file URL is empty"
+    },
+    {
+      "at": "0x8c1bb8",
+      "va": "0xae2f5c",
+      "string": "filename"
+    },
+    {
+      "at": "0x8c1c54",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c1c60",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c1c6c",
+      "va": "0xbd9238",
+      "string": "Download file filename is empty"
+    },
+    {
+      "at": "0x8c1d00",
+      "va": "0xbd90e8",
+      "string": "taskID"
+    },
+    {
+      "at": "0x8c1d9c",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c1da8",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c1db4",
+      "va": "0xbd9258",
+      "string": "Download file taskID is empty"
+    },
+    {
+      "at": "0x8c1e48",
+      "va": "0xbb94e0",
+      "string": "md5"
+    },
+    {
+      "at": "0x8c1ee4",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c1ef0",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c1efc",
+      "va": "0xbd9278",
+      "string": "Download file md5 is empty"
+    },
+    {
+      "at": "0x8c1f78",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c1f84",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c1f90",
+      "va": "0xbd9294",
+      "string": "Setting download file URL: {}"
+    },
+    {
+      "at": "0x8c1f9c",
+      "va": "0xbd9294",
+      "string": "Setting download file URL: {}"
+    },
+    {
+      "at": "0x8c2088",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c2094",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c20a0",
+      "va": "0xbd92b4",
+      "string": "Not in WAN mode, cannot download file"
+    },
+    {
+      "at": "0x8c212c",
+      "va": "0xba16fc",
+      "string": "local"
+    },
+    {
+      "at": "0x8c23bc",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c23c8",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c23d4",
+      "va": "0xbd92dc",
+      "string": "Download file taskID already exists: {}"
+    },
+    {
+      "at": "0x8c23e0",
+      "va": "0xbd92dc",
+      "string": "Download file taskID already exists: {}"
+    },
+    {
+      "at": "0x8c2554",
+      "va": "0xbd7f48",
+      "string": "handle_set_download_file_url"
+    },
+    {
+      "at": "0x8c2560",
+      "va": "0xbd83b8",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp"
+    },
+    {
+      "at": "0x8c256c",
+      "va": "0xbd9304",
+      "string": "Download file task started for taskID: {}, filename: {}"
+    },
+    {
+      "at": "0x8c2578",
+      "va": "0xbd9304",
+      "string": "Download file task started for taskID: {}, filename: {}"
+    }
+  ]
+}

@@ -1,0 +1,154 @@
+znp::UvcCamera::OnCameraHealthChanged(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0013c668: push     {r4, fp, lr}
+0013c66c: add      fp, sp, #8
+0013c670: sub      sp, sp, #0x7c
+0013c674: str      r0, [fp, #-0x60]
+0013c678: str      r1, [fp, #-0x64]
+0013c67c: str      r2, [fp, #-0x68]
+0013c680: str      r3, [fp, #-0x6c]
+0013c684: ldr      r3, [fp, #-0x6c]
+0013c688: cmp      r3, #2
+0013c68c: beq      #0x13c728
+0013c690: cmp      r3, #3
+0013c694: beq      #0x13c7b0
+0013c698: cmp      r3, #1
+0013c69c: bne      #0x13c838
+0013c6a0: bl       #0x88808 ; spdlog::default_logger_raw()
+0013c6a4: mov      r4, r0
+0013c6a8: sub      r0, fp, #0x5c
+0013c6ac: movw     r3, #0xcfb4
+0013c6b0: movt     r3, #0x1b ; 'OnCameraHealthChanged'
+0013c6b4: mov      r2, #0x68
+0013c6b8: movw     r1, #0xd060
+0013c6bc: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp'
+0013c6c0: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0013c6c4: movw     r3, #0xd19c
+0013c6c8: movt     r3, #0x1b ; '[camera-health] {} stream ({}) no frame, recovering: {}'
+0013c6cc: str      r3, [fp, #-0x50]
+0013c6d0: movw     r0, #0xd19c
+0013c6d4: movt     r0, #0x1b ; '[camera-health] {} stream ({}) no frame, recovering: {}'
+0013c6d8: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+0013c6dc: mov      r3, r0
+0013c6e0: str      r3, [fp, #-0x4c]
+0013c6e4: ldr      r3, [fp, #4]
+0013c6e8: str      r3, [sp, #0x14]
+0013c6ec: ldr      r3, [fp, #-0x68]
+0013c6f0: str      r3, [sp, #0x10]
+0013c6f4: ldr      r3, [fp, #-0x64]
+0013c6f8: str      r3, [sp, #0xc]
+0013c6fc: add      r2, sp, #4
+0013c700: sub      r3, fp, #0x50
+0013c704: ldm      r3, {r0, r1}
+0013c708: stm      r2, {r0, r1}
+0013c70c: mov      r3, #3
+0013c710: str      r3, [sp]
+0013c714: sub      r3, fp, #0x5c
+0013c718: ldm      r3, {r1, r2, r3}
+0013c71c: mov      r0, r4
+0013c720: bl       #0x13dee8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0013c724: b        #0x13c8c0
+0013c728: bl       #0x88808 ; spdlog::default_logger_raw()
+0013c72c: mov      r4, r0
+0013c730: sub      r0, fp, #0x48
+0013c734: movw     r3, #0xcfb4
+0013c738: movt     r3, #0x1b ; 'OnCameraHealthChanged'
+0013c73c: mov      r2, #0x6d
+0013c740: movw     r1, #0xd060
+0013c744: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp'
+0013c748: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0013c74c: movw     r3, #0xd1d4
+0013c750: movt     r3, #0x1b ; '[camera-health] {} stream ({}) FAULT: {}'
+0013c754: str      r3, [fp, #-0x3c]
+0013c758: movw     r0, #0xd1d4
+0013c75c: movt     r0, #0x1b ; '[camera-health] {} stream ({}) FAULT: {}'
+0013c760: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+0013c764: mov      r3, r0
+0013c768: str      r3, [fp, #-0x38]
+0013c76c: ldr      r3, [fp, #4]
+0013c770: str      r3, [sp, #0x14]
+0013c774: ldr      r3, [fp, #-0x68]
+0013c778: str      r3, [sp, #0x10]
+0013c77c: ldr      r3, [fp, #-0x64]
+0013c780: str      r3, [sp, #0xc]
+0013c784: add      r2, sp, #4
+0013c788: sub      r3, fp, #0x3c
+0013c78c: ldm      r3, {r0, r1}
+0013c790: stm      r2, {r0, r1}
+0013c794: mov      r3, #4
+0013c798: str      r3, [sp]
+0013c79c: sub      r3, fp, #0x48
+0013c7a0: ldm      r3, {r1, r2, r3}
+0013c7a4: mov      r0, r4
+0013c7a8: bl       #0x13dee8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0013c7ac: b        #0x13c8c0
+0013c7b0: bl       #0x88808 ; spdlog::default_logger_raw()
+0013c7b4: mov      r4, r0
+0013c7b8: sub      r0, fp, #0x34
+0013c7bc: movw     r3, #0xcfb4
+0013c7c0: movt     r3, #0x1b ; 'OnCameraHealthChanged'
+0013c7c4: mov      r2, #0x70
+0013c7c8: movw     r1, #0xd060
+0013c7cc: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp'
+0013c7d0: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0013c7d4: movw     r3, #0xd200
+0013c7d8: movt     r3, #0x1b ; '[camera-health] {} stream ({}) recovered: {}'
+0013c7dc: str      r3, [fp, #-0x28]
+0013c7e0: movw     r0, #0xd200
+0013c7e4: movt     r0, #0x1b ; '[camera-health] {} stream ({}) recovered: {}'
+0013c7e8: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+0013c7ec: mov      r3, r0
+0013c7f0: str      r3, [fp, #-0x24]
+0013c7f4: ldr      r3, [fp, #4]
+0013c7f8: str      r3, [sp, #0x14]
+0013c7fc: ldr      r3, [fp, #-0x68]
+0013c800: str      r3, [sp, #0x10]
+0013c804: ldr      r3, [fp, #-0x64]
+0013c808: str      r3, [sp, #0xc]
+0013c80c: add      r2, sp, #4
+0013c810: sub      r3, fp, #0x28
+0013c814: ldm      r3, {r0, r1}
+0013c818: stm      r2, {r0, r1}
+0013c81c: mov      r3, #3
+0013c820: str      r3, [sp]
+0013c824: sub      r3, fp, #0x34
+0013c828: ldm      r3, {r1, r2, r3}
+0013c82c: mov      r0, r4
+0013c830: bl       #0x13dee8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0013c834: b        #0x13c8c0
+0013c838: bl       #0x88808 ; spdlog::default_logger_raw()
+0013c83c: mov      r4, r0
+0013c840: sub      r0, fp, #0x20
+0013c844: movw     r3, #0xcfb4
+0013c848: movt     r3, #0x1b ; 'OnCameraHealthChanged'
+0013c84c: mov      r2, #0x74
+0013c850: movw     r1, #0xd060
+0013c854: movt     r1, #0x1b ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp'
+0013c858: bl       #0x83280 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0013c85c: movw     r3, #0xd230
+0013c860: movt     r3, #0x1b ; '[camera-health] {} stream ({}) ok: {}'
+0013c864: str      r3, [fp, #-0x14]
+0013c868: movw     r0, #0xd230
+0013c86c: movt     r0, #0x1b ; '[camera-health] {} stream ({}) ok: {}'
+0013c870: bl       #0x7d3c8 ; std::char_traits<char>::length(char const*)
+0013c874: mov      r3, r0
+0013c878: str      r3, [fp, #-0x10]
+0013c87c: ldr      r3, [fp, #4]
+0013c880: str      r3, [sp, #0x14]
+0013c884: ldr      r3, [fp, #-0x68]
+0013c888: str      r3, [sp, #0x10]
+0013c88c: ldr      r3, [fp, #-0x64]
+0013c890: str      r3, [sp, #0xc]
+0013c894: add      r2, sp, #4
+0013c898: sub      r3, fp, #0x14
+0013c89c: ldm      r3, {r0, r1}
+0013c8a0: stm      r2, {r0, r1}
+0013c8a4: mov      r3, #2
+0013c8a8: str      r3, [sp]
+0013c8ac: sub      r3, fp, #0x20
+0013c8b0: ldm      r3, {r1, r2, r3}
+0013c8b4: mov      r0, r4
+0013c8b8: bl       #0x13dee8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0013c8bc: nop
+0013c8c0: nop
+0013c8c4: sub      sp, fp, #8
+0013c8c8: pop      {r4, fp, pc}

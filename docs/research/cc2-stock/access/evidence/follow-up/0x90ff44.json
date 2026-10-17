@@ -1,0 +1,729 @@
+{
+  "function": "api_module::SQLDatabase::SQLDatabase()",
+  "va": "0x90ff44",
+  "size": 2432,
+  "calls": [
+    {
+      "at": "0x90ff70",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x90ff88",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x90ff94",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x90ffa8",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x90ffc0",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x90ffcc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x90ffe0",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x90fff8",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x910004",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x910018",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x910030",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x91003c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x910050",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x910068",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x910074",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x910088",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x9100a0",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x9100ac",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9100c0",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x9100d8",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x9100e4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9100f8",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x910110",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x91011c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x91012c",
+      "target": "0xcacac",
+      "name": "std::mutex::mutex()"
+    },
+    {
+      "at": "0x910140",
+      "target": "0xa390d8",
+      "name": "sqlite3_config"
+    },
+    {
+      "at": "0x910160",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x910180",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x91019c",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x9101cc",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x9101d4",
+      "target": "0xa38d14",
+      "name": "sqlite3_initialize"
+    },
+    {
+      "at": "0x9101f4",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x910214",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x910230",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x910260",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x910274",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x910288",
+      "target": "0xa3dda8",
+      "name": "sqlite3_open_v2"
+    },
+    {
+      "at": "0x9102a8",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x9102c8",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x9102e0",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x9102f8",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x910330",
+      "target": "0x257718",
+      "name": "void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)"
+    },
+    {
+      "at": "0x910354",
+      "target": "0xbfc58",
+      "name": "memcpy"
+    },
+    {
+      "at": "0x91037c",
+      "target": "0x9ef0e0",
+      "name": "sqlite3_exec"
+    },
+    {
+      "at": "0x910394",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x9103b4",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x9103cc",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x910404",
+      "target": "0x91afa8",
+      "name": "void spdlog::logger::log<char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char*&>::type>, char*&)"
+    },
+    {
+      "at": "0x910410",
+      "target": "0x9593a8",
+      "name": "sqlite3_free"
+    },
+    {
+      "at": "0x91041c",
+      "target": "0x918d88",
+      "name": "api_module::SQLDatabase::get_db_version()"
+    },
+    {
+      "at": "0x91043c",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x91045c",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x910474",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x9104b8",
+      "target": "0x91b014",
+      "name": "void spdlog::logger::log<int&, int const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int&>::type, fmt::v10::type_identity<int const&>::type>, int&, int const&)"
+    },
+    {
+      "at": "0x9104c0",
+      "target": "0x919c20",
+      "name": "api_module::SQLDatabase::init_database()"
+    },
+    {
+      "at": "0x9104c8",
+      "target": "0x918f44",
+      "name": "api_module::SQLDatabase::set_db_version()"
+    },
+    {
+      "at": "0x9104d0",
+      "target": "0x91a69c",
+      "name": "api_module::SQLDatabase::remove_duplicate_files()"
+    },
+    {
+      "at": "0x9104d8",
+      "target": "0x91a7bc",
+      "name": "api_module::SQLDatabase::remove_duplicate_thumbnails()"
+    },
+    {
+      "at": "0x9104f4",
+      "target": "0x149b20",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x91050c",
+      "target": "0x149ba4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)"
+    },
+    {
+      "at": "0x910518",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91052c",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x910548",
+      "target": "0x9ef0e0",
+      "name": "sqlite3_exec"
+    },
+    {
+      "at": "0x910568",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x910588",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x9105a0",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x9105b8",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x9105f8",
+      "target": "0x91b090",
+      "name": "void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)"
+    },
+    {
+      "at": "0x910604",
+      "target": "0x9593a8",
+      "name": "sqlite3_free"
+    },
+    {
+      "at": "0x910628",
+      "target": "0x149b20",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x910640",
+      "target": "0x149ba4",
+      "name": "std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)"
+    },
+    {
+      "at": "0x910654",
+      "target": "0xbfc40",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_"
+    },
+    {
+      "at": "0x910660",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91066c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910680",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x91069c",
+      "target": "0x9ef0e0",
+      "name": "sqlite3_exec"
+    },
+    {
+      "at": "0x9106bc",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x9106dc",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x9106f4",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x91070c",
+      "target": "0xbf7f0",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv"
+    },
+    {
+      "at": "0x91074c",
+      "target": "0x91b090",
+      "name": "void spdlog::logger::log<char const*, char*&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char*&>::type>, char const*&&, char*&)"
+    },
+    {
+      "at": "0x910758",
+      "target": "0x9593a8",
+      "name": "sqlite3_free"
+    },
+    {
+      "at": "0x910770",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91078c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x910790",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    },
+    {
+      "at": "0x91079c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9107ac",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9107bc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9107cc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9107dc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9107ec",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x9107fc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x91080c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91081c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x91082c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910840",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910850",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910860",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910870",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910880",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x910890",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x9108a0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x9108b0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x9108b4",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x90ff80",
+      "va": "0xbdf2e4",
+      "string": "/opt/usr/record/elegoo.db"
+    },
+    {
+      "at": "0x90ffb8",
+      "va": "0xbdf300",
+      "string": "task_record"
+    },
+    {
+      "at": "0x90fff0",
+      "va": "0xbdf30c",
+      "string": "file_details"
+    },
+    {
+      "at": "0x910028",
+      "va": "0xbdf31c",
+      "string": "file_thumbnail"
+    },
+    {
+      "at": "0x910060",
+      "va": "0xbdf32c",
+      "string": "delete_file"
+    },
+    {
+      "at": "0x910098",
+      "va": "0xbdf338",
+      "string": "user_avatar"
+    },
+    {
+      "at": "0x9100d0",
+      "va": "0xbdf344",
+      "string": "exception_message"
+    },
+    {
+      "at": "0x910108",
+      "va": "0xbdf358",
+      "string": "cloud_file_cache"
+    },
+    {
+      "at": "0x910170",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x91017c",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x910188",
+      "va": "0xbdf3bc",
+      "string": "Failed to configure SQLite single-thread mode"
+    },
+    {
+      "at": "0x910204",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x910210",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x91021c",
+      "va": "0xbdf3ec",
+      "string": "Failed to initialize SQLite"
+    },
+    {
+      "at": "0x910280",
+      "va": "0xbdf408",
+      "string": "unix-none"
+    },
+    {
+      "at": "0x9102b8",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x9102c4",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x9102d0",
+      "va": "0xbdf414",
+      "string": "Failed to open database: {}"
+    },
+    {
+      "at": "0x9102dc",
+      "va": "0xbdf414",
+      "string": "Failed to open database: {}"
+    },
+    {
+      "at": "0x910340",
+      "va": "0xbdf430",
+      "string": "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY);"
+    },
+    {
+      "at": "0x9103a4",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x9103b0",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x9103bc",
+      "va": "0xbdf47c",
+      "string": "Failed to create table: schema_version SQL error: {}"
+    },
+    {
+      "at": "0x9103c8",
+      "va": "0xbdf47c",
+      "string": "Failed to create table: schema_version SQL error: {}"
+    },
+    {
+      "at": "0x91044c",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x910458",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x910464",
+      "va": "0xbdf4b4",
+      "string": "Database version mismatch, db_version {} updating to version {}"
+    },
+    {
+      "at": "0x910470",
+      "va": "0xbdf4b4",
+      "string": "Database version mismatch, db_version {} updating to version {}"
+    },
+    {
+      "at": "0x9104ec",
+      "va": "0xbdf4f4",
+      "string": "CREATE UNIQUE INDEX IF NOT EXISTS idx_filename ON "
+    },
+    {
+      "at": "0x910504",
+      "va": "0xbdf528",
+      "string": " (filename);"
+    },
+    {
+      "at": "0x910578",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x910584",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x910590",
+      "va": "0xbdf538",
+      "string": "Failed to add unique index to table: {} SQL error: {}"
+    },
+    {
+      "at": "0x91059c",
+      "va": "0xbdf538",
+      "string": "Failed to add unique index to table: {} SQL error: {}"
+    },
+    {
+      "at": "0x910620",
+      "va": "0xbdf570",
+      "string": "CREATE UNIQUE INDEX IF NOT EXISTS idx_thumbnail_filename ON "
+    },
+    {
+      "at": "0x910638",
+      "va": "0xbdf528",
+      "string": " (filename);"
+    },
+    {
+      "at": "0x9106cc",
+      "va": "0xbdedf0",
+      "string": "SQLDatabase"
+    },
+    {
+      "at": "0x9106d8",
+      "va": "0xbdf36c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp"
+    },
+    {
+      "at": "0x9106e4",
+      "va": "0xbdf538",
+      "string": "Failed to add unique index to table: {} SQL error: {}"
+    },
+    {
+      "at": "0x9106f0",
+      "va": "0xbdf538",
+      "string": "Failed to add unique index to table: {} SQL error: {}"
+    }
+  ]
+}

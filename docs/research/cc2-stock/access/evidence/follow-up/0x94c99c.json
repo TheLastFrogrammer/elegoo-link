@@ -1,0 +1,18 @@
+{
+  "function": "api_module::LogExport::LogExport()",
+  "va": "0x94c99c",
+  "size": 76,
+  "calls": [
+    {
+      "at": "0x94c9c8",
+      "target": "0xc00f0",
+      "name": "time"
+    },
+    {
+      "at": "0x94c9d4",
+      "target": "0xbf418",
+      "name": "srand"
+    }
+  ],
+  "strings": []
+}

@@ -1,0 +1,926 @@
+api_module::APIPrinter::handle_upload_log_file(std::shared_ptr<api_module::APIRequest>)::{lambda(std::shared_ptr<api_module::APIRequest>)#1}::operator()(std::shared_ptr<api_module::APIRequest>) const
+008c326c: push     {r4, r5, fp, lr}
+008c3270: add      fp, sp, #0xc
+008c3274: sub      sp, sp, #0x520
+008c3278: str      r0, [fp, #-0x518]
+008c327c: str      r1, [fp, #-0x51c]
+008c3280: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c3284: mov      r3, r0
+008c3288: movw     r2, #0xbb8
+008c328c: mov      r1, #0xb
+008c3290: mov      r0, r3
+008c3294: bl       #0x88eacc ; api_module::DeviceStatus::set_status(api_module::EMachineStatus, api_module::EMachineSubStatus)
+008c3298: bl       #0xbf058 ; pthread_self
+008c329c: mov      r3, r0
+008c32a0: movw     r1, #0x9478
+008c32a4: movt     r1, #0xbd ; 'upload_log'
+008c32a8: mov      r0, r3
+008c32ac: bl       #0xc0330 ; pthread_setname_np
+008c32b0: sub      r3, fp, #0x4c0
+008c32b4: sub      r3, r3, #0xc
+008c32b8: mov      r0, r3
+008c32bc: bl       #0xbfab4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev
+008c32c0: sub      r3, fp, #0x4d0
+008c32c4: sub      r3, r3, #0xc
+008c32c8: sub      r3, r3, #8
+008c32cc: mov      r0, r3
+008c32d0: bl       #0xbfab4 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1Ev
+008c32d4: bl       #0x94afd0 ; api_module::LogExport::get_instance()
+008c32d8: mov      r2, r0
+008c32dc: sub      r3, fp, #0x4c0
+008c32e0: sub      r3, r3, #0xc
+008c32e4: mov      r1, r3
+008c32e8: mov      r0, r2
+008c32ec: bl       #0x94b058 ; api_module::LogExport::upload_log(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c32f0: str      r0, [fp, #-0x10]
+008c32f4: ldr      r3, [fp, #-0x10]
+008c32f8: cmp      r3, #0
+008c32fc: bne      #0x8c3424
+008c3300: bl       #0x255dbc ; api_module::ConfigManager::getInstance()
+008c3304: mov      r2, r0
+008c3308: sub      r3, fp, #0x490
+008c330c: sub      r3, r3, #0xc
+008c3310: mov      r1, r2
+008c3314: mov      r0, r3
+008c3318: bl       #0x920a90 ; api_module::ConfigManager::get_product_auth() const
+008c331c: sub      r3, fp, #0x4a0
+008c3320: sub      r3, r3, #0xc
+008c3324: sub      r3, r3, #8
+008c3328: sub      r1, fp, #0x490
+008c332c: sub      r1, r1, #0xc
+008c3330: movw     r2, #0x9484
+008c3334: movt     r2, #0xbd ; '/log/'
+008c3338: mov      r0, r3
+008c333c: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+008c3340: sub      r3, fp, #0x4c0
+008c3344: sub      r3, r3, #0xc
+008c3348: mvn      r2, #0
+008c334c: mov      r1, #0x2f
+008c3350: mov      r0, r3
+008c3354: bl       #0xbf8c8 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE12find_last_ofEcj
+008c3358: mov      r3, r0
+008c335c: add      r2, r3, #1
+008c3360: sub      r0, fp, #0x440
+008c3364: sub      r0, r0, #0xc
+008c3368: sub      r0, r0, #8
+008c336c: sub      r1, fp, #0x4c0
+008c3370: sub      r1, r1, #0xc
+008c3374: mvn      r3, #0
+008c3378: bl       #0xbeb90 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE6substrEjj
+008c337c: sub      r3, fp, #0x500
+008c3380: sub      r3, r3, #0xc
+008c3384: sub      r3, r3, #8
+008c3388: sub      r2, fp, #0x440
+008c338c: sub      r2, r2, #0xc
+008c3390: sub      r2, r2, #8
+008c3394: sub      r1, fp, #0x4a0
+008c3398: sub      r1, r1, #0xc
+008c339c: sub      r1, r1, #8
+008c33a0: mov      r0, r3
+008c33a4: bl       #0x1496b4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+008c33a8: sub      r3, fp, #0x440
+008c33ac: sub      r3, r3, #0xc
+008c33b0: sub      r3, r3, #8
+008c33b4: mov      r0, r3
+008c33b8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c33bc: sub      r3, fp, #0x4a0
+008c33c0: sub      r3, r3, #0xc
+008c33c4: sub      r3, r3, #8
+008c33c8: mov      r0, r3
+008c33cc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c33d0: sub      r3, fp, #0x490
+008c33d4: sub      r3, r3, #0xc
+008c33d8: mov      r0, r3
+008c33dc: bl       #0x2555b4 ; api_module::ProductAuth::~ProductAuth()
+008c33e0: bl       #0x7dac74 ; communication::CloudServiceClient::get_instance()
+008c33e4: sub      r3, fp, #0x4d0
+008c33e8: sub      r3, r3, #0xc
+008c33ec: sub      r3, r3, #8
+008c33f0: sub      r2, fp, #0x4c0
+008c33f4: sub      r2, r2, #0xc
+008c33f8: sub      r1, fp, #0x500
+008c33fc: sub      r1, r1, #0xc
+008c3400: sub      r1, r1, #8
+008c3404: bl       #0x7dc0a8 ; communication::CloudServiceClient::upload_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c3408: str      r0, [fp, #-0x10]
+008c340c: sub      r3, fp, #0x500
+008c3410: sub      r3, r3, #0xc
+008c3414: sub      r3, r3, #8
+008c3418: mov      r0, r3
+008c341c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3420: b        #0x8c34b8
+008c3424: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c3428: mov      r4, r0
+008c342c: sub      r0, fp, #0x430
+008c3430: sub      r0, r0, #0xc
+008c3434: movw     r3, #0x7fb4
+008c3438: movt     r3, #0xbd ; 'operator()'
+008c343c: movw     r2, #0x7fb
+008c3440: movw     r1, #0x83b8
+008c3444: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c3448: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c344c: movw     r3, #0x948c
+008c3450: movt     r3, #0xbd ; 'Failed to export log file, error code: {}'
+008c3454: str      r3, [fp, #-0x430]
+008c3458: movw     r0, #0x948c
+008c345c: movt     r0, #0xbd ; 'Failed to export log file, error code: {}'
+008c3460: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c3464: mov      r3, r0
+008c3468: str      r3, [fp, #-0x42c]
+008c346c: ldr      r3, [fp, #-0x10]
+008c3470: str      r3, [fp, #-0x428]
+008c3474: sub      r3, fp, #0x410
+008c3478: sub      r3, r3, #0xc
+008c347c: sub      r3, r3, #0xc
+008c3480: str      r3, [sp, #0xc]
+008c3484: add      r2, sp, #4
+008c3488: sub      r3, fp, #0x420
+008c348c: sub      r3, r3, #0xc
+008c3490: sub      r3, r3, #4
+008c3494: ldm      r3, {r0, r1}
+008c3498: stm      r2, {r0, r1}
+008c349c: mov      r3, #4
+008c34a0: str      r3, [sp]
+008c34a4: sub      r3, fp, #0x430
+008c34a8: sub      r3, r3, #0xc
+008c34ac: ldm      r3, {r1, r2, r3}
+008c34b0: mov      r0, r4
+008c34b4: bl       #0x2ef72c ; void spdlog::logger::log<int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int>::type>, int&&)
+008c34b8: sub      r3, fp, #0x4c0
+008c34bc: sub      r3, r3, #0xc
+008c34c0: mov      r0, r3
+008c34c4: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008c34c8: mov      r3, r0
+008c34cc: eor      r3, r3, #1
+008c34d0: uxtb     r3, r3
+008c34d4: cmp      r3, #0
+008c34d8: beq      #0x8c3504
+008c34dc: bl       #0x94afd0 ; api_module::LogExport::get_instance()
+008c34e0: mov      r4, r0
+008c34e4: sub      r3, fp, #0x4c0
+008c34e8: sub      r3, r3, #0xc
+008c34ec: mov      r0, r3
+008c34f0: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008c34f4: mov      r3, r0
+008c34f8: mov      r1, r3
+008c34fc: mov      r0, r4
+008c3500: bl       #0x94bea0 ; api_module::LogExport::remove_temp_files(char const*)
+008c3504: ldr      r3, [fp, #-0x51c]
+008c3508: mov      r0, r3
+008c350c: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c3510: mov      r2, r0
+008c3514: sub      r3, fp, #0x4f0
+008c3518: sub      r3, r3, #0xc
+008c351c: mov      r1, r2
+008c3520: mov      r0, r3
+008c3524: bl       #0x8af4d8 ; api_module::APIRequest::get_extra[abi:cxx11]()
+008c3528: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c352c: mov      r4, r0
+008c3530: sub      r0, fp, #0x410
+008c3534: sub      r0, r0, #0xc
+008c3538: sub      r0, r0, #8
+008c353c: movw     r3, #0x7fb4
+008c3540: movt     r3, #0xbd ; 'operator()'
+008c3544: movw     r2, #0x801
+008c3548: movw     r1, #0x83b8
+008c354c: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c3550: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c3554: movw     r3, #0x94b8
+008c3558: movt     r3, #0xbd ; '-------------peer_id: {}'
+008c355c: str      r3, [fp, #-0x418]
+008c3560: movw     r0, #0x94b8
+008c3564: movt     r0, #0xbd ; '-------------peer_id: {}'
+008c3568: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c356c: mov      r3, r0
+008c3570: str      r3, [fp, #-0x414]
+008c3574: sub      r3, fp, #0x4f0
+008c3578: sub      r3, r3, #0xc
+008c357c: str      r3, [sp, #0xc]
+008c3580: add      r2, sp, #4
+008c3584: sub      r3, fp, #0x400
+008c3588: sub      r3, r3, #0xc
+008c358c: sub      r3, r3, #0xc
+008c3590: ldm      r3, {r0, r1}
+008c3594: stm      r2, {r0, r1}
+008c3598: mov      r3, #2
+008c359c: str      r3, [sp]
+008c35a0: sub      r3, fp, #0x410
+008c35a4: sub      r3, r3, #0xc
+008c35a8: sub      r3, r3, #8
+008c35ac: ldm      r3, {r1, r2, r3}
+008c35b0: mov      r0, r4
+008c35b4: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c35b8: ldr      r3, [fp, #-0x10]
+008c35bc: cmp      r3, #0
+008c35c0: bne      #0x8c39c0
+008c35c4: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c35c8: mov      r4, r0
+008c35cc: sub      r0, fp, #0x400
+008c35d0: sub      r0, r0, #0xc
+008c35d4: sub      r0, r0, #4
+008c35d8: movw     r3, #0x7fb4
+008c35dc: movt     r3, #0xbd ; 'operator()'
+008c35e0: movw     r2, #0x803
+008c35e4: movw     r1, #0x83b8
+008c35e8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c35ec: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c35f0: movw     r3, #0x94d4
+008c35f4: movt     r3, #0xbd ; 'Successfully uploaded log file: {}'
+008c35f8: str      r3, [fp, #-0x404]
+008c35fc: movw     r0, #0x94d4
+008c3600: movt     r0, #0xbd ; 'Successfully uploaded log file: {}'
+008c3604: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c3608: mov      r3, r0
+008c360c: str      r3, [fp, #-0x400]
+008c3610: sub      r3, fp, #0x4c0
+008c3614: sub      r3, r3, #0xc
+008c3618: str      r3, [sp, #0xc]
+008c361c: add      r2, sp, #4
+008c3620: sub      r3, fp, #0x400
+008c3624: sub      r3, r3, #4
+008c3628: ldm      r3, {r0, r1}
+008c362c: stm      r2, {r0, r1}
+008c3630: mov      r3, #2
+008c3634: str      r3, [sp]
+008c3638: sub      r3, fp, #0x400
+008c363c: sub      r3, r3, #0xc
+008c3640: sub      r3, r3, #4
+008c3644: ldm      r3, {r1, r2, r3}
+008c3648: mov      r0, r4
+008c364c: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c3650: ldr      r3, [fp, #-0x51c]
+008c3654: mov      r0, r3
+008c3658: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c365c: mov      r2, r0
+008c3660: sub      r3, fp, #0x3fc
+008c3664: mov      r1, r2
+008c3668: mov      r0, r3
+008c366c: bl       #0x8af474 ; api_module::APIRequest::get_connector()
+008c3670: sub      r3, fp, #0x3fc
+008c3674: mov      r0, r3
+008c3678: bl       #0x8ddc08 ; std::__shared_ptr<communication::BaseCommunication, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c367c: mov      r5, r0
+008c3680: ldr      r3, [r5]
+008c3684: add      r3, r3, #0x1c
+008c3688: ldr      r4, [r3]
+008c368c: sub      r3, fp, #0x374
+008c3690: movw     r1, #0xcb54
+008c3694: movt     r1, #0xba ; 'id'
+008c3698: mov      r0, r3
+008c369c: bl       #0x7d5c48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [3], 0>(char const (&) [3])
+008c36a0: mov      r3, #0
+008c36a4: str      r3, [fp, #-0x340]
+008c36a8: sub      r2, fp, #0x340
+008c36ac: sub      r3, fp, #0x374
+008c36b0: add      r3, r3, #0x18
+008c36b4: mov      r1, r2
+008c36b8: mov      r0, r3
+008c36bc: bl       #0x7d5c94 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<int, 0>(int&&)
+008c36c0: sub      r3, fp, #0x374
+008c36c4: str      r3, [fp, #-0x37c]
+008c36c8: mov      r3, #2
+008c36cc: str      r3, [fp, #-0x378]
+008c36d0: sub      r0, fp, #0x3c4
+008c36d4: sub      r3, fp, #0x37c
+008c36d8: ldm      r3, {r1, r2}
+008c36dc: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c36e0: sub      r3, fp, #0x334
+008c36e4: movw     r1, #0x757c
+008c36e8: movt     r1, #0xa8 ; 'method'
+008c36ec: mov      r0, r3
+008c36f0: bl       #0x7d5ce0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [7], 0>(char const (&) [7])
+008c36f4: movw     r3, #0x1777
+008c36f8: str      r3, [fp, #-0x300]
+008c36fc: sub      r2, fp, #0x300
+008c3700: sub      r3, fp, #0x334
+008c3704: add      r3, r3, #0x18
+008c3708: mov      r1, r2
+008c370c: mov      r0, r3
+008c3710: bl       #0x7d5c94 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<int, 0>(int&&)
+008c3714: sub      r3, fp, #0x334
+008c3718: str      r3, [fp, #-0x33c]
+008c371c: mov      r3, #2
+008c3720: str      r3, [fp, #-0x338]
+008c3724: sub      r3, fp, #0x3c4
+008c3728: add      r0, r3, #0x18
+008c372c: sub      r3, fp, #0x33c
+008c3730: ldm      r3, {r1, r2}
+008c3734: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3738: sub      r3, fp, #0x2f4
+008c373c: movw     r1, #0x3f4
+008c3740: movt     r1, #0xac ; 'result'
+008c3744: mov      r0, r3
+008c3748: bl       #0x7d5ce0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [7], 0>(char const (&) [7])
+008c374c: sub      r3, fp, #0x284
+008c3750: movw     r1, #0x3018
+008c3754: movt     r1, #0xae ; 'status'
+008c3758: mov      r0, r3
+008c375c: bl       #0x7d5ce0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [7], 0>(char const (&) [7])
+008c3760: mov      r3, #1
+008c3764: str      r3, [fp, #-0x250]
+008c3768: sub      r2, fp, #0x250
+008c376c: sub      r3, fp, #0x284
+008c3770: add      r3, r3, #0x18
+008c3774: mov      r1, r2
+008c3778: mov      r0, r3
+008c377c: bl       #0x7d5c94 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<int, 0>(int&&)
+008c3780: sub      r3, fp, #0x284
+008c3784: str      r3, [fp, #-0x28c]
+008c3788: mov      r3, #2
+008c378c: str      r3, [fp, #-0x288]
+008c3790: sub      r0, fp, #0x2bc
+008c3794: sub      r3, fp, #0x28c
+008c3798: ldm      r3, {r1, r2}
+008c379c: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c37a0: sub      r3, fp, #0x244
+008c37a4: movw     r1, #0x5960
+008c37a8: movt     r1, #0xb8 ; 'url'
+008c37ac: mov      r0, r3
+008c37b0: bl       #0x7d5ef4 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [4], 0>(char const (&) [4])
+008c37b4: sub      r3, fp, #0x4d0
+008c37b8: sub      r3, r3, #0xc
+008c37bc: sub      r3, r3, #8
+008c37c0: sub      r2, fp, #0x244
+008c37c4: add      r2, r2, #0x18
+008c37c8: mov      r1, r3
+008c37cc: mov      r0, r2
+008c37d0: bl       #0x2ed984 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, 0>(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c37d4: sub      r3, fp, #0x244
+008c37d8: str      r3, [fp, #-0x24c]
+008c37dc: mov      r3, #2
+008c37e0: str      r3, [fp, #-0x248]
+008c37e4: sub      r3, fp, #0x2bc
+008c37e8: add      r0, r3, #0x18
+008c37ec: sub      r3, fp, #0x24c
+008c37f0: ldm      r3, {r1, r2}
+008c37f4: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c37f8: sub      r3, fp, #0x2bc
+008c37fc: str      r3, [fp, #-0x2c4]
+008c3800: mov      r3, #2
+008c3804: str      r3, [fp, #-0x2c0]
+008c3808: sub      r3, fp, #0x2f4
+008c380c: add      r0, r3, #0x18
+008c3810: sub      r3, fp, #0x2c4
+008c3814: ldm      r3, {r1, r2}
+008c3818: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c381c: sub      r3, fp, #0x2f4
+008c3820: str      r3, [fp, #-0x2fc]
+008c3824: mov      r3, #2
+008c3828: str      r3, [fp, #-0x2f8]
+008c382c: sub      r3, fp, #0x3c4
+008c3830: add      r0, r3, #0x30
+008c3834: sub      r3, fp, #0x2fc
+008c3838: ldm      r3, {r1, r2}
+008c383c: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3840: sub      r3, fp, #0x3c4
+008c3844: str      r3, [fp, #-0x3cc]
+008c3848: mov      r3, #3
+008c384c: str      r3, [fp, #-0x3c8]
+008c3850: sub      r0, fp, #0x3dc
+008c3854: sub      r3, fp, #0x3cc
+008c3858: ldm      r3, {r1, r2}
+008c385c: bl       #0x149874 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3860: sub      r0, fp, #0x3f4
+008c3864: sub      r1, fp, #0x3dc
+008c3868: mov      r3, #0
+008c386c: str      r3, [sp, #4]
+008c3870: mov      r3, #0
+008c3874: str      r3, [sp]
+008c3878: mov      r3, #0x20
+008c387c: mvn      r2, #0
+008c3880: bl       #0x1bce44 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::dump(int, char, bool, nlohmann::json_abi_v3_12_0::detail::error_handler_t) const
+008c3884: sub      r2, fp, #0x4f0
+008c3888: sub      r2, r2, #0xc
+008c388c: sub      r3, fp, #0x3f4
+008c3890: mov      r1, r3
+008c3894: mov      r0, r5
+008c3898: blx      r4
+008c389c: sub      r3, fp, #0x3f4
+008c38a0: mov      r0, r3
+008c38a4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c38a8: sub      r3, fp, #0x3dc
+008c38ac: mov      r0, r3
+008c38b0: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c38b4: sub      r4, fp, #0x3c4
+008c38b8: add      r4, r4, #0x48
+008c38bc: sub      r3, fp, #0x3c4
+008c38c0: cmp      r4, r3
+008c38c4: beq      #0x8c38d8
+008c38c8: sub      r4, r4, #0x18
+008c38cc: mov      r0, r4
+008c38d0: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c38d4: b        #0x8c38bc
+008c38d8: sub      r4, fp, #0x2f4
+008c38dc: add      r4, r4, #0x30
+008c38e0: sub      r3, fp, #0x2f4
+008c38e4: cmp      r4, r3
+008c38e8: beq      #0x8c38fc
+008c38ec: sub      r4, r4, #0x18
+008c38f0: mov      r0, r4
+008c38f4: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c38f8: b        #0x8c38e0
+008c38fc: sub      r4, fp, #0x2bc
+008c3900: add      r4, r4, #0x30
+008c3904: sub      r3, fp, #0x2bc
+008c3908: cmp      r4, r3
+008c390c: beq      #0x8c3920
+008c3910: sub      r4, r4, #0x18
+008c3914: mov      r0, r4
+008c3918: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c391c: b        #0x8c3904
+008c3920: sub      r4, fp, #0x244
+008c3924: add      r4, r4, #0x30
+008c3928: sub      r3, fp, #0x244
+008c392c: cmp      r4, r3
+008c3930: beq      #0x8c3944
+008c3934: sub      r4, r4, #0x18
+008c3938: mov      r0, r4
+008c393c: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3940: b        #0x8c3928
+008c3944: sub      r4, fp, #0x284
+008c3948: add      r4, r4, #0x30
+008c394c: sub      r3, fp, #0x284
+008c3950: cmp      r4, r3
+008c3954: beq      #0x8c3968
+008c3958: sub      r4, r4, #0x18
+008c395c: mov      r0, r4
+008c3960: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3964: b        #0x8c394c
+008c3968: sub      r4, fp, #0x334
+008c396c: add      r4, r4, #0x30
+008c3970: sub      r3, fp, #0x334
+008c3974: cmp      r4, r3
+008c3978: beq      #0x8c398c
+008c397c: sub      r4, r4, #0x18
+008c3980: mov      r0, r4
+008c3984: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3988: b        #0x8c3970
+008c398c: sub      r4, fp, #0x374
+008c3990: add      r4, r4, #0x30
+008c3994: sub      r3, fp, #0x374
+008c3998: cmp      r4, r3
+008c399c: beq      #0x8c39b0
+008c39a0: sub      r4, r4, #0x18
+008c39a4: mov      r0, r4
+008c39a8: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c39ac: b        #0x8c3994
+008c39b0: sub      r3, fp, #0x3fc
+008c39b4: mov      r0, r3
+008c39b8: bl       #0x82cf68 ; std::shared_ptr<communication::BaseCommunication>::~shared_ptr()
+008c39bc: b        #0x8c3d9c
+008c39c0: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c39c4: mov      r4, r0
+008c39c8: sub      r0, fp, #0x210
+008c39cc: movw     r3, #0x7fb4
+008c39d0: movt     r3, #0xbd ; 'operator()'
+008c39d4: movw     r2, #0x806
+008c39d8: movw     r1, #0x83b8
+008c39dc: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c39e0: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c39e4: movw     r3, #0x94f8
+008c39e8: movt     r3, #0xbd ; 'Failed to upload log file: {}'
+008c39ec: str      r3, [fp, #-0x204]
+008c39f0: movw     r0, #0x94f8
+008c39f4: movt     r0, #0xbd ; 'Failed to upload log file: {}'
+008c39f8: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c39fc: mov      r3, r0
+008c3a00: str      r3, [fp, #-0x200]
+008c3a04: sub      r3, fp, #0x4c0
+008c3a08: sub      r3, r3, #0xc
+008c3a0c: str      r3, [sp, #0xc]
+008c3a10: add      r2, sp, #4
+008c3a14: sub      r3, fp, #0x204
+008c3a18: ldm      r3, {r0, r1}
+008c3a1c: stm      r2, {r0, r1}
+008c3a20: mov      r3, #4
+008c3a24: str      r3, [sp]
+008c3a28: sub      r3, fp, #0x210
+008c3a2c: ldm      r3, {r1, r2, r3}
+008c3a30: mov      r0, r4
+008c3a34: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c3a38: ldr      r3, [fp, #-0x51c]
+008c3a3c: mov      r0, r3
+008c3a40: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c3a44: mov      r2, r0
+008c3a48: sub      r3, fp, #0x1fc
+008c3a4c: mov      r1, r2
+008c3a50: mov      r0, r3
+008c3a54: bl       #0x8af474 ; api_module::APIRequest::get_connector()
+008c3a58: sub      r3, fp, #0x1fc
+008c3a5c: mov      r0, r3
+008c3a60: bl       #0x8ddc08 ; std::__shared_ptr<communication::BaseCommunication, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c3a64: mov      r5, r0
+008c3a68: ldr      r3, [r5]
+008c3a6c: add      r3, r3, #0x1c
+008c3a70: ldr      r4, [r3]
+008c3a74: sub      r3, fp, #0x174
+008c3a78: movw     r1, #0xcb54
+008c3a7c: movt     r1, #0xba ; 'id'
+008c3a80: mov      r0, r3
+008c3a84: bl       #0x7d5c48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [3], 0>(char const (&) [3])
+008c3a88: mov      r3, #0
+008c3a8c: str      r3, [fp, #-0x140]
+008c3a90: sub      r2, fp, #0x140
+008c3a94: sub      r3, fp, #0x174
+008c3a98: add      r3, r3, #0x18
+008c3a9c: mov      r1, r2
+008c3aa0: mov      r0, r3
+008c3aa4: bl       #0x7d5c94 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<int, 0>(int&&)
+008c3aa8: sub      r3, fp, #0x174
+008c3aac: str      r3, [fp, #-0x17c]
+008c3ab0: mov      r3, #2
+008c3ab4: str      r3, [fp, #-0x178]
+008c3ab8: sub      r0, fp, #0x1c4
+008c3abc: sub      r3, fp, #0x17c
+008c3ac0: ldm      r3, {r1, r2}
+008c3ac4: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3ac8: sub      r3, fp, #0x134
+008c3acc: movw     r1, #0x757c
+008c3ad0: movt     r1, #0xa8 ; 'method'
+008c3ad4: mov      r0, r3
+008c3ad8: bl       #0x7d5ce0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [7], 0>(char const (&) [7])
+008c3adc: movw     r3, #0x1777
+008c3ae0: str      r3, [fp, #-0x100]
+008c3ae4: sub      r2, fp, #0x100
+008c3ae8: sub      r3, fp, #0x134
+008c3aec: add      r3, r3, #0x18
+008c3af0: mov      r1, r2
+008c3af4: mov      r0, r3
+008c3af8: bl       #0x7d5c94 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<int, 0>(int&&)
+008c3afc: sub      r3, fp, #0x134
+008c3b00: str      r3, [fp, #-0x13c]
+008c3b04: mov      r3, #2
+008c3b08: str      r3, [fp, #-0x138]
+008c3b0c: sub      r3, fp, #0x1c4
+008c3b10: add      r0, r3, #0x18
+008c3b14: sub      r3, fp, #0x13c
+008c3b18: ldm      r3, {r1, r2}
+008c3b1c: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3b20: sub      r3, fp, #0xf4
+008c3b24: movw     r1, #0x3f4
+008c3b28: movt     r1, #0xac ; 'result'
+008c3b2c: mov      r0, r3
+008c3b30: bl       #0x7d5ce0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [7], 0>(char const (&) [7])
+008c3b34: sub      r3, fp, #0x84
+008c3b38: movw     r1, #0x3018
+008c3b3c: movt     r1, #0xae ; 'status'
+008c3b40: mov      r0, r3
+008c3b44: bl       #0x7d5ce0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [7], 0>(char const (&) [7])
+008c3b48: mvn      r3, #0
+008c3b4c: str      r3, [fp, #-0x50]
+008c3b50: sub      r2, fp, #0x50
+008c3b54: sub      r3, fp, #0x84
+008c3b58: add      r3, r3, #0x18
+008c3b5c: mov      r1, r2
+008c3b60: mov      r0, r3
+008c3b64: bl       #0x7d5c94 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<int, 0>(int&&)
+008c3b68: sub      r3, fp, #0x84
+008c3b6c: str      r3, [fp, #-0x8c]
+008c3b70: mov      r3, #2
+008c3b74: str      r3, [fp, #-0x88]
+008c3b78: sub      r0, fp, #0xbc
+008c3b7c: sub      r3, fp, #0x8c
+008c3b80: ldm      r3, {r1, r2}
+008c3b84: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3b88: sub      r3, fp, #0x44
+008c3b8c: movw     r1, #0x5960
+008c3b90: movt     r1, #0xb8 ; 'url'
+008c3b94: mov      r0, r3
+008c3b98: bl       #0x7d5ef4 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [4], 0>(char const (&) [4])
+008c3b9c: sub      r3, fp, #0x44
+008c3ba0: add      r3, r3, #0x18
+008c3ba4: movw     r1, #0x44
+008c3ba8: movt     r1, #0xac
+008c3bac: mov      r0, r3
+008c3bb0: bl       #0x8de9cc ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref<char const (&) [1], 0>(char const (&) [1])
+008c3bb4: sub      r3, fp, #0x44
+008c3bb8: str      r3, [fp, #-0x4c]
+008c3bbc: mov      r3, #2
+008c3bc0: str      r3, [fp, #-0x48]
+008c3bc4: sub      r3, fp, #0xbc
+008c3bc8: add      r0, r3, #0x18
+008c3bcc: sub      r3, fp, #0x4c
+008c3bd0: ldm      r3, {r1, r2}
+008c3bd4: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3bd8: sub      r3, fp, #0xbc
+008c3bdc: str      r3, [fp, #-0xc4]
+008c3be0: mov      r3, #2
+008c3be4: str      r3, [fp, #-0xc0]
+008c3be8: sub      r3, fp, #0xf4
+008c3bec: add      r0, r3, #0x18
+008c3bf0: sub      r3, fp, #0xc4
+008c3bf4: ldm      r3, {r1, r2}
+008c3bf8: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3bfc: sub      r3, fp, #0xf4
+008c3c00: str      r3, [fp, #-0xfc]
+008c3c04: mov      r3, #2
+008c3c08: str      r3, [fp, #-0xf8]
+008c3c0c: sub      r3, fp, #0x1c4
+008c3c10: add      r0, r3, #0x30
+008c3c14: sub      r3, fp, #0xfc
+008c3c18: ldm      r3, {r1, r2}
+008c3c1c: bl       #0x2ed9d0 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::json_ref(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3c20: sub      r3, fp, #0x1c4
+008c3c24: str      r3, [fp, #-0x1cc]
+008c3c28: mov      r3, #3
+008c3c2c: str      r3, [fp, #-0x1c8]
+008c3c30: sub      r0, fp, #0x1dc
+008c3c34: sub      r3, fp, #0x1cc
+008c3c38: ldm      r3, {r1, r2}
+008c3c3c: bl       #0x149874 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c3c40: sub      r0, fp, #0x1f4
+008c3c44: sub      r1, fp, #0x1dc
+008c3c48: mov      r3, #0
+008c3c4c: str      r3, [sp, #4]
+008c3c50: mov      r3, #0
+008c3c54: str      r3, [sp]
+008c3c58: mov      r3, #0x20
+008c3c5c: mvn      r2, #0
+008c3c60: bl       #0x1bce44 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::dump(int, char, bool, nlohmann::json_abi_v3_12_0::detail::error_handler_t) const
+008c3c64: sub      r2, fp, #0x4f0
+008c3c68: sub      r2, r2, #0xc
+008c3c6c: sub      r3, fp, #0x1f4
+008c3c70: mov      r1, r3
+008c3c74: mov      r0, r5
+008c3c78: blx      r4
+008c3c7c: sub      r3, fp, #0x1f4
+008c3c80: mov      r0, r3
+008c3c84: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3c88: sub      r3, fp, #0x1dc
+008c3c8c: mov      r0, r3
+008c3c90: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c3c94: sub      r4, fp, #0x1c4
+008c3c98: add      r4, r4, #0x48
+008c3c9c: sub      r3, fp, #0x1c4
+008c3ca0: cmp      r4, r3
+008c3ca4: beq      #0x8c3cb8
+008c3ca8: sub      r4, r4, #0x18
+008c3cac: mov      r0, r4
+008c3cb0: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3cb4: b        #0x8c3c9c
+008c3cb8: sub      r4, fp, #0xf4
+008c3cbc: add      r4, r4, #0x30
+008c3cc0: sub      r3, fp, #0xf4
+008c3cc4: cmp      r4, r3
+008c3cc8: beq      #0x8c3cdc
+008c3ccc: sub      r4, r4, #0x18
+008c3cd0: mov      r0, r4
+008c3cd4: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3cd8: b        #0x8c3cc0
+008c3cdc: sub      r4, fp, #0xbc
+008c3ce0: add      r4, r4, #0x30
+008c3ce4: sub      r3, fp, #0xbc
+008c3ce8: cmp      r4, r3
+008c3cec: beq      #0x8c3d00
+008c3cf0: sub      r4, r4, #0x18
+008c3cf4: mov      r0, r4
+008c3cf8: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3cfc: b        #0x8c3ce4
+008c3d00: sub      r4, fp, #0x44
+008c3d04: add      r4, r4, #0x30
+008c3d08: sub      r3, fp, #0x44
+008c3d0c: cmp      r4, r3
+008c3d10: beq      #0x8c3d24
+008c3d14: sub      r4, r4, #0x18
+008c3d18: mov      r0, r4
+008c3d1c: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3d20: b        #0x8c3d08
+008c3d24: sub      r4, fp, #0x84
+008c3d28: add      r4, r4, #0x30
+008c3d2c: sub      r3, fp, #0x84
+008c3d30: cmp      r4, r3
+008c3d34: beq      #0x8c3d48
+008c3d38: sub      r4, r4, #0x18
+008c3d3c: mov      r0, r4
+008c3d40: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3d44: b        #0x8c3d2c
+008c3d48: sub      r4, fp, #0x134
+008c3d4c: add      r4, r4, #0x30
+008c3d50: sub      r3, fp, #0x134
+008c3d54: cmp      r4, r3
+008c3d58: beq      #0x8c3d6c
+008c3d5c: sub      r4, r4, #0x18
+008c3d60: mov      r0, r4
+008c3d64: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3d68: b        #0x8c3d50
+008c3d6c: sub      r4, fp, #0x174
+008c3d70: add      r4, r4, #0x30
+008c3d74: sub      r3, fp, #0x174
+008c3d78: cmp      r4, r3
+008c3d7c: beq      #0x8c3d90
+008c3d80: sub      r4, r4, #0x18
+008c3d84: mov      r0, r4
+008c3d88: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3d8c: b        #0x8c3d74
+008c3d90: sub      r3, fp, #0x1fc
+008c3d94: mov      r0, r3
+008c3d98: bl       #0x82cf68 ; std::shared_ptr<communication::BaseCommunication>::~shared_ptr()
+008c3d9c: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c3da0: mov      r3, r0
+008c3da4: movw     r1, #0xbb9
+008c3da8: mov      r0, r3
+008c3dac: bl       #0x88ee04 ; api_module::DeviceStatus::set_sub_status(api_module::EMachineSubStatus)
+008c3db0: sub      r3, fp, #0x4f0
+008c3db4: sub      r3, r3, #0xc
+008c3db8: mov      r0, r3
+008c3dbc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3dc0: sub      r3, fp, #0x4d0
+008c3dc4: sub      r3, r3, #0xc
+008c3dc8: sub      r3, r3, #8
+008c3dcc: mov      r0, r3
+008c3dd0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3dd4: sub      r3, fp, #0x4c0
+008c3dd8: sub      r3, r3, #0xc
+008c3ddc: mov      r0, r3
+008c3de0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3de4: b        #0x8c40d8
+008c3de8: sub      r3, fp, #0x440
+008c3dec: sub      r3, r3, #0xc
+008c3df0: sub      r3, r3, #8
+008c3df4: mov      r0, r3
+008c3df8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3dfc: b        #0x8c3e00
+008c3e00: sub      r3, fp, #0x4a0
+008c3e04: sub      r3, r3, #0xc
+008c3e08: sub      r3, r3, #8
+008c3e0c: mov      r0, r3
+008c3e10: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3e14: b        #0x8c3e18
+008c3e18: sub      r3, fp, #0x490
+008c3e1c: sub      r3, r3, #0xc
+008c3e20: mov      r0, r3
+008c3e24: bl       #0x2555b4 ; api_module::ProductAuth::~ProductAuth()
+008c3e28: b        #0x8c40b0
+008c3e2c: sub      r3, fp, #0x500
+008c3e30: sub      r3, r3, #0xc
+008c3e34: sub      r3, r3, #8
+008c3e38: mov      r0, r3
+008c3e3c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3e40: b        #0x8c40b0
+008c3e44: sub      r3, fp, #0x3f4
+008c3e48: mov      r0, r3
+008c3e4c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3e50: b        #0x8c3e54
+008c3e54: sub      r3, fp, #0x3dc
+008c3e58: mov      r0, r3
+008c3e5c: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c3e60: b        #0x8c3e64
+008c3e64: sub      r4, fp, #0x3c4
+008c3e68: add      r4, r4, #0x48
+008c3e6c: sub      r3, fp, #0x3c4
+008c3e70: cmp      r4, r3
+008c3e74: beq      #0x8c3e88
+008c3e78: sub      r4, r4, #0x18
+008c3e7c: mov      r0, r4
+008c3e80: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3e84: b        #0x8c3e6c
+008c3e88: sub      r4, fp, #0x2f4
+008c3e8c: add      r4, r4, #0x30
+008c3e90: sub      r3, fp, #0x2f4
+008c3e94: cmp      r4, r3
+008c3e98: beq      #0x8c3eac
+008c3e9c: sub      r4, r4, #0x18
+008c3ea0: mov      r0, r4
+008c3ea4: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3ea8: b        #0x8c3e90
+008c3eac: sub      r4, fp, #0x2bc
+008c3eb0: add      r4, r4, #0x30
+008c3eb4: sub      r3, fp, #0x2bc
+008c3eb8: cmp      r4, r3
+008c3ebc: beq      #0x8c3ed0
+008c3ec0: sub      r4, r4, #0x18
+008c3ec4: mov      r0, r4
+008c3ec8: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3ecc: b        #0x8c3eb4
+008c3ed0: sub      r4, fp, #0x244
+008c3ed4: add      r4, r4, #0x30
+008c3ed8: sub      r3, fp, #0x244
+008c3edc: cmp      r4, r3
+008c3ee0: beq      #0x8c3ef4
+008c3ee4: sub      r4, r4, #0x18
+008c3ee8: mov      r0, r4
+008c3eec: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3ef0: b        #0x8c3ed8
+008c3ef4: sub      r4, fp, #0x284
+008c3ef8: add      r4, r4, #0x30
+008c3efc: sub      r3, fp, #0x284
+008c3f00: cmp      r4, r3
+008c3f04: beq      #0x8c3f18
+008c3f08: sub      r4, r4, #0x18
+008c3f0c: mov      r0, r4
+008c3f10: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3f14: b        #0x8c3efc
+008c3f18: sub      r4, fp, #0x334
+008c3f1c: add      r4, r4, #0x30
+008c3f20: sub      r3, fp, #0x334
+008c3f24: cmp      r4, r3
+008c3f28: beq      #0x8c3f3c
+008c3f2c: sub      r4, r4, #0x18
+008c3f30: mov      r0, r4
+008c3f34: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3f38: b        #0x8c3f20
+008c3f3c: sub      r4, fp, #0x374
+008c3f40: add      r4, r4, #0x30
+008c3f44: sub      r3, fp, #0x374
+008c3f48: cmp      r4, r3
+008c3f4c: beq      #0x8c3f60
+008c3f50: sub      r4, r4, #0x18
+008c3f54: mov      r0, r4
+008c3f58: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3f5c: b        #0x8c3f44
+008c3f60: sub      r3, fp, #0x3fc
+008c3f64: mov      r0, r3
+008c3f68: bl       #0x82cf68 ; std::shared_ptr<communication::BaseCommunication>::~shared_ptr()
+008c3f6c: b        #0x8c409c
+008c3f70: sub      r3, fp, #0x1f4
+008c3f74: mov      r0, r3
+008c3f78: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c3f7c: b        #0x8c3f80
+008c3f80: sub      r3, fp, #0x1dc
+008c3f84: mov      r0, r3
+008c3f88: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c3f8c: b        #0x8c3f90
+008c3f90: sub      r4, fp, #0x1c4
+008c3f94: add      r4, r4, #0x48
+008c3f98: sub      r3, fp, #0x1c4
+008c3f9c: cmp      r4, r3
+008c3fa0: beq      #0x8c3fb4
+008c3fa4: sub      r4, r4, #0x18
+008c3fa8: mov      r0, r4
+008c3fac: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3fb0: b        #0x8c3f98
+008c3fb4: sub      r4, fp, #0xf4
+008c3fb8: add      r4, r4, #0x30
+008c3fbc: sub      r3, fp, #0xf4
+008c3fc0: cmp      r4, r3
+008c3fc4: beq      #0x8c3fd8
+008c3fc8: sub      r4, r4, #0x18
+008c3fcc: mov      r0, r4
+008c3fd0: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3fd4: b        #0x8c3fbc
+008c3fd8: sub      r4, fp, #0xbc
+008c3fdc: add      r4, r4, #0x30
+008c3fe0: sub      r3, fp, #0xbc
+008c3fe4: cmp      r4, r3
+008c3fe8: beq      #0x8c3ffc
+008c3fec: sub      r4, r4, #0x18
+008c3ff0: mov      r0, r4
+008c3ff4: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c3ff8: b        #0x8c3fe0
+008c3ffc: sub      r4, fp, #0x44
+008c4000: add      r4, r4, #0x30
+008c4004: sub      r3, fp, #0x44
+008c4008: cmp      r4, r3
+008c400c: beq      #0x8c4020
+008c4010: sub      r4, r4, #0x18
+008c4014: mov      r0, r4
+008c4018: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c401c: b        #0x8c4004
+008c4020: sub      r4, fp, #0x84
+008c4024: add      r4, r4, #0x30
+008c4028: sub      r3, fp, #0x84
+008c402c: cmp      r4, r3
+008c4030: beq      #0x8c4044
+008c4034: sub      r4, r4, #0x18
+008c4038: mov      r0, r4
+008c403c: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c4040: b        #0x8c4028
+008c4044: sub      r4, fp, #0x134
+008c4048: add      r4, r4, #0x30
+008c404c: sub      r3, fp, #0x134
+008c4050: cmp      r4, r3
+008c4054: beq      #0x8c4068
+008c4058: sub      r4, r4, #0x18
+008c405c: mov      r0, r4
+008c4060: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c4064: b        #0x8c404c
+008c4068: sub      r4, fp, #0x174
+008c406c: add      r4, r4, #0x30
+008c4070: sub      r3, fp, #0x174
+008c4074: cmp      r4, r3
+008c4078: beq      #0x8c408c
+008c407c: sub      r4, r4, #0x18
+008c4080: mov      r0, r4
+008c4084: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c4088: b        #0x8c4070
+008c408c: sub      r3, fp, #0x1fc
+008c4090: mov      r0, r3
+008c4094: bl       #0x82cf68 ; std::shared_ptr<communication::BaseCommunication>::~shared_ptr()
+008c4098: b        #0x8c409c
+008c409c: sub      r3, fp, #0x4f0
+008c40a0: sub      r3, r3, #0xc
+008c40a4: mov      r0, r3
+008c40a8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c40ac: b        #0x8c40b0
+008c40b0: sub      r3, fp, #0x4d0
+008c40b4: sub      r3, r3, #0xc
+008c40b8: sub      r3, r3, #8
+008c40bc: mov      r0, r3
+008c40c0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c40c4: sub      r3, fp, #0x4c0
+008c40c8: sub      r3, r3, #0xc
+008c40cc: mov      r0, r3
+008c40d0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c40d4: bl       #0xbf3f4 ; __cxa_end_cleanup
+008c40d8: sub      sp, fp, #0xc
+008c40dc: pop      {r4, r5, fp, pc}

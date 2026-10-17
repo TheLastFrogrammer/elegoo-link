@@ -1,0 +1,169 @@
+{
+  "function": "znp::UvcCamera::OnCameraHealthChanged(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, znp::CameraHealth, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+  "va": "0x13c668",
+  "size": 612,
+  "calls": [
+    {
+      "at": "0x13c6a0",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x13c6c0",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x13c6d8",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x13c720",
+      "target": "0x13dee8",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x13c728",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x13c748",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x13c760",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x13c7a8",
+      "target": "0x13dee8",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x13c7b0",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x13c7d0",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x13c7e8",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x13c830",
+      "target": "0x13dee8",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    },
+    {
+      "at": "0x13c838",
+      "target": "0x88808",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x13c858",
+      "target": "0x83280",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x13c870",
+      "target": "0x7d3c8",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x13c8b8",
+      "target": "0x13dee8",
+      "name": "void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x13c6b0",
+      "va": "0x1bcfb4",
+      "string": "OnCameraHealthChanged"
+    },
+    {
+      "at": "0x13c6bc",
+      "va": "0x1bd060",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp"
+    },
+    {
+      "at": "0x13c6c8",
+      "va": "0x1bd19c",
+      "string": "[camera-health] {} stream ({}) no frame, recovering: {}"
+    },
+    {
+      "at": "0x13c6d4",
+      "va": "0x1bd19c",
+      "string": "[camera-health] {} stream ({}) no frame, recovering: {}"
+    },
+    {
+      "at": "0x13c738",
+      "va": "0x1bcfb4",
+      "string": "OnCameraHealthChanged"
+    },
+    {
+      "at": "0x13c744",
+      "va": "0x1bd060",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp"
+    },
+    {
+      "at": "0x13c750",
+      "va": "0x1bd1d4",
+      "string": "[camera-health] {} stream ({}) FAULT: {}"
+    },
+    {
+      "at": "0x13c75c",
+      "va": "0x1bd1d4",
+      "string": "[camera-health] {} stream ({}) FAULT: {}"
+    },
+    {
+      "at": "0x13c7c0",
+      "va": "0x1bcfb4",
+      "string": "OnCameraHealthChanged"
+    },
+    {
+      "at": "0x13c7cc",
+      "va": "0x1bd060",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp"
+    },
+    {
+      "at": "0x13c7d8",
+      "va": "0x1bd200",
+      "string": "[camera-health] {} stream ({}) recovered: {}"
+    },
+    {
+      "at": "0x13c7e4",
+      "va": "0x1bd200",
+      "string": "[camera-health] {} stream ({}) recovered: {}"
+    },
+    {
+      "at": "0x13c848",
+      "va": "0x1bcfb4",
+      "string": "OnCameraHealthChanged"
+    },
+    {
+      "at": "0x13c854",
+      "va": "0x1bd060",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/extras/ai_camera/module/camera/uvc_camera_without_uart.cpp"
+    },
+    {
+      "at": "0x13c860",
+      "va": "0x1bd230",
+      "string": "[camera-health] {} stream ({}) ok: {}"
+    },
+    {
+      "at": "0x13c86c",
+      "va": "0x1bd230",
+      "string": "[camera-health] {} stream ({}) ok: {}"
+    }
+  ]
+}

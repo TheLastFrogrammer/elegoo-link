@@ -1,0 +1,154 @@
+GCodeHelper::handle_script(std::shared_ptr<WebRequest>)
+002d93c0: push     {r4, fp, lr}
+002d93c4: add      fp, sp, #8
+002d93c8: sub      sp, sp, #0x94
+002d93cc: str      r0, [fp, #-0x90]
+002d93d0: str      r1, [fp, #-0x94]
+002d93d4: ldr      r3, [fp, #-0x94]
+002d93d8: mov      r0, r3
+002d93dc: bl       #0x2eb218 ; std::__shared_ptr<WebRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+002d93e0: mov      r4, r0
+002d93e4: sub      r3, fp, #0x58
+002d93e8: mov      r0, r3
+002d93ec: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d93f0: sub      r2, fp, #0x58
+002d93f4: sub      r3, fp, #0x70
+002d93f8: movw     r1, #0x7944
+002d93fc: movt     r1, #0xa8 ; 'script'
+002d9400: mov      r0, r3
+002d9404: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d9408: sub      r3, fp, #0x3c
+002d940c: mov      r0, r3
+002d9410: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d9414: sub      r2, fp, #0x3c
+002d9418: sub      r3, fp, #0x54
+002d941c: movw     r1, #0x44
+002d9420: movt     r1, #0xac
+002d9424: mov      r0, r3
+002d9428: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d942c: sub      r0, fp, #0x88
+002d9430: sub      r3, fp, #0x54
+002d9434: sub      r2, fp, #0x70
+002d9438: mov      r1, r4
+002d943c: bl       #0x2d34f0 ; WebRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+002d9440: sub      r3, fp, #0x54
+002d9444: mov      r0, r3
+002d9448: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d944c: sub      r3, fp, #0x3c
+002d9450: mov      r0, r3
+002d9454: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d9458: sub      r3, fp, #0x70
+002d945c: mov      r0, r3
+002d9460: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d9464: sub      r3, fp, #0x58
+002d9468: mov      r0, r3
+002d946c: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d9470: sub      r3, fp, #0x88
+002d9474: mov      r2, #0
+002d9478: movw     r1, #0x794c
+002d947c: movt     r1, #0xa8 ; 'SET_PIN PIN=led_pin'
+002d9480: mov      r0, r3
+002d9484: bl       #0xbf8d4 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4findEPKcj
+002d9488: mov      r3, r0
+002d948c: cmn      r3, #1
+002d9490: movne    r3, #1
+002d9494: moveq    r3, #0
+002d9498: uxtb     r3, r3
+002d949c: cmp      r3, #0
+002d94a0: beq      #0x2d9580
+002d94a4: sub      r3, fp, #0x88
+002d94a8: mov      r2, #0
+002d94ac: movw     r1, #0xc14c
+002d94b0: movt     r1, #0xb6 ; 'VALUE=0'
+002d94b4: mov      r0, r3
+002d94b8: bl       #0xbf8d4 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4findEPKcj
+002d94bc: mov      r3, r0
+002d94c0: cmn      r3, #1
+002d94c4: movne    r3, #1
+002d94c8: moveq    r3, #0
+002d94cc: uxtb     r3, r3
+002d94d0: cmp      r3, #0
+002d94d4: beq      #0x2d9558
+002d94d8: bl       #0x2e8344 ; api_module::TimerManager::getInstance()
+002d94dc: mov      r4, r0
+002d94e0: ldr      r2, [fp, #-0x90]
+002d94e4: sub      r3, fp, #0x38
+002d94e8: mov      r1, r2
+002d94ec: mov      r0, r3
+002d94f0: bl       #0x2df5d4 ; std::function<void ()>::function<GCodeHelper::handle_script(std::shared_ptr<WebRequest>)::{lambda()#1}, void, void>(GCodeHelper::handle_script(std::shared_ptr<WebRequest>)::{lambda()#1})
+002d94f4: sub      r3, fp, #0x10
+002d94f8: mov      r0, r3
+002d94fc: bl       #0xbf388 ; _ZNSaIcEC1Ev
+002d9500: sub      r2, fp, #0x10
+002d9504: sub      r3, fp, #0x28
+002d9508: movw     r1, #0x7960
+002d950c: movt     r1, #0xa8 ; 'close_ai_detection'
+002d9510: mov      r0, r3
+002d9514: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+002d9518: sub      r1, fp, #0x38
+002d951c: sub      r3, fp, #0x28
+002d9520: str      r3, [sp]
+002d9524: mov      r3, #0
+002d9528: mov      r2, #0x64
+002d952c: mov      r0, r4
+002d9530: bl       #0x93d274 ; api_module::TimerManager::add_timer_task(std::function<void ()>, int, bool, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+002d9534: sub      r3, fp, #0x28
+002d9538: mov      r0, r3
+002d953c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d9540: sub      r3, fp, #0x10
+002d9544: mov      r0, r3
+002d9548: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d954c: sub      r3, fp, #0x38
+002d9550: mov      r0, r3
+002d9554: bl       #0x1b8fb0 ; std::function<void ()>::~function()
+002d9558: ldr      r3, [fp, #-0x90]
+002d955c: add      r3, r3, #8
+002d9560: mov      r0, r3
+002d9564: bl       #0x14bde8 ; std::__shared_ptr<GCodeDispatch, (__gnu_cxx::_Lock_policy)2>::operator->() const
+002d9568: mov      r2, r0
+002d956c: sub      r3, fp, #0x88
+002d9570: mov      r1, r3
+002d9574: mov      r0, r2
+002d9578: bl       #0x1a0284 ; GCodeDispatch::run_script_from_command(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+002d957c: b        #0x2d95a4
+002d9580: ldr      r3, [fp, #-0x90]
+002d9584: add      r3, r3, #8
+002d9588: mov      r0, r3
+002d958c: bl       #0x14bde8 ; std::__shared_ptr<GCodeDispatch, (__gnu_cxx::_Lock_policy)2>::operator->() const
+002d9590: mov      r2, r0
+002d9594: sub      r3, fp, #0x88
+002d9598: mov      r1, r3
+002d959c: mov      r0, r2
+002d95a0: bl       #0x1a03c4 ; GCodeDispatch::run_script(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+002d95a4: sub      r3, fp, #0x88
+002d95a8: mov      r0, r3
+002d95ac: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d95b0: b        #0x2d961c
+002d95b4: sub      r3, fp, #0x54
+002d95b8: mov      r0, r3
+002d95bc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d95c0: b        #0x2d95c4
+002d95c4: sub      r3, fp, #0x3c
+002d95c8: mov      r0, r3
+002d95cc: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d95d0: sub      r3, fp, #0x70
+002d95d4: mov      r0, r3
+002d95d8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d95dc: b        #0x2d95e0
+002d95e0: sub      r3, fp, #0x58
+002d95e4: mov      r0, r3
+002d95e8: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d95ec: bl       #0xbf3f4 ; __cxa_end_cleanup
+002d95f0: sub      r3, fp, #0x10
+002d95f4: mov      r0, r3
+002d95f8: bl       #0xbe944 ; _ZNSaIcED1Ev
+002d95fc: sub      r3, fp, #0x38
+002d9600: mov      r0, r3
+002d9604: bl       #0x1b8fb0 ; std::function<void ()>::~function()
+002d9608: b        #0x2d960c
+002d960c: sub      r3, fp, #0x88
+002d9610: mov      r0, r3
+002d9614: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+002d9618: bl       #0xbf3f4 ; __cxa_end_cleanup
+002d961c: sub      sp, fp, #8
+002d9620: pop      {r4, fp, pc}

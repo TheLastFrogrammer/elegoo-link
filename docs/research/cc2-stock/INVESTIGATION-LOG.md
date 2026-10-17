@@ -1,0 +1,29 @@
+# CC2 investigation log
+
+Recorded 17 October 2026. All current technical results below are offline findings. The owner's installed firmware, serial access, helper operation and camera hardware are not yet established.
+
+| ID | Claim or experiment | Status | Evidence | Remaining check |
+|---|---|---|---|---|
+| R01 | The inspected package is the pinned vendor stock payload | Verified signature/hash chain against published stock key; mirror provenance retained | baseline/evidence/VERIFICATION.json | Compare installed version and executable fingerprint |
+| R02 | LAN and WAN strategy lifecycle blocks straightforward coexistence | Verified native calls, including HTTP/MQTT teardown and WAN local-video stop | Original report; TARGET-XREFS.json | No current device test |
+| R03 | Native file GET rejects non-idle machine states | Verified branch and 16 bounded original-ARM admission cases | baseline/evidence/DOWNLOAD-GATE-EMULATION.json | No active-print HTTP transfer tested |
+| R04 | APIPrinter registers 55 unique numbered handlers | Recovered and checked | baseline/evidence/API-METHOD-MAP.json; CSV | Transport permissions and request semantics remain per-method checks |
+| R05 | Owner console may be available through serial | inittab askfirst entries, ttyS2 init output and CC2 header documentation found | access/evidence/CONSOLE-ASSETS.json; console quickstart | Header-to-terminal mapping, signal voltage, baud and shell on actual printer |
+| R06 | Stock has a local G-code/status console and a client | UDS path, handlers and debug_window/whconsole identity found | access/evidence/follow-up/0x2d8c80.json, 0x2d59e8.json; CONSOLE-ASSETS.json | Run read-only endpoint/help discovery after owner access |
+| R07 | Cloud prints download exact bytes to local storage | Native on_cloud_print worker calls HTTP downloader; staged file renamed on completion | 0x81c688.json; 0x81b394.json; 0x8022b0.json | Compare known cloud job and local file on hardware |
+| R08 | Cached slice URLs can survive beyond the incoming message | cloud_file_cache schema and getter/upsert recovered | 0x90ff44.json; 0x91aa3c.json; 0x91a8dc.json | Consistent idle export, retention and URL expiry |
+| R09 | Diagnostic API can return an uploaded bundle URL | 1059 worker packages/uploads and constructs status/url response | 0x8c326c.json | Authorized transport and returned result; idle test only initially |
+| R10 | Thumbnail data is recorded separately from simple image directories | Native thumbnail lookup and decoded PNG upload path | 0x88cd30.json; 0x8f3eb4.json | Representative exported records and decoder compatibility |
+| R11 | Stock camera-host build already has stalled-frame recovery | Direct calls to RestartStreaming and ReopenDevice | access/evidence/camera-follow-up/0x146990.json | Installed build and bounded camera logs |
+| R12 | Some camera modules have a separate boot/configuration defect | Primary community research pinned; narrow hardware coverage documented | Access report camera section and source links | Identify camera variant; no repair installed |
+| R13 | A small independent file/UDS reader may retain WAN operation | Proposed architecture; stock paths and local interfaces exist | Access report companion contract | Owner bootstrap, resource limits, active-print reads, persistence and update behavior |
+| A01 | App already retains some exact input/download copies | Source verified at dde7699 | GcodeLibrary.java; PrinterService.keep | Do not recreate retention as a new feature |
+| A02 | Existing retained-file identity is too weak for exact live-job association | Source verified: name-keyed replacement, global name lookup and 12-file/1.5-GiB pruning | GcodeLibrary.put/find; CloudFileMemory name mapping | Digest/version/printer/job identity design and acceptance tests |
+
+## Process record
+
+- Initial pass: verified the package and stock network/download policy; recovered numbered methods and candidate owner-shell/file-reader paths.
+- Access follow-up: traced the bundled console client, native UDS methods, cloud URL cache, final download rename, media/database paths and camera-host watchdog. Reviewed separate camera-module mitigation coverage.
+- Repository checkpoint: added the reports, source pins, evidence, reproduction tools and dated app reviews to the app branch. No application behavior is changed by this checkpoint.
+
+New experiments should record input fingerprint, command/tool version, result, relevant redacted output and what the result does not establish. Keep raw diagnostic exports, signed URLs and camera identities outside the repository. A failed or absent file lookup is evidence too; never replace it with a filename-based claim of exact identity.

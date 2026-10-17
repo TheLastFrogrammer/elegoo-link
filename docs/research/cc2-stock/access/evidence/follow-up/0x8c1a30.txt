@@ -1,0 +1,946 @@
+api_module::APIPrinter::handle_set_download_file_url(std::shared_ptr<api_module::APIRequest>)
+008c1a30: push     {r4, fp, lr}
+008c1a34: add      fp, sp, #8
+008c1a38: sub      sp, sp, #0x540
+008c1a3c: sub      sp, sp, #4
+008c1a40: str      r0, [fp, #-0x530]
+008c1a44: str      r1, [fp, #-0x534]
+008c1a48: ldr      r3, [fp, #-0x534]
+008c1a4c: mov      r0, r3
+008c1a50: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1a54: mov      r4, r0
+008c1a58: sub      r3, fp, #0x354
+008c1a5c: mov      r0, r3
+008c1a60: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1a64: sub      r2, fp, #0x354
+008c1a68: sub      r3, fp, #0x36c
+008c1a6c: movw     r1, #0x5960
+008c1a70: movt     r1, #0xb8 ; 'url'
+008c1a74: mov      r0, r3
+008c1a78: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1a7c: sub      r3, fp, #0x338
+008c1a80: mov      r0, r3
+008c1a84: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1a88: sub      r2, fp, #0x338
+008c1a8c: sub      r3, fp, #0x350
+008c1a90: movw     r1, #0x44
+008c1a94: movt     r1, #0xac
+008c1a98: mov      r0, r3
+008c1a9c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1aa0: sub      r0, fp, #0x384
+008c1aa4: sub      r3, fp, #0x350
+008c1aa8: sub      r2, fp, #0x36c
+008c1aac: mov      r1, r4
+008c1ab0: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c1ab4: sub      r3, fp, #0x350
+008c1ab8: mov      r0, r3
+008c1abc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1ac0: sub      r3, fp, #0x338
+008c1ac4: mov      r0, r3
+008c1ac8: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1acc: sub      r3, fp, #0x36c
+008c1ad0: mov      r0, r3
+008c1ad4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1ad8: sub      r3, fp, #0x354
+008c1adc: mov      r0, r3
+008c1ae0: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1ae4: sub      r3, fp, #0x384
+008c1ae8: mov      r0, r3
+008c1aec: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008c1af0: mov      r3, r0
+008c1af4: cmp      r3, #0
+008c1af8: beq      #0x8c1b90
+008c1afc: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1b00: mov      r4, r0
+008c1b04: sub      r0, fp, #0x334
+008c1b08: movw     r3, #0x7f48
+008c1b0c: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c1b10: movw     r2, #0x75f
+008c1b14: movw     r1, #0x83b8
+008c1b18: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c1b1c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1b20: movw     r3, #0x921c
+008c1b24: movt     r3, #0xbd ; 'Download file URL is empty'
+008c1b28: str      r3, [fp, #-0x10]
+008c1b2c: ldr      r3, [fp, #-0x10]
+008c1b30: str      r3, [fp, #-0x328]
+008c1b34: ldr      r0, [fp, #-0x10]
+008c1b38: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1b3c: mov      r3, r0
+008c1b40: str      r3, [fp, #-0x324]
+008c1b44: add      r2, sp, #4
+008c1b48: sub      r3, fp, #0x328
+008c1b4c: ldm      r3, {r0, r1}
+008c1b50: stm      r2, {r0, r1}
+008c1b54: mov      r3, #4
+008c1b58: str      r3, [sp]
+008c1b5c: sub      r3, fp, #0x334
+008c1b60: ldm      r3, {r1, r2, r3}
+008c1b64: mov      r0, r4
+008c1b68: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c1b6c: ldr      r3, [fp, #-0x534]
+008c1b70: mov      r0, r3
+008c1b74: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1b78: mov      r3, r0
+008c1b7c: movw     r1, #0x3eb
+008c1b80: mov      r0, r3
+008c1b84: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c1b88: mov      r4, #0
+008c1b8c: b        #0x8c26d0
+008c1b90: ldr      r3, [fp, #-0x534]
+008c1b94: mov      r0, r3
+008c1b98: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1b9c: mov      r4, r0
+008c1ba0: sub      r3, fp, #0x308
+008c1ba4: mov      r0, r3
+008c1ba8: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1bac: sub      r2, fp, #0x308
+008c1bb0: sub      r3, fp, #0x320
+008c1bb4: movw     r1, #0x2f5c
+008c1bb8: movt     r1, #0xae ; 'filename'
+008c1bbc: mov      r0, r3
+008c1bc0: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1bc4: sub      r3, fp, #0x2ec
+008c1bc8: mov      r0, r3
+008c1bcc: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1bd0: sub      r2, fp, #0x2ec
+008c1bd4: sub      r3, fp, #0x304
+008c1bd8: movw     r1, #0x44
+008c1bdc: movt     r1, #0xac
+008c1be0: mov      r0, r3
+008c1be4: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1be8: sub      r0, fp, #0x39c
+008c1bec: sub      r3, fp, #0x304
+008c1bf0: sub      r2, fp, #0x320
+008c1bf4: mov      r1, r4
+008c1bf8: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c1bfc: sub      r3, fp, #0x304
+008c1c00: mov      r0, r3
+008c1c04: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1c08: sub      r3, fp, #0x2ec
+008c1c0c: mov      r0, r3
+008c1c10: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1c14: sub      r3, fp, #0x320
+008c1c18: mov      r0, r3
+008c1c1c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1c20: sub      r3, fp, #0x308
+008c1c24: mov      r0, r3
+008c1c28: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1c2c: sub      r3, fp, #0x39c
+008c1c30: mov      r0, r3
+008c1c34: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008c1c38: mov      r3, r0
+008c1c3c: cmp      r3, #0
+008c1c40: beq      #0x8c1cd8
+008c1c44: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1c48: mov      r4, r0
+008c1c4c: sub      r0, fp, #0x2e8
+008c1c50: movw     r3, #0x7f48
+008c1c54: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c1c58: movw     r2, #0x765
+008c1c5c: movw     r1, #0x83b8
+008c1c60: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c1c64: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1c68: movw     r3, #0x9238
+008c1c6c: movt     r3, #0xbd ; 'Download file filename is empty'
+008c1c70: str      r3, [fp, #-0x14]
+008c1c74: ldr      r3, [fp, #-0x14]
+008c1c78: str      r3, [fp, #-0x2dc]
+008c1c7c: ldr      r0, [fp, #-0x14]
+008c1c80: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1c84: mov      r3, r0
+008c1c88: str      r3, [fp, #-0x2d8]
+008c1c8c: add      r2, sp, #4
+008c1c90: sub      r3, fp, #0x2dc
+008c1c94: ldm      r3, {r0, r1}
+008c1c98: stm      r2, {r0, r1}
+008c1c9c: mov      r3, #4
+008c1ca0: str      r3, [sp]
+008c1ca4: sub      r3, fp, #0x2e8
+008c1ca8: ldm      r3, {r1, r2, r3}
+008c1cac: mov      r0, r4
+008c1cb0: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c1cb4: ldr      r3, [fp, #-0x534]
+008c1cb8: mov      r0, r3
+008c1cbc: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1cc0: mov      r3, r0
+008c1cc4: movw     r1, #0x3eb
+008c1cc8: mov      r0, r3
+008c1ccc: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c1cd0: mov      r4, #0
+008c1cd4: b        #0x8c26ac
+008c1cd8: ldr      r3, [fp, #-0x534]
+008c1cdc: mov      r0, r3
+008c1ce0: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1ce4: mov      r4, r0
+008c1ce8: sub      r3, fp, #0x2bc
+008c1cec: mov      r0, r3
+008c1cf0: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1cf4: sub      r2, fp, #0x2bc
+008c1cf8: sub      r3, fp, #0x2d4
+008c1cfc: movw     r1, #0x90e8
+008c1d00: movt     r1, #0xbd ; 'taskID'
+008c1d04: mov      r0, r3
+008c1d08: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1d0c: sub      r3, fp, #0x2a0
+008c1d10: mov      r0, r3
+008c1d14: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1d18: sub      r2, fp, #0x2a0
+008c1d1c: sub      r3, fp, #0x2b8
+008c1d20: movw     r1, #0x44
+008c1d24: movt     r1, #0xac
+008c1d28: mov      r0, r3
+008c1d2c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1d30: sub      r0, fp, #0x3b4
+008c1d34: sub      r3, fp, #0x2b8
+008c1d38: sub      r2, fp, #0x2d4
+008c1d3c: mov      r1, r4
+008c1d40: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c1d44: sub      r3, fp, #0x2b8
+008c1d48: mov      r0, r3
+008c1d4c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1d50: sub      r3, fp, #0x2a0
+008c1d54: mov      r0, r3
+008c1d58: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1d5c: sub      r3, fp, #0x2d4
+008c1d60: mov      r0, r3
+008c1d64: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1d68: sub      r3, fp, #0x2bc
+008c1d6c: mov      r0, r3
+008c1d70: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1d74: sub      r3, fp, #0x3b4
+008c1d78: mov      r0, r3
+008c1d7c: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008c1d80: mov      r3, r0
+008c1d84: cmp      r3, #0
+008c1d88: beq      #0x8c1e20
+008c1d8c: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1d90: mov      r4, r0
+008c1d94: sub      r0, fp, #0x29c
+008c1d98: movw     r3, #0x7f48
+008c1d9c: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c1da0: movw     r2, #0x76b
+008c1da4: movw     r1, #0x83b8
+008c1da8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c1dac: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1db0: movw     r3, #0x9258
+008c1db4: movt     r3, #0xbd ; 'Download file taskID is empty'
+008c1db8: str      r3, [fp, #-0x18]
+008c1dbc: ldr      r3, [fp, #-0x18]
+008c1dc0: str      r3, [fp, #-0x290]
+008c1dc4: ldr      r0, [fp, #-0x18]
+008c1dc8: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1dcc: mov      r3, r0
+008c1dd0: str      r3, [fp, #-0x28c]
+008c1dd4: add      r2, sp, #4
+008c1dd8: sub      r3, fp, #0x290
+008c1ddc: ldm      r3, {r0, r1}
+008c1de0: stm      r2, {r0, r1}
+008c1de4: mov      r3, #4
+008c1de8: str      r3, [sp]
+008c1dec: sub      r3, fp, #0x29c
+008c1df0: ldm      r3, {r1, r2, r3}
+008c1df4: mov      r0, r4
+008c1df8: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c1dfc: ldr      r3, [fp, #-0x534]
+008c1e00: mov      r0, r3
+008c1e04: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1e08: mov      r3, r0
+008c1e0c: movw     r1, #0x3eb
+008c1e10: mov      r0, r3
+008c1e14: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c1e18: mov      r4, #0
+008c1e1c: b        #0x8c2688
+008c1e20: ldr      r3, [fp, #-0x534]
+008c1e24: mov      r0, r3
+008c1e28: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1e2c: mov      r4, r0
+008c1e30: sub      r3, fp, #0x270
+008c1e34: mov      r0, r3
+008c1e38: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1e3c: sub      r2, fp, #0x270
+008c1e40: sub      r3, fp, #0x288
+008c1e44: movw     r1, #0x94e0
+008c1e48: movt     r1, #0xbb ; 'md5'
+008c1e4c: mov      r0, r3
+008c1e50: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1e54: sub      r3, fp, #0x254
+008c1e58: mov      r0, r3
+008c1e5c: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c1e60: sub      r2, fp, #0x254
+008c1e64: sub      r3, fp, #0x26c
+008c1e68: movw     r1, #0x44
+008c1e6c: movt     r1, #0xac
+008c1e70: mov      r0, r3
+008c1e74: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c1e78: sub      r0, fp, #0x3cc
+008c1e7c: sub      r3, fp, #0x26c
+008c1e80: sub      r2, fp, #0x288
+008c1e84: mov      r1, r4
+008c1e88: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c1e8c: sub      r3, fp, #0x26c
+008c1e90: mov      r0, r3
+008c1e94: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1e98: sub      r3, fp, #0x254
+008c1e9c: mov      r0, r3
+008c1ea0: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1ea4: sub      r3, fp, #0x288
+008c1ea8: mov      r0, r3
+008c1eac: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1eb0: sub      r3, fp, #0x270
+008c1eb4: mov      r0, r3
+008c1eb8: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c1ebc: sub      r3, fp, #0x3cc
+008c1ec0: mov      r0, r3
+008c1ec4: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008c1ec8: mov      r3, r0
+008c1ecc: cmp      r3, #0
+008c1ed0: beq      #0x8c1f68
+008c1ed4: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1ed8: mov      r4, r0
+008c1edc: sub      r0, fp, #0x250
+008c1ee0: movw     r3, #0x7f48
+008c1ee4: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c1ee8: movw     r2, #0x771
+008c1eec: movw     r1, #0x83b8
+008c1ef0: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c1ef4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1ef8: movw     r3, #0x9278
+008c1efc: movt     r3, #0xbd ; 'Download file md5 is empty'
+008c1f00: str      r3, [fp, #-0x1c]
+008c1f04: ldr      r3, [fp, #-0x1c]
+008c1f08: str      r3, [fp, #-0x244]
+008c1f0c: ldr      r0, [fp, #-0x1c]
+008c1f10: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1f14: mov      r3, r0
+008c1f18: str      r3, [fp, #-0x240]
+008c1f1c: add      r2, sp, #4
+008c1f20: sub      r3, fp, #0x244
+008c1f24: ldm      r3, {r0, r1}
+008c1f28: stm      r2, {r0, r1}
+008c1f2c: mov      r3, #4
+008c1f30: str      r3, [sp]
+008c1f34: sub      r3, fp, #0x250
+008c1f38: ldm      r3, {r1, r2, r3}
+008c1f3c: mov      r0, r4
+008c1f40: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c1f44: ldr      r3, [fp, #-0x534]
+008c1f48: mov      r0, r3
+008c1f4c: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c1f50: mov      r3, r0
+008c1f54: movw     r1, #0x3eb
+008c1f58: mov      r0, r3
+008c1f5c: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c1f60: mov      r4, #0
+008c1f64: b        #0x8c2664
+008c1f68: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1f6c: mov      r4, r0
+008c1f70: sub      r0, fp, #0x23c
+008c1f74: movw     r3, #0x7f48
+008c1f78: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c1f7c: movw     r2, #0x776
+008c1f80: movw     r1, #0x83b8
+008c1f84: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c1f88: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1f8c: movw     r3, #0x9294
+008c1f90: movt     r3, #0xbd ; 'Setting download file URL: {}'
+008c1f94: str      r3, [fp, #-0x230]
+008c1f98: movw     r0, #0x9294
+008c1f9c: movt     r0, #0xbd ; 'Setting download file URL: {}'
+008c1fa0: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1fa4: mov      r3, r0
+008c1fa8: str      r3, [fp, #-0x22c]
+008c1fac: sub      r3, fp, #0x384
+008c1fb0: str      r3, [sp, #0xc]
+008c1fb4: add      r2, sp, #4
+008c1fb8: sub      r3, fp, #0x230
+008c1fbc: ldm      r3, {r0, r1}
+008c1fc0: stm      r2, {r0, r1}
+008c1fc4: mov      r3, #2
+008c1fc8: str      r3, [sp]
+008c1fcc: sub      r3, fp, #0x23c
+008c1fd0: ldm      r3, {r1, r2, r3}
+008c1fd4: mov      r0, r4
+008c1fd8: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c1fdc: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c1fe0: mov      r2, r0
+008c1fe4: sub      r3, fp, #0x3e8
+008c1fe8: mov      r1, r2
+008c1fec: mov      r0, r3
+008c1ff0: bl       #0x8926a0 ; api_module::DeviceStatus::get_machine_status()
+008c1ff4: ldr      r3, [fp, #-0x3e8]
+008c1ff8: cmp      r3, #1
+008c1ffc: beq      #0x8c2024
+008c2000: ldr      r3, [fp, #-0x534]
+008c2004: mov      r0, r3
+008c2008: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c200c: mov      r3, r0
+008c2010: movw     r1, #0x3f1
+008c2014: mov      r0, r3
+008c2018: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c201c: mov      r4, #0
+008c2020: b        #0x8c2640
+008c2024: bl       #0x25606c ; communication::NetworkManager::get_instance()
+008c2028: mov      r3, r0
+008c202c: mov      r0, r3
+008c2030: bl       #0x8124a0 ; communication::NetworkManager::get_mode() const
+008c2034: mov      r3, r0
+008c2038: cmp      r3, #1
+008c203c: bne      #0x8c2064
+008c2040: bl       #0x25606c ; communication::NetworkManager::get_instance()
+008c2044: mov      r3, r0
+008c2048: mov      r0, r3
+008c204c: bl       #0x810e88 ; communication::NetworkManager::normal()
+008c2050: mov      r3, r0
+008c2054: eor      r3, r3, #1
+008c2058: uxtb     r3, r3
+008c205c: cmp      r3, #0
+008c2060: beq      #0x8c206c
+008c2064: mov      r3, #1
+008c2068: b        #0x8c2070
+008c206c: mov      r3, #0
+008c2070: cmp      r3, #0
+008c2074: beq      #0x8c210c
+008c2078: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c207c: mov      r4, r0
+008c2080: sub      r0, fp, #0x228
+008c2084: movw     r3, #0x7f48
+008c2088: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c208c: movw     r2, #0x77f
+008c2090: movw     r1, #0x83b8
+008c2094: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c2098: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c209c: movw     r3, #0x92b4
+008c20a0: movt     r3, #0xbd ; 'Not in WAN mode, cannot download file'
+008c20a4: str      r3, [fp, #-0x20]
+008c20a8: ldr      r3, [fp, #-0x20]
+008c20ac: str      r3, [fp, #-0x21c]
+008c20b0: ldr      r0, [fp, #-0x20]
+008c20b4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c20b8: mov      r3, r0
+008c20bc: str      r3, [fp, #-0x218]
+008c20c0: add      r2, sp, #4
+008c20c4: sub      r3, fp, #0x21c
+008c20c8: ldm      r3, {r0, r1}
+008c20cc: stm      r2, {r0, r1}
+008c20d0: mov      r3, #4
+008c20d4: str      r3, [sp]
+008c20d8: sub      r3, fp, #0x228
+008c20dc: ldm      r3, {r1, r2, r3}
+008c20e0: mov      r0, r4
+008c20e4: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c20e8: ldr      r3, [fp, #-0x534]
+008c20ec: mov      r0, r3
+008c20f0: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c20f4: mov      r3, r0
+008c20f8: movw     r1, #0x401
+008c20fc: mov      r0, r3
+008c2100: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c2104: mov      r4, #0
+008c2108: b        #0x8c2640
+008c210c: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c2110: mov      r4, r0
+008c2114: sub      r3, fp, #0x1e4
+008c2118: mov      r0, r3
+008c211c: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008c2120: sub      r2, fp, #0x1e4
+008c2124: sub      r3, fp, #0x1fc
+008c2128: movw     r1, #0x16fc
+008c212c: movt     r1, #0xba ; 'local'
+008c2130: mov      r0, r3
+008c2134: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008c2138: sub      r3, fp, #0x214
+008c213c: sub      r2, fp, #0x1fc
+008c2140: mov      r1, r4
+008c2144: mov      r0, r3
+008c2148: bl       #0x891274 ; api_module::DeviceStatus::get_storage_path(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c214c: sub      r3, fp, #0x400
+008c2150: sub      r2, fp, #0x39c
+008c2154: sub      r1, fp, #0x214
+008c2158: mov      r0, r3
+008c215c: bl       #0x14bf84 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008c2160: sub      r3, fp, #0x214
+008c2164: mov      r0, r3
+008c2168: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c216c: sub      r3, fp, #0x1fc
+008c2170: mov      r0, r3
+008c2174: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2178: sub      r3, fp, #0x1e4
+008c217c: mov      r0, r3
+008c2180: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c2184: sub      r3, fp, #0x470
+008c2188: sub      r3, r3, #0xc
+008c218c: sub      r3, r3, #4
+008c2190: mov      r0, r3
+008c2194: bl       #0x8dcda4 ; api_module::downloadFileInfo::downloadFileInfo()
+008c2198: sub      r2, fp, #0x39c
+008c219c: sub      r3, fp, #0x470
+008c21a0: sub      r3, r3, #0xc
+008c21a4: sub      r3, r3, #4
+008c21a8: mov      r1, r2
+008c21ac: mov      r0, r3
+008c21b0: bl       #0xc0384 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_
+008c21b4: sub      r2, fp, #0x400
+008c21b8: sub      r3, fp, #0x470
+008c21bc: sub      r3, r3, #0xc
+008c21c0: sub      r3, r3, #4
+008c21c4: add      r3, r3, #0x18
+008c21c8: mov      r1, r2
+008c21cc: mov      r0, r3
+008c21d0: bl       #0xc0384 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_
+008c21d4: sub      r2, fp, #0x384
+008c21d8: sub      r3, fp, #0x470
+008c21dc: sub      r3, r3, #0xc
+008c21e0: sub      r3, r3, #4
+008c21e4: add      r3, r3, #0x30
+008c21e8: mov      r1, r2
+008c21ec: mov      r0, r3
+008c21f0: bl       #0xc0384 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_
+008c21f4: sub      r2, fp, #0x3b4
+008c21f8: sub      r3, fp, #0x470
+008c21fc: sub      r3, r3, #0xc
+008c2200: sub      r3, r3, #4
+008c2204: add      r3, r3, #0x48
+008c2208: mov      r1, r2
+008c220c: mov      r0, r3
+008c2210: bl       #0xc0384 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_
+008c2214: sub      r2, fp, #0x3cc
+008c2218: sub      r3, fp, #0x470
+008c221c: sub      r3, r3, #0xc
+008c2220: sub      r3, r3, #4
+008c2224: add      r3, r3, #0x60
+008c2228: mov      r1, r2
+008c222c: mov      r0, r3
+008c2230: bl       #0xc0384 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSERKS4_
+008c2234: mov      r3, #0
+008c2238: str      r3, [fp, #-0x408]
+008c223c: mov      r3, #0
+008c2240: str      r3, [fp, #-0x404]
+008c2244: sub      r3, fp, #0x510
+008c2248: sub      r3, r3, #0xc
+008c224c: sub      r3, r3, #0xc
+008c2250: mov      r0, r3
+008c2254: bl       #0x8dcfec ; api_module::downloadFileTask::downloadFileTask()
+008c2258: sub      r2, fp, #0x470
+008c225c: sub      r2, r2, #0xc
+008c2260: sub      r2, r2, #4
+008c2264: sub      r3, fp, #0x510
+008c2268: sub      r3, r3, #0xc
+008c226c: sub      r3, r3, #0xc
+008c2270: mov      r1, r2
+008c2274: mov      r0, r3
+008c2278: bl       #0x8dd354 ; api_module::downloadFileInfo::operator=(api_module::downloadFileInfo const&)
+008c227c: sub      r3, fp, #0x1e0
+008c2280: movw     r1, #0x44
+008c2284: movt     r1, #0xac
+008c2288: mov      r0, r3
+008c228c: bl       #0x7eccec ; std::shared_ptr<communication::HTTPClient> std::make_shared<communication::HTTPClient, char const (&) [1]>(char const (&) [1])
+008c2290: sub      r2, fp, #0x1e0
+008c2294: sub      r3, fp, #0x510
+008c2298: sub      r3, r3, #0xc
+008c229c: sub      r3, r3, #0xc
+008c22a0: add      r3, r3, #0x80
+008c22a4: mov      r1, r2
+008c22a8: mov      r0, r3
+008c22ac: bl       #0x7ecd78 ; std::shared_ptr<communication::HTTPClient>::operator=(std::shared_ptr<communication::HTTPClient>&&)
+008c22b0: sub      r3, fp, #0x1e0
+008c22b4: mov      r0, r3
+008c22b8: bl       #0x7ebb84 ; std::shared_ptr<communication::HTTPClient>::~shared_ptr()
+008c22bc: ldr      r3, [fp, #-0x534]
+008c22c0: mov      r0, r3
+008c22c4: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c22c8: mov      r2, r0
+008c22cc: sub      r3, fp, #0x1d8
+008c22d0: mov      r1, r2
+008c22d4: mov      r0, r3
+008c22d8: bl       #0x8af4d8 ; api_module::APIRequest::get_extra[abi:cxx11]()
+008c22dc: sub      r2, fp, #0x1d8
+008c22e0: sub      r3, fp, #0x510
+008c22e4: sub      r3, r3, #0xc
+008c22e8: sub      r3, r3, #0xc
+008c22ec: add      r3, r3, #0x88
+008c22f0: mov      r1, r2
+008c22f4: mov      r0, r3
+008c22f8: bl       #0xbfc40 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEOS4_
+008c22fc: sub      r3, fp, #0x1d8
+008c2300: mov      r0, r3
+008c2304: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2308: ldr      r3, [fp, #-0x534]
+008c230c: mov      r0, r3
+008c2310: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c2314: mov      r2, r0
+008c2318: sub      r3, fp, #0x1c0
+008c231c: mov      r1, r2
+008c2320: mov      r0, r3
+008c2324: bl       #0x8af474 ; api_module::APIRequest::get_connector()
+008c2328: sub      r2, fp, #0x1c0
+008c232c: sub      r3, fp, #0x510
+008c2330: sub      r3, r3, #0xc
+008c2334: sub      r3, r3, #0xc
+008c2338: add      r3, r3, #0xa0
+008c233c: mov      r1, r2
+008c2340: mov      r0, r3
+008c2344: bl       #0x8dd658 ; std::shared_ptr<communication::BaseCommunication>::operator=(std::shared_ptr<communication::BaseCommunication>&&)
+008c2348: sub      r3, fp, #0x1c0
+008c234c: mov      r0, r3
+008c2350: bl       #0x82cf68 ; std::shared_ptr<communication::BaseCommunication>::~shared_ptr()
+008c2354: ldr      r3, [fp, #-0x530]
+008c2358: add      r3, r3, #0x1b0
+008c235c: sub      r2, fp, #0x3b4
+008c2360: mov      r1, r2
+008c2364: mov      r0, r3
+008c2368: bl       #0x8de75c ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::find(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008c236c: mov      r3, r0
+008c2370: str      r3, [fp, #-0x1b8]
+008c2374: ldr      r3, [fp, #-0x530]
+008c2378: add      r3, r3, #0x1b0
+008c237c: mov      r0, r3
+008c2380: bl       #0x8de790 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::end()
+008c2384: mov      r3, r0
+008c2388: str      r3, [fp, #-0x1b4]
+008c238c: sub      r2, fp, #0x1b4
+008c2390: sub      r3, fp, #0x1b8
+008c2394: mov      r1, r2
+008c2398: mov      r0, r3
+008c239c: bl       #0x8de7bc ; std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> >::operator!=(std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > const&) const
+008c23a0: mov      r3, r0
+008c23a4: cmp      r3, #0
+008c23a8: beq      #0x8c2444
+008c23ac: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c23b0: mov      r4, r0
+008c23b4: sub      r0, fp, #0x1b0
+008c23b8: movw     r3, #0x7f48
+008c23bc: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c23c0: movw     r2, #0x793
+008c23c4: movw     r1, #0x83b8
+008c23c8: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c23cc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c23d0: movw     r3, #0x92dc
+008c23d4: movt     r3, #0xbd ; 'Download file taskID already exists: {}'
+008c23d8: str      r3, [fp, #-0x1a4]
+008c23dc: movw     r0, #0x92dc
+008c23e0: movt     r0, #0xbd ; 'Download file taskID already exists: {}'
+008c23e4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c23e8: mov      r3, r0
+008c23ec: str      r3, [fp, #-0x1a0]
+008c23f0: sub      r3, fp, #0x3b4
+008c23f4: str      r3, [sp, #0xc]
+008c23f8: add      r2, sp, #4
+008c23fc: sub      r3, fp, #0x1a4
+008c2400: ldm      r3, {r0, r1}
+008c2404: stm      r2, {r0, r1}
+008c2408: mov      r3, #4
+008c240c: str      r3, [sp]
+008c2410: sub      r3, fp, #0x1b0
+008c2414: ldm      r3, {r1, r2, r3}
+008c2418: mov      r0, r4
+008c241c: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c2420: ldr      r3, [fp, #-0x534]
+008c2424: mov      r0, r3
+008c2428: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c242c: mov      r3, r0
+008c2430: movw     r1, #0x3eb
+008c2434: mov      r0, r3
+008c2438: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008c243c: mov      r4, #0
+008c2440: b        #0x8c25c4
+008c2444: sub      r3, fp, #0x510
+008c2448: sub      r3, r3, #0xc
+008c244c: sub      r3, r3, #0xc
+008c2450: sub      r2, fp, #0x19c
+008c2454: mov      r1, r3
+008c2458: mov      r0, r2
+008c245c: bl       #0x8dd2a4 ; api_module::downloadFileTask::downloadFileTask(api_module::downloadFileTask const&)
+008c2460: sub      r3, fp, #0x19c
+008c2464: mov      r1, r3
+008c2468: ldr      r0, [fp, #-0x530]
+008c246c: bl       #0x8c28f4 ; api_module::APIPrinter::set_download_file_task(api_module::downloadFileTask)
+008c2470: sub      r3, fp, #0x19c
+008c2474: mov      r0, r3
+008c2478: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c247c: sub      r3, fp, #0x510
+008c2480: sub      r3, r3, #0xc
+008c2484: sub      r3, r3, #0xc
+008c2488: sub      r2, fp, #0xf4
+008c248c: mov      r1, r3
+008c2490: mov      r0, r2
+008c2494: bl       #0x8dd2a4 ; api_module::downloadFileTask::downloadFileTask(api_module::downloadFileTask const&)
+008c2498: sub      r3, fp, #0xf4
+008c249c: mov      r1, r3
+008c24a0: ldr      r0, [fp, #-0x530]
+008c24a4: bl       #0x8c199c ; api_module::APIPrinter::download_file(api_module::downloadFileTask)
+008c24a8: sub      r3, fp, #0xf4
+008c24ac: mov      r0, r3
+008c24b0: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c24b4: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c24b8: mov      r3, r0
+008c24bc: movw     r2, #0xbb8
+008c24c0: mov      r1, #0xb
+008c24c4: mov      r0, r3
+008c24c8: bl       #0x88eacc ; api_module::DeviceStatus::set_status(api_module::EMachineStatus, api_module::EMachineSubStatus)
+008c24cc: ldr      r3, [fp, #-0x534]
+008c24d0: mov      r0, r3
+008c24d4: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c24d8: mov      r4, r0
+008c24dc: sub      r3, fp, #0x34
+008c24e0: str      r3, [fp, #-0x3c]
+008c24e4: mov      r3, #0
+008c24e8: str      r3, [fp, #-0x38]
+008c24ec: sub      r0, fp, #0x4c
+008c24f0: sub      r3, fp, #0x3c
+008c24f4: ldm      r3, {r1, r2}
+008c24f8: bl       #0x149874 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)
+008c24fc: sub      r3, fp, #0x4c
+008c2500: mov      r1, r3
+008c2504: mov      r0, r4
+008c2508: bl       #0x8af188 ; api_module::APIRequest::send(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)
+008c250c: sub      r3, fp, #0x4c
+008c2510: mov      r0, r3
+008c2514: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c2518: nop
+008c251c: sub      r4, fp, #0x34
+008c2520: sub      r3, fp, #0x34
+008c2524: cmp      r4, r3
+008c2528: beq      #0x8c2540
+008c252c: nop
+008c2530: sub      r4, r4, #0x18
+008c2534: mov      r0, r4
+008c2538: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c253c: b        #0x8c2520
+008c2540: nop
+008c2544: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c2548: mov      r4, r0
+008c254c: sub      r0, fp, #0x34
+008c2550: movw     r3, #0x7f48
+008c2554: movt     r3, #0xbd ; 'handle_set_download_file_url'
+008c2558: movw     r2, #0x79d
+008c255c: movw     r1, #0x83b8
+008c2560: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c2564: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c2568: movw     r3, #0x9304
+008c256c: movt     r3, #0xbd ; 'Download file task started for taskID: {}, filename: {}'
+008c2570: str      r3, [fp, #-0x28]
+008c2574: movw     r0, #0x9304
+008c2578: movt     r0, #0xbd ; 'Download file task started for taskID: {}, filename: {}'
+008c257c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c2580: mov      r3, r0
+008c2584: str      r3, [fp, #-0x24]
+008c2588: sub      r3, fp, #0x39c
+008c258c: str      r3, [sp, #0x10]
+008c2590: sub      r3, fp, #0x3b4
+008c2594: str      r3, [sp, #0xc]
+008c2598: add      r2, sp, #4
+008c259c: sub      r3, fp, #0x28
+008c25a0: ldm      r3, {r0, r1}
+008c25a4: stm      r2, {r0, r1}
+008c25a8: mov      r3, #2
+008c25ac: str      r3, [sp]
+008c25b0: sub      r3, fp, #0x34
+008c25b4: ldm      r3, {r1, r2, r3}
+008c25b8: mov      r0, r4
+008c25bc: bl       #0x1bf66c ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008c25c0: mov      r4, #1
+008c25c4: sub      r3, fp, #0x510
+008c25c8: sub      r3, r3, #0xc
+008c25cc: sub      r3, r3, #0xc
+008c25d0: mov      r0, r3
+008c25d4: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c25d8: cmp      r4, #1
+008c25dc: beq      #0x8c25e8
+008c25e0: mov      r4, #0
+008c25e4: b        #0x8c25f0
+008c25e8: nop
+008c25ec: mov      r4, #1
+008c25f0: sub      r3, fp, #0x470
+008c25f4: sub      r3, r3, #0xc
+008c25f8: sub      r3, r3, #4
+008c25fc: mov      r0, r3
+008c2600: bl       #0x8dcf80 ; api_module::downloadFileInfo::~downloadFileInfo()
+008c2604: cmp      r4, #1
+008c2608: beq      #0x8c2614
+008c260c: mov      r4, #0
+008c2610: b        #0x8c261c
+008c2614: nop
+008c2618: mov      r4, #1
+008c261c: sub      r3, fp, #0x400
+008c2620: mov      r0, r3
+008c2624: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2628: cmp      r4, #1
+008c262c: beq      #0x8c2638
+008c2630: mov      r4, #0
+008c2634: b        #0x8c2640
+008c2638: nop
+008c263c: mov      r4, #1
+008c2640: sub      r3, fp, #0x3e8
+008c2644: mov      r0, r3
+008c2648: bl       #0x39de6c ; api_module::MachineStatus::~MachineStatus()
+008c264c: cmp      r4, #1
+008c2650: beq      #0x8c265c
+008c2654: mov      r4, #0
+008c2658: b        #0x8c2664
+008c265c: nop
+008c2660: mov      r4, #1
+008c2664: sub      r3, fp, #0x3cc
+008c2668: mov      r0, r3
+008c266c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2670: cmp      r4, #1
+008c2674: beq      #0x8c2680
+008c2678: mov      r4, #0
+008c267c: b        #0x8c2688
+008c2680: nop
+008c2684: mov      r4, #1
+008c2688: sub      r3, fp, #0x3b4
+008c268c: mov      r0, r3
+008c2690: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2694: cmp      r4, #1
+008c2698: beq      #0x8c26a4
+008c269c: mov      r4, #0
+008c26a0: b        #0x8c26ac
+008c26a4: nop
+008c26a8: mov      r4, #1
+008c26ac: sub      r3, fp, #0x39c
+008c26b0: mov      r0, r3
+008c26b4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c26b8: cmp      r4, #1
+008c26bc: beq      #0x8c26c8
+008c26c0: mov      r4, #0
+008c26c4: b        #0x8c26d0
+008c26c8: nop
+008c26cc: mov      r4, #1
+008c26d0: sub      r3, fp, #0x384
+008c26d4: mov      r0, r3
+008c26d8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c26dc: cmp      r4, #1
+008c26e0: b        #0x8c28ec
+008c26e4: sub      r3, fp, #0x350
+008c26e8: mov      r0, r3
+008c26ec: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c26f0: b        #0x8c26f4
+008c26f4: sub      r3, fp, #0x338
+008c26f8: mov      r0, r3
+008c26fc: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c2700: sub      r3, fp, #0x36c
+008c2704: mov      r0, r3
+008c2708: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c270c: b        #0x8c2710
+008c2710: sub      r3, fp, #0x354
+008c2714: mov      r0, r3
+008c2718: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c271c: bl       #0xbf3f4 ; __cxa_end_cleanup
+008c2720: sub      r3, fp, #0x304
+008c2724: mov      r0, r3
+008c2728: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c272c: b        #0x8c2730
+008c2730: sub      r3, fp, #0x2ec
+008c2734: mov      r0, r3
+008c2738: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c273c: sub      r3, fp, #0x320
+008c2740: mov      r0, r3
+008c2744: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2748: b        #0x8c274c
+008c274c: sub      r3, fp, #0x308
+008c2750: mov      r0, r3
+008c2754: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c2758: b        #0x8c28dc
+008c275c: sub      r3, fp, #0x2b8
+008c2760: mov      r0, r3
+008c2764: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2768: b        #0x8c276c
+008c276c: sub      r3, fp, #0x2a0
+008c2770: mov      r0, r3
+008c2774: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c2778: sub      r3, fp, #0x2d4
+008c277c: mov      r0, r3
+008c2780: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2784: b        #0x8c2788
+008c2788: sub      r3, fp, #0x2bc
+008c278c: mov      r0, r3
+008c2790: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c2794: b        #0x8c28cc
+008c2798: sub      r3, fp, #0x26c
+008c279c: mov      r0, r3
+008c27a0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c27a4: b        #0x8c27a8
+008c27a8: sub      r3, fp, #0x254
+008c27ac: mov      r0, r3
+008c27b0: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c27b4: sub      r3, fp, #0x288
+008c27b8: mov      r0, r3
+008c27bc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c27c0: b        #0x8c27c4
+008c27c4: sub      r3, fp, #0x270
+008c27c8: mov      r0, r3
+008c27cc: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c27d0: b        #0x8c28bc
+008c27d4: sub      r3, fp, #0x214
+008c27d8: mov      r0, r3
+008c27dc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c27e0: sub      r3, fp, #0x1fc
+008c27e4: mov      r0, r3
+008c27e8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c27ec: b        #0x8c27f0
+008c27f0: sub      r3, fp, #0x1e4
+008c27f4: mov      r0, r3
+008c27f8: bl       #0xbe944 ; _ZNSaIcED1Ev
+008c27fc: b        #0x8c289c
+008c2800: sub      r3, fp, #0x19c
+008c2804: mov      r0, r3
+008c2808: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c280c: b        #0x8c2860
+008c2810: sub      r3, fp, #0xf4
+008c2814: mov      r0, r3
+008c2818: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c281c: b        #0x8c2860
+008c2820: sub      r3, fp, #0x4c
+008c2824: mov      r0, r3
+008c2828: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008c282c: b        #0x8c2830
+008c2830: nop
+008c2834: sub      r4, fp, #0x34
+008c2838: sub      r3, fp, #0x34
+008c283c: cmp      r4, r3
+008c2840: beq      #0x8c285c
+008c2844: nop
+008c2848: sub      r4, r4, #0x18
+008c284c: mov      r0, r4
+008c2850: bl       #0x147d48 ; nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()
+008c2854: b        #0x8c2838
+008c2858: b        #0x8c2860
+008c285c: nop
+008c2860: sub      r3, fp, #0x510
+008c2864: sub      r3, r3, #0xc
+008c2868: sub      r3, r3, #0xc
+008c286c: mov      r0, r3
+008c2870: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c2874: b        #0x8c2878
+008c2878: sub      r3, fp, #0x470
+008c287c: sub      r3, r3, #0xc
+008c2880: sub      r3, r3, #4
+008c2884: mov      r0, r3
+008c2888: bl       #0x8dcf80 ; api_module::downloadFileInfo::~downloadFileInfo()
+008c288c: sub      r3, fp, #0x400
+008c2890: mov      r0, r3
+008c2894: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c2898: b        #0x8c289c
+008c289c: sub      r3, fp, #0x3e8
+008c28a0: mov      r0, r3
+008c28a4: bl       #0x39de6c ; api_module::MachineStatus::~MachineStatus()
+008c28a8: b        #0x8c28ac
+008c28ac: sub      r3, fp, #0x3cc
+008c28b0: mov      r0, r3
+008c28b4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c28b8: b        #0x8c28bc
+008c28bc: sub      r3, fp, #0x3b4
+008c28c0: mov      r0, r3
+008c28c4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c28c8: b        #0x8c28cc
+008c28cc: sub      r3, fp, #0x39c
+008c28d0: mov      r0, r3
+008c28d4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c28d8: b        #0x8c28dc
+008c28dc: sub      r3, fp, #0x384
+008c28e0: mov      r0, r3
+008c28e4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c28e8: bl       #0xbf3f4 ; __cxa_end_cleanup
+008c28ec: sub      sp, fp, #8
+008c28f0: pop      {r4, fp, pc}

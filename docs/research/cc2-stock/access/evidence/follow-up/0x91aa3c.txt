@@ -1,0 +1,138 @@
+api_module::SQLDatabase::get_cloud_file_url(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+0091aa3c: push     {r4, fp, lr}
+0091aa40: add      fp, sp, #8
+0091aa44: sub      sp, sp, #0x7c
+0091aa48: str      r0, [fp, #-0x68]
+0091aa4c: str      r1, [fp, #-0x6c]
+0091aa50: str      r2, [fp, #-0x70]
+0091aa54: ldr      r3, [fp, #-0x68]
+0091aa58: add      r2, r3, #0xc4
+0091aa5c: sub      r3, fp, #0x48
+0091aa60: mov      r1, r2
+0091aa64: mov      r0, r3
+0091aa68: bl       #0xd12e0 ; std::lock_guard<std::mutex>::lock_guard(std::mutex&)
+0091aa6c: ldr      r3, [fp, #-0x68]
+0091aa70: add      r2, r3, #0xac
+0091aa74: sub      r3, fp, #0x44
+0091aa78: movw     r1, #0x8b4
+0091aa7c: movt     r1, #0xbe ; 'SELECT slice_url FROM '
+0091aa80: mov      r0, r3
+0091aa84: bl       #0x149b20 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+0091aa88: sub      r3, fp, #0x60
+0091aa8c: sub      r1, fp, #0x44
+0091aa90: movw     r2, #0x8cc
+0091aa94: movt     r2, #0xbe ; ' WHERE filename = ? LIMIT 1;'
+0091aa98: mov      r0, r3
+0091aa9c: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+0091aaa0: sub      r3, fp, #0x44
+0091aaa4: mov      r0, r3
+0091aaa8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+0091aaac: mov      r3, #0
+0091aab0: str      r3, [fp, #-0x64]
+0091aab4: ldr      r3, [fp, #-0x68]
+0091aab8: ldr      r4, [r3]
+0091aabc: sub      r3, fp, #0x60
+0091aac0: mov      r0, r3
+0091aac4: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091aac8: mov      r1, r0
+0091aacc: sub      r2, fp, #0x64
+0091aad0: mov      r3, #0
+0091aad4: str      r3, [sp]
+0091aad8: mov      r3, r2
+0091aadc: mvn      r2, #0
+0091aae0: mov      r0, r4
+0091aae4: bl       #0x9f80d0 ; sqlite3_prepare_v2
+0091aae8: mov      r3, r0
+0091aaec: cmp      r3, #0
+0091aaf0: movne    r3, #1
+0091aaf4: moveq    r3, #0
+0091aaf8: uxtb     r3, r3
+0091aafc: cmp      r3, #0
+0091ab00: beq      #0x91ab98
+0091ab04: bl       #0xcf64c ; spdlog::default_logger_raw()
+0091ab08: mov      r4, r0
+0091ab0c: sub      r0, fp, #0x2c
+0091ab10: movw     r3, #0xf2d0
+0091ab14: movt     r3, #0xbd ; 'get_cloud_file_url'
+0091ab18: movw     r2, #0x4ad
+0091ab1c: movw     r1, #0xf36c
+0091ab20: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/sql_database.cpp'
+0091ab24: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+0091ab28: movw     r3, #0x8ec
+0091ab2c: movt     r3, #0xbe ; 'get_cloud_file_url: prepare failed: {}'
+0091ab30: str      r3, [fp, #-0x20]
+0091ab34: movw     r0, #0x8ec
+0091ab38: movt     r0, #0xbe ; 'get_cloud_file_url: prepare failed: {}'
+0091ab3c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0091ab40: mov      r3, r0
+0091ab44: str      r3, [fp, #-0x1c]
+0091ab48: ldr      r3, [fp, #-0x68]
+0091ab4c: ldr      r3, [r3]
+0091ab50: mov      r0, r3
+0091ab54: bl       #0xa3c4c4 ; sqlite3_errmsg
+0091ab58: mov      r3, r0
+0091ab5c: str      r3, [fp, #-0x18]
+0091ab60: sub      r3, fp, #0x18
+0091ab64: str      r3, [sp, #0xc]
+0091ab68: add      r2, sp, #4
+0091ab6c: sub      r3, fp, #0x20
+0091ab70: ldm      r3, {r0, r1}
+0091ab74: stm      r2, {r0, r1}
+0091ab78: mov      r3, #4
+0091ab7c: str      r3, [sp]
+0091ab80: sub      r3, fp, #0x2c
+0091ab84: ldm      r3, {r1, r2, r3}
+0091ab88: mov      r0, r4
+0091ab8c: bl       #0x257718 ; void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)
+0091ab90: mov      r4, #0
+0091ab94: b        #0x91ac38
+0091ab98: ldr      r4, [fp, #-0x64]
+0091ab9c: ldr      r0, [fp, #-0x6c]
+0091aba0: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0091aba4: mov      r2, r0
+0091aba8: mvn      r3, #0
+0091abac: str      r3, [sp]
+0091abb0: mvn      r3, #0
+0091abb4: mov      r1, #1
+0091abb8: mov      r0, r4
+0091abbc: bl       #0x9a2e8c ; sqlite3_bind_text
+0091abc0: mov      r3, #0
+0091abc4: strb     r3, [fp, #-0xd]
+0091abc8: ldr      r3, [fp, #-0x64]
+0091abcc: mov      r0, r3
+0091abd0: bl       #0x9a17a8 ; sqlite3_step
+0091abd4: mov      r3, r0
+0091abd8: cmp      r3, #0x64
+0091abdc: moveq    r3, #1
+0091abe0: movne    r3, #0
+0091abe4: uxtb     r3, r3
+0091abe8: cmp      r3, #0
+0091abec: beq      #0x91ac28
+0091abf0: ldr      r3, [fp, #-0x64]
+0091abf4: mov      r1, #0
+0091abf8: mov      r0, r3
+0091abfc: bl       #0x9a23fc ; sqlite3_column_text
+0091ac00: mov      r3, r0
+0091ac04: str      r3, [fp, #-0x14]
+0091ac08: ldr      r3, [fp, #-0x14]
+0091ac0c: cmp      r3, #0
+0091ac10: beq      #0x91ac28
+0091ac14: ldr      r1, [fp, #-0x14]
+0091ac18: ldr      r0, [fp, #-0x70]
+0091ac1c: bl       #0xbede8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEPKc
+0091ac20: mov      r3, #1
+0091ac24: strb     r3, [fp, #-0xd]
+0091ac28: ldr      r3, [fp, #-0x64]
+0091ac2c: mov      r0, r3
+0091ac30: bl       #0x9a0324 ; sqlite3_finalize
+0091ac34: ldrb     r4, [fp, #-0xd]
+0091ac38: sub      r3, fp, #0x60
+0091ac3c: mov      r0, r3
+0091ac40: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+0091ac44: sub      r3, fp, #0x48
+0091ac48: mov      r0, r3
+0091ac4c: bl       #0xd1320 ; std::lock_guard<std::mutex>::~lock_guard()
+0091ac50: mov      r3, r4
+0091ac54: mov      r0, r3
+0091ac58: sub      sp, fp, #8
+0091ac5c: pop      {r4, fp, pc}

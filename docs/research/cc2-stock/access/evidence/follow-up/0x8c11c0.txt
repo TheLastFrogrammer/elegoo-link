@@ -1,0 +1,492 @@
+api_module::APIPrinter::download_file(api_module::downloadFileTask)::{lambda()#1}::operator()() const
+008c11c0: push     {r4, r5, r6, fp, lr}
+008c11c4: add      fp, sp, #0x10
+008c11c8: sub      sp, sp, #0x27c
+008c11cc: str      r0, [fp, #-0x270]
+008c11d0: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c11d4: mov      r5, r0
+008c11d8: sub      r0, fp, #0x1b8
+008c11dc: movw     r3, #0x7f3c
+008c11e0: movt     r3, #0xbd ; 'operator()'
+008c11e4: movw     r2, #0x72b
+008c11e8: movw     r1, #0x83b8
+008c11ec: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c11f0: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c11f4: movw     r3, #0x9110
+008c11f8: movt     r3, #0xbd ; 'Starting download file task: id {} name {}'
+008c11fc: str      r3, [fp, #-0x1ac]
+008c1200: movw     r0, #0x9110
+008c1204: movt     r0, #0xbd ; 'Starting download file task: id {} name {}'
+008c1208: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c120c: mov      r3, r0
+008c1210: str      r3, [fp, #-0x1a8]
+008c1214: ldr      r3, [fp, #-0x270]
+008c1218: add      r4, r3, #0x4c
+008c121c: ldr      r3, [fp, #-0x270]
+008c1220: add      r3, r3, #4
+008c1224: mov      r0, r3
+008c1228: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008c122c: mov      r3, r0
+008c1230: str      r3, [fp, #-0x1a4]
+008c1234: sub      r3, fp, #0x1a4
+008c1238: str      r3, [sp, #0x10]
+008c123c: str      r4, [sp, #0xc]
+008c1240: add      r2, sp, #4
+008c1244: sub      r3, fp, #0x1ac
+008c1248: ldm      r3, {r0, r1}
+008c124c: stm      r2, {r0, r1}
+008c1250: mov      r3, #2
+008c1254: str      r3, [sp]
+008c1258: sub      r3, fp, #0x1b8
+008c125c: ldm      r3, {r1, r2, r3}
+008c1260: mov      r0, r5
+008c1264: bl       #0x7f1190 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<char const*>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*&&)
+008c1268: sub      r3, fp, #0x268
+008c126c: mov      r0, r3
+008c1270: bl       #0x8dcfec ; api_module::downloadFileTask::downloadFileTask()
+008c1274: ldr      r3, [fp, #-0x270]
+008c1278: ldr      r4, [r3]
+008c127c: ldr      r3, [fp, #-0x270]
+008c1280: add      r2, r3, #0x4c
+008c1284: sub      r3, fp, #0x1a0
+008c1288: mov      r1, r2
+008c128c: mov      r0, r3
+008c1290: bl       #0xbeb18 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_
+008c1294: sub      r2, fp, #0x268
+008c1298: sub      r3, fp, #0x1a0
+008c129c: mov      r1, r3
+008c12a0: mov      r0, r4
+008c12a4: bl       #0x8c2ae8 ; api_module::APIPrinter::get_download_file_task(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask&)
+008c12a8: mov      r3, r0
+008c12ac: eor      r3, r3, #1
+008c12b0: uxtb     r4, r3
+008c12b4: sub      r3, fp, #0x1a0
+008c12b8: mov      r0, r3
+008c12bc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c12c0: cmp      r4, #0
+008c12c4: beq      #0x8c133c
+008c12c8: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c12cc: mov      r4, r0
+008c12d0: sub      r0, fp, #0x188
+008c12d4: movw     r3, #0x7f3c
+008c12d8: movt     r3, #0xbd ; 'operator()'
+008c12dc: movw     r2, #0x72e
+008c12e0: movw     r1, #0x83b8
+008c12e4: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c12e8: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c12ec: movw     r3, #0x913c
+008c12f0: movt     r3, #0xbd ; 'No task found for download file'
+008c12f4: str      r3, [fp, #-0x24]
+008c12f8: ldr      r3, [fp, #-0x24]
+008c12fc: str      r3, [fp, #-0x17c]
+008c1300: ldr      r0, [fp, #-0x24]
+008c1304: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1308: mov      r3, r0
+008c130c: str      r3, [fp, #-0x178]
+008c1310: add      r2, sp, #4
+008c1314: sub      r3, fp, #0x17c
+008c1318: ldm      r3, {r0, r1}
+008c131c: stm      r2, {r0, r1}
+008c1320: mov      r3, #4
+008c1324: str      r3, [sp]
+008c1328: sub      r3, fp, #0x188
+008c132c: ldm      r3, {r1, r2, r3}
+008c1330: mov      r0, r4
+008c1334: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c1338: b        #0x8c17f0
+008c133c: sub      r3, fp, #0x268
+008c1340: add      r3, r3, #0x80
+008c1344: mov      r1, #0
+008c1348: mov      r0, r3
+008c134c: bl       #0x8de724 ; bool std::operator==<communication::HTTPClient>(std::shared_ptr<communication::HTTPClient> const&, decltype(nullptr))
+008c1350: mov      r3, r0
+008c1354: cmp      r3, #0
+008c1358: beq      #0x8c13d0
+008c135c: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1360: mov      r4, r0
+008c1364: sub      r0, fp, #0x174
+008c1368: movw     r3, #0x7f3c
+008c136c: movt     r3, #0xbd ; 'operator()'
+008c1370: movw     r2, #0x732
+008c1374: movw     r1, #0x83b8
+008c1378: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c137c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1380: movw     r3, #0x915c
+008c1384: movt     r3, #0xbd ; 'HTTP client is null'
+008c1388: str      r3, [fp, #-0x28]
+008c138c: ldr      r3, [fp, #-0x28]
+008c1390: str      r3, [fp, #-0x168]
+008c1394: ldr      r0, [fp, #-0x28]
+008c1398: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c139c: mov      r3, r0
+008c13a0: str      r3, [fp, #-0x164]
+008c13a4: add      r2, sp, #4
+008c13a8: sub      r3, fp, #0x168
+008c13ac: ldm      r3, {r0, r1}
+008c13b0: stm      r2, {r0, r1}
+008c13b4: mov      r3, #4
+008c13b8: str      r3, [sp]
+008c13bc: sub      r3, fp, #0x174
+008c13c0: ldm      r3, {r1, r2, r3}
+008c13c4: mov      r0, r4
+008c13c8: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008c13cc: b        #0x8c17f0
+008c13d0: sub      r3, fp, #0x268
+008c13d4: add      r3, r3, #0x80
+008c13d8: mov      r0, r3
+008c13dc: bl       #0x7ed9ac ; std::__shared_ptr<communication::HTTPClient, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008c13e0: mov      r4, r0
+008c13e4: sub      r3, fp, #0x268
+008c13e8: add      r3, r3, #0x30
+008c13ec: mov      r0, r3
+008c13f0: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008c13f4: mov      r5, r0
+008c13f8: sub      r3, fp, #0x268
+008c13fc: add      r3, r3, #0x18
+008c1400: mov      r0, r3
+008c1404: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008c1408: mov      r6, r0
+008c140c: ldr      r3, [fp, #-0x270]
+008c1410: ldr      r3, [r3]
+008c1414: mov      r2, r3
+008c1418: sub      r3, fp, #0x160
+008c141c: mov      r1, r2
+008c1420: mov      r0, r3
+008c1424: bl       #0x8c9f7c ; std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>::function<api_module::APIPrinter::download_file(api_module::downloadFileTask)::{lambda()#1}::operator()() const::{lambda(unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)#1}, void, void>(api_module::APIPrinter::download_file(api_module::downloadFileTask)::{lambda()#1}::operator()() const::{lambda(unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)#1})
+008c1428: sub      r2, fp, #0x160
+008c142c: sub      r3, fp, #0x268
+008c1430: add      r3, r3, #0x48
+008c1434: str      r3, [sp, #4]
+008c1438: sub      r3, fp, #0x268
+008c143c: add      r3, r3, #0x60
+008c1440: str      r3, [sp]
+008c1444: mov      r3, r2
+008c1448: mov      r2, r6
+008c144c: mov      r1, r5
+008c1450: mov      r0, r4
+008c1454: bl       #0x8022b0 ; communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008c1458: mov      r3, r0
+008c145c: str      r3, [fp, #-0x18]
+008c1460: sub      r3, fp, #0x160
+008c1464: mov      r0, r3
+008c1468: bl       #0x823bbc ; std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>::~function()
+008c146c: ldr      r3, [fp, #-0x18]
+008c1470: movw     r2, #0x2337
+008c1474: cmp      r3, r2
+008c1478: bne      #0x8c1510
+008c147c: mov      r3, #2
+008c1480: str      r3, [fp, #-0x1f0]
+008c1484: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1488: mov      r4, r0
+008c148c: sub      r0, fp, #0x150
+008c1490: movw     r3, #0x7f3c
+008c1494: movt     r3, #0xbd ; 'operator()'
+008c1498: movw     r2, #0x73a
+008c149c: movw     r1, #0x83b8
+008c14a0: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c14a4: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c14a8: movw     r3, #0x9170
+008c14ac: movt     r3, #0xbd ; 'Download file canceled: {}'
+008c14b0: str      r3, [fp, #-0x144]
+008c14b4: movw     r0, #0x9170
+008c14b8: movt     r0, #0xbd ; 'Download file canceled: {}'
+008c14bc: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c14c0: mov      r3, r0
+008c14c4: str      r3, [fp, #-0x140]
+008c14c8: sub      r3, fp, #0x268
+008c14cc: mov      r0, r3
+008c14d0: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008c14d4: mov      r3, r0
+008c14d8: str      r3, [fp, #-0x13c]
+008c14dc: sub      r3, fp, #0x13c
+008c14e0: str      r3, [sp, #0xc]
+008c14e4: add      r2, sp, #4
+008c14e8: sub      r3, fp, #0x144
+008c14ec: ldm      r3, {r0, r1}
+008c14f0: stm      r2, {r0, r1}
+008c14f4: mov      r3, #2
+008c14f8: str      r3, [sp]
+008c14fc: sub      r3, fp, #0x150
+008c1500: ldm      r3, {r1, r2, r3}
+008c1504: mov      r0, r4
+008c1508: bl       #0x257718 ; void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)
+008c150c: b        #0x8c15e0
+008c1510: ldr      r3, [fp, #-0x18]
+008c1514: cmp      r3, #0
+008c1518: bne      #0x8c1524
+008c151c: mov      r3, #1
+008c1520: b        #0x8c1528
+008c1524: mov      r3, #3
+008c1528: str      r3, [fp, #-0x1f0]
+008c152c: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1530: mov      r4, r0
+008c1534: sub      r0, fp, #0x138
+008c1538: movw     r3, #0x7f3c
+008c153c: movt     r3, #0xbd ; 'operator()'
+008c1540: movw     r2, #0x73d
+008c1544: movw     r1, #0x83b8
+008c1548: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c154c: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1550: movw     r3, #0x918c
+008c1554: movt     r3, #0xbd ; 'Download file {}: {}'
+008c1558: str      r3, [fp, #-0x12c]
+008c155c: movw     r0, #0x918c
+008c1560: movt     r0, #0xbd ; 'Download file {}: {}'
+008c1564: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1568: mov      r3, r0
+008c156c: str      r3, [fp, #-0x128]
+008c1570: ldr      r3, [fp, #-0x18]
+008c1574: cmp      r3, #0
+008c1578: bne      #0x8c1588
+008c157c: movw     r3, #0xb4d8
+008c1580: movt     r3, #0xb2 ; 'completed'
+008c1584: b        #0x8c1590
+008c1588: movw     r3, #0xebac
+008c158c: movt     r3, #0xb1 ; 'failed'
+008c1590: str      r3, [fp, #-0x124]
+008c1594: sub      r3, fp, #0x268
+008c1598: mov      r0, r3
+008c159c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008c15a0: mov      r3, r0
+008c15a4: str      r3, [fp, #-0x120]
+008c15a8: sub      r3, fp, #0x120
+008c15ac: str      r3, [sp, #0x10]
+008c15b0: sub      r3, fp, #0x124
+008c15b4: str      r3, [sp, #0xc]
+008c15b8: add      r2, sp, #4
+008c15bc: sub      r3, fp, #0x12c
+008c15c0: ldm      r3, {r0, r1}
+008c15c4: stm      r2, {r0, r1}
+008c15c8: mov      r3, #2
+008c15cc: str      r3, [sp]
+008c15d0: sub      r3, fp, #0x138
+008c15d4: ldm      r3, {r1, r2, r3}
+008c15d8: mov      r0, r4
+008c15dc: bl       #0x7ee06c ; void spdlog::logger::log<char const*, char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char const*>::type>, char const*&&, char const*&&)
+008c15e0: ldr      r3, [fp, #-0x270]
+008c15e4: ldr      r4, [r3]
+008c15e8: sub      r2, fp, #0x268
+008c15ec: sub      r3, fp, #0x11c
+008c15f0: mov      r1, r2
+008c15f4: mov      r0, r3
+008c15f8: bl       #0x8dd2a4 ; api_module::downloadFileTask::downloadFileTask(api_module::downloadFileTask const&)
+008c15fc: sub      r3, fp, #0x11c
+008c1600: mov      r1, r3
+008c1604: mov      r0, r4
+008c1608: bl       #0x8c28f4 ; api_module::APIPrinter::set_download_file_task(api_module::downloadFileTask)
+008c160c: sub      r3, fp, #0x11c
+008c1610: mov      r0, r3
+008c1614: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c1618: ldr      r3, [fp, #-0x270]
+008c161c: ldr      r4, [r3]
+008c1620: sub      r3, fp, #0x268
+008c1624: add      r2, r3, #0x48
+008c1628: sub      r3, fp, #0x74
+008c162c: mov      r1, r2
+008c1630: mov      r0, r3
+008c1634: bl       #0xbeb18 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_
+008c1638: sub      r3, fp, #0x74
+008c163c: mov      r1, r3
+008c1640: mov      r0, r4
+008c1644: bl       #0x8c09d0 ; api_module::APIPrinter::report_download_progress(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008c1648: sub      r3, fp, #0x74
+008c164c: mov      r0, r3
+008c1650: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1654: mov      r3, #0
+008c1658: strb     r3, [fp, #-0x19]
+008c165c: ldr      r3, [fp, #-0x270]
+008c1660: ldr      r3, [r3]
+008c1664: add      r2, r3, #0xfc
+008c1668: sub      r3, fp, #0x1bc
+008c166c: mov      r1, r2
+008c1670: mov      r0, r3
+008c1674: bl       #0xd12e0 ; std::lock_guard<std::mutex>::lock_guard(std::mutex&)
+008c1678: ldr      r3, [fp, #-0x270]
+008c167c: ldr      r3, [r3]
+008c1680: add      r2, r3, #0x1b0
+008c1684: sub      r3, fp, #0x268
+008c1688: add      r3, r3, #0x48
+008c168c: mov      r1, r3
+008c1690: mov      r0, r2
+008c1694: bl       #0x8de75c ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::find(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008c1698: mov      r3, r0
+008c169c: str      r3, [fp, #-0x1c0]
+008c16a0: ldr      r3, [fp, #-0x270]
+008c16a4: ldr      r3, [r3]
+008c16a8: add      r3, r3, #0x1b0
+008c16ac: mov      r0, r3
+008c16b0: bl       #0x8de790 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::end()
+008c16b4: mov      r3, r0
+008c16b8: str      r3, [fp, #-0x5c]
+008c16bc: sub      r2, fp, #0x5c
+008c16c0: sub      r3, fp, #0x1c0
+008c16c4: mov      r1, r2
+008c16c8: mov      r0, r3
+008c16cc: bl       #0x8de7bc ; std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> >::operator!=(std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > const&) const
+008c16d0: mov      r3, r0
+008c16d4: cmp      r3, #0
+008c16d8: beq      #0x8c16f4
+008c16dc: ldr      r3, [fp, #-0x270]
+008c16e0: ldr      r3, [r3]
+008c16e4: add      r3, r3, #0x1b0
+008c16e8: ldr      r1, [fp, #-0x1c0]
+008c16ec: mov      r0, r3
+008c16f0: bl       #0x8de800 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::erase[abi:cxx11](std::_Rb_tree_iterator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> >)
+008c16f4: ldr      r3, [fp, #-0x270]
+008c16f8: ldr      r3, [r3]
+008c16fc: add      r3, r3, #0x1b0
+008c1700: mov      r0, r3
+008c1704: bl       #0x8de834 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::empty() const
+008c1708: mov      r3, r0
+008c170c: strb     r3, [fp, #-0x19]
+008c1710: ldrb     r3, [fp, #-0x19]
+008c1714: eor      r3, r3, #1
+008c1718: uxtb     r3, r3
+008c171c: cmp      r3, #0
+008c1720: beq      #0x8c17c0
+008c1724: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c1728: mov      r4, r0
+008c172c: sub      r0, fp, #0x58
+008c1730: movw     r3, #0x7f3c
+008c1734: movt     r3, #0xbd ; 'operator()'
+008c1738: movw     r2, #0x74d
+008c173c: movw     r1, #0x83b8
+008c1740: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c1744: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c1748: movw     r3, #0x91a4
+008c174c: movt     r3, #0xbd ; 'Download task {} done but {} other task(s) still running, skip FILE_TRANSFER_DONE'
+008c1750: str      r3, [fp, #-0x4c]
+008c1754: movw     r0, #0x91a4
+008c1758: movt     r0, #0xbd ; 'Download task {} done but {} other task(s) still running, skip FILE_TRANSFER_DONE'
+008c175c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c1760: mov      r3, r0
+008c1764: str      r3, [fp, #-0x48]
+008c1768: ldr      r3, [fp, #-0x270]
+008c176c: ldr      r3, [r3]
+008c1770: add      r3, r3, #0x1b0
+008c1774: mov      r0, r3
+008c1778: bl       #0x8de860 ; std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::downloadFileTask, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::downloadFileTask> > >::size() const
+008c177c: mov      r3, r0
+008c1780: str      r3, [fp, #-0x44]
+008c1784: sub      r3, fp, #0x44
+008c1788: str      r3, [sp, #0x10]
+008c178c: sub      r3, fp, #0x268
+008c1790: add      r3, r3, #0x48
+008c1794: str      r3, [sp, #0xc]
+008c1798: add      r2, sp, #4
+008c179c: sub      r3, fp, #0x4c
+008c17a0: ldm      r3, {r0, r1}
+008c17a4: stm      r2, {r0, r1}
+008c17a8: mov      r3, #2
+008c17ac: str      r3, [sp]
+008c17b0: sub      r3, fp, #0x58
+008c17b4: ldm      r3, {r1, r2, r3}
+008c17b8: mov      r0, r4
+008c17bc: bl       #0x2193b8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type, fmt::v10::type_identity<unsigned int>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, unsigned int&&)
+008c17c0: sub      r3, fp, #0x1bc
+008c17c4: mov      r0, r3
+008c17c8: bl       #0xd1320 ; std::lock_guard<std::mutex>::~lock_guard()
+008c17cc: ldrb     r3, [fp, #-0x19]
+008c17d0: cmp      r3, #0
+008c17d4: beq      #0x8c17ec
+008c17d8: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008c17dc: mov      r3, r0
+008c17e0: movw     r1, #0xbb9
+008c17e4: mov      r0, r3
+008c17e8: bl       #0x88ee04 ; api_module::DeviceStatus::set_sub_status(api_module::EMachineSubStatus)
+008c17ec: nop
+008c17f0: sub      r3, fp, #0x268
+008c17f4: mov      r0, r3
+008c17f8: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c17fc: b        #0x8c1964
+008c1800: mov      r5, r0
+008c1804: mov      r4, r1
+008c1808: sub      r3, fp, #0x1a0
+008c180c: mov      r0, r3
+008c1810: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c1814: b        #0x8c1880
+008c1818: mov      r5, r0
+008c181c: mov      r4, r1
+008c1820: sub      r3, fp, #0x160
+008c1824: mov      r0, r3
+008c1828: bl       #0x823bbc ; std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>::~function()
+008c182c: b        #0x8c1880
+008c1830: mov      r5, r0
+008c1834: mov      r4, r1
+008c1838: sub      r3, fp, #0x11c
+008c183c: mov      r0, r3
+008c1840: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c1844: b        #0x8c1880
+008c1848: mov      r5, r0
+008c184c: mov      r4, r1
+008c1850: sub      r3, fp, #0x74
+008c1854: mov      r0, r3
+008c1858: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008c185c: b        #0x8c1880
+008c1860: mov      r5, r0
+008c1864: mov      r4, r1
+008c1868: sub      r3, fp, #0x1bc
+008c186c: mov      r0, r3
+008c1870: bl       #0xd1320 ; std::lock_guard<std::mutex>::~lock_guard()
+008c1874: b        #0x8c1880
+008c1878: mov      r5, r0
+008c187c: mov      r4, r1
+008c1880: sub      r3, fp, #0x268
+008c1884: mov      r0, r3
+008c1888: bl       #0x8dd0a8 ; api_module::downloadFileTask::~downloadFileTask()
+008c188c: mov      r2, r5
+008c1890: mov      r3, r4
+008c1894: b        #0x8c18a0
+008c1898: mov      r2, r0
+008c189c: mov      r3, r1
+008c18a0: cmp      r3, #1
+008c18a4: beq      #0x8c18ac
+008c18a8: bl       #0xbf3f4 ; __cxa_end_cleanup
+008c18ac: mov      r3, r2
+008c18b0: mov      r0, r3
+008c18b4: bl       #0xbea1c ; __cxa_begin_catch
+008c18b8: mov      r3, r0
+008c18bc: str      r3, [fp, #-0x20]
+008c18c0: bl       #0xcf64c ; spdlog::default_logger_raw()
+008c18c4: mov      r4, r0
+008c18c8: sub      r0, fp, #0x40
+008c18cc: movw     r3, #0x7f3c
+008c18d0: movt     r3, #0xbd ; 'operator()'
+008c18d4: movw     r2, #0x755
+008c18d8: movw     r1, #0x83b8
+008c18dc: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008c18e0: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008c18e4: movw     r3, #0x91f8
+008c18e8: movt     r3, #0xbd ; 'Exception in download file task: {}'
+008c18ec: str      r3, [fp, #-0x34]
+008c18f0: movw     r0, #0x91f8
+008c18f4: movt     r0, #0xbd ; 'Exception in download file task: {}'
+008c18f8: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008c18fc: mov      r3, r0
+008c1900: str      r3, [fp, #-0x30]
+008c1904: ldr      r3, [fp, #-0x20]
+008c1908: ldr      r3, [r3]
+008c190c: add      r3, r3, #8
+008c1910: ldr      r3, [r3]
+008c1914: ldr      r0, [fp, #-0x20]
+008c1918: blx      r3
+008c191c: mov      r3, r0
+008c1920: str      r3, [fp, #-0x2c]
+008c1924: sub      r3, fp, #0x2c
+008c1928: str      r3, [sp, #0xc]
+008c192c: add      r2, sp, #4
+008c1930: sub      r3, fp, #0x34
+008c1934: ldm      r3, {r0, r1}
+008c1938: stm      r2, {r0, r1}
+008c193c: mov      r3, #4
+008c1940: str      r3, [sp]
+008c1944: sub      r3, fp, #0x40
+008c1948: ldm      r3, {r1, r2, r3}
+008c194c: mov      r0, r4
+008c1950: bl       #0x257718 ; void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)
+008c1954: bl       #0xbff1c ; __cxa_end_catch
+008c1958: b        #0x8c1964
+008c195c: bl       #0xbff1c ; __cxa_end_catch
+008c1960: bl       #0xbf3f4 ; __cxa_end_cleanup
+008c1964: sub      sp, fp, #0x10
+008c1968: pop      {r4, r5, r6, fp, pc}

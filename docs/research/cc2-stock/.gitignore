@@ -1,0 +1,8 @@
+__pycache__/
+*.pyc
+captures/
+**/tools/tooling/
+**/tools/stock-unpacked/
+**/tools/official-*.zip.sig
+**/tools/stock-public.pem
+**/tools/opencentauri/

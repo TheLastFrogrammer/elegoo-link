@@ -1,0 +1,649 @@
+{
+  "function": "WebHooks::WebHooks(std::shared_ptr<Printer>)",
+  "va": "0x2d59e8",
+  "size": 1920,
+  "calls": [
+    {
+      "at": "0x2d5a04",
+      "target": "0x2e8bc4",
+      "name": "std::enable_shared_from_this<WebHooks>::enable_shared_from_this()"
+    },
+    {
+      "at": "0x2d5a18",
+      "target": "0x148908",
+      "name": "std::shared_ptr<Printer>::shared_ptr(std::shared_ptr<Printer> const&)"
+    },
+    {
+      "at": "0x2d5a28",
+      "target": "0x2e8c2c",
+      "name": "std::shared_ptr<GCodeHelper>::shared_ptr()"
+    },
+    {
+      "at": "0x2d5a38",
+      "target": "0x2e8c94",
+      "name": "std::shared_ptr<QueryStatusHelper>::shared_ptr()"
+    },
+    {
+      "at": "0x2d5a48",
+      "target": "0x2e8edc",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > >::unordered_map()"
+    },
+    {
+      "at": "0x2d5a58",
+      "target": "0x2e9124",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > > > > >::unordered_map()"
+    },
+    {
+      "at": "0x2d5a68",
+      "target": "0x2ec864",
+      "name": "std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > > > > >::map()"
+    },
+    {
+      "at": "0x2d5a78",
+      "target": "0x2e918c",
+      "name": "std::shared_ptr<ServerSocket>::shared_ptr()"
+    },
+    {
+      "at": "0x2d5a84",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5a9c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5ab0",
+      "target": "0x2de894",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#1}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#1})"
+    },
+    {
+      "at": "0x2d5ac4",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5ad0",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5adc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5ae8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5af4",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5b0c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5b20",
+      "target": "0x2de95c",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#2}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#2})"
+    },
+    {
+      "at": "0x2d5b34",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5b40",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5b4c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5b58",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5b64",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5b7c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5b90",
+      "target": "0x2dea24",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#3}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#3})"
+    },
+    {
+      "at": "0x2d5ba4",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5bb0",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5bbc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5bc8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5bd4",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5bec",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5c00",
+      "target": "0x2deaec",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#4}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#4})"
+    },
+    {
+      "at": "0x2d5c14",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5c20",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5c2c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5c38",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5c44",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5c5c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5c70",
+      "target": "0x2debb4",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#5}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#5})"
+    },
+    {
+      "at": "0x2d5c84",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5c90",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5c9c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5ca8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5cb4",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5ccc",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5ce0",
+      "target": "0x2dec7c",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#6}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#6})"
+    },
+    {
+      "at": "0x2d5cf4",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5d00",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5d0c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5d18",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5d24",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5d3c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5d50",
+      "target": "0x2ded44",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#7}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#7})"
+    },
+    {
+      "at": "0x2d5d64",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5d70",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5d7c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5d88",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5d94",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5dac",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5dc0",
+      "target": "0x2dee0c",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#8}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#8})"
+    },
+    {
+      "at": "0x2d5dd4",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5de0",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5dec",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5df8",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5e04",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d5e1c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d5e30",
+      "target": "0x2deed4",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#9}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#9})"
+    },
+    {
+      "at": "0x2d5e44",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d5e50",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5e5c",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5e68",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5e6c",
+      "target": "0x2563d8",
+      "name": "api_module::DeviceUiMessageHandle::get_instance()"
+    },
+    {
+      "at": "0x2d5e84",
+      "target": "0x2def9c",
+      "name": "std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>::function<WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)#10}, void, void>(WebHooks::WebHooks(std::shared_ptr<Printer>)::{lambda(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)#10})"
+    },
+    {
+      "at": "0x2d5e94",
+      "target": "0x92edb4",
+      "name": "api_module::DeviceUiMessageHandle::set_report_callback(std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>)"
+    },
+    {
+      "at": "0x2d5ea0",
+      "target": "0xd03e4",
+      "name": "std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>::~function()"
+    },
+    {
+      "at": "0x2d5ea4",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x2d5ec4",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x2d5ee0",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x2d5f10",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x2d5f24",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5f34",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5f44",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5f54",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5f64",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5f74",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5f84",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5f94",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5fa4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5fb4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5fc4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d5fd4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d5fe4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d5ff4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d6004",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d6014",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d6024",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d6034",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d6044",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d6054",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d6064",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d6074",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d6084",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d6094",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d60a4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d60b4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d60c4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d60d4",
+      "target": "0xd03e4",
+      "name": "std::function<void (nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)>::~function()"
+    },
+    {
+      "at": "0x2d60e8",
+      "target": "0x26869c",
+      "name": "std::shared_ptr<ServerSocket>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d60f8",
+      "target": "0x268640",
+      "name": "std::map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >, std::less<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::less<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > > > > >::~map()"
+    },
+    {
+      "at": "0x2d6108",
+      "target": "0x268614",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > >, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > > > > > >::~unordered_map()"
+    },
+    {
+      "at": "0x2d6118",
+      "target": "0x2685e8",
+      "name": "std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void (std::shared_ptr<WebRequest>)>, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, std::function<void (std::shared_ptr<WebRequest>)> > > >::~unordered_map()"
+    },
+    {
+      "at": "0x2d6128",
+      "target": "0x2685bc",
+      "name": "std::shared_ptr<QueryStatusHelper>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d6138",
+      "target": "0x268560",
+      "name": "std::shared_ptr<GCodeHelper>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d6148",
+      "target": "0x14872c",
+      "name": "std::shared_ptr<Printer>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d6154",
+      "target": "0x268950",
+      "name": "std::enable_shared_from_this<WebHooks>::~enable_shared_from_this()"
+    },
+    {
+      "at": "0x2d6158",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x2d5a94",
+      "va": "0xa8755c",
+      "string": "list_endpoints"
+    },
+    {
+      "at": "0x2d5b04",
+      "va": "0xbb8e5c",
+      "string": "info"
+    },
+    {
+      "at": "0x2d5b74",
+      "va": "0xa68f80",
+      "string": "emergency_stop"
+    },
+    {
+      "at": "0x2d5be4",
+      "va": "0xa8756c",
+      "string": "register_remote_method"
+    },
+    {
+      "at": "0x2d5c54",
+      "va": "0xa87408",
+      "string": "network_access_cfg"
+    },
+    {
+      "at": "0x2d5cc4",
+      "va": "0xa87404",
+      "string": "get_network_access_cfg"
+    },
+    {
+      "at": "0x2d5d34",
+      "va": "0xa8741c",
+      "string": "bind_func"
+    },
+    {
+      "at": "0x2d5da4",
+      "va": "0xa87584",
+      "string": "device_manage"
+    },
+    {
+      "at": "0x2d5e14",
+      "va": "0xa87428",
+      "string": "sync_info"
+    },
+    {
+      "at": "0x2d5eb4",
+      "va": "0xa85358",
+      "string": "WebHooks"
+    },
+    {
+      "at": "0x2d5ec0",
+      "va": "0xa8715c",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/webhooks.cpp"
+    },
+    {
+      "at": "0x2d5ecc",
+      "va": "0xa87594",
+      "string": "create WebHooks success!"
+    }
+  ]
+}

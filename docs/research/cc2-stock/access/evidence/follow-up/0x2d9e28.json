@@ -1,0 +1,159 @@
+{
+  "function": "GCodeHelper::handle_subscribe_output(std::shared_ptr<WebRequest>)",
+  "va": "0x2d9e28",
+  "size": 564,
+  "calls": [
+    {
+      "at": "0x2d9e44",
+      "target": "0x2eb218",
+      "name": "std::__shared_ptr<WebRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d9e58",
+      "target": "0x2d33fc",
+      "name": "WebRequest::get_client_connection() const"
+    },
+    {
+      "at": "0x2d9e64",
+      "target": "0x2eb218",
+      "name": "std::__shared_ptr<WebRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d9e74",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d9e8c",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d9eac",
+      "target": "0x149874",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::object(std::initializer_list<nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > >)"
+    },
+    {
+      "at": "0x2d9ec0",
+      "target": "0x2d3698",
+      "name": "WebRequest::get_dict(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>)"
+    },
+    {
+      "at": "0x2d9ecc",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x2d9ee8",
+      "target": "0x147d48",
+      "name": "nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()"
+    },
+    {
+      "at": "0x2d9ef8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9f04",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9f1c",
+      "target": "0x2ee6bc",
+      "name": "std::unordered_map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::hash<std::shared_ptr<ClientConnection> >, std::equal_to<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >::operator[](std::shared_ptr<ClientConnection> const&)"
+    },
+    {
+      "at": "0x2d9f34",
+      "target": "0xdb05c",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)"
+    },
+    {
+      "at": "0x2d9f44",
+      "target": "0xdafa0",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::operator=(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>)"
+    },
+    {
+      "at": "0x2d9f50",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x2d9f78",
+      "target": "0x14bde8",
+      "name": "std::__shared_ptr<GCodeDispatch, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d9f90",
+      "target": "0x2df69c",
+      "name": "std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>::function<GCodeHelper::handle_subscribe_output(std::shared_ptr<WebRequest>)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)#1}, void, void>(GCodeHelper::handle_subscribe_output(std::shared_ptr<WebRequest>)::{lambda(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)#1})"
+    },
+    {
+      "at": "0x2d9fa0",
+      "target": "0x1a022c",
+      "name": "GCodeDispatch::register_output_handler(std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>)"
+    },
+    {
+      "at": "0x2d9fac",
+      "target": "0x1db24c",
+      "name": "std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>::~function()"
+    },
+    {
+      "at": "0x2d9fc4",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x2d9fd0",
+      "target": "0x2687bc",
+      "name": "std::shared_ptr<ClientConnection>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d9fe0",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x2da000",
+      "target": "0x147d48",
+      "name": "nlohmann::json_abi_v3_12_0::detail::json_ref<nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> >::~json_ref()"
+    },
+    {
+      "at": "0x2da010",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2da020",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2da030",
+      "target": "0x1db24c",
+      "name": "std::function<void (std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, elegoo::common::ErrorLevel)>::~function()"
+    },
+    {
+      "at": "0x2da040",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x2da04c",
+      "target": "0x2687bc",
+      "name": "std::shared_ptr<ClientConnection>::~shared_ptr()"
+    },
+    {
+      "at": "0x2da050",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x2d9e84",
+      "va": "0xa87760",
+      "string": "response_template"
+    }
+  ]
+}

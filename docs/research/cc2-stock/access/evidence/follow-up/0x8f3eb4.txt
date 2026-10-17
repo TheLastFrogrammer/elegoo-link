@@ -1,0 +1,279 @@
+api_module::RecordManager::upload_file_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008f3eb4: push     {r4, fp, lr}
+008f3eb8: add      fp, sp, #8
+008f3ebc: sub      sp, sp, #0x2b4
+008f3ec0: str      r0, [fp, #-0x298]
+008f3ec4: str      r1, [fp, #-0x29c]
+008f3ec8: str      r2, [fp, #-0x2a0]
+008f3ecc: str      r3, [fp, #-0x2a4]
+008f3ed0: ldr      r3, [fp, #-0x298]
+008f3ed4: add      r3, r3, #0xe8
+008f3ed8: ldr      r1, [fp, #-0x29c]
+008f3edc: mov      r0, r3
+008f3ee0: bl       #0x8fb988 ; std::unordered_map<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::ThumbnailInfo, std::hash<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::equal_to<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > >, std::allocator<std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const, api_module::ThumbnailInfo> > >::operator[](std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008f3ee4: mov      r3, r0
+008f3ee8: add      r2, r3, #0x18
+008f3eec: sub      r3, fp, #0x134
+008f3ef0: mov      r1, r2
+008f3ef4: mov      r0, r3
+008f3ef8: bl       #0xbeb18 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_
+008f3efc: sub      r3, fp, #0x134
+008f3f00: mov      r0, r3
+008f3f04: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008f3f08: mov      r3, r0
+008f3f0c: cmp      r3, #0
+008f3f10: beq      #0x8f3f1c
+008f3f14: mov      r4, #0
+008f3f18: b        #0x8f42f0
+008f3f1c: sub      r3, fp, #0x134
+008f3f20: mov      r0, r3
+008f3f24: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008f3f28: mov      r4, r0
+008f3f2c: sub      r3, fp, #0x134
+008f3f30: mov      r0, r3
+008f3f34: bl       #0xbfa0c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4sizeEv
+008f3f38: mov      r2, r0
+008f3f3c: sub      r3, fp, #0x14c
+008f3f40: mov      r1, r4
+008f3f44: mov      r0, r3
+008f3f48: bl       #0x8ea594 ; hv::Base64Decode(char const*, unsigned int)
+008f3f4c: sub      r3, fp, #0x14c
+008f3f50: mov      r0, r3
+008f3f54: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008f3f58: mov      r3, r0
+008f3f5c: cmp      r3, #0
+008f3f60: beq      #0x8f3fe0
+008f3f64: bl       #0xcf64c ; spdlog::default_logger_raw()
+008f3f68: mov      r4, r0
+008f3f6c: sub      r0, fp, #0x11c
+008f3f70: movw     r3, #0xeb0c
+008f3f74: movt     r3, #0xbd ; 'upload_file_thumbnail'
+008f3f78: movw     r2, #0x57d
+008f3f7c: movw     r1, #0x98ec
+008f3f80: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/record_manager.cpp'
+008f3f84: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008f3f88: movw     r3, #0xa6ac
+008f3f8c: movt     r3, #0xbd ; 'Failed to decode thumbnail for file: {}'
+008f3f90: str      r3, [fp, #-0x110]
+008f3f94: movw     r0, #0xa6ac
+008f3f98: movt     r0, #0xbd ; 'Failed to decode thumbnail for file: {}'
+008f3f9c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008f3fa0: mov      r3, r0
+008f3fa4: str      r3, [fp, #-0x10c]
+008f3fa8: ldr      r3, [fp, #-0x29c]
+008f3fac: str      r3, [sp, #0xc]
+008f3fb0: add      r2, sp, #4
+008f3fb4: sub      r3, fp, #0x110
+008f3fb8: ldm      r3, {r0, r1}
+008f3fbc: stm      r2, {r0, r1}
+008f3fc0: mov      r3, #4
+008f3fc4: str      r3, [sp]
+008f3fc8: sub      r3, fp, #0x11c
+008f3fcc: ldm      r3, {r1, r2, r3}
+008f3fd0: mov      r0, r4
+008f3fd4: bl       #0x1baaf8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008f3fd8: mov      r4, #0
+008f3fdc: b        #0x8f42e4
+008f3fe0: sub      r3, fp, #0x108
+008f3fe4: mov      r0, r3
+008f3fe8: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008f3fec: sub      r2, fp, #0x108
+008f3ff0: sub      r3, fp, #0x164
+008f3ff4: movw     r1, #0xa6d4
+008f3ff8: movt     r1, #0xbd ; '/root/tmp_upload.png'
+008f3ffc: mov      r0, r3
+008f4000: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008f4004: sub      r3, fp, #0x108
+008f4008: mov      r0, r3
+008f400c: bl       #0xbe944 ; _ZNSaIcED1Ev
+008f4010: sub      r1, fp, #0x164
+008f4014: sub      r3, fp, #0x278
+008f4018: mov      r2, #4
+008f401c: mov      r0, r3
+008f4020: bl       #0xbf8bc ; _ZNSt14basic_ofstreamIcSt11char_traitsIcEEC1ERKNSt7__cxx1112basic_stringIcS1_SaIcEEESt13_Ios_Openmode
+008f4024: sub      r3, fp, #0x278
+008f4028: add      r3, r3, #0x8c
+008f402c: mov      r0, r3
+008f4030: bl       #0xbf7d8 ; _ZNKSt9basic_iosIcSt11char_traitsIcEEntEv
+008f4034: mov      r3, r0
+008f4038: cmp      r3, #0
+008f403c: beq      #0x8f40bc
+008f4040: bl       #0xcf64c ; spdlog::default_logger_raw()
+008f4044: mov      r4, r0
+008f4048: sub      r0, fp, #0x104
+008f404c: movw     r3, #0xeb0c
+008f4050: movt     r3, #0xbd ; 'upload_file_thumbnail'
+008f4054: movw     r2, #0x584
+008f4058: movw     r1, #0x98ec
+008f405c: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/record_manager.cpp'
+008f4060: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008f4064: movw     r3, #0xa6ec
+008f4068: movt     r3, #0xbd ; 'Failed to open temp file {}'
+008f406c: str      r3, [fp, #-0xf8]
+008f4070: movw     r0, #0xa6ec
+008f4074: movt     r0, #0xbd ; 'Failed to open temp file {}'
+008f4078: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008f407c: mov      r3, r0
+008f4080: str      r3, [fp, #-0xf4]
+008f4084: sub      r3, fp, #0x164
+008f4088: str      r3, [sp, #0xc]
+008f408c: add      r2, sp, #4
+008f4090: sub      r3, fp, #0xf8
+008f4094: ldm      r3, {r0, r1}
+008f4098: stm      r2, {r0, r1}
+008f409c: mov      r3, #4
+008f40a0: str      r3, [sp]
+008f40a4: sub      r3, fp, #0x104
+008f40a8: ldm      r3, {r1, r2, r3}
+008f40ac: mov      r0, r4
+008f40b0: bl       #0x1baaf8 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008f40b4: mov      r4, #0
+008f40b8: b        #0x8f42cc
+008f40bc: sub      r3, fp, #0x14c
+008f40c0: mov      r0, r3
+008f40c4: bl       #0xbec74 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4dataEv
+008f40c8: mov      r4, r0
+008f40cc: sub      r3, fp, #0x14c
+008f40d0: mov      r0, r3
+008f40d4: bl       #0xbfa0c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE4sizeEv
+008f40d8: mov      r3, r0
+008f40dc: mov      r2, r3
+008f40e0: sub      r3, fp, #0x278
+008f40e4: mov      r1, r4
+008f40e8: mov      r0, r3
+008f40ec: bl       #0xbf628 ; _ZNSo5writeEPKci
+008f40f0: sub      r3, fp, #0x278
+008f40f4: mov      r0, r3
+008f40f8: bl       #0xbf3a0 ; _ZNSt14basic_ofstreamIcSt11char_traitsIcEE5closeEv
+008f40fc: bl       #0x255dbc ; api_module::ConfigManager::getInstance()
+008f4100: mov      r2, r0
+008f4104: sub      r3, fp, #0x90
+008f4108: mov      r1, r2
+008f410c: mov      r0, r3
+008f4110: bl       #0x920a90 ; api_module::ConfigManager::get_product_auth() const
+008f4114: sub      r3, fp, #0xa8
+008f4118: sub      r1, fp, #0x90
+008f411c: movw     r2, #0xa708
+008f4120: movt     r2, #0xbd ; '/thumbnail/'
+008f4124: mov      r0, r3
+008f4128: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+008f412c: sub      r3, fp, #0x48
+008f4130: ldr      r1, [fp, #-0x2a0]
+008f4134: mov      r0, r3
+008f4138: bl       #0xc3ce4 ; std::__cxx11::to_string(int)
+008f413c: sub      r3, fp, #0xc0
+008f4140: sub      r2, fp, #0x48
+008f4144: sub      r1, fp, #0xa8
+008f4148: mov      r0, r3
+008f414c: bl       #0x1496b4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+008f4150: sub      r3, fp, #0xd8
+008f4154: sub      r1, fp, #0xc0
+008f4158: movw     r2, #0xd344
+008f415c: movt     r2, #0xb3
+008f4160: mov      r0, r3
+008f4164: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+008f4168: sub      r3, fp, #0xf0
+008f416c: sub      r1, fp, #0xd8
+008f4170: ldr      r2, [fp, #-0x29c]
+008f4174: mov      r0, r3
+008f4178: bl       #0xdac70 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008f417c: sub      r3, fp, #0x290
+008f4180: sub      r1, fp, #0xf0
+008f4184: movw     r2, #0xa6e4
+008f4188: movt     r2, #0xbd ; '.png'
+008f418c: mov      r0, r3
+008f4190: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+008f4194: sub      r3, fp, #0xf0
+008f4198: mov      r0, r3
+008f419c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f41a0: sub      r3, fp, #0xd8
+008f41a4: mov      r0, r3
+008f41a8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f41ac: sub      r3, fp, #0xc0
+008f41b0: mov      r0, r3
+008f41b4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f41b8: sub      r3, fp, #0x48
+008f41bc: mov      r0, r3
+008f41c0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f41c4: sub      r3, fp, #0xa8
+008f41c8: mov      r0, r3
+008f41cc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f41d0: sub      r3, fp, #0x90
+008f41d4: mov      r0, r3
+008f41d8: bl       #0x2555b4 ; api_module::ProductAuth::~ProductAuth()
+008f41dc: bl       #0x7dac74 ; communication::CloudServiceClient::get_instance()
+008f41e0: sub      r2, fp, #0x164
+008f41e4: sub      r1, fp, #0x290
+008f41e8: ldr      r3, [fp, #-0x2a4]
+008f41ec: bl       #0x7dc0a8 ; communication::CloudServiceClient::upload_file(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008f41f0: str      r0, [fp, #-0x10]
+008f41f4: bl       #0xcf64c ; spdlog::default_logger_raw()
+008f41f8: mov      r4, r0
+008f41fc: sub      r0, fp, #0x30
+008f4200: movw     r3, #0xeb0c
+008f4204: movt     r3, #0xbd ; 'upload_file_thumbnail'
+008f4208: movw     r2, #0x58c
+008f420c: movw     r1, #0x98ec
+008f4210: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/record_manager.cpp'
+008f4214: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008f4218: movw     r3, #0xa714
+008f421c: movt     r3, #0xbd ; 'Uploading src_name{} thumbnail for file: {} to {}'
+008f4220: str      r3, [fp, #-0x24]
+008f4224: movw     r0, #0xa714
+008f4228: movt     r0, #0xbd ; 'Uploading src_name{} thumbnail for file: {} to {}'
+008f422c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008f4230: mov      r3, r0
+008f4234: str      r3, [fp, #-0x20]
+008f4238: sub      r3, fp, #0x290
+008f423c: mov      r0, r3
+008f4240: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008f4244: mov      r3, r0
+008f4248: str      r3, [fp, #-0x1c]
+008f424c: ldr      r0, [fp, #-0x29c]
+008f4250: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008f4254: mov      r3, r0
+008f4258: str      r3, [fp, #-0x18]
+008f425c: ldr      r0, [fp, #-0x2a4]
+008f4260: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008f4264: mov      r3, r0
+008f4268: str      r3, [fp, #-0x14]
+008f426c: sub      r3, fp, #0x14
+008f4270: str      r3, [sp, #0x14]
+008f4274: sub      r3, fp, #0x18
+008f4278: str      r3, [sp, #0x10]
+008f427c: sub      r3, fp, #0x1c
+008f4280: str      r3, [sp, #0xc]
+008f4284: add      r2, sp, #4
+008f4288: sub      r3, fp, #0x24
+008f428c: ldm      r3, {r0, r1}
+008f4290: stm      r2, {r0, r1}
+008f4294: mov      r3, #2
+008f4298: str      r3, [sp]
+008f429c: sub      r3, fp, #0x30
+008f42a0: ldm      r3, {r1, r2, r3}
+008f42a4: mov      r0, r4
+008f42a8: bl       #0x835294 ; void spdlog::logger::log<char const*, char const*, char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<char const*>::type>, char const*&&, char const*&&, char const*&&)
+008f42ac: ldr      r3, [fp, #-0x10]
+008f42b0: cmp      r3, #0
+008f42b4: moveq    r3, #1
+008f42b8: movne    r3, #0
+008f42bc: uxtb     r4, r3
+008f42c0: sub      r3, fp, #0x290
+008f42c4: mov      r0, r3
+008f42c8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f42cc: sub      r3, fp, #0x278
+008f42d0: mov      r0, r3
+008f42d4: bl       #0xbff88 ; _ZNSt14basic_ofstreamIcSt11char_traitsIcEED1Ev
+008f42d8: sub      r3, fp, #0x164
+008f42dc: mov      r0, r3
+008f42e0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f42e4: sub      r3, fp, #0x14c
+008f42e8: mov      r0, r3
+008f42ec: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f42f0: sub      r3, fp, #0x134
+008f42f4: mov      r0, r3
+008f42f8: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008f42fc: mov      r3, r4
+008f4300: mov      r0, r3
+008f4304: sub      sp, fp, #8
+008f4308: pop      {r4, fp, pc}

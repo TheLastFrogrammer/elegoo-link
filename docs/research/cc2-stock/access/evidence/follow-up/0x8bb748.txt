@@ -1,0 +1,99 @@
+api_module::APIPrinter::handle_get_monitor_url(std::shared_ptr<api_module::APIRequest>)
+008bb748: push     {r4, fp, lr}
+008bb74c: add      fp, sp, #8
+008bb750: sub      sp, sp, #0x54
+008bb754: str      r0, [fp, #-0x58]
+008bb758: str      r1, [fp, #-0x5c]
+008bb75c: sub      r3, fp, #0x2c
+008bb760: mov      r0, r3
+008bb764: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008bb768: sub      r2, fp, #0x2c
+008bb76c: sub      r3, fp, #0x44
+008bb770: movw     r1, #0xbee8
+008bb774: movt     r1, #0xb6 ; 'chassis_camera'
+008bb778: mov      r0, r3
+008bb77c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008bb780: sub      r3, fp, #0x2c
+008bb784: mov      r0, r3
+008bb788: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bb78c: bl       #0x892b24 ; api_module::ComponentManager::get_instance()
+008bb790: mov      r4, r0
+008bb794: sub      r2, fp, #0x44
+008bb798: sub      r3, fp, #0x28
+008bb79c: mov      r1, r2
+008bb7a0: mov      r0, r3
+008bb7a4: bl       #0xbeb18 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1ERKS4_
+008bb7a8: sub      r3, fp, #0x28
+008bb7ac: mov      r1, r3
+008bb7b0: mov      r0, r4
+008bb7b4: bl       #0x892cac ; api_module::ComponentManager::is_component_available(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008bb7b8: mov      r3, r0
+008bb7bc: eor      r3, r3, #1
+008bb7c0: uxtb     r4, r3
+008bb7c4: sub      r3, fp, #0x28
+008bb7c8: mov      r0, r3
+008bb7cc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bb7d0: cmp      r4, #0
+008bb7d4: beq      #0x8bb7fc
+008bb7d8: ldr      r3, [fp, #-0x5c]
+008bb7dc: mov      r0, r3
+008bb7e0: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bb7e4: mov      r3, r0
+008bb7e8: movw     r1, #0x40c
+008bb7ec: mov      r0, r3
+008bb7f0: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008bb7f4: mov      r4, #0
+008bb7f8: b        #0x8bb874
+008bb7fc: sub      r3, fp, #0x54
+008bb800: mov      r1, #0
+008bb804: mov      r0, r3
+008bb808: bl       #0xdb888 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json(decltype(nullptr))
+008bb80c: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008bb810: mov      r2, r0
+008bb814: sub      r3, fp, #0x54
+008bb818: mov      r1, r3
+008bb81c: mov      r0, r2
+008bb820: bl       #0x87e064 ; api_module::DeviceStatus::get_monitor_video_info(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)
+008bb824: str      r0, [fp, #-0x10]
+008bb828: ldr      r3, [fp, #-0x5c]
+008bb82c: mov      r0, r3
+008bb830: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bb834: mov      r3, r0
+008bb838: ldr      r1, [fp, #-0x10]
+008bb83c: mov      r0, r3
+008bb840: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008bb844: ldr      r3, [fp, #-0x5c]
+008bb848: mov      r0, r3
+008bb84c: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bb850: mov      r2, r0
+008bb854: sub      r3, fp, #0x54
+008bb858: mov      r1, r3
+008bb85c: mov      r0, r2
+008bb860: bl       #0x8af188 ; api_module::APIRequest::send(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)
+008bb864: sub      r3, fp, #0x54
+008bb868: mov      r0, r3
+008bb86c: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008bb870: mov      r4, #1
+008bb874: sub      r3, fp, #0x44
+008bb878: mov      r0, r3
+008bb87c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bb880: cmp      r4, #1
+008bb884: b        #0x8bb8c8
+008bb888: sub      r3, fp, #0x2c
+008bb88c: mov      r0, r3
+008bb890: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bb894: bl       #0xbf3f4 ; __cxa_end_cleanup
+008bb898: sub      r3, fp, #0x28
+008bb89c: mov      r0, r3
+008bb8a0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bb8a4: b        #0x8bb8b8
+008bb8a8: sub      r3, fp, #0x54
+008bb8ac: mov      r0, r3
+008bb8b0: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008bb8b4: b        #0x8bb8b8
+008bb8b8: sub      r3, fp, #0x44
+008bb8bc: mov      r0, r3
+008bb8c0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bb8c4: bl       #0xbf3f4 ; __cxa_end_cleanup
+008bb8c8: sub      sp, fp, #8
+008bb8cc: pop      {r4, fp, pc}

@@ -1,0 +1,549 @@
+{
+  "function": "GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)",
+  "va": "0x2d8c80",
+  "size": 1636,
+  "calls": [
+    {
+      "at": "0x2d8ca0",
+      "target": "0x148908",
+      "name": "std::shared_ptr<Printer>::shared_ptr(std::shared_ptr<Printer> const&)"
+    },
+    {
+      "at": "0x2d8cb0",
+      "target": "0x1b9e20",
+      "name": "std::shared_ptr<GCodeDispatch>::shared_ptr()"
+    },
+    {
+      "at": "0x2d8ccc",
+      "target": "0x2e99e8",
+      "name": "std::unordered_map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::hash<std::shared_ptr<ClientConnection> >, std::equal_to<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >::unordered_map()"
+    },
+    {
+      "at": "0x2d8ce8",
+      "target": "0x2ee194",
+      "name": "std::vector<std::shared_ptr<ClientConnection>, std::allocator<std::shared_ptr<ClientConnection> > >::vector()"
+    },
+    {
+      "at": "0x2d8cf8",
+      "target": "0x2e9aac",
+      "name": "std::shared_ptr<DeviceExceptWorker>::shared_ptr()"
+    },
+    {
+      "at": "0x2d8d0c",
+      "target": "0x14bbcc",
+      "name": "std::__shared_ptr<Printer, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d8d1c",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d8d34",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d8d40",
+      "target": "0x147ee4",
+      "name": "Any::Any()"
+    },
+    {
+      "at": "0x2d8d54",
+      "target": "0x250934",
+      "name": "Printer::lookup_object(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Any)"
+    },
+    {
+      "at": "0x2d8d68",
+      "target": "0x14bce8",
+      "name": "std::shared_ptr<GCodeDispatch> any_cast<std::shared_ptr<GCodeDispatch> >(Any const&)"
+    },
+    {
+      "at": "0x2d8d78",
+      "target": "0x1bf8d4",
+      "name": "std::shared_ptr<GCodeDispatch>::operator=(std::shared_ptr<GCodeDispatch>&&)"
+    },
+    {
+      "at": "0x2d8d84",
+      "target": "0x148be8",
+      "name": "std::shared_ptr<GCodeDispatch>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d8d90",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d8d9c",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d8da8",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d8db4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d8dc0",
+      "target": "0x14bbcc",
+      "name": "std::__shared_ptr<Printer, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d8dd0",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d8de8",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d8df4",
+      "target": "0x147ee4",
+      "name": "Any::Any()"
+    },
+    {
+      "at": "0x2d8e08",
+      "target": "0x250934",
+      "name": "Printer::lookup_object(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, Any)"
+    },
+    {
+      "at": "0x2d8e1c",
+      "target": "0x1bed00",
+      "name": "std::shared_ptr<WebHooks> any_cast<std::shared_ptr<WebHooks> >(Any const&)"
+    },
+    {
+      "at": "0x2d8e28",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d8e34",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d8e40",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d8e4c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d8e58",
+      "target": "0x1bc4b8",
+      "name": "std::__shared_ptr<WebHooks, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d8e68",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d8e80",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d8e94",
+      "target": "0x2df1ec",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#1}, void, void>(GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#1})"
+    },
+    {
+      "at": "0x2d8ea8",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d8eb4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d8ec0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d8ecc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d8ed8",
+      "target": "0x1bc4b8",
+      "name": "std::__shared_ptr<WebHooks, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d8ee8",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d8f00",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d8f14",
+      "target": "0x2df2b4",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#2}, void, void>(GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#2})"
+    },
+    {
+      "at": "0x2d8f28",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d8f34",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d8f40",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d8f4c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d8f58",
+      "target": "0x1bc4b8",
+      "name": "std::__shared_ptr<WebHooks, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d8f68",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d8f80",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d8f94",
+      "target": "0x2df37c",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#3}, void, void>(GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#3})"
+    },
+    {
+      "at": "0x2d8fa8",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d8fb4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d8fc0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d8fcc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d8fd8",
+      "target": "0x1bc4b8",
+      "name": "std::__shared_ptr<WebHooks, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d8fe8",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d9000",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d9014",
+      "target": "0x2df444",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#4}, void, void>(GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#4})"
+    },
+    {
+      "at": "0x2d9028",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d9034",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d9040",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d904c",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9058",
+      "target": "0x1bc4b8",
+      "name": "std::__shared_ptr<WebHooks, (__gnu_cxx::_Lock_policy)2>::operator->() const"
+    },
+    {
+      "at": "0x2d9068",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x2d9080",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x2d9094",
+      "target": "0x2df50c",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::function<GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#5}, void, void>(GCodeHelper::GCodeHelper(std::shared_ptr<Printer>)::{lambda(std::shared_ptr<WebRequest>)#5})"
+    },
+    {
+      "at": "0x2d90a8",
+      "target": "0x2d6268",
+      "name": "WebHooks::register_endpoint(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::function<void (std::shared_ptr<WebRequest>)>)"
+    },
+    {
+      "at": "0x2d90b4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d90c0",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d90cc",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d90e0",
+      "target": "0x2ee21c",
+      "name": "std::shared_ptr<DeviceExceptWorker> std::make_shared<DeviceExceptWorker>()"
+    },
+    {
+      "at": "0x2d90f0",
+      "target": "0x2ee29c",
+      "name": "std::shared_ptr<DeviceExceptWorker>::operator=(std::shared_ptr<DeviceExceptWorker>&&)"
+    },
+    {
+      "at": "0x2d90fc",
+      "target": "0x2e9ad8",
+      "name": "std::shared_ptr<DeviceExceptWorker>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d9108",
+      "target": "0x1b9330",
+      "name": "std::shared_ptr<WebHooks>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d911c",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d912c",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d9138",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9148",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9158",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d9168",
+      "target": "0x147f20",
+      "name": "Any::~Any()"
+    },
+    {
+      "at": "0x2d9174",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9184",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9194",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d91a4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d91b4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d91c4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d91d4",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d91e4",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d91f4",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d9204",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9214",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9224",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d9234",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9244",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9254",
+      "target": "0x2552b8",
+      "name": "std::function<void (std::shared_ptr<WebRequest>)>::~function()"
+    },
+    {
+      "at": "0x2d9264",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    },
+    {
+      "at": "0x2d9274",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x2d9284",
+      "target": "0x1b9330",
+      "name": "std::shared_ptr<WebHooks>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d9294",
+      "target": "0x2e9ad8",
+      "name": "std::shared_ptr<DeviceExceptWorker>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d92a4",
+      "target": "0x2ee1c0",
+      "name": "std::vector<std::shared_ptr<ClientConnection>, std::allocator<std::shared_ptr<ClientConnection> > >::~vector()"
+    },
+    {
+      "at": "0x2d92b4",
+      "target": "0x2e9a14",
+      "name": "std::unordered_map<std::shared_ptr<ClientConnection>, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>, std::hash<std::shared_ptr<ClientConnection> >, std::equal_to<std::shared_ptr<ClientConnection> >, std::allocator<std::pair<std::shared_ptr<ClientConnection> const, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> > > >::~unordered_map()"
+    },
+    {
+      "at": "0x2d92c4",
+      "target": "0x148be8",
+      "name": "std::shared_ptr<GCodeDispatch>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d92d0",
+      "target": "0x14872c",
+      "name": "std::shared_ptr<Printer>::~shared_ptr()"
+    },
+    {
+      "at": "0x2d92d4",
+      "target": "0xbf3f4",
+      "name": "__cxa_end_cleanup"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x2d8d2c",
+      "va": "0xb294cc",
+      "string": "gcode"
+    },
+    {
+      "at": "0x2d8de0",
+      "va": "0xa608f0",
+      "string": "webhooks"
+    },
+    {
+      "at": "0x2d8e78",
+      "va": "0xa878e8",
+      "string": "gcode/help"
+    },
+    {
+      "at": "0x2d8ef8",
+      "va": "0xa878f4",
+      "string": "gcode/script"
+    },
+    {
+      "at": "0x2d8f78",
+      "va": "0xa87904",
+      "string": "gcode/restart"
+    },
+    {
+      "at": "0x2d8ff8",
+      "va": "0xa87914",
+      "string": "gcode/firmware_restart"
+    },
+    {
+      "at": "0x2d9078",
+      "va": "0xa8792c",
+      "string": "gcode/subscribe_report"
+    }
+  ]
+}

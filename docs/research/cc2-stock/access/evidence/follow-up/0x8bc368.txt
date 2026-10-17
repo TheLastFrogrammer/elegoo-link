@@ -1,0 +1,218 @@
+api_module::APIPrinter::handle_get_file_thumbnail(std::shared_ptr<api_module::APIRequest>)
+008bc368: push     {r4, fp, lr}
+008bc36c: add      fp, sp, #8
+008bc370: sub      sp, sp, #0xe4
+008bc374: str      r0, [fp, #-0xd8]
+008bc378: str      r1, [fp, #-0xdc]
+008bc37c: ldr      r3, [fp, #-0xdc]
+008bc380: mov      r0, r3
+008bc384: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bc388: mov      r4, r0
+008bc38c: sub      r3, fp, #0x7c
+008bc390: mov      r0, r3
+008bc394: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008bc398: sub      r2, fp, #0x7c
+008bc39c: sub      r3, fp, #0x94
+008bc3a0: movw     r1, #0x18b0
+008bc3a4: movt     r1, #0xba ; 'storage_media'
+008bc3a8: mov      r0, r3
+008bc3ac: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008bc3b0: sub      r3, fp, #0x60
+008bc3b4: mov      r0, r3
+008bc3b8: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008bc3bc: sub      r2, fp, #0x60
+008bc3c0: sub      r3, fp, #0x78
+008bc3c4: movw     r1, #0x44
+008bc3c8: movt     r1, #0xac
+008bc3cc: mov      r0, r3
+008bc3d0: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008bc3d4: sub      r0, fp, #0xac
+008bc3d8: sub      r3, fp, #0x78
+008bc3dc: sub      r2, fp, #0x94
+008bc3e0: mov      r1, r4
+008bc3e4: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008bc3e8: sub      r3, fp, #0x78
+008bc3ec: mov      r0, r3
+008bc3f0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc3f4: sub      r3, fp, #0x60
+008bc3f8: mov      r0, r3
+008bc3fc: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc400: sub      r3, fp, #0x94
+008bc404: mov      r0, r3
+008bc408: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc40c: sub      r3, fp, #0x7c
+008bc410: mov      r0, r3
+008bc414: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc418: ldr      r3, [fp, #-0xdc]
+008bc41c: mov      r0, r3
+008bc420: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bc424: mov      r4, r0
+008bc428: sub      r3, fp, #0x44
+008bc42c: mov      r0, r3
+008bc430: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008bc434: sub      r2, fp, #0x44
+008bc438: sub      r3, fp, #0x5c
+008bc43c: movw     r1, #0xbf50
+008bc440: movt     r1, #0xae ; 'file_name'
+008bc444: mov      r0, r3
+008bc448: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008bc44c: sub      r3, fp, #0x28
+008bc450: mov      r0, r3
+008bc454: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008bc458: sub      r2, fp, #0x28
+008bc45c: sub      r3, fp, #0x40
+008bc460: movw     r1, #0x44
+008bc464: movt     r1, #0xac
+008bc468: mov      r0, r3
+008bc46c: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008bc470: sub      r0, fp, #0xc4
+008bc474: sub      r3, fp, #0x40
+008bc478: sub      r2, fp, #0x5c
+008bc47c: mov      r1, r4
+008bc480: bl       #0x8ae048 ; api_module::APIRequest::get_str(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)
+008bc484: sub      r3, fp, #0x40
+008bc488: mov      r0, r3
+008bc48c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc490: sub      r3, fp, #0x28
+008bc494: mov      r0, r3
+008bc498: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc49c: sub      r3, fp, #0x5c
+008bc4a0: mov      r0, r3
+008bc4a4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc4a8: sub      r3, fp, #0x44
+008bc4ac: mov      r0, r3
+008bc4b0: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc4b4: sub      r3, fp, #0xd4
+008bc4b8: mov      r1, #0
+008bc4bc: mov      r0, r3
+008bc4c0: bl       #0xdb888 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json(decltype(nullptr))
+008bc4c4: mov      r3, #0
+008bc4c8: str      r3, [fp, #-0x10]
+008bc4cc: sub      r3, fp, #0xac
+008bc4d0: movw     r1, #0x16fc
+008bc4d4: movt     r1, #0xba ; 'local'
+008bc4d8: mov      r0, r3
+008bc4dc: bl       #0x1498d8 ; bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)
+008bc4e0: mov      r3, r0
+008bc4e4: cmp      r3, #0
+008bc4e8: beq      #0x8bc508
+008bc4ec: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008bc4f0: sub      r2, fp, #0xd4
+008bc4f4: sub      r3, fp, #0xc4
+008bc4f8: mov      r1, r3
+008bc4fc: bl       #0x88cd30 ; api_module::DeviceStatus::get_local_files_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)
+008bc500: str      r0, [fp, #-0x10]
+008bc504: b        #0x8bc5c0
+008bc508: sub      r3, fp, #0xac
+008bc50c: movw     r1, #0xb6a8
+008bc510: movt     r1, #0xbc ; 'u-disk'
+008bc514: mov      r0, r3
+008bc518: bl       #0x1498d8 ; bool std::operator==<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char const*)
+008bc51c: mov      r3, r0
+008bc520: cmp      r3, #0
+008bc524: beq      #0x8bc544
+008bc528: bl       #0x87ab00 ; api_module::DeviceStatus::getInstance()
+008bc52c: sub      r2, fp, #0xd4
+008bc530: sub      r3, fp, #0xc4
+008bc534: mov      r1, r3
+008bc538: bl       #0x88cf10 ; api_module::DeviceStatus::get_udisk_files_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)
+008bc53c: str      r0, [fp, #-0x10]
+008bc540: b        #0x8bc5c0
+008bc544: bl       #0xcf64c ; spdlog::default_logger_raw()
+008bc548: mov      r4, r0
+008bc54c: sub      r0, fp, #0x24
+008bc550: movw     r3, #0x7b84
+008bc554: movt     r3, #0xbd ; 'handle_get_file_thumbnail'
+008bc558: movw     r2, #0x57e
+008bc55c: movw     r1, #0x83b8
+008bc560: movt     r1, #0xbd ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/api_printer.cpp'
+008bc564: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008bc568: movw     r3, #0x8c90
+008bc56c: movt     r3, #0xbd ; 'Unsupported storage media: {}'
+008bc570: str      r3, [fp, #-0x18]
+008bc574: movw     r0, #0x8c90
+008bc578: movt     r0, #0xbd ; 'Unsupported storage media: {}'
+008bc57c: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008bc580: mov      r3, r0
+008bc584: str      r3, [fp, #-0x14]
+008bc588: sub      r3, fp, #0xac
+008bc58c: str      r3, [sp, #0xc]
+008bc590: add      r2, sp, #4
+008bc594: sub      r3, fp, #0x18
+008bc598: ldm      r3, {r0, r1}
+008bc59c: stm      r2, {r0, r1}
+008bc5a0: mov      r3, #4
+008bc5a4: str      r3, [sp]
+008bc5a8: sub      r3, fp, #0x24
+008bc5ac: ldm      r3, {r1, r2, r3}
+008bc5b0: mov      r0, r4
+008bc5b4: bl       #0x1bd864 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)
+008bc5b8: movw     r3, #0x3eb
+008bc5bc: str      r3, [fp, #-0x10]
+008bc5c0: ldr      r3, [fp, #-0xdc]
+008bc5c4: mov      r0, r3
+008bc5c8: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bc5cc: mov      r3, r0
+008bc5d0: ldr      r1, [fp, #-0x10]
+008bc5d4: mov      r0, r3
+008bc5d8: bl       #0x8af158 ; api_module::APIRequest::set_error(ErrorCode)
+008bc5dc: ldr      r3, [fp, #-0xdc]
+008bc5e0: mov      r0, r3
+008bc5e4: bl       #0x8ddba8 ; std::__shared_ptr<api_module::APIRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008bc5e8: mov      r2, r0
+008bc5ec: sub      r3, fp, #0xd4
+008bc5f0: mov      r1, r3
+008bc5f4: mov      r0, r2
+008bc5f8: bl       #0x8af188 ; api_module::APIRequest::send(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void> const&)
+008bc5fc: sub      r3, fp, #0xd4
+008bc600: mov      r0, r3
+008bc604: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008bc608: sub      r3, fp, #0xc4
+008bc60c: mov      r0, r3
+008bc610: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc614: sub      r3, fp, #0xac
+008bc618: mov      r0, r3
+008bc61c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc620: b        #0x8bc6c4
+008bc624: sub      r3, fp, #0x78
+008bc628: mov      r0, r3
+008bc62c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc630: b        #0x8bc634
+008bc634: sub      r3, fp, #0x60
+008bc638: mov      r0, r3
+008bc63c: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc640: sub      r3, fp, #0x94
+008bc644: mov      r0, r3
+008bc648: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc64c: b        #0x8bc650
+008bc650: sub      r3, fp, #0x7c
+008bc654: mov      r0, r3
+008bc658: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc65c: bl       #0xbf3f4 ; __cxa_end_cleanup
+008bc660: sub      r3, fp, #0x40
+008bc664: mov      r0, r3
+008bc668: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc66c: b        #0x8bc670
+008bc670: sub      r3, fp, #0x28
+008bc674: mov      r0, r3
+008bc678: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc67c: sub      r3, fp, #0x5c
+008bc680: mov      r0, r3
+008bc684: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc688: b        #0x8bc68c
+008bc68c: sub      r3, fp, #0x44
+008bc690: mov      r0, r3
+008bc694: bl       #0xbe944 ; _ZNSaIcED1Ev
+008bc698: b        #0x8bc6b4
+008bc69c: sub      r3, fp, #0xd4
+008bc6a0: mov      r0, r3
+008bc6a4: bl       #0xd1194 ; nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()
+008bc6a8: sub      r3, fp, #0xc4
+008bc6ac: mov      r0, r3
+008bc6b0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc6b4: sub      r3, fp, #0xac
+008bc6b8: mov      r0, r3
+008bc6bc: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+008bc6c0: bl       #0xbf3f4 ; __cxa_end_cleanup
+008bc6c4: sub      sp, fp, #8
+008bc6c8: pop      {r4, fp, pc}

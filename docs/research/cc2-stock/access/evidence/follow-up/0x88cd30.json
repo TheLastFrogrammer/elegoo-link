@@ -1,0 +1,144 @@
+{
+  "function": "api_module::DeviceStatus::get_local_files_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>&)",
+  "va": "0x88cd30",
+  "size": 480,
+  "calls": [
+    {
+      "at": "0x88cd4c",
+      "target": "0xbed4c",
+      "name": "_ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv"
+    },
+    {
+      "at": "0x88cd5c",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x88cd7c",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x88cd98",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x88cdc8",
+      "target": "0x147d74",
+      "name": "spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)"
+    },
+    {
+      "at": "0x88cddc",
+      "target": "0xbf388",
+      "name": "_ZNSaIcEC1Ev"
+    },
+    {
+      "at": "0x88cdf4",
+      "target": "0xbf2c8",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_"
+    },
+    {
+      "at": "0x88ce00",
+      "target": "0xbe944",
+      "name": "_ZNSaIcED1Ev"
+    },
+    {
+      "at": "0x88ce04",
+      "target": "0x8ec260",
+      "name": "api_module::RecordManager::getInstance()"
+    },
+    {
+      "at": "0x88ce14",
+      "target": "0x8f1f50",
+      "name": "api_module::RecordManager::get_thumbnail_by_filename(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x88ce28",
+      "target": "0xcf64c",
+      "name": "spdlog::default_logger_raw()"
+    },
+    {
+      "at": "0x88ce48",
+      "target": "0xca108",
+      "name": "spdlog::source_loc::source_loc(char const*, int, char const*)"
+    },
+    {
+      "at": "0x88ce60",
+      "target": "0xc3c40",
+      "name": "std::char_traits<char>::length(char const*)"
+    },
+    {
+      "at": "0x88cea0",
+      "target": "0x2ef72c",
+      "name": "void spdlog::logger::log<int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<int>::type>, int&&)"
+    },
+    {
+      "at": "0x88ceb8",
+      "target": "0xdadbc",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>& nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::operator[]<char const>(char const*)"
+    },
+    {
+      "at": "0x88ced0",
+      "target": "0x21ae1c",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::basic_json<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, 0>(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)"
+    },
+    {
+      "at": "0x88cee0",
+      "target": "0xdafa0",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::operator=(nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>)"
+    },
+    {
+      "at": "0x88ceec",
+      "target": "0xd1194",
+      "name": "nlohmann::json_abi_v3_12_0::basic_json<std::map, std::vector, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, bool, long long, unsigned long long, double, std::allocator, nlohmann::json_abi_v3_12_0::adl_serializer, std::vector<unsigned char, std::allocator<unsigned char> >, void>::~basic_json()"
+    },
+    {
+      "at": "0x88cefc",
+      "target": "0xbff28",
+      "name": "_ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev"
+    }
+  ],
+  "strings": [
+    {
+      "at": "0x88cd6c",
+      "va": "0xbc9928",
+      "string": "get_local_files_thumbnail"
+    },
+    {
+      "at": "0x88cd78",
+      "va": "0xbcb6d4",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/device_status.cpp"
+    },
+    {
+      "at": "0x88cd84",
+      "va": "0xbcc410",
+      "string": "file name is empty"
+    },
+    {
+      "at": "0x88ce38",
+      "va": "0xbc9928",
+      "string": "get_local_files_thumbnail"
+    },
+    {
+      "at": "0x88ce44",
+      "va": "0xbcb6d4",
+      "string": "/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/api_module/device_status.cpp"
+    },
+    {
+      "at": "0x88ce50",
+      "va": "0xbcc424",
+      "string": "get thumbnail failed, error code: {}"
+    },
+    {
+      "at": "0x88ce5c",
+      "va": "0xbcc424",
+      "string": "get thumbnail failed, error code: {}"
+    },
+    {
+      "at": "0x88ceb0",
+      "va": "0xbcc44c",
+      "string": "thumbnail"
+    }
+  ]
+}

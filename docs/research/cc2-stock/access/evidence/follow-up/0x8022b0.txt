@@ -1,0 +1,574 @@
+communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+008022b0: push     {r4, fp, lr}
+008022b4: add      fp, sp, #8
+008022b8: sub      sp, sp, #0x314
+008022bc: str      r0, [fp, #-0x2f8]
+008022c0: str      r1, [fp, #-0x2fc]
+008022c4: str      r2, [fp, #-0x300]
+008022c8: str      r3, [fp, #-0x304]
+008022cc: sub      r3, fp, #0xdc
+008022d0: mov      r0, r3
+008022d4: bl       #0xbf388 ; _ZNSaIcEC1Ev
+008022d8: sub      r2, fp, #0xdc
+008022dc: sub      r3, fp, #0xf4
+008022e0: ldr      r1, [fp, #-0x300]
+008022e4: mov      r0, r3
+008022e8: bl       #0xbf2c8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEC1EPKcRKS3_
+008022ec: sub      r3, fp, #0x10c
+008022f0: sub      r1, fp, #0xf4
+008022f4: movw     r2, #0xdf80
+008022f8: movt     r2, #0xa6
+008022fc: mov      r0, r3
+00802300: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+00802304: ldr      r2, [fp, #-0x2f8]
+00802308: sub      r3, fp, #0xd8
+0080230c: mov      r1, r2
+00802310: mov      r0, r3
+00802314: bl       #0x1b75d8 ; std::__cxx11::to_string(unsigned int)
+00802318: sub      r3, fp, #0x124
+0080231c: sub      r2, fp, #0xd8
+00802320: sub      r1, fp, #0x10c
+00802324: mov      r0, r3
+00802328: bl       #0x1496b4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&)
+0080232c: sub      r3, fp, #0x13c
+00802330: sub      r1, fp, #0x124
+00802334: movw     r2, #0x3084
+00802338: movt     r2, #0xb9 ; '.download'
+0080233c: mov      r0, r3
+00802340: bl       #0x149ba4 ; std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > std::operator+<char, std::char_traits<char>, std::allocator<char> >(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&&, char const*)
+00802344: sub      r3, fp, #0x124
+00802348: mov      r0, r3
+0080234c: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802350: sub      r3, fp, #0xd8
+00802354: mov      r0, r3
+00802358: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+0080235c: sub      r3, fp, #0x10c
+00802360: mov      r0, r3
+00802364: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802368: sub      r3, fp, #0xf4
+0080236c: mov      r0, r3
+00802370: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802374: sub      r3, fp, #0xdc
+00802378: mov      r0, r3
+0080237c: bl       #0xbe944 ; _ZNSaIcED1Ev
+00802380: sub      r3, fp, #0x244
+00802384: mov      r0, r3
+00802388: bl       #0x80538c ; HFile::HFile()
+0080238c: ldr      r3, [fp, #-0x2f8]
+00802390: add      r3, r3, #0x34
+00802394: mov      r1, #0
+00802398: mov      r0, r3
+0080239c: bl       #0xc4f10 ; std::atomic<bool>::operator=(bool)
+008023a0: sub      r3, fp, #0x13c
+008023a4: mov      r0, r3
+008023a8: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008023ac: mov      r1, r0
+008023b0: sub      r3, fp, #0x244
+008023b4: movw     r2, #0x3090
+008023b8: movt     r2, #0xb9 ; 'wb'
+008023bc: mov      r0, r3
+008023c0: bl       #0x8053f0 ; HFile::open(char const*, char const*)
+008023c4: mov      r3, r0
+008023c8: str      r3, [fp, #-0x14]
+008023cc: ldr      r3, [fp, #-0x14]
+008023d0: cmp      r3, #0
+008023d4: beq      #0x8023e0
+008023d8: movw     r4, #0x2336
+008023dc: b        #0x802acc
+008023e0: ldr      r0, [fp, #4]
+008023e4: bl       #0xbed4c ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5emptyEv
+008023e8: mov      r3, r0
+008023ec: eor      r3, r3, #1
+008023f0: strb     r3, [fp, #-0x15]
+008023f4: ldrb     r3, [fp, #-0x15]
+008023f8: cmp      r3, #0
+008023fc: beq      #0x80240c
+00802400: sub      r3, fp, #0x29c
+00802404: mov      r0, r3
+00802408: bl       #0xbfd24 ; HV_MD5Init
+0080240c: sub      r3, fp, #0x2a4
+00802410: mov      r0, r3
+00802414: bl       #0x8060f0 ; std::shared_ptr<HttpRequest> std::make_shared<HttpRequest>()
+00802418: sub      r3, fp, #0x2a4
+0080241c: mov      r0, r3
+00802420: bl       #0x8061b0 ; std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+00802424: mov      r2, r0
+00802428: mov      r3, #1
+0080242c: str      r3, [r2, #0xa8]
+00802430: sub      r3, fp, #0x2a4
+00802434: mov      r0, r3
+00802438: bl       #0x8061b0 ; std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+0080243c: mov      r3, r0
+00802440: add      r3, r3, #0xac
+00802444: ldr      r1, [fp, #-0x2fc]
+00802448: mov      r0, r3
+0080244c: bl       #0xbede8 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEaSEPKc
+00802450: sub      r3, fp, #0x2a4
+00802454: mov      r0, r3
+00802458: bl       #0x8061b0 ; std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+0080245c: mov      r3, r0
+00802460: add      r3, r3, #0x144
+00802464: mov      r2, #0xe10
+00802468: strh     r2, [r3]
+0080246c: ldr      r3, [fp, #-0x2f8]
+00802470: add      r2, r3, #0x40
+00802474: sub      r3, fp, #0x2b8
+00802478: mov      r1, r2
+0080247c: mov      r0, r3
+00802480: bl       #0xd12e0 ; std::lock_guard<std::mutex>::lock_guard(std::mutex&)
+00802484: ldr      r3, [fp, #-0x2f8]
+00802488: add      r3, r3, #0x38
+0080248c: sub      r2, fp, #0x2a4
+00802490: mov      r1, r2
+00802494: mov      r0, r3
+00802498: bl       #0x805f5c ; std::shared_ptr<HttpRequest>::operator=(std::shared_ptr<HttpRequest> const&)
+0080249c: sub      r3, fp, #0x2b8
+008024a0: mov      r0, r3
+008024a4: bl       #0xd1320 ; std::lock_guard<std::mutex>::~lock_guard()
+008024a8: mov      r3, #0
+008024ac: str      r3, [fp, #-0x2a8]
+008024b0: mov      r3, #0
+008024b4: str      r3, [fp, #-0x2ac]
+008024b8: sub      r3, fp, #0x2a4
+008024bc: mov      r0, r3
+008024c0: bl       #0x8061b0 ; std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008024c4: mov      r3, r0
+008024c8: add      r4, r3, #0x48
+008024cc: ldr      r3, [fp, #-0x2f8]
+008024d0: str      r3, [fp, #-0xc0]
+008024d4: sub      r3, fp, #0x244
+008024d8: str      r3, [fp, #-0xbc]
+008024dc: sub      r3, fp, #0x2a8
+008024e0: str      r3, [fp, #-0xb8]
+008024e4: sub      r3, fp, #0x2ac
+008024e8: str      r3, [fp, #-0xb4]
+008024ec: ldr      r3, [fp, #-0x304]
+008024f0: str      r3, [fp, #-0xb0]
+008024f4: sub      r3, fp, #0x29c
+008024f8: str      r3, [fp, #-0xac]
+008024fc: ldrb     r3, [fp, #-0x15]
+00802500: strb     r3, [fp, #-0xa8]
+00802504: ldr      r3, [fp, #8]
+00802508: str      r3, [fp, #-0xa4]
+0080250c: sub      r2, fp, #0x2a4
+00802510: sub      r3, fp, #0xc0
+00802514: add      r3, r3, #0x20
+00802518: mov      r1, r2
+0080251c: mov      r0, r3
+00802520: bl       #0x8056dc ; std::shared_ptr<HttpRequest>::shared_ptr(std::shared_ptr<HttpRequest> const&)
+00802524: sub      r3, fp, #0xc0
+00802528: mov      r1, r3
+0080252c: mov      r0, r4
+00802530: bl       #0x8038bc ; std::enable_if<std::function<void (HttpMessage*, http_parser_state, char const*, unsigned int)>::_Callable<std::decay<communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}>::type, std::result_of<std::decay<communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}>::type& (HttpMessage*, http_parser_state, char const*, unsigned int)>::type>::value, std::function<void (HttpMessage*, http_parser_state, char const*, unsigned int)>&>::type std::function<void (HttpMessage*, http_parser_state, char const*, unsigned int)>::operator=<communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}>(communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}&&)
+00802534: sub      r3, fp, #0xc0
+00802538: mov      r0, r3
+0080253c: bl       #0x802280 ; communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}::~http_parser_state()
+00802540: sub      r2, fp, #0x2a4
+00802544: sub      r3, fp, #0x98
+00802548: mov      r1, r2
+0080254c: mov      r0, r3
+00802550: bl       #0x8056dc ; std::shared_ptr<HttpRequest>::shared_ptr(std::shared_ptr<HttpRequest> const&)
+00802554: sub      r3, fp, #0x2b4
+00802558: sub      r2, fp, #0x98
+0080255c: mov      r1, r2
+00802560: mov      r0, r3
+00802564: bl       #0x7fdfe8 ; requests::request(std::shared_ptr<HttpRequest>)
+00802568: sub      r3, fp, #0x98
+0080256c: mov      r0, r3
+00802570: bl       #0x7eb450 ; std::shared_ptr<HttpRequest>::~shared_ptr()
+00802574: sub      r3, fp, #0x244
+00802578: mov      r0, r3
+0080257c: bl       #0x80546c ; HFile::close()
+00802580: ldr      r3, [fp, #-0x2f8]
+00802584: add      r2, r3, #0x40
+00802588: sub      r3, fp, #0x2bc
+0080258c: mov      r1, r2
+00802590: mov      r0, r3
+00802594: bl       #0xd12e0 ; std::lock_guard<std::mutex>::lock_guard(std::mutex&)
+00802598: ldr      r3, [fp, #-0x2f8]
+0080259c: add      r3, r3, #0x38
+008025a0: mov      r0, r3
+008025a4: bl       #0x806de4 ; std::__shared_ptr<HttpRequest, (__gnu_cxx::_Lock_policy)2>::reset()
+008025a8: sub      r3, fp, #0x2bc
+008025ac: mov      r0, r3
+008025b0: bl       #0xd1320 ; std::lock_guard<std::mutex>::~lock_guard()
+008025b4: sub      r3, fp, #0x2b4
+008025b8: mov      r1, #0
+008025bc: mov      r0, r3
+008025c0: bl       #0x80623c ; bool std::operator==<HttpResponse>(std::shared_ptr<HttpResponse> const&, decltype(nullptr))
+008025c4: mov      r3, r0
+008025c8: cmp      r3, #0
+008025cc: bne      #0x8025ec
+008025d0: sub      r3, fp, #0x2b4
+008025d4: mov      r0, r3
+008025d8: bl       #0x806274 ; std::__shared_ptr<HttpResponse, (__gnu_cxx::_Lock_policy)2>::operator->() const
+008025dc: mov      r3, r0
+008025e0: ldr      r3, [r3, #0xa8]
+008025e4: cmp      r3, #0xc8
+008025e8: beq      #0x8025f4
+008025ec: mov      r3, #1
+008025f0: b        #0x8025f8
+008025f4: mov      r3, #0
+008025f8: cmp      r3, #0
+008025fc: beq      #0x8027a0
+00802600: sub      r3, fp, #0x13c
+00802604: mov      r0, r3
+00802608: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+0080260c: mov      r3, r0
+00802610: mov      r0, r3
+00802614: bl       #0xbee78 ; remove
+00802618: ldr      r3, [fp, #-0x2f8]
+0080261c: add      r3, r3, #0x34
+00802620: mov      r0, r3
+00802624: bl       #0x7eb47c ; std::atomic<bool>::operator bool() const
+00802628: mov      r3, r0
+0080262c: cmp      r3, #0
+00802630: beq      #0x8026ac
+00802634: bl       #0xcf64c ; spdlog::default_logger_raw()
+00802638: mov      r4, r0
+0080263c: sub      r0, fp, #0x90
+00802640: movw     r3, #0x2f94
+00802644: movt     r3, #0xb9 ; 'download_file'
+00802648: movw     r2, #0x207
+0080264c: movw     r1, #0x3094
+00802650: movt     r1, #0xb9 ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp'
+00802654: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00802658: movw     r3, #0x37f8
+0080265c: movt     r3, #0xb9 ; 'File download canceled (incomplete)'
+00802660: str      r3, [fp, #-0x1c]
+00802664: ldr      r3, [fp, #-0x1c]
+00802668: str      r3, [fp, #-0x84]
+0080266c: ldr      r0, [fp, #-0x1c]
+00802670: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00802674: mov      r3, r0
+00802678: str      r3, [fp, #-0x80]
+0080267c: add      r2, sp, #4
+00802680: sub      r3, fp, #0x84
+00802684: ldm      r3, {r0, r1}
+00802688: stm      r2, {r0, r1}
+0080268c: mov      r3, #2
+00802690: str      r3, [sp]
+00802694: sub      r3, fp, #0x90
+00802698: ldm      r3, {r1, r2, r3}
+0080269c: mov      r0, r4
+008026a0: bl       #0x147d74 ; spdlog::logger::log(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_string_view<char>)
+008026a4: movw     r4, #0x2337
+008026a8: b        #0x802ab4
+008026ac: bl       #0xcf64c ; spdlog::default_logger_raw()
+008026b0: mov      r4, r0
+008026b4: sub      r0, fp, #0x7c
+008026b8: movw     r3, #0x2f94
+008026bc: movt     r3, #0xb9 ; 'download_file'
+008026c0: mov      r2, #0x20c
+008026c4: movw     r1, #0x3094
+008026c8: movt     r1, #0xb9 ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp'
+008026cc: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+008026d0: movw     r3, #0x381c
+008026d4: movt     r3, #0xb9 ; 'File download failed: resp={}, status={}'
+008026d8: str      r3, [fp, #-0x70]
+008026dc: movw     r0, #0x381c
+008026e0: movt     r0, #0xb9 ; 'File download failed: resp={}, status={}'
+008026e4: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+008026e8: mov      r3, r0
+008026ec: str      r3, [fp, #-0x6c]
+008026f0: sub      r3, fp, #0x2b4
+008026f4: mov      r1, #0
+008026f8: mov      r0, r3
+008026fc: bl       #0x80623c ; bool std::operator==<HttpResponse>(std::shared_ptr<HttpResponse> const&, decltype(nullptr))
+00802700: mov      r3, r0
+00802704: cmp      r3, #0
+00802708: beq      #0x802718
+0080270c: movw     r3, #0x54f4
+00802710: movt     r3, #0xb8 ; 'null'
+00802714: b        #0x802720
+00802718: movw     r3, #0xcd18
+0080271c: movt     r3, #0xae ; 'ok'
+00802720: str      r3, [fp, #-0x68]
+00802724: sub      r3, fp, #0x2b4
+00802728: mov      r1, #0
+0080272c: mov      r0, r3
+00802730: bl       #0x80623c ; bool std::operator==<HttpResponse>(std::shared_ptr<HttpResponse> const&, decltype(nullptr))
+00802734: mov      r3, r0
+00802738: cmp      r3, #0
+0080273c: beq      #0x802748
+00802740: mov      r3, #0
+00802744: b        #0x80275c
+00802748: sub      r3, fp, #0x2b4
+0080274c: mov      r0, r3
+00802750: bl       #0x806274 ; std::__shared_ptr<HttpResponse, (__gnu_cxx::_Lock_policy)2>::operator->() const
+00802754: mov      r3, r0
+00802758: ldr      r3, [r3, #0xa8]
+0080275c: str      r3, [fp, #-0x64]
+00802760: sub      r3, fp, #0x64
+00802764: str      r3, [sp, #0x10]
+00802768: sub      r3, fp, #0x68
+0080276c: str      r3, [sp, #0xc]
+00802770: add      r2, sp, #4
+00802774: sub      r3, fp, #0x70
+00802778: ldm      r3, {r0, r1}
+0080277c: stm      r2, {r0, r1}
+00802780: mov      r3, #3
+00802784: str      r3, [sp]
+00802788: sub      r3, fp, #0x7c
+0080278c: ldm      r3, {r1, r2, r3}
+00802790: mov      r0, r4
+00802794: bl       #0x7eceb4 ; void spdlog::logger::log<char const*, int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type, fmt::v10::type_identity<int>::type>, char const*&&, int&&)
+00802798: movw     r4, #0x2336
+0080279c: b        #0x802ab4
+008027a0: ldr      r3, [fp, #-0x2a8]
+008027a4: cmp      r3, #0
+008027a8: beq      #0x8027dc
+008027ac: sub      r3, fp, #0x13c
+008027b0: mov      r0, r3
+008027b4: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008027b8: mov      r3, r0
+008027bc: mov      r0, r3
+008027c0: bl       #0xbedf4 ; hv_filesize
+008027c4: mov      r2, r0
+008027c8: ldr      r3, [fp, #-0x2a8]
+008027cc: cmp      r2, r3
+008027d0: beq      #0x8027dc
+008027d4: mov      r3, #1
+008027d8: b        #0x8027e0
+008027dc: mov      r3, #0
+008027e0: cmp      r3, #0
+008027e4: beq      #0x8028a4
+008027e8: sub      r3, fp, #0x13c
+008027ec: mov      r0, r3
+008027f0: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008027f4: mov      r3, r0
+008027f8: mov      r0, r3
+008027fc: bl       #0xbee78 ; remove
+00802800: bl       #0xcf64c ; spdlog::default_logger_raw()
+00802804: mov      r4, r0
+00802808: sub      r0, fp, #0x60
+0080280c: movw     r3, #0x2f94
+00802810: movt     r3, #0xb9 ; 'download_file'
+00802814: movw     r2, #0x211
+00802818: movw     r1, #0x3094
+0080281c: movt     r1, #0xb9 ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp'
+00802820: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00802824: movw     r3, #0x3848
+00802828: movt     r3, #0xb9 ; 'Expected file size: {}, actual file size: {}'
+0080282c: str      r3, [fp, #-0x54]
+00802830: movw     r0, #0x3848
+00802834: movt     r0, #0xb9 ; 'Expected file size: {}, actual file size: {}'
+00802838: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0080283c: mov      r3, r0
+00802840: str      r3, [fp, #-0x50]
+00802844: sub      r3, fp, #0x13c
+00802848: mov      r0, r3
+0080284c: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00802850: mov      r3, r0
+00802854: mov      r0, r3
+00802858: bl       #0xbedf4 ; hv_filesize
+0080285c: mov      r3, r0
+00802860: str      r3, [fp, #-0x4c]
+00802864: sub      r3, fp, #0x4c
+00802868: str      r3, [sp, #0x10]
+0080286c: sub      r3, fp, #0x2a8
+00802870: str      r3, [sp, #0xc]
+00802874: add      r2, sp, #4
+00802878: sub      r3, fp, #0x54
+0080287c: ldm      r3, {r0, r1}
+00802880: stm      r2, {r0, r1}
+00802884: mov      r3, #2
+00802888: str      r3, [sp]
+0080288c: sub      r3, fp, #0x60
+00802890: ldm      r3, {r1, r2, r3}
+00802894: mov      r0, r4
+00802898: bl       #0x806e28 ; void spdlog::logger::log<unsigned int&, unsigned int>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<unsigned int&>::type, fmt::v10::type_identity<unsigned int>::type>, unsigned int&, unsigned int&&)
+0080289c: movw     r4, #0x2336
+008028a0: b        #0x802ab4
+008028a4: ldrb     r3, [fp, #-0x15]
+008028a8: cmp      r3, #0
+008028ac: beq      #0x8029fc
+008028b0: sub      r3, fp, #0x2cc
+008028b4: mov      r2, #0
+008028b8: str      r2, [r3]
+008028bc: str      r2, [r3, #4]
+008028c0: str      r2, [r3, #8]
+008028c4: str      r2, [r3, #0xc]
+008028c8: sub      r2, fp, #0x2cc
+008028cc: sub      r3, fp, #0x29c
+008028d0: mov      r1, r2
+008028d4: mov      r0, r3
+008028d8: bl       #0xbec14 ; HV_MD5Final
+008028dc: sub      r3, fp, #0x2f0
+008028e0: mov      r2, #0x21
+008028e4: mov      r1, #0
+008028e8: mov      r0, r3
+008028ec: bl       #0xbf37c ; memset
+008028f0: mov      r3, #0
+008028f4: str      r3, [fp, #-0x10]
+008028f8: ldr      r3, [fp, #-0x10]
+008028fc: cmp      r3, #0xf
+00802900: bgt      #0x802944
+00802904: ldr      r3, [fp, #-0x10]
+00802908: lsl      r3, r3, #1
+0080290c: sub      r2, fp, #0x2f0
+00802910: add      r0, r2, r3
+00802914: sub      r2, fp, #0x2cc
+00802918: ldr      r3, [fp, #-0x10]
+0080291c: add      r3, r2, r3
+00802920: ldrb     r3, [r3]
+00802924: mov      r2, r3
+00802928: movw     r1, #0x660c
+0080292c: movt     r1, #0xb8 ; '%02x'
+00802930: bl       #0xc000c ; sprintf
+00802934: ldr      r3, [fp, #-0x10]
+00802938: add      r3, r3, #1
+0080293c: str      r3, [fp, #-0x10]
+00802940: b        #0x8028f8
+00802944: sub      r3, fp, #0x2f0
+00802948: ldr      r1, [fp, #4]
+0080294c: mov      r0, r3
+00802950: bl       #0x806ea4 ; bool std::operator!=<char, std::char_traits<char>, std::allocator<char> >(char const*, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)
+00802954: mov      r3, r0
+00802958: cmp      r3, #0
+0080295c: beq      #0x8029fc
+00802960: bl       #0xcf64c ; spdlog::default_logger_raw()
+00802964: mov      r4, r0
+00802968: sub      r0, fp, #0x48
+0080296c: movw     r3, #0x2f94
+00802970: movt     r3, #0xb9 ; 'download_file'
+00802974: movw     r2, #0x21d
+00802978: movw     r1, #0x3094
+0080297c: movt     r1, #0xb9 ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp'
+00802980: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00802984: movw     r3, #0x3878
+00802988: movt     r3, #0xb9 ; 'MD5 mismatch! expected: {}, actual: {}'
+0080298c: str      r3, [fp, #-0x3c]
+00802990: movw     r0, #0x3878
+00802994: movt     r0, #0xb9 ; 'MD5 mismatch! expected: {}, actual: {}'
+00802998: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+0080299c: mov      r3, r0
+008029a0: str      r3, [fp, #-0x38]
+008029a4: sub      r3, fp, #0x2f0
+008029a8: str      r3, [sp, #0x10]
+008029ac: ldr      r3, [fp, #4]
+008029b0: str      r3, [sp, #0xc]
+008029b4: add      r2, sp, #4
+008029b8: sub      r3, fp, #0x3c
+008029bc: ldm      r3, {r0, r1}
+008029c0: stm      r2, {r0, r1}
+008029c4: mov      r3, #4
+008029c8: str      r3, [sp]
+008029cc: sub      r3, fp, #0x48
+008029d0: ldm      r3, {r1, r2, r3}
+008029d4: mov      r0, r4
+008029d8: bl       #0x806f00 ; void spdlog::logger::log<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char (&) [33]>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&>::type, fmt::v10::type_identity<char (&) [33]>::type>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, char (&) [33])
+008029dc: sub      r3, fp, #0x13c
+008029e0: mov      r0, r3
+008029e4: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+008029e8: mov      r3, r0
+008029ec: mov      r0, r3
+008029f0: bl       #0xbee78 ; remove
+008029f4: movw     r4, #0x2336
+008029f8: b        #0x802ab4
+008029fc: sub      r3, fp, #0x13c
+00802a00: mov      r0, r3
+00802a04: bl       #0xbf7f0 ; _ZNKSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEE5c_strEv
+00802a08: mov      r3, r0
+00802a0c: ldr      r1, [fp, #-0x300]
+00802a10: mov      r0, r3
+00802a14: bl       #0xbf3d0 ; rename
+00802a18: bl       #0xcf64c ; spdlog::default_logger_raw()
+00802a1c: mov      r4, r0
+00802a20: sub      r0, fp, #0x34
+00802a24: movw     r3, #0x2f94
+00802a28: movt     r3, #0xb9 ; 'download_file'
+00802a2c: mov      r2, #0x224
+00802a30: movw     r1, #0x3094
+00802a34: movt     r1, #0xb9 ; '/home/elegoo/workspace/FD0304/elegoo_printer/elegoo/communication/http_client.cpp'
+00802a38: bl       #0xca108 ; spdlog::source_loc::source_loc(char const*, int, char const*)
+00802a3c: movw     r3, #0x38a0
+00802a40: movt     r3, #0xb9 ; 'File downloaded{}.'
+00802a44: str      r3, [fp, #-0x28]
+00802a48: movw     r0, #0x38a0
+00802a4c: movt     r0, #0xb9 ; 'File downloaded{}.'
+00802a50: bl       #0xc3c40 ; std::char_traits<char>::length(char const*)
+00802a54: mov      r3, r0
+00802a58: str      r3, [fp, #-0x24]
+00802a5c: ldrb     r3, [fp, #-0x15]
+00802a60: cmp      r3, #0
+00802a64: beq      #0x802a74
+00802a68: movw     r3, #0x38b4
+00802a6c: movt     r3, #0xb9 ; ' and MD5 verified'
+00802a70: b        #0x802a7c
+00802a74: movw     r3, #0x44
+00802a78: movt     r3, #0xac
+00802a7c: str      r3, [fp, #-0x20]
+00802a80: sub      r3, fp, #0x20
+00802a84: str      r3, [sp, #0xc]
+00802a88: add      r2, sp, #4
+00802a8c: sub      r3, fp, #0x28
+00802a90: ldm      r3, {r0, r1}
+00802a94: stm      r2, {r0, r1}
+00802a98: mov      r3, #2
+00802a9c: str      r3, [sp]
+00802aa0: sub      r3, fp, #0x34
+00802aa4: ldm      r3, {r1, r2, r3}
+00802aa8: mov      r0, r4
+00802aac: bl       #0x257718 ; void spdlog::logger::log<char const*>(spdlog::source_loc, spdlog::level::level_enum, fmt::v10::basic_format_string<char, fmt::v10::type_identity<char const*>::type>, char const*&&)
+00802ab0: mov      r4, #0
+00802ab4: sub      r3, fp, #0x2b4
+00802ab8: mov      r0, r3
+00802abc: bl       #0x80586c ; std::shared_ptr<HttpResponse>::~shared_ptr()
+00802ac0: sub      r3, fp, #0x2a4
+00802ac4: mov      r0, r3
+00802ac8: bl       #0x7eb450 ; std::shared_ptr<HttpRequest>::~shared_ptr()
+00802acc: sub      r3, fp, #0x244
+00802ad0: mov      r0, r3
+00802ad4: bl       #0x8053c8 ; HFile::~HFile()
+00802ad8: sub      r3, fp, #0x13c
+00802adc: mov      r0, r3
+00802ae0: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802ae4: mov      r3, r4
+00802ae8: b        #0x802b98
+00802aec: sub      r3, fp, #0x124
+00802af0: mov      r0, r3
+00802af4: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802af8: b        #0x802afc
+00802afc: sub      r3, fp, #0xd8
+00802b00: mov      r0, r3
+00802b04: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802b08: b        #0x802b0c
+00802b0c: sub      r3, fp, #0x10c
+00802b10: mov      r0, r3
+00802b14: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802b18: b        #0x802b1c
+00802b1c: sub      r3, fp, #0xf4
+00802b20: mov      r0, r3
+00802b24: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802b28: b        #0x802b2c
+00802b2c: sub      r3, fp, #0xdc
+00802b30: mov      r0, r3
+00802b34: bl       #0xbe944 ; _ZNSaIcED1Ev
+00802b38: bl       #0xbf3f4 ; __cxa_end_cleanup
+00802b3c: sub      r3, fp, #0xc0
+00802b40: mov      r0, r3
+00802b44: bl       #0x802280 ; communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)::{lambda(HttpMessage*, http_parser_state, char const*, unsigned int)#1}::~http_parser_state()
+00802b48: b        #0x802b6c
+00802b4c: sub      r3, fp, #0x98
+00802b50: mov      r0, r3
+00802b54: bl       #0x7eb450 ; std::shared_ptr<HttpRequest>::~shared_ptr()
+00802b58: b        #0x802b6c
+00802b5c: sub      r3, fp, #0x2b4
+00802b60: mov      r0, r3
+00802b64: bl       #0x80586c ; std::shared_ptr<HttpResponse>::~shared_ptr()
+00802b68: b        #0x802b6c
+00802b6c: sub      r3, fp, #0x2a4
+00802b70: mov      r0, r3
+00802b74: bl       #0x7eb450 ; std::shared_ptr<HttpRequest>::~shared_ptr()
+00802b78: b        #0x802b7c
+00802b7c: sub      r3, fp, #0x244
+00802b80: mov      r0, r3
+00802b84: bl       #0x8053c8 ; HFile::~HFile()
+00802b88: sub      r3, fp, #0x13c
+00802b8c: mov      r0, r3
+00802b90: bl       #0xbff28 ; _ZNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEED1Ev
+00802b94: bl       #0xbf3f4 ; __cxa_end_cleanup
+00802b98: mov      r0, r3
+00802b9c: sub      sp, fp, #8
+00802ba0: pop      {r4, fp, pc}
