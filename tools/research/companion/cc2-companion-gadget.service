@@ -1,0 +1,14 @@
+[Unit]
+Description=CC2 companion CDC-ACM USB gadget (Pi only)
+Before=cc2-companion.service
+ConditionPathExists=/proc/device-tree/model
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh /opt/cc2-companion/companion/gadget-start.sh
+ExecStop=/sbin/modprobe -r g_serial
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

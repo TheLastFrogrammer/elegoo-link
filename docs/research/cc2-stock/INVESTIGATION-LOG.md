@@ -36,6 +36,8 @@ Recorded 17 October 2026. Firmware analysis below is offline; R15 separately rec
 
 ## Process record
 
+- Pi starter implementation: added a static read-only USB exporter for four fixed private bundle files, a standard-library Pi receiver with nonce/length/CRC validation and bounded deduplicated storage, a plan-first installer with boot backup/removal, temporary checked UART staging, and a separately installed fingerprint/route-gated procd template. All 25 new companion tests pass locally; the complete suite runs 105 tests with five environment-required Unix-socket skips. CI builds/tests the actual ARM executable and packages a downloadable starter. Initial shell access, physical enumeration/power, printer/WAN/camera health, hook/reboot/update acceptance and authenticated maintenance operations remain pending. No printer was contacted or changed.
+
 - Initial pass: verified the package and stock network/download policy; recovered numbered methods and candidate owner-shell/file-reader paths.
 - Access follow-up: traced the bundled console client, native UDS methods, cloud URL cache, final download rename, media/database paths and camera-host watchdog. Reviewed separate camera-module mitigation coverage.
 - Repository checkpoint: added the reports, source pins, evidence, reproduction tools and dated app reviews to the app branch. No application behavior is changed by this checkpoint.

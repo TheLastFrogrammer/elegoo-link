@@ -1,5 +1,7 @@
 # Ordered next steps
 
+Pi setup implementation: [PI-COMPANION-SETUP.md](../../../tools/research/PI-COMPANION-SETUP.md). Start hardware qualification with identity-only USB export, then one finalized fixed-inventory capture. The optional boot hook requires independent temporary-transport qualification, matching executable/helper fingerprints and an observed USB route. UART bootstrap/recovery, authenticated maintenance operations and G-code/media exports remain separate steps.
+
 Research baseline: dde7699 / v0.64.0. Follow-on app implementation: v0.65.0 / build 156, based on 7239d9b. Device access is not established. Keep the vendor printer executable intact and do not toggle mode to work around file access.
 
 | Priority / ID | Work | Done when | Dependency |

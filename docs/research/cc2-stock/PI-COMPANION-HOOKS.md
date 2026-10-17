@@ -1,5 +1,7 @@
 # A persistent Pi companion for the stock CC2
 
+Implementation follow-up: [Pi companion starter](../../../tools/research/PI-COMPANION-SETUP.md) adds the read-only export transport, Pi supervision/install/removal and a separately installed procd template proposed below. Hardware enumeration, owner bootstrap, persistent-hook acceptance, automated UART recovery and maintenance writes remain unqualified. This report records the preceding firmware evidence pass.
+
 Checked 17 October 2026 against the signature-verified **02.01.01.07** package. This pass re-downloaded the pinned package, verified all three vendor RSA/hash layers, read the rootfs and embedded kernel configuration, and inspected startup/hotplug/update scripts. No firmware was executed, no printer was contacted and no hook was installed. The owner's exact installed version, live mount state, shell privilege and physical connections remain unverified.
 
 **A permanently attached Pi is a credible direction. The stock kernel has a particularly useful USB capability: a Pi presenting CDC-ACM serial can potentially communicate with it. That does not automatically provide a Linux shell. The most update-tolerant design keeps recovery and policy on the Pi, retains UART as the bootstrap path, and treats any printer-side startup hook as disposable.**

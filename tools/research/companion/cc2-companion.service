@@ -1,0 +1,35 @@
+[Unit]
+Description=CC2 private USB bundle receiver
+Requires=cc2-companion-gadget.service
+After=cc2-companion-gadget.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /opt/cc2-companion/cc2_pi_companion.py serve
+Environment=PYTHONDONTWRITEBYTECODE=1
+User=root
+UMask=0077
+StateDirectory=cc2-companion
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=5
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
+DevicePolicy=closed
+DeviceAllow=/dev/ttyGS0 rw
+MemoryMax=64M
+CPUQuota=25%
+
+[Install]
+WantedBy=multi-user.target

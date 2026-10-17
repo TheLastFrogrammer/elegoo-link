@@ -1,0 +1,14 @@
+#!/bin/sh /etc/rc.common
+# Optional stock overlay hook. Official updates can erase this file and rc link.
+START=98
+STOP=10
+USE_PROCD=1
+
+start_service() {
+    procd_open_instance
+    procd_set_param command /bin/sh /opt/usr/cc2-companion/printer-start.sh
+    # No boot wait; retry later at most five times when no paired device is ready.
+    procd_set_param respawn 3600 15 5
+    procd_set_param term_timeout 5
+    procd_close_instance
+}

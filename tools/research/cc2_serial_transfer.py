@@ -46,7 +46,7 @@ def private_files(directory, files):
             os.fsync(output.fileno())
 
 
-def validate_binary(binary, manifest):
+def validate_binary(binary, manifest, profile="probe"):
     if len(binary) < 52 or len(binary) > MAX_BINARY:
         raise CaptureError("invalid_probe_binary")
     header = struct.unpack("<16sHHIIIIIHHHHHH", binary[:52])
@@ -58,30 +58,39 @@ def validate_binary(binary, manifest):
         if struct.unpack_from("<I", binary, header[5] + index * header[9])[0] in (2, 3):
             raise CaptureError("dynamic_probe_refused")
     digest = hashlib.sha256(binary).hexdigest()
-    source_hash = hashlib.sha256(read_regular(Path(__file__).with_name("cc2_native_probe.c"), 128 * 1024)).hexdigest()
-    if manifest.get("format") != "cc2-native-first-probe-build-v1" or manifest.get("binary") != "cc2-native-probe-armv7" or manifest.get("sha256") != digest or type(manifest.get("bytes")) is not int or manifest["bytes"] != len(binary):
+    profiles = {
+        "probe": ("cc2_native_probe.c", "cc2-native-first-probe-build-v1", "cc2-native-probe-armv7"),
+        "usb-export": ("cc2_usb_export.c", "cc2-usb-export-build-v1", "cc2-usb-export-armv7"),
+    }
+    if profile not in profiles:
+        raise CaptureError("invalid_binary_profile")
+    source_name, format_name, binary_name = profiles[profile]
+    source_hash = hashlib.sha256(read_regular(Path(__file__).with_name(source_name), 128 * 1024)).hexdigest()
+    if manifest.get("format") != format_name or manifest.get("binary") != binary_name or manifest.get("sha256") != digest or type(manifest.get("bytes")) is not int or manifest["bytes"] != len(binary):
         raise CaptureError("probe_manifest_mismatch")
     source = manifest.get("source_sha256")
-    if not isinstance(source, dict) or source.get("cc2_native_probe.c") != source_hash:
+    if not isinstance(source, dict) or source.get(source_name) != source_hash:
         raise CaptureError("probe_source_mismatch")
     return digest
 
 
-def upload_script(binary, identity, digest):
+def upload_script(binary, identity, digest, filename="probe"):
+    if filename not in ("probe", "usb-export", "printer-prepare.sh"):
+        raise CaptureError("invalid_stage_filename")
     stage = "/tmp/cc2-owner-" + identity
     lines = [
         "# Temporary data transfer only; requires an established owner shell.",
         "# Send as paced text after normal Linux boot, never at a bootloader prompt.",
         "(", "set -eu", "umask 077", "set -C", f"cc2_stage='{stage}'",
-        '/bin/mkdir "$cc2_stage"', 'exec 3>"$cc2_stage/probe"',
+        '/bin/mkdir "$cc2_stage"', f'exec 3>"$cc2_stage/{filename}"',
     ]
     for start in range(0, len(binary), 128):
         escaped = "".join("\\0" + format(byte, "03o") for byte in binary[start:start + 128])
         lines.append("/usr/bin/printf '%b' '" + escaped + "' >&3")
     lines += [
-        "exec 3>&-", 'cc2_sum=$(/usr/bin/sha256sum "$cc2_stage/probe")',
+        "exec 3>&-", f'cc2_sum=$(/usr/bin/sha256sum "$cc2_stage/{filename}")',
         f'[ "${{cc2_sum%% *}}" = "{digest}" ] || {{ /usr/bin/printf "%s\\n" CC2_STAGE_CHECKSUM_MISMATCH; exit 1; }}',
-        '/bin/chmod 700 "$cc2_stage/probe"',
+        f'/bin/chmod 700 "$cc2_stage/{filename}"',
         f"/usr/bin/printf '%s\\n' 'CC2_STAGE_VERIFIED {identity} {digest}'", ")", "",
     ]
     result = "\n".join(lines).encode("ascii")

@@ -118,6 +118,32 @@ jobs:
             --binary build/native-first-probe/cc2-native-probe-armv7 \
             --manifest build/native-first-probe/BUILD-MANIFEST.json \
             --output build/native-first-probe/uart-transfer
+      - name: Build the bounded read-only USB companion agent
+        run: |
+          mkdir -p build/cc2-companion-starter
+          "$CC2_MUSL_PREFIX/bin/musl-gcc" -std=c11 -Os -static -s \
+            -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard \
+            -D_FILE_OFFSET_BITS=64 -fstack-protector-strong -Wall -Wextra -Werror \
+            tools/research/cc2_usb_export.c -o build/cc2-companion-starter/cc2-usb-export-armv7
+          python - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('build/cc2-companion-starter')
+          binary = root / 'cc2-usb-export-armv7'
+          manifest = json.loads(pathlib.Path('build/native-first-probe/BUILD-MANIFEST.json').read_text())
+          manifest.update(format='cc2-usb-export-build-v1', binary=binary.name,
+                          bytes=binary.stat().st_size, sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                          source_sha256={'cc2_usb_export.c': hashlib.sha256(pathlib.Path('tools/research/cc2_usb_export.c').read_bytes()).hexdigest()})
+          (root / 'BUILD-MANIFEST.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          python tools/research/cc2_pi_companion.py prepare-transfer \
+            --binary build/cc2-companion-starter/cc2-usb-export-armv7 \
+            --manifest build/cc2-companion-starter/BUILD-MANIFEST.json \
+            --output build/cc2-companion-starter/uart-transfer
+      - name: Exercise the actual ARM USB agent through real pseudo-terminals
+        env:
+          CC2_USB_EXPORT: build/cc2-companion-starter/cc2-usb-export-armv7
+          CC2_USB_RUNNER: qemu-arm -cpu cortex-a7
+        run: python -m unittest discover -s tools/research/tests -p test_cc2_companion.py -v
       - name: Package the probe, source, inspectors and transfer instructions
         run: |
           cp tools/research/cc2_native_probe.c tools/research/cc2_native_capture_inspect.py \
@@ -134,5 +160,26 @@ jobs:
         with:
           name: cc2-native-first-probe-armv7
           path: build/native-first-probe/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Package the Pi setup, printer source, optional hook and temporary transfer
+        run: |
+          cp tools/research/cc2_pi_companion.py tools/research/cc2_pi_install.py \
+            tools/research/cc2_usb_export.c tools/research/cc2_native_probe.c \
+            tools/research/cc2_console_capture.py tools/research/cc2_serial_transfer.py \
+            tools/research/cc2_native_capture_inspect.py tools/research/PI-COMPANION-SETUP.md \
+            build/cc2-companion-starter/
+          cp -r tools/research/companion build/cc2-companion-starter/
+          cp build/native-first-probe/musl-COPYRIGHT build/native-first-probe/GCC-COPYRIGHT build/cc2-companion-starter/
+          python - <<'PY'
+          import hashlib, pathlib
+          root = pathlib.Path('build/cc2-companion-starter')
+          files = sorted(p for p in root.rglob('*') if p.is_file())
+          (root / 'SHA256SUMS').write_text(''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + str(p.relative_to(root)) + '\n' for p in files))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cc2-companion-starter
+          path: build/cc2-companion-starter/
           if-no-files-found: error
           retention-days: 30

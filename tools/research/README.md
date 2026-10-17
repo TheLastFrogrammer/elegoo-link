@@ -1,5 +1,7 @@
 # Offline CC2 capture inspector
 
+For the new Pi transport setup, see [PI-COMPANION-SETUP.md](PI-COMPANION-SETUP.md): a Pi installer, supervised private USB receiver, static read-only printer exporter and optional fingerprint-gated procd hook. Initial owner access and physical qualification remain required. This starter exports fixed facts/captures; automated UART recovery, maintenance writes and G-code/media access are subsequent work.
+
 For a stock owner shell without Python, use the [native first-contact recorder](NATIVE-FIRST-PROBE.md) and optional [checksummed paced-text transfer](SERIAL-TRANSFER.md). Both are preparation tools; physical access and actual printer acceptance remain pending.
 
 For an independently established stock console, see the separate [bounded console recorder](CONSOLE-CAPTURE.md). It does not create shell access; Python availability on stock firmware is not established. The offline inspector below remains suitable for already exported files on a workstation or Termux.
