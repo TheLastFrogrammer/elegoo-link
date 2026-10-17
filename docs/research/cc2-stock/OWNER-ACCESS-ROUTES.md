@@ -18,6 +18,7 @@ This is stronger than the earlier generic "owner shell required" wording. The un
 | Mainboard UART0 | CC2 hardware reference documents the UART0/DSP header; stock init plus actual askfirst code support direct shell activation | Identify exact board/header, verify signal levels, capture receive-only normal boot, then activate the Linux console if observed |
 | Printer USB/ADB | Generic USB configuration code and an `adbd` dependency string exist, but no named adbd executable or corresponding init service was found | No qualified stock printer ADB route established |
 | Camera USB/ADB | Camera maintenance project establishes a route to supported camera modules | Useful for camera work; it does not establish mainboard shell access |
+| USB keyboard / tty1 | Init has a tty1 shell action, but the actual embedded kernel config disables HID/USB-HID keyboard support and framebuffer console rendering | No qualified plug-in keyboard shell route in the inspected image; gadget-side HID support is a different direction |
 | USB autorun or failsafe hooks | Debug-install line is commented and its script absent. A failsafe script refers to Dropbear, but its named binaries are absent from the rootfs inventory | Do not treat these remnants as a working bootstrap |
 | FEL / RAM recovery | Board reference labels FEL; this is a possible lower-level investigation | Not the first route. CC1 procedures and arbitrary boot images are not qualified CC2 recovery instructions |
 

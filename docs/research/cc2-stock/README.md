@@ -21,6 +21,8 @@ The [owner-access route analysis](OWNER-ACCESS-ROUTES.md) now verifies the stock
 
 The [phone/UART next-step sequence](PHONE-UART-NEXT-STEPS.md) now incorporates the owner's completed network checks and missing adapter. A [native first-contact probe](../../../tools/research/NATIVE-FIRST-PROBE.md) prepares one fixed endpoint-inventory request without printer-side Python, with private bounded raw capture and strict offline inspection. Its ARM build/emulator qualification is separate from physical printer acceptance and owner bootstrap.
 
+Native qualification checkpoint: [run 39039995345](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39039995345) passed all 67 research tests on each host Python version and all 22 native-probe tests with the actual static ARM executable under QEMU, with zero skips. The executable is 25,852 bytes; its downloadable artifact includes source, inspector, instructions, manifest and checksums. [Validation record](NATIVE-PROBE-VALIDATION.json). No physical printer qualification or owner bootstrap is implied.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout

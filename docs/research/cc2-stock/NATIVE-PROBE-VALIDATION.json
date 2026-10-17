@@ -41,7 +41,7 @@
     "cross_compiler": "Not installed; local apt setup unavailable under workspace permissions. Use ordinary Linux CI runner for cross compilation."
   },
   "ci": {
-    "status": "pending",
+    "status": "passed",
     "workflow": ".github/workflows/research-tools.yml",
     "host_python_versions": [
       "3.10",
@@ -49,7 +49,65 @@
     ],
     "target": "Static Linux ARMv7-A EABI5 hard-float with musl 1.2.6",
     "emulator": "qemu-arm -cpu cortex-a7",
-    "artifact_name": "cc2-native-first-probe-armv7"
+    "artifact_name": "cc2-native-first-probe-armv7",
+    "run_id": 39039995345,
+    "run_url": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39039995345",
+    "source_commit": "811b344543270e6ff43f0e845023b1cf17cf6426",
+    "host_jobs": [
+      {
+        "python": "3.10",
+        "job_id": 117417327320,
+        "tests_passed": 67,
+        "skipped": 0
+      },
+      {
+        "python": "3.12",
+        "job_id": 117417327484,
+        "tests_passed": 67,
+        "skipped": 0
+      }
+    ],
+    "arm_job": {
+      "job_id": 117417370550,
+      "tests_passed": 22,
+      "skipped": 0,
+      "actual_arm_unix_connection": true,
+      "actual_arm_interrupt_finalization": true,
+      "socket_symlink_refusal": true
+    },
+    "build_manifest": {
+      "format": "cc2-native-first-probe-build-v1",
+      "source_commit": "811b344543270e6ff43f0e845023b1cf17cf6426",
+      "target": "Linux ARMv7-A little-endian EABI5 hard-float; static executable",
+      "libc": {
+        "name": "musl",
+        "version": "1.2.6",
+        "source_sha256": "d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a"
+      },
+      "binary": "cc2-native-probe-armv7",
+      "bytes": 25852,
+      "sha256": "523dac21dee64fa942ff4fcd9514925c08915d80ef62b68da877f3515f6d76ad",
+      "compiler": "arm-linux-gnueabihf-gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0",
+      "emulator": "qemu-arm version 8.2.2 (Debian 1:8.2.2+ds-0ubuntu1.18)",
+      "physical_printer_qualified": false,
+      "owner_access_provided": false,
+      "source_sha256": {
+        "cc2_native_probe.c": "0c1549f994a03727f20326f8a8d6be67fc60966713c83cabb2b7fbb4067aaa9d",
+        "cc2_native_capture_inspect.py": "31e5518e8e8cdef6d025b97370345b8f27fde1b2b984a7c92ae7956daf4cf559",
+        "cc2_console_capture.py": "649f0a7ed0c1941c1e311d48622b883622c88610fbe988cec3cd00bbae1dcbaa"
+      }
+    },
+    "artifact": {
+      "id": 12104180298,
+      "bytes": 50544,
+      "sha256": "e2e3e9c9c760700ec5c0fafeef82477ed650a199c7746d5748b6577762bb0196",
+      "all_internal_checksums_verified_after_download": true,
+      "archived_source_matches_worktree": true
+    },
+    "initial_build_configuration_fixes": [
+      "Explicit GNU cross-archiver/ranlib selection for musl target triplet",
+      "Explicit enablement of cross musl-gcc wrapper"
+    ]
   },
   "physical_printer_qualified": false,
   "owner_access_provided": false,

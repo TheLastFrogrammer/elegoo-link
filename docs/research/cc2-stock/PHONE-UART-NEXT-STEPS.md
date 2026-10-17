@@ -23,6 +23,8 @@ An adapter with a 5-V supply pin is not necessarily a 5-V logic adapter. A commo
 
 A plain USB cable is not a qualified mainboard shell path. The printer's toolhead USB-C connection is documented as carrying **24 V** and must not be connected to the phone or laptop.
 
+A USB keyboard is not a qualified shortcut either. Although init includes a tty1 shell, the pinned kernel's embedded configuration disables `CONFIG_HID`, `CONFIG_USB_HID` and `CONFIG_FRAMEBUFFER_CONSOLE`. Gadget-side `CONFIG_USB_CONFIGFS_F_HID` being enabled does not make the printer a USB keyboard host. See the [configuration fingerprint and selected options](access/evidence/UART-DT-FOLLOWUP.json).
+
 ## 3. Make one receive-only boot observation
 
 Before pin-by-pin wiring, obtain a clear picture showing the actual mainboard revision, the header and its surrounding orientation. The reference identifies EF-M5-V1.0.073 and a UART0/DSP 2x4 header; that does not establish the owner's revision or the physical mapping to Linux `ttyS2`.

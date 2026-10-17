@@ -7,7 +7,10 @@
     "size_bytes": 56869,
     "sha256": "63db65f5107cecf572f97d3c2c617fdafe1367cafd42ca2a1a472eb8a55d38ab",
     "model": "sun8iw20",
-    "compatible": ["allwinner,r528", "arm,sun8iw20p1"],
+    "compatible": [
+      "allwinner,r528",
+      "arm,sun8iw20p1"
+    ],
     "chosen_bootargs": "earlyprintk=sunxi-uart,0x2500000 loglevel=8 initcall_debug=0 console=ttyS2 init=/init",
     "aliases": {
       "serial0": "/soc@3000000/uart@2500000",
@@ -20,7 +23,10 @@
       "register_address_hex": "0x02500000",
       "pinctrl_0_phandle": "0x14",
       "pin_node": "/soc@3000000/pinctrl@2000000/uart0_pins@0",
-      "pins": ["PF2", "PF4"],
+      "pins": [
+        "PF2",
+        "PF4"
+      ],
       "function": "uart0",
       "uart0_port_property_bytes": 0,
       "uart0_type": 2
@@ -30,13 +36,28 @@
       "status": "disabled",
       "register_address_hex": "0x02500800",
       "pinctrl_0_phandle": "0x18",
-      "pins": ["PE2", "PE3"],
+      "pins": [
+        "PE2",
+        "PE3"
+      ],
       "uart2_port": 2,
       "uart2_type": 4
     },
     "pinctrl_supplies": {
-      "vcc-pf-supply": {"phandle": "0xf", "node": "/pio-18", "name": "pio-18", "minimum_microvolt": 1800000, "maximum_microvolt": 1800000},
-      "vcc-pfo-supply": {"phandle": "0x10", "node": "/pio-33", "name": "pio-33", "minimum_microvolt": 3300000, "maximum_microvolt": 3300000}
+      "vcc-pf-supply": {
+        "phandle": "0xf",
+        "node": "/pio-18",
+        "name": "pio-18",
+        "minimum_microvolt": 1800000,
+        "maximum_microvolt": 1800000
+      },
+      "vcc-pfo-supply": {
+        "phandle": "0x10",
+        "node": "/pio-33",
+        "name": "pio-33",
+        "minimum_microvolt": 3300000,
+        "maximum_microvolt": 3300000
+      }
     }
   },
   "kernel": {
@@ -45,9 +66,31 @@
     "gzip_offset_within_kernel_member": 15884,
     "decompressed_bytes": 10730880,
     "version_string_prefix": "Linux version 5.4.61 (3dp@user-07)",
-    "qualification": "Image string only; not the owner's running uname result"
+    "qualification": "Image string only; not the owner's running uname result",
+    "embedded_config": {
+      "marker_offset_in_decompressed_kernel": 7316776,
+      "marker": "IKCFG_ST",
+      "gzip_starts_after_marker_bytes": 8,
+      "gzip_bytes": 22857,
+      "decompressed_bytes": 102243,
+      "sha256": "8fa0a87f203d69cb9c4e027e8db11a9a0d92c5d2ea8ae83f87b34714aae7ec4a",
+      "selected_values": {
+        "CONFIG_VT": "y",
+        "CONFIG_VT_CONSOLE": "y",
+        "CONFIG_INPUT_EVDEV": "y",
+        "CONFIG_INPUT_KEYBOARD": "not set",
+        "CONFIG_HID": "not set",
+        "CONFIG_USB_HID": "not set",
+        "CONFIG_FRAMEBUFFER_CONSOLE": "not set",
+        "CONFIG_FB_CONSOLE_SUNXI": "not set",
+        "CONFIG_USB_CONFIGFS_F_HID": "y",
+        "CONFIG_USB_CONFIGFS_SERIAL": "y",
+        "CONFIG_USB_CONFIGFS_F_FS": "y"
+      },
+      "interpretation": "No standard USB-keyboard/framebuffer-console path is established despite the tty1 askfirst entry. USB_CONFIGFS_F_HID is peripheral/gadget-side support, not a USB-host keyboard input driver. USB gadget function support does not create a userspace shell or supply the absent adbd executable."
+    }
   },
-  "reproduction": "Locate the FDT at the pinned offset, validate its big-endian header and size, walk FDT_BEGIN_NODE/FDT_PROP/FDT_END_NODE tokens, resolve property-name strings and referenced phandles. Read-only parsing; no boot/update execution.",
+  "reproduction": "Locate the FDT at the pinned offset, validate its big-endian header and size, walk FDT_BEGIN_NODE/FDT_PROP/FDT_END_NODE tokens, resolve property-name strings and referenced phandles. Read-only parsing; no boot/update execution. For embedded kernel configuration, extract the Android image kernel, decompress its gzip payload, find IKCFG_ST and decompress the following gzip stream; compare the pinned configuration digest before interpreting options.",
   "interpretation_limits": [
     "An embedded FDT is not proof of the live bootloader-patched kernel device tree or final command line.",
     "Hardware UART0 naming and Linux ttyS2 cannot be equated from these records alone.",
