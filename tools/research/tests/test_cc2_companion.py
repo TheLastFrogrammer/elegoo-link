@@ -167,13 +167,23 @@ class CompanionTests(unittest.TestCase):
     def test_native_refuses_symlink_file_and_partial_probe_bundle(self):
         source = self.root / "source"
         pi.private_files(source, {"identity.json": identity(), "request.bin": REQUEST})
-        result = subprocess.run(self.command + ["--device", "/dev/null", "--bundle", str(source)], capture_output=True)
-        self.assertEqual(result.returncode, 1)
-        (source / "request.bin").unlink()
-        (source / "identity.json").rename(source / "private")
-        (source / "identity.json").symlink_to(source / "private")
-        result = subprocess.run(self.command + ["--device", "/dev/null", "--bundle", str(source)], capture_output=True)
-        self.assertEqual(result.returncode, 1)
+        master, slave = pty.openpty()
+        original = termios.tcgetattr(slave)
+        try:
+            # A valid serial device makes this prove bundle refusal rather than
+            # accidentally succeed through the separate non-TTY guard.
+            for attempt in range(2):
+                result = subprocess.run(self.command + ["--device", os.ttyname(slave), "--bundle", str(source)],
+                                        capture_output=True, timeout=3)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(termios.tcgetattr(slave), original)
+                if attempt == 0:
+                    (source / "request.bin").unlink()
+                    (source / "identity.json").rename(source / "private")
+                    (source / "identity.json").symlink_to(source / "private")
+        finally:
+            os.close(master)
+            os.close(slave)
 
     def test_native_rechecks_bound_after_file_changes(self):
         with self.native() as (master, process, source):
