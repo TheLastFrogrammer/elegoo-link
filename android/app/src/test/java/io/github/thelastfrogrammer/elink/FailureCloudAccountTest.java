@@ -55,7 +55,7 @@ public class FailureCloudAccountTest {
             ? new CloudApi.Response(200, "{\"code\":0,\"data\":{\"token\":\"new-access\",\"refreshToken\":\"new-refresh\",\"accessTokenExpireTime\":" + (System.currentTimeMillis() + 3_600_000) + ",\"accountId\":\"42\"}}")
             : new CloudApi.Response(200, "{\"code\":0,\"data\":[]}"));
         java.util.List<String> saved = new java.util.ArrayList<>();
-        api.onAccountChanged(account -> saved.add(account.accessToken + "/" + account.refreshToken));
+        api.onAccountChanged((before, account) -> saved.add(account.accessToken + "/" + account.refreshToken));
         api.devices();
         assertEquals(java.util.Collections.singletonList("new-access/new-refresh"), saved);
     }

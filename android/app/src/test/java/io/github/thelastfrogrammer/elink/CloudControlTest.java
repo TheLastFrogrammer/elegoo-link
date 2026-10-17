@@ -92,7 +92,7 @@ public class CloudControlTest {
         CloudControl control = control(5000, 60000); Replies replies = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.STOP), replies);
         JSONObject request = new JSONObject(take(waitForLink())[1]);
-        links.get(0).events.message("12345SN818", new JSONObject().put("id", request.getInt("id")).put("result", new JSONObject().put("error_code", 1010)).toString());
+        links.get(0).events.message("12345SN818", new JSONObject().put("id", request.getInt("id")).put("method", Cc2Codec.STOP).put("result", new JSONObject().put("error_code", 1010)).toString());
         assertEquals("fail: " + PrinterErrors.code(1010), replies.take());
     }
 
@@ -168,7 +168,7 @@ public class CloudControlTest {
         CloudControl control = control(5000, 150); Replies replies = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.PAUSE), replies);
         JSONObject request = new JSONObject(take(waitForLink())[1]);
-        links.get(0).events.message("12345SN818", new JSONObject().put("id", request.getInt("id")).put("result", new JSONObject().put("error_code", 0)).toString());
+        links.get(0).events.message("12345SN818", new JSONObject().put("id", request.getInt("id")).put("method", Cc2Codec.PAUSE).put("result", new JSONObject().put("error_code", 0)).toString());
         replies.take();
         waitFor(() -> links.get(0).closed); assertFalse(control.connected());
     }

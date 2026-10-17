@@ -273,6 +273,7 @@ public final class AutomationActivity extends Activity {
                 text(form, "Sent once per event while the app has a live connection; never repeated.", 12, muted, false); break;
             }
             case Automation.WEBHOOK: {
+                if (a.needsAddress) text(form, "This webhook came from a shared rule or a backup without a password, so only its site was kept. Enter its full address before it can be sent.", 13, ink, true);
                 url = field(form, "Address (https://…)", a.url, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
                 body = field(form, "Body (blank: all values as JSON)", a.body, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
                 header = field(form, "Header name for a token (optional), e.g. Authorization", a.header, InputType.TYPE_CLASS_TEXT);
@@ -306,7 +307,9 @@ public final class AutomationActivity extends Activity {
             if (fPicture != null) a.picture = fPicture.isChecked(); if (fChart != null) a.chart = fChart.isChecked();
             if (fRaw != null) { a.rawImage = fRaw.isChecked(); String h = fMessage.getText().toString().trim(); a.messageHeader = h.matches("[A-Za-z0-9-]{1,40}") ? h : "Message"; }
             if (fUrl != null) {
-                a.url = Automation.cap(fUrl.getText().toString().trim(), 2000); a.body = Automation.cap(fBody.getText().toString(), 8000); a.header = fHeader.getText().toString().trim();
+                String typedUrl = Automation.cap(fUrl.getText().toString().trim(), 2000);
+                if (!typedUrl.equals(a.url)) a.needsAddress = false;   // the person entered the address: it can be used
+                a.url = typedUrl; a.body = Automation.cap(fBody.getText().toString(), 8000); a.header = fHeader.getText().toString().trim();
                 if (!a.header.isEmpty() && !a.header.matches("[A-Za-z0-9-]{1,60}")) { toast("A header name has only letters, digits and dashes (for example Authorization). It was left out."); a.header = ""; }
                 String value = fSecret.getText().toString();
                 try { CredentialStore store = new CredentialStore(this);

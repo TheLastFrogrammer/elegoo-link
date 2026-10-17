@@ -50,7 +50,7 @@ public final class CloudControl implements AutoCloseable {
     private Link link;
     private String userId = "";
     private String ended = "";
-    private Pending pending;
+    private Pending pending, urgent;   // the command awaiting its reply; an emergency stop sent alongside it
     static final int MAX_WAITING = 3;
     static final long WAIT_MS = 15_000;
     private final java.util.concurrent.atomic.AtomicInteger inFlight = new java.util.concurrent.atomic.AtomicInteger();
@@ -146,6 +146,7 @@ public final class CloudControl implements AutoCloseable {
             int method = request.optInt("method", -1);
             if (!allowed(method) && !(cameraQuestion && method == Cc2Codec.CAMERA)) { counted.done(false, "This command is not available through the cloud."); return; }
             if (!Cc2Discovery.validSerial(serial)) { counted.done(false, "Unknown printer serial."); return; }
+            if (method == Cc2Codec.URGENT_STOP) { urgentStop(serial, request, counted); return; }
             synchronized (this) {
                 if (pending != null || !waiting.isEmpty()) {
                     // Only a command that has NOT been sent may wait. Nothing already published is ever sent again.
@@ -156,12 +157,31 @@ public final class CloudControl implements AutoCloseable {
                     return;
                 }
             }
-            dispatch(serial, request, counted, method);
+            dispatch(serial, request, counted, method, false);
         });
     }
 
     /** Commands accepted but not yet sent plus the one awaiting its reply: what the screens call "busy". */
     public int outstanding() { return inFlight.get(); }
+
+    /**
+     * Emergency stop is never held behind another command: changing commands still waiting (never published) are dropped, and
+     * the stop goes out at the next moment the channel spacing allows, even while an earlier command awaits its reply. That
+     * earlier command is not repeated or cancelled; its reply is still matched to it.
+     */
+    private void urgentStop(String serial, JSONObject request, Reply reply) {
+        List<Waiting> dropped = new ArrayList<>();
+        synchronized (this) {
+            if (urgent != null || pending != null && pending.method == Cc2Codec.URGENT_STOP) { reply.done(false, "Emergency stop already sent. Waiting for the printer's reply."); return; }
+            for (java.util.Iterator<Waiting> it = waiting.iterator(); it.hasNext(); ) {
+                Waiting entry = it.next();
+                if (Cc2Codec.changing(entry.request.optInt("method", -1))) { it.remove(); dropped.add(entry); }
+            }
+        }
+        for (Waiting entry : dropped) { entry.expiry.cancel(false); entry.reply.done(false, "Cancelled for the emergency stop. This command was not sent."); }
+        boolean alongside; synchronized (this) { alongside = pending != null; }
+        dispatch(serial, request, reply, Cc2Codec.URGENT_STOP, alongside);
+    }
 
     private void expire(Waiting entry) {
         synchronized (this) { if (!waiting.remove(entry)) return; }
@@ -176,7 +196,7 @@ public final class CloudControl implements AutoCloseable {
             next = waiting.remove(0);
         }
         next.expiry.cancel(false);
-        dispatch(next.serial, next.request, next.reply, next.request.optInt("method", -1));
+        dispatch(next.serial, next.request, next.reply, next.request.optInt("method", -1), false);
     }
 
     /** Fails every command that was waiting (never sent). Worker thread. */
@@ -186,7 +206,8 @@ public final class CloudControl implements AutoCloseable {
         for (Waiting entry : dropped) { entry.expiry.cancel(false); entry.reply.done(false, why + " This command was not sent."); }
     }
 
-    private void dispatch(String serial, JSONObject request, Reply reply, int method) {
+    /** Publishes one command; `asUrgent` tracks it beside a command still awaiting its reply (emergency stop only). */
+    private void dispatch(String serial, JSONObject request, Reply reply, int method, boolean asUrgent) {
         {
             try {
                 ensureConnected();
@@ -196,7 +217,7 @@ public final class CloudControl implements AutoCloseable {
                 synchronized (this) {
                     wait.id = nextId++; wait.method = method; wait.publisher = userId + serial; wait.reply = reply;
                     message.put("id", wait.id);
-                    pending = wait;
+                    if (asUrgent) urgent = wait; else pending = wait;
                     // Kept apart from the previous command (see SPACING_MS); the reply wait starts when it actually goes out.
                     long now = System.currentTimeMillis();
                     delay = Math.max(0, lastPublishAt + spacingMs - now); lastPublishAt = now + delay;
@@ -207,7 +228,7 @@ public final class CloudControl implements AutoCloseable {
                 if (delay > 0) {
                     String text = message.toString();
                     worker.schedule(() -> {
-                        synchronized (this) { if (pending != wait) return; }   // ended meanwhile (link closed): never sent
+                        synchronized (this) { if (pending != wait && urgent != wait) return; }   // ended meanwhile (link closed): never sent
                         try { link.publish(wait.publisher, text); }
                         catch (Exception error) {
                             String why = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
@@ -216,7 +237,7 @@ public final class CloudControl implements AutoCloseable {
                     }, delay, TimeUnit.MILLISECONDS);
                 } else link.publish(wait.publisher, message.toString());
             } catch (Exception error) {
-                Pending failed; synchronized (this) { failed = pending; }
+                Pending failed; synchronized (this) { failed = asUrgent ? urgent : pending; }
                 String text = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
                 if (failed != null && Cc2Codec.changing(method)) text += " " + OUTCOME_UNKNOWN;
                 if (failed != null) finish(failed, false, text); else { reply.done(false, text); failWaiting(text); }
@@ -284,8 +305,8 @@ public final class CloudControl implements AutoCloseable {
             return;
         }
         Pending wait;
-        synchronized (this) { wait = pending; }
-        if (wait == null || !wait.publisher.equals(publisher) || message.optInt("id", -1) != wait.id) {
+        synchronized (this) { wait = answers(pending, publisher, message) ? pending : answers(urgent, publisher, message) ? urgent : null; }
+        if (wait == null) {
             int method = message.optInt("method", -1);
             unasked.saw("cloud", method);
             String uid; synchronized (this) { uid = userId; }
@@ -293,14 +314,23 @@ public final class CloudControl implements AutoCloseable {
             return;
         }
         JSONObject result = message.optJSONObject("result");
-        int code = result == null ? -1 : result.optInt("error_code", 0);
+        if (result == null) { finish(wait, false, "The printer's reply through the cloud carried no result." + (Cc2Codec.changing(wait.method) ? " " + OUTCOME_UNKNOWN : "")); return; }
+        // A changing command needs the printer to say it succeeded (error_code 0), as on the local network; a read may answer
+        // with its data alone.
+        boolean changing = Cc2Codec.changing(wait.method);
+        int code = result.has("error_code") ? result.optInt("error_code", -1) : changing ? -1 : 0;
         if (code == 0) finish(wait, true, "Printer acknowledged through the cloud. Waiting for its status to update.", result);
+        else if (!result.has("error_code")) finish(wait, false, "The printer's reply through the cloud did not say whether it worked." + (changing ? " " + OUTCOME_UNKNOWN : ""));
         else finish(wait, false, PrinterErrors.code(code));
+    }
+    /** Whether a message is the reply to this command: same printer, same id and same method. */
+    private static boolean answers(Pending wait, String publisher, JSONObject message) {
+        return wait != null && wait.publisher.equals(publisher) && message.optInt("id", -1) == wait.id && message.optInt("method", -1) == wait.method;
     }
 
     private void finish(Pending wait, boolean acknowledged, String text) { finish(wait, acknowledged, text, new JSONObject()); }
     private void finish(Pending wait, boolean acknowledged, String text, JSONObject result) {
-        synchronized (this) { if (pending != wait) return; pending = null; }
+        synchronized (this) { if (pending == wait) pending = null; else if (urgent == wait) urgent = null; else return; }
         if (wait.timeout != null) wait.timeout.cancel(false);
         wait.reply.done(acknowledged, text, result);
         worker.execute(this::drain);
@@ -308,8 +338,9 @@ public final class CloudControl implements AutoCloseable {
 
     private void endedOutside(Link which, String reason) {
         synchronized (this) { if (link != which) return; ended = reason; }
-        Pending wait; Transfers watcher; synchronized (this) { wait = pending; watcher = watching == null ? null : transfers; }
+        Pending wait, stop; Transfers watcher; synchronized (this) { wait = pending; stop = urgent; watcher = watching == null ? null : transfers; }
         if (wait != null) finish(wait, false, Cc2Codec.changing(wait.method) ? reason + " " + OUTCOME_UNKNOWN : reason);
+        if (stop != null) finish(stop, false, reason + " " + OUTCOME_UNKNOWN);
         failWaiting(reason);
         closeLink();
         if (watcher != null) watcher.ended(reason);
@@ -318,7 +349,7 @@ public final class CloudControl implements AutoCloseable {
     private void scheduleIdleClose() {
         synchronized (this) {
             if (idle != null) idle.cancel(false);
-            idle = worker.schedule(() -> { synchronized (CloudControl.this) { if (pending != null || watching != null || System.currentTimeMillis() < listenUntil) { scheduleIdleClose(); return; } } closeLink(); }, idleCloseMs, TimeUnit.MILLISECONDS);
+            idle = worker.schedule(() -> { synchronized (CloudControl.this) { if (pending != null || urgent != null || watching != null || System.currentTimeMillis() < listenUntil) { scheduleIdleClose(); return; } } closeLink(); }, idleCloseMs, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -330,8 +361,9 @@ public final class CloudControl implements AutoCloseable {
 
     @Override public void close() {
         worker.execute(() -> {
-            Pending wait; synchronized (this) { wait = pending; if (idle != null) idle.cancel(false); }
+            Pending wait, stop; synchronized (this) { wait = pending; stop = urgent; if (idle != null) idle.cancel(false); }
             if (wait != null) finish(wait, false, "Cloud controls closed.");
+            if (stop != null) finish(stop, false, "Cloud controls closed. " + OUTCOME_UNKNOWN);
             failWaiting("Cloud controls closed.");
             closeLink();
         });

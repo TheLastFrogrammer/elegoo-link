@@ -55,7 +55,9 @@
     uniform int uBase, uDimBelow;   // index of the first instance drawn; instances before uDimBelow are dimmed
     uniform vec3 uDimColor;
     uniform int uLayerStart; uniform float uAlpha, uBelowAlpha;   // opacity of the current layer, and of the layers below it
-    out vec3 vNormal; out vec3 vColor; out float vAlpha;
+    uniform float uTypeAlpha[18];   // opacity per line type
+    uniform int uEdgeMask;          // line types drawn as edges only
+    out vec3 vNormal; out vec3 vColor; out float vAlpha; out float vEdge;
     // Wide-angle lens: seen from the printer's camera, the drawing bends like the camera's picture (barrel curve, division model,
     // radius measured against the picture's half-diagonal) so the bed outline can be matched to a curved bed edge.
     uniform float uLens, uScreenAspect, uPictureAspect, uFit;
@@ -82,11 +84,12 @@
       vNormal = mat3(uView) * normalize(d * aNormal.x + side * aNormal.y + up * aNormal.z);
       vColor = uColors[type];
       if (gl_InstanceID + uBase < uDimBelow) vColor = mix(vColor, uDimColor, 0.55);
-      vAlpha = gl_InstanceID + uBase < uLayerStart ? uBelowAlpha : uAlpha;
+      vAlpha = (gl_InstanceID + uBase < uLayerStart ? uBelowAlpha : uAlpha) * uTypeAlpha[type];
+      vEdge = float((uEdgeMask >> type) & 1);
       gl_Position = zoomed(lens(uViewProj * vec4(p, 1.0)));
     }`, `#version 300 es
     precision mediump float;
-    in vec3 vNormal; in vec3 vColor; in float vAlpha;
+    in vec3 vNormal; in vec3 vColor; in float vAlpha; in float vEdge;
     uniform float uGhost; uniform vec3 uGhostColor;
     out vec4 fragment;
     void main() {
@@ -95,7 +98,11 @@
       float diffuse = max(dot(n, key), 0.0), back = max(dot(n, fill), 0.0);
       float shine = pow(max(dot(reflect(-key, n), vec3(0.0, 0.0, 1.0)), 0.0), 24.0);
       vec3 color = vColor * (0.36 + 0.56 * diffuse + 0.16 * back) + vec3(0.14) * shine;
-      fragment = uGhost > 0.5 ? vec4(mix(uGhostColor, color, 0.2), 0.3 * vAlpha) : vec4(color, vAlpha);
+      float alpha = vAlpha;
+      // Edges only: a bead shows where it turns away from the eye (its sides seen edge-on) and fades where it faces it, so
+      // the lines read as outlines and what lies behind them shows through.
+      if (vEdge > 0.5) { float rim = smoothstep(0.35, 0.85, 1.0 - abs(n.z)); alpha *= rim; color = min(color * 1.25 + 0.08, vec3(1.0)); if (alpha < 0.03) discard; }
+      fragment = uGhost > 0.5 ? vec4(mix(uGhostColor, color, 0.2), 0.3 * vAlpha) : vec4(color, alpha);
     }`);
 
   const lines = program(`#version 300 es
@@ -166,7 +173,7 @@
   // ---------------------------------------------------------------- state
   const data = { meta: null, segments: null, count: 0, travels: null, travelCount: 0, box: null };
   const view = { start: 0, end: 0, ghostEnd: 0, travelStart: 0, travelEnd: 0, showTravel: false, hidden: 0, nozzle: null, dimBelow: 0,
-    nozzleSize: 16, nozzleAlpha: 1, supportAlpha: 0.35, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false,
+    nozzleSize: 16, nozzleAlpha: 1, supportAlpha: 0.35, typeAlpha: null, edgeMask: 0, nozzleFlat: false, layerStart: 0, alpha: 1, belowAlpha: 1, head: false,
     headSize: { w: 70, d: 80, h: 80, block: 24, offset: 0 }, headShow: false, headLook: "mask" };
   const theme = { background: [0.949, 0.961, 0.965], grid: [0.75, 0.8, 0.8, 1], plate: [0.88, 0.91, 0.91, 1], ghost: [0.6, 0.65, 0.67],
     travel: [0.2, 0.45, 0.9, 0.55], nozzle: [0, 0.62, 0.56, 1], ring: [1, 1, 1, 1], dim: [0.62, 0.66, 0.68],
@@ -517,14 +524,21 @@
     const solid = a > 0.99 && b > 0.99;
     if (!solid) gl.depthMask(false);
     gl.bindVertexArray(beadVao); bindInstances(first);
-    // Supports are see-through (view.supportAlpha): a sparse support's walls, seen side on, would otherwise read as a solid
-    // block hiding the model. They are drawn after everything else, without writing depth, so what is behind them shows.
-    const mask = supportMask(), seeThrough = !ghost && mask && view.supportAlpha < 0.99 && (view.hidden & mask) !== mask;
+    // See-through line types (their own opacity below 100 %, supports at view.supportAlpha, or drawn as edges only) come after
+    // the solid ones and do not write depth, so what is behind them shows. A sparse support's walls, seen side on, would
+    // otherwise read as a solid block hiding the model.
+    const supports = supportMask(), alphas = new Float32Array(18); let mask = 0;
+    for (let i = 0; i < 18; i++) {
+      const own = Array.isArray(view.typeAlpha) && view.typeAlpha[i] >= 0 ? Math.min(1, view.typeAlpha[i]) : 1;
+      alphas[i] = Math.max(0.03, own * ((supports >> i) & 1 ? Math.max(0.05, view.supportAlpha) : 1));
+      if (alphas[i] < 0.99 || (view.edgeMask >> i) & 1) mask |= 1 << i;
+    }
+    gl.uniform1fv(bead.u.uTypeAlpha, alphas); gl.uniform1i(bead.u.uEdgeMask, ghost ? 0 : view.edgeMask | 0);
+    const seeThrough = !ghost && mask && (view.hidden & mask) !== mask;
     if (seeThrough) gl.uniform1i(bead.u.uHidden, view.hidden | mask);
     gl.drawArraysInstanced(gl.TRIANGLES, 0, beadVertices.length / 6, end - first);
     if (seeThrough) {
-      const k = Math.max(0.05, view.supportAlpha);
-      gl.uniform1i(bead.u.uHidden, view.hidden | ~mask); gl.uniform1f(bead.u.uAlpha, a * k); gl.uniform1f(bead.u.uBelowAlpha, b * k);
+      gl.uniform1i(bead.u.uHidden, view.hidden | ~mask);
       gl.depthMask(false); gl.drawArraysInstanced(gl.TRIANGLES, 0, beadVertices.length / 6, end - first); gl.depthMask(solid);
     }
     if (!solid) gl.depthMask(true);

@@ -254,6 +254,7 @@ public final class Cc2Session implements AutoCloseable {
         int id = message.optInt("id"), method = message.optInt("method");
         if (!ready()) return;
         if (readOnly() && changing(method)) { emitResult("Read-only PIN probe: printer-changing commands are disabled."); return; }
+        if (method == Cc2Codec.URGENT_STOP) { urgentStop(message); return; }
         if (queued.contains(method) || pending.values().stream().anyMatch(p -> p.method == method)
             || changing(method) && (queued.stream().anyMatch(Cc2Session::changing) || pending.values().stream().anyMatch(p -> changing(p.method)))) {
             // Background polls and resyncs regularly overlap a queued status/tray/attribute read; the read already
@@ -265,6 +266,24 @@ public final class Cc2Session implements AutoCloseable {
         if (changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " queued");
         // Stop takes the next available slot ahead of reads; all requests retain the firmware spacing.
         if (method == Cc2Codec.STOP) requestQueue.addFirst(message); else requestQueue.addLast(message);
+        scheduleDispatch();
+    }
+    /**
+     * Emergency stop is never held behind another command: changing commands still waiting to be sent are dropped (they were
+     * never published, so nothing is undone or repeated), and the stop takes the next slot the firmware spacing allows.
+     * Commands already sent keep waiting for their own replies.
+     */
+    private void urgentStop(JSONObject message) {
+        if (queued.contains(Cc2Codec.URGENT_STOP) || pending.values().stream().anyMatch(p -> p.method == Cc2Codec.URGENT_STOP)) { emitResult("Emergency stop already sent. Waiting for the printer's reply."); return; }
+        int dropped = 0;
+        for (java.util.Iterator<JSONObject> it = requestQueue.iterator(); it.hasNext(); ) {
+            JSONObject waiting = it.next(); int m = waiting.optInt("method");
+            if (changing(m)) { it.remove(); queued.remove(m); dropped++; Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(m) + " not sent: emergency stop"); }
+        }
+        if (dropped > 0) emitResult(dropped == 1 ? "A command waiting to be sent was cancelled for the emergency stop." : dropped + " commands waiting to be sent were cancelled for the emergency stop.");
+        queued.add(Cc2Codec.URGENT_STOP);
+        Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(Cc2Codec.URGENT_STOP) + " queued first");
+        requestQueue.addFirst(message);
         scheduleDispatch();
     }
     private void scheduleDispatch() {
@@ -296,7 +315,9 @@ public final class Cc2Session implements AutoCloseable {
                     && (maps.length() == 0 || canvasAt != 0 && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45)
                         && FeatureData.mappings(status.optJSONObject("canvas_info"), maps));
             }
-            if (method == Cc2Codec.DELETE || method == Cc2Codec.TEMPERATURE) return Cc2Codec.idle(status) && StatusPresentation.faultCodes(status).isEmpty();
+            if (method == Cc2Codec.DELETE) return Cc2Codec.idle(status) && StatusPresentation.faultCodes(status).isEmpty();
+            // The same rule the screens use (idle, printing or paused), plus no faults.
+            if (method == Cc2Codec.TEMPERATURE) return Cc2Codec.heatersAdjustable(status) && StatusPresentation.faultCodes(status).isEmpty();
             if (method == Cc2Codec.AUTO_REFILL) return canvasAt != 0 && System.nanoTime() - canvasAt < TimeUnit.SECONDS.toNanos(45);
             if (method == Cc2Codec.SPEED) return Cc2Codec.canPause(status);
             if (method == Cc2Codec.URGENT_STOP) return true;

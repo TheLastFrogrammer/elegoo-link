@@ -414,6 +414,10 @@ public final class PrinterService extends Service {
     // Files sent from the Slice screen, one after another.
     private final java.util.List<Object[]> uploadQueue = new java.util.ArrayList<>();
     private File queuedFile; private String queuedName; private int uploadedCount;
+    /** Where the queued files go: the printer and connection they were queued for (uploadTarget()); a change stops the queue. */
+    private String queueTarget;
+    /** This printer over this connection: the local session (serial and session generation) or the cloud (serial and account session). */
+    String uploadTarget() { return ready() ? "local:" + serial + ":" + generation : "cloud:" + cloudSerial + ":" + System.identityHashCode(cloudApi); }
     /** Files can be sent: over the local connection, or through the Elegoo cloud while watching that way. */
     public boolean canUpload() { return ready() ? !pinProbe : cloudUploadReady(); }
     /** No local session, fresh cloud status and a signed-in account: files go through Elegoo's storage (CloudUpload). */
@@ -424,22 +428,32 @@ public final class PrinterService extends Service {
         JSONObject current = liveStatus();
         if (name == null || current.length() == 0 || Cc2Codec.idle(current)) return false;
         JSONObject print = current.optJSONObject("print_status");
-        String active = print == null ? "" : print.optString("filename", "").replaceFirst("^/+", "");
-        return !active.isEmpty() && active.equals(name.replaceFirst("^/+", ""));
+        return sameFile(print == null ? "" : print.optString("filename", ""), name);
+    }
+    /** Whether two printer file names are the same file: compared by the name itself, whatever folder or leading slash. */
+    static boolean sameFile(String active, String name) {
+        String a = active == null ? "" : active.substring(active.lastIndexOf('/') + 1), b = name == null ? "" : name.substring(name.lastIndexOf('/') + 1);
+        return !a.isEmpty() && a.equals(b);
     }
     /** The name is in the last file list received from the printer (internal storage). */
     public boolean nameOnPrinter(String name) { return name != null && listed("local", name); }
     public boolean uploadFiles(java.util.List<File> sources, java.util.List<String> names) {
         for (String name : names) if (replacesActivePrint(name)) { feedback = StatusPresentation.clean(name) + " is the file being printed. It cannot be replaced until the print ends."; changed(); return false; }
         if (!canUpload()) { Diagnostics.note(Diagnostics.FILES, "upload not started: local " + (ready() ? (pinProbe ? "read-only PIN probe" : "ready") : "not connected") + ", cloud " + (!usingCloud() ? "not in use" : "online=" + cloudOnline + ", status age " + (cloudCheckedAt == 0 ? "none" : ((System.currentTimeMillis() - cloudCheckedAt) / 1000) + " s") + (cloudApi == null ? ", no account session" : ""))); feedback = "Uploading needs the local connection, or the printer watched through the Elegoo cloud (Settings)."; changed(); return false; }
+        if (!uploadQueue.isEmpty() && !uploadTarget().equals(queueTarget)) { feedback = "Files are still being sent to another printer or connection. Wait for them first."; changed(); return false; }
         for (int i = 0; i < sources.size(); i++) uploadQueue.add(new Object[] {sources.get(i), names.get(i)});
-        uploadedCount = 0; pumpUploads(); return true;
+        if (queuedName == null) { uploadedCount = 0; queueTarget = uploadTarget(); }
+        pumpUploads(); return true;
     }
     public boolean uploadsPending() { return queuedName != null || !uploadQueue.isEmpty(); }
     private void pumpUploads() {
         if (uploadQueue.isEmpty() || queuedName != null || destroyed) return;
-        if (!canUpload()) { uploadQueue.clear(); feedback = "Connection lost; uploads stopped."; changed(); return; }
-        if (fileBusy() || cloudCommandBusy()) { main.postDelayed(this::pumpUploads, 500); return; }
+        if (!canUpload()) { stopQueue("Connection lost; uploads stopped."); return; }
+        if (!uploadTarget().equals(queueTarget)) { stopQueue("The printer or connection changed, so the remaining uploads stopped."); return; }
+        if (fileBusy() || cloudCommandBusy() || !liveFresh()) { main.postDelayed(this::pumpUploads, 500); return; }
+        // Checked again for every file with fresh status: the printer may have started printing one of them meanwhile.
+        String nextName = (String) uploadQueue.get(0)[1];
+        if (replacesActivePrint(nextName)) { stopQueue(StatusPresentation.clean(nextName) + " is now being printed, so it was not replaced; the remaining uploads stopped."); return; }
         Object[] next = uploadQueue.remove(0);
         queuedFile = (File) next[0]; queuedName = (String) next[1];
         feedback = "Uploading " + queuedName + "…";
@@ -462,6 +476,12 @@ public final class PrinterService extends Service {
             if (uploadQueue.isEmpty()) feedback = uploadedCount == 1 ? message : "Uploaded " + uploadedCount + " files.";
             main.postDelayed(PrinterService.this::pumpUploads, 300);
         }
+    }
+    /** Stops the queue before its next file: nothing more is sent, and the reason is shown. */
+    private void stopQueue(String why) {
+        int left = uploadQueue.size(); uploadQueue.clear();
+        Diagnostics.note(Diagnostics.FILES, "upload queue stopped with " + left + " file(s) left: " + why);
+        feedback = why + (left > 0 ? " " + left + " file(s) were not sent; they are kept under Recent slices on the Files tab." : ""); changed();
     }
     private void queueFailed() {
         if (queuedName == null) return;
@@ -963,6 +983,7 @@ public final class PrinterService extends Service {
                 JSONObject answer = result; String problem = why;
                 main.post(() -> {
                     queryBusy.remove(Cc2Codec.FILES);
+                    if (!cloudStill(cloud, serial)) { changed(); return; }
                     // Not asked through the cloud channel instead: large file-list answers have taken the printer's cloud link offline.
                     if (answer == null) { Diagnostics.note(Diagnostics.FILES, "cloud file records unavailable (" + problem + ")"); fileMessage = "Elegoo's cloud did not send the file list (" + problem + "). Refresh to try again."; changed(); return; }
                     filePage = FeatureData.normalizeFiles(answer); this.storage = "local"; fileOffset = offset; filesAt = System.nanoTime();
@@ -1003,6 +1024,7 @@ public final class PrinterService extends Service {
                 JSONObject answer = result;
                 main.post(() -> {
                     queryBusy.remove(Cc2Codec.HISTORY);
+                    if (!cloudStill(cloud, serial)) { changed(); return; }
                     if (answer == null) { historyMessage = "Elegoo's cloud did not send the print history. Refresh to try again."; changed(); return; }
                     history = answer; historyMessage = "History from Elegoo's cloud records."; changed();
                 });
@@ -1097,7 +1119,7 @@ public final class PrinterService extends Service {
         String stored = cloudRecords() && "local".equals(storage) ? cloudThumbnail(filename) : null;
         if (stored != null) {
             // The picture the printer stored with Elegoo, by the name the cloud's record gives; fetched once.
-            queryBusy.add(Cc2Codec.THUMBNAIL); String key = storage + "/" + filename; CloudApi cloud = cloudApi;
+            queryBusy.add(Cc2Codec.THUMBNAIL); String key = storage + "/" + filename; CloudApi cloud = cloudApi; String forPrinter = cloudSerial;
             cloudReads.execute(() -> {
                 String data = "";
                 try {
@@ -1114,7 +1136,7 @@ public final class PrinterService extends Service {
                     } finally { connection.disconnect(); }
                 } catch (Exception error) { Diagnostics.note(Diagnostics.FILES, "cloud thumbnail unavailable: " + error.getClass().getSimpleName()); }
                 String picture = data;
-                main.post(() -> { queryBusy.remove(Cc2Codec.THUMBNAIL); thumbnails.put(key, picture); changed(); });
+                main.post(() -> { queryBusy.remove(Cc2Codec.THUMBNAIL); if (cloudStill(cloud, forPrinter)) thumbnails.put(key, picture); changed(); });
             });
             return;
         }
@@ -1332,11 +1354,30 @@ public final class PrinterService extends Service {
     public boolean cloudBackground() { return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudBackground", false) && cloudAccountPresent(); }
     /** Called after the setting changes or the account changes, while the app is visible. */
     public void cloudSettingsChanged() {
+        // A new sign-in or printer: answers still on their way from the old one are dropped (they check cloudApi), its
+        // command channel is closed, and nothing it reported counts as fresh any more.
         cloudApi = null;
+        if (cloudControl != null) { cloudControl.close(); cloudControl = null; }
+        cloudStatus = new JSONObject(); cloudCheckedAt = 0; if (!ready()) filesAt = 0;
         if (cloudBackground() && !wanted) startMonitoring();
         else if (!wanted && foreground) { stopForeground(STOP_FOREGROUND_REMOVE); foreground = false; stopSelf(); }
         main.removeCallbacks(cloudPoll); main.post(cloudPoll);
     }
+    /**
+     * Saves a renewed sign-in only when the stored account is still the one that was renewed (same user, same refresh
+     * token): a renewal that finishes after signing out, or after signing in as someone else, is dropped.
+     */
+    static void saveRenewed(CloudAccountStore store, CloudLogin.Account from, CloudLogin.Account renewed) {
+        try {
+            synchronized (CloudAccountStore.class) {
+                CloudLogin.Account stored = store.load();
+                if (stored != null && from != null && stored.userId.equals(from.userId) && stored.refreshToken.equals(from.refreshToken)) store.save(renewed);
+                else Diagnostics.note(Diagnostics.FILES, "a renewed Elegoo sign-in was not saved: the account changed meanwhile");
+            }
+        } catch (Exception ignored) { }
+    }
+    /** An answer read through `api` for `serial` still belongs to what is shown: same sign-in and printer, still watched through the cloud. */
+    private boolean cloudStill(CloudApi api, String serial) { return !destroyed && api != null && cloudApi == api && serial.equals(cloudSerial) && cloudRecords(); }
     private boolean cloudAccountPresent() { try { return cloudAccounts != null && cloudAccounts.load() != null; } catch (Exception error) { return false; } }
     /** A successful cloud read in the last minute, with the printer online. */
     /**
@@ -1381,7 +1422,7 @@ public final class PrinterService extends Service {
             if (api == null || !api.account().accessToken.equals(account.accessToken)) {
                 api = new CloudApi(cloudAccounts.china(), account, CloudApi.agent(this), CloudApi::https); api.language(Locale.getDefault().getLanguage());
                 final CloudAccountStore store = cloudAccounts;
-                api.onAccountChanged(renewed -> { try { if (store.load() != null) store.save(renewed); } catch (Exception ignored) { } });
+                api.onAccountChanged((from, renewed) -> saveRenewed(store, from, renewed));
                 cloudApi = api;
             }
             String preferred = getSharedPreferences("workshop-settings", MODE_PRIVATE).getString("cloudSerial", "");
@@ -1395,10 +1436,10 @@ public final class PrinterService extends Service {
                 else { online = api.online(device.serial); snapshot = api.status(device.serial); startLive(api); }
             } catch (Exception error) { String plain = FriendlyErrors.describe(error, "The Elegoo cloud request"); message = plain != null ? plain : error.getMessage() == null ? "Could not reach the Elegoo cloud." : error.getMessage(); }
             api.takeTrace();
-            if (api.account() != before) try { if (cloudAccounts.load() != null) cloudAccounts.save(api.account()); } catch (Exception ignored) { }
-            CloudApi.Device found = device; int reportedOnline = online; CloudApi.Snapshot reported = snapshot; String text = message;
+            if (api.account() != before) saveRenewed(cloudAccounts, before, api.account());
+            CloudApi.Device found = device; CloudApi polled = api; int reportedOnline = online; CloudApi.Snapshot reported = snapshot; String text = message;
             main.post(() -> {
-                if (destroyed) return;
+                if (destroyed || cloudApi != polled) return;   // signed out, or another account or printer meanwhile: this answer is not theirs
                 cloudSignedIn = true; cloudMessage = text;
                 if (found != null) {
                     if (!found.serial.equals(cloudSerial)) cloudAlerts = new PrintAlerts();
@@ -1480,7 +1521,7 @@ public final class PrinterService extends Service {
         boolean query = Cc2Codec.isQuery(method) || method == Cc2Codec.CANVAS;
         CloudApi api = cloudApi;
         if (!usingCloud() || !cloudFresh() || api == null) { queryBusy.remove(method); return; }
-        if (cloudCommandBusy()) {
+        if (cloudCommandBusy() && method != Cc2Codec.URGENT_STOP) {   // emergency stop is never held back (CloudControl.urgentStop)
             queryBusy.remove(method);
             if (method != Cc2Codec.CANVAS) { feedback = "Waiting for the previous cloud command to finish."; changed(); }
             return;

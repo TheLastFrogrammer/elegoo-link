@@ -36,6 +36,20 @@ const server = http.createServer((q, r) => {
       out.view = viewer.getViewState();
       return out;
     });
+    // Edge mode and per-type opacity: the same view drawn solid, then as edges only, must differ, and see-through infill too.
+    const pixels = () => page.evaluate(() => { const c = document.querySelector('canvas'), p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
+      const g = p.getContext('2d'); g.drawImage(c, 0, 0); return Array.from(g.getImageData(0, 0, c.width, c.height).data.filter((v, i) => i % 16 === 0)); });
+    const draw = async (state) => { await page.evaluate((st) => { viewer.setViewState({ looking: false, camera: { yaw: -60, pitch: 30, distance: 160, target: [128, 128, 2] } }); viewer.update(st); }, state); await page.waitForTimeout(300); return pixels(); };
+    const full = { start: 0, end: r.loaded, layerStart: 0, edgeMask: 0, typeAlpha: null };
+    const solid = await draw(full);
+    if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/viewer-solid.png' });
+    const edges = await draw(Object.assign({}, full, { edgeMask: 0x3ffff }));
+    if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/viewer-edges.png' });
+    const faded = await draw(Object.assign({}, full, { typeAlpha: [1, 1, 1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 1, 1, 1, 1, 1, 1, 0.2, 1, 1] }));
+    const differ = (a, b) => a.reduce((n, v, i) => n + (Math.abs(v - b[i]) > 24 ? 1 : 0), 0);
+    if (!(differ(solid, edges) > 200)) fail('edges only did not change the drawing (' + differ(solid, edges) + ')');
+    if (!(differ(solid, faded) > 50)) fail('see-through infill did not change the drawing (' + differ(solid, faded) + ')');
+    await page.evaluate(() => viewer.update({ edgeMask: 0, typeAlpha: null }));
     if (errors.length) fail('script error: ' + errors.join(' | '));
     if (r.error) fail('the viewer reported: ' + r.error);
     if (!(r.loaded > 0)) fail('the toolpath did not load');
@@ -43,6 +57,6 @@ const server = http.createServer((q, r) => {
     const c = r.view && r.view.camera;
     if (!c || c.yaw !== 12 || c.pitch !== 34 || c.distance !== 222 || c.target.join() !== '10,20,3') fail('the view did not survive a save and restore: ' + JSON.stringify(r.view));
     if (!(Math.abs(r.orbit - 90) < 0.01)) fail('the showcase orbit did not turn the view by 90 degrees: ' + r.orbit);
-    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit and view state work`);
+    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit, view state, edges only and see-through types work`);
   } catch (e) { fail(e.message); } finally { await browser.close(); server.close(); }
 });

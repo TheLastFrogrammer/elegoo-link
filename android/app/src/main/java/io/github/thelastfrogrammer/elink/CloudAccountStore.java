@@ -48,6 +48,7 @@ public final class CloudAccountStore {
     public void forget() { prefs.edit().remove("cipher").remove("iv").apply(); }
 
     private SecretKey key(boolean create) throws Exception {
+        if (CredentialStore.testKey != null) return CredentialStore.testKey;   // tests only: the JVM has no Android Keystore
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         if (store.containsAlias(ALIAS)) return (SecretKey) store.getKey(ALIAS, null);
         if (!create) throw new IllegalStateException("Saved Elegoo account key is unavailable");

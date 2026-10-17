@@ -1249,7 +1249,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                         .put("z", viewerPrefs().getInt("fanZ", 10)).put("w", viewerPrefs().getInt("fanW", 20)).put("d", viewerPrefs().getInt("fanD", 50)).put("h", viewerPrefs().getInt("fanH", 50))
                         .put("mirror", viewerPrefs().getBoolean("fanMirror", false))))
                 .put("layerStart", start).put("alpha", viewerPrefs().getInt("layerOpacity", 100) / 100.0).put("belowAlpha", viewerPrefs().getInt("belowOpacity", 100) / 100.0)
-                .put("supportAlpha", viewerPrefs().getInt("supportOpacity", 35) / 100.0);
+                .put("supportAlpha", viewerPrefs().getInt("supportOpacity", 35) / 100.0)
+                .put("typeAlpha", new JSONArray(typeAlpha(viewerPrefs()))).put("edgeMask", edgeMask(viewerPrefs()));
             if (smoothNext > 0 && viewerPrefs().getBoolean("smoothLive", true)) state.put("smoothMs", smoothNext);
             if (liveAt > 0) { state.put("at", liveAt); liveAt = 0; }
             smoothNext = 0;
@@ -1453,6 +1454,25 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         }));
         dialog.show();
     }
+    /** Line types in groups for the opacity and edge settings: {key, name, feature indices (GcodeToolpath.FEATURES)}. Supports use "supportOpacity". */
+    static final String[][] LINE_GROUPS = {{"walls", "Walls", "0,1,2"}, {"infill", "Infill and surfaces", "3,4,5,6,7,8,15"},
+        {"supports", "Supports", "11,12,13"}, {"other", "Skirt, brim, tower, other", "9,10,14,16,17"}};
+    /** Opacity per feature type from the groups' settings (supports stay 1 here: the page applies supportOpacity to them). */
+    static double[] typeAlpha(android.content.SharedPreferences prefs) {
+        double[] out = new double[GcodeToolpath.FEATURES.length]; java.util.Arrays.fill(out, 1);
+        for (String[] group : LINE_GROUPS) {
+            if (group[0].equals("supports")) continue;
+            double a = Math.max(5, Math.min(100, prefs.getInt("opacity_" + group[0], 100))) / 100.0;
+            for (String i : group[2].split(",")) out[Integer.parseInt(i)] = a;
+        }
+        return out;
+    }
+    /** Feature types drawn as edges only, as a bit mask. */
+    static int edgeMask(android.content.SharedPreferences prefs) {
+        int mask = 0;
+        for (String[] group : LINE_GROUPS) if (prefs.getBoolean("edges_" + group[0], false)) for (String i : group[2].split(",")) mask |= 1 << Integer.parseInt(i);
+        return mask;
+    }
     /** How the nozzle dot looks (size, transparency, flat on the bed or a fixed screen dot), and whether only this layer shows. */
     private void nozzleDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
@@ -1460,7 +1480,16 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         groupHeading(body, "Layers");
         styleSlider(body, "This layer: opacity", "layerOpacity", 5, 100, 100, "%", this::pushView);
         styleSlider(body, "Layers below: opacity", "belowOpacity", 5, 100, 100, "%", this::pushView);
-        styleSlider(body, "Supports: opacity (see-through, so the model shows)", "supportOpacity", 5, 100, 35, "%", this::pushView);
+        groupHeading(body, "Line types");
+        label(body, "How see-through each kind of line is. Edges only draws a line's outline, so what is inside or behind it shows.", 12, muted, false);
+        for (String[] group : LINE_GROUPS) {
+            boolean supports = group[0].equals("supports");
+            styleSlider(body, group[1] + ": opacity", supports ? "supportOpacity" : "opacity_" + group[0], 5, 100, supports ? 35 : 100, "%", this::pushView);
+            android.widget.CheckBox edges = new android.widget.CheckBox(this); edges.setTextColor(ink); edges.setMinHeight(dp(48));
+            edges.setText(group[1] + ": edges only"); edges.setChecked(viewerPrefs().getBoolean("edges_" + group[0], false));
+            edges.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("edges_" + group[0], on).apply(); pushView(); });
+            body.addView(edges);
+        }
         android.widget.CheckBox only = new android.widget.CheckBox(this); only.setTextColor(ink); only.setMinHeight(dp(48));
         only.setText("Show only the current layer");
         only.setChecked(viewerPrefs().getBoolean("layerOnly", false));

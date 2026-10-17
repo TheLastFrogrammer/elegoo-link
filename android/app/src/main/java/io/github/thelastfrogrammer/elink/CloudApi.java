@@ -50,12 +50,15 @@ public final class CloudApi {
     private final String base, userAgent;
     private String language = "en";
     private final Transport transport;
-    private CloudLogin.Account account;
+    private volatile CloudLogin.Account account;
+    /** One renewal at a time: requests that find the token expired wait for it and use its result (it is renewed once). */
+    private final Object renewal = new Object();
     private volatile boolean signInRefused;
     private volatile AccountListener accountListener;
     static final String SIGN_IN_ENDED = "Elegoo no longer accepts the saved sign-in. Sign out and sign in again in Settings.";
     /** Told after every successful renewal, so the new tokens are saved by whoever triggered it (poll, cloud control or upload). */
-    public interface AccountListener { void changed(CloudLogin.Account account); }
+    /** A renewal's result, with the account it renewed: the caller saves it only if that account is still the one stored. */
+    public interface AccountListener { void changed(CloudLogin.Account before, CloudLogin.Account after); }
     public void onAccountChanged(AccountListener listener) { accountListener = listener; }
     /** The renewal was refused: nothing more is sent to Elegoo until the user signs in again (a new CloudApi). */
     public boolean needsSignIn() { return signInRefused; }
@@ -83,7 +86,9 @@ public final class CloudApi {
     boolean needsRefresh(long nowSeconds) { return account.accessExpires > 0 && seconds(account.accessExpires) - nowSeconds < REFRESH_MARGIN_SECONDS; }
 
     /** Exchanges the refresh token for new tokens. The caller persists {@link #account()} afterwards. */
-    public void refresh() throws IOException {
+    public void refresh() throws IOException { synchronized (renewal) { renew(); } }
+    private void renew() throws IOException {
+        CloudLogin.Account before = account;
         if (signInRefused) throw new CloudException(SIGN_IN_ENDED, true);
         if (account.refreshToken.isEmpty()) { signInRefused = true; throw new CloudException("Elegoo sign-in has expired. Sign in again.", true); }
         JSONObject data;
@@ -105,7 +110,7 @@ public final class CloudApi {
         long refreshExpires = data.optLong("refreshTokenExpireTime", data.optLong("refreshExpiresTime", account.refreshExpires));
         account = account.withTokens(userId.isEmpty() ? account.userId : userId, access, data.optString("refreshToken", account.refreshToken), accessExpires, refreshExpires);
         AccountListener listener = accountListener;
-        if (listener != null) try { listener.changed(account); } catch (RuntimeException ignored) { }
+        if (listener != null) try { listener.changed(before, account); } catch (RuntimeException ignored) { }
     }
 
     /** Checks the token against the account service only, without renewing it; the result is recorded in the trace. */
@@ -478,8 +483,13 @@ public final class CloudApi {
     private JSONObject authorized(String method, String path, String body, boolean essential) throws IOException {
         if (signInRefused) throw new CloudException(SIGN_IN_ENDED, true);
         if (needsRefresh(System.currentTimeMillis() / 1000)) {
-            note("Access token expired " + when(account.accessExpires) + "; renewing before the request");
-            refresh();
+            synchronized (renewal) {
+                // Another request may have renewed it while this one waited.
+                if (needsRefresh(System.currentTimeMillis() / 1000)) {
+                    note("Access token expired " + when(account.accessExpires) + "; renewing before the request");
+                    renew();
+                }
+            }
         }
         try { return call(method, path, body, true); }
         catch (CloudException error) {

@@ -1500,7 +1500,7 @@ public final class MainActivity extends Activity {
         EditText first = input(body, "Backup password", true), again = input(body, "The same password again", true);
         Runnable showFields = () -> { int v = secrets.isChecked() ? View.VISIBLE : View.GONE; first.setVisibility(v); again.setVisibility(v); };
         secrets.setOnCheckedChangeListener((view, on) -> showFields.run()); showFields.run();
-        label(body, "Without a backup password, printers, added cameras and webhooks come back without their passwords and addresses; enter them again after restoring. Keep the password safe: it cannot be recovered.", 12, MUTED, false);
+        label(body, "With a backup password, printers' access codes, added cameras, webhook addresses and tokens are encrypted with it. Without one they are left out: webhooks keep only their site and come back turned off, so enter them again after restoring. Keep the password safe: it cannot be recovered.", 12, MUTED, false);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Back up settings").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Choose where to save…", null).create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             if (secrets.isChecked()) {
@@ -2501,7 +2501,9 @@ public final class MainActivity extends Activity {
         boolean upkeepOk = canControl && upkeepReason.isEmpty();
         for (Button button : new Button[] {loadFilament, unloadFilament, homeAll, jog, autoLevel, vibration, selfCheck}) button.setEnabled(upkeepOk);
         trayFilament.setEnabled(upkeepOk && printer.canvas != null);
-        for (Button stop : emergencyStops) { stop.setEnabled(canControl); stop.setVisibility(canControl ? View.VISIBLE : View.GONE); }
+        // Emergency stop stays while another command is still busy: it goes ahead of anything not yet sent.
+        boolean canStop = canControl || block == ControlState.Block.CLOUD_BUSY;
+        for (Button stop : emergencyStops) { stop.setEnabled(canStop); stop.setVisibility(canStop ? View.VISIBLE : View.GONE); }
         upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE); filamentButtons.setVisibility(upkeepButtons.getVisibility());
         upkeepHint.setText(upkeepOk ? "Each tap sends one command. Nothing here is repeated automatically." : upkeepReason + " Emergency stop stays available.");
         // On a new install the Get started card already offers Find, Sign in and Slice, so the empty Controls card waits.

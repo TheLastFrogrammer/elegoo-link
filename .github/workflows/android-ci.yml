@@ -37,10 +37,13 @@ jobs:
           name: link-workshop-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
-      - name: The toolpath viewer loads in a browser
+      - name: The toolpath viewer, camera and plate pages work in a browser
         run: |
           npm install --no-save --no-package-lock --silent playwright@1.56.1
-          CHROME="$(command -v google-chrome || command -v chromium || true)" node tools/viewer-check.js
+          export CHROME="$(command -v google-chrome || command -v chromium || true)"
+          node tools/viewer-check.js
+          node tools/camera-check.js
+          node tools/plate-check.js
       - name: Report validation totals
         if: always()
         run: |

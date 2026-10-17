@@ -159,7 +159,9 @@ final class AutomationRun {
                             shown == null ? null : android.graphics.BitmapFactory.decodeByteArray(shown, 0, shown.length));
                         Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": notification shown"); break;
                     case Automation.LIGHT: light(label, a.on); break;
-                    case Automation.WEBHOOK: webhook(label, a, values, a.picture ? picture : null, a.chart ? chart : null, true); break;
+                    case Automation.WEBHOOK:
+                        if (a.needsAddress) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook not sent: its address must be entered again (it came from a share or a backup)"); break; }
+                        webhook(label, a, values, a.picture ? picture : null, a.chart ? chart : null, true); break;
                     case Automation.HA_EVENT: {
                         JSONObject o = new JSONObject().put("event_type", event.type);
                         for (Map.Entry<String, String> v : values.entrySet()) if (!v.getKey().equals("event") && !v.getKey().startsWith("status.")) o.put(v.getKey(), v.getValue());

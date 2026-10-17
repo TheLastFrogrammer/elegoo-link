@@ -73,11 +73,21 @@ final class Automation {
         boolean rawImage; String messageHeader = "Message";
         /** Where the secret header value is kept (CredentialStore); never exported. */
         String secretId = UUID.randomUUID().toString();
+        /** webhook: the address was cut back to its site when shared or backed up without a password; it must be entered again before it is used. */
+        boolean needsAddress;
         JSONObject toJson(boolean sharing) throws JSONException {
             JSONObject o = new JSONObject().put("kind", kind);
             if (kind.equals(LIGHT)) o.put("on", on);
             if (kind.equals(NOTIFY)) o.put("title", title).put("text", text);
-            if (kind.equals(WEBHOOK)) { o.put("url", url).put("body", body).put("header", header); if (!sharing) o.put("secretId", secretId); if (rawImage) o.put("rawImage", true).put("messageHeader", messageHeader); }
+            if (kind.equals(WEBHOOK)) {
+                // Shared: the address keeps only its site (paths and queries often are the credential, as in Discord's
+                // webhook addresses) and secret-looking body values are emptied.
+                String shownUrl = sharing ? siteOf(url) : url, shownBody = sharing ? redactBody(body) : body;
+                o.put("url", shownUrl).put("body", shownBody).put("header", header);
+                if (!sharing) o.put("secretId", secretId);
+                if (needsAddress || sharing && !shownUrl.equals(url)) o.put("needs_address", true);
+                if (rawImage) o.put("rawImage", true).put("messageHeader", messageHeader);
+            }
             if (picture) o.put("picture", true); if (chart) o.put("chart", true);
             return o;
         }
@@ -88,6 +98,7 @@ final class Automation {
             a.body = cap(o.optString("body"), 8000); a.header = o.optString("header").trim();
             if (!a.header.isEmpty() && !a.header.matches("[A-Za-z0-9-]{1,60}")) throw new JSONException("a header name has letters, digits and dashes only");
             if (o.has("secretId")) a.secretId = o.getString("secretId");
+            a.needsAddress = o.optBoolean("needs_address");
             a.picture = o.optBoolean("picture"); a.chart = o.optBoolean("chart"); a.rawImage = o.optBoolean("rawImage"); a.messageHeader = o.optString("messageHeader", "Message");
             if (!a.messageHeader.matches("[A-Za-z0-9-]{1,40}")) a.messageHeader = "Message";
             if (a.kind.equals(WEBHOOK) && !webhookUrlOk(a.url)) throw new JSONException("webhook address must start with https:// or http://");
@@ -279,6 +290,40 @@ final class Automation {
     static boolean webhookUrlOk(String url) {
         try { java.net.URI u = new java.net.URI(url.trim()); return ("https".equalsIgnoreCase(u.getScheme()) || "http".equalsIgnoreCase(u.getScheme())) && u.getHost() != null && !u.getHost().isEmpty(); }
         catch (Exception bad) { return false; }
+    }
+    /** An address cut back to its site: "https://discord.com/api/webhooks/1/token?x=y" becomes "https://discord.com/". */
+    static String siteOf(String url) {
+        try {
+            java.net.URI u = new java.net.URI(url.trim());
+            if (u.getScheme() == null || u.getHost() == null) return url;
+            return u.getScheme().toLowerCase(java.util.Locale.ROOT) + "://" + u.getHost() + (u.getPort() > 0 ? ":" + u.getPort() : "") + "/";
+        } catch (Exception bad) { return ""; }
+    }
+    /** A webhook body with the values of secret-looking JSON fields and query parameters (token, key, secret, password, auth…) emptied. */
+    static String redactBody(String body) {
+        if (body == null || body.isEmpty()) return body == null ? "" : body;
+        String names = "[A-Za-z0-9_-]*(?i:token|key|secret|password|passwd|pass|auth|signature|sig|credential)[A-Za-z0-9_-]*";
+        return body.replaceAll("(\"" + names + "\"\\s*:\\s*)\"(?:[^\"\\\\]|\\\\.)*\"", "$1\"\"")
+            .replaceAll("(?<=[?&]|^)(" + names + ")=[^&\\s\"]*", "$1=");
+    }
+    /**
+     * Saved rules or templates as a backup without a password holds them: webhook addresses cut back to their site and
+     * secret-looking body values emptied, and every rule that lost something turned off until it is set up again.
+     */
+    static String redactedForBackup(String saved) throws JSONException {
+        List<Rule> rules = load(saved);
+        JSONArray list = new JSONArray();
+        for (Rule r : rules) {
+            JSONObject o = r.toJson(false); JSONArray actions = new JSONArray(); boolean cut = false;
+            for (Action a : r.actions) {
+                JSONObject shared = a.toJson(true);
+                if (a.kind.equals(WEBHOOK)) { shared.put("secretId", a.secretId); cut |= shared.optBoolean("needs_address") || !shared.optString("body").equals(a.body); }
+                actions.put(shared);
+            }
+            o.put("actions", actions); if (cut) o.put("enabled", false);
+            list.put(o);
+        }
+        return new JSONObject().put(FORMAT, 1).put("rules", list).toString();
     }
     static String shortUrl(String url) {
         try { java.net.URI u = new java.net.URI(url.trim()); return u.getHost() == null ? url : u.getHost(); } catch (Exception bad) { return url; }
