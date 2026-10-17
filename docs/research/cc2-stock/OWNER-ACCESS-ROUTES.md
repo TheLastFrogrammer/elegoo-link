@@ -56,6 +56,8 @@ PY
 
 Use the **CC2-specific** board picture and the actual revision marking. The reference calls the lower row of a 2×4 header UART0 and the upper row DSP. Its pin table labels +5V, TX, RX and GND, but that does not establish the signal voltage or left/right orientation in a user photo. Do not substitute a CC1 pinout.
 
+The [embedded-device-tree follow-up](access/evidence/UART-DT-FOLLOWUP.json) finds `console=ttyS2` alongside an enabled hardware UART0 and disabled hardware UART2, plus separate 1.8-V and 3.3-V PF/PFO supply references. Bootloader fixups/driver naming and the actual header voltage remain unresolved. This evidence does not justify selecting a fixed-voltage adapter or changing boot arguments; normal receive-only boot output is still the next physical observation.
+
 For a verified, correctly oriented UART header and an adapter matched to its logic levels:
 
 | Printer signal | Initial adapter connection |

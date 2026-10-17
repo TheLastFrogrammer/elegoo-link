@@ -1,0 +1,58 @@
+{
+  "recorded_date": "2026-10-17",
+  "scope": "Offline inspection of an embedded FDT in the signature-verified stock 02.01.01.07 U-Boot payload; no firmware executed or hardware measured",
+  "uboot_sha256": "769d55b96ed4dff486ff5b79f35d61a36d68c444f49f19e44059e2472d468f72",
+  "fdt": {
+    "offset_bytes": 1241088,
+    "size_bytes": 56869,
+    "sha256": "63db65f5107cecf572f97d3c2c617fdafe1367cafd42ca2a1a472eb8a55d38ab",
+    "model": "sun8iw20",
+    "compatible": ["allwinner,r528", "arm,sun8iw20p1"],
+    "chosen_bootargs": "earlyprintk=sunxi-uart,0x2500000 loglevel=8 initcall_debug=0 console=ttyS2 init=/init",
+    "aliases": {
+      "serial0": "/soc@3000000/uart@2500000",
+      "serial2": "/soc@3000000/uart@2500800"
+    },
+    "uart0": {
+      "path": "/soc@3000000/uart@2500000",
+      "status": "okay",
+      "compatible": "allwinner,sun8i-uart",
+      "register_address_hex": "0x02500000",
+      "pinctrl_0_phandle": "0x14",
+      "pin_node": "/soc@3000000/pinctrl@2000000/uart0_pins@0",
+      "pins": ["PF2", "PF4"],
+      "function": "uart0",
+      "uart0_port_property_bytes": 0,
+      "uart0_type": 2
+    },
+    "uart2": {
+      "path": "/soc@3000000/uart@2500800",
+      "status": "disabled",
+      "register_address_hex": "0x02500800",
+      "pinctrl_0_phandle": "0x18",
+      "pins": ["PE2", "PE3"],
+      "uart2_port": 2,
+      "uart2_type": 4
+    },
+    "pinctrl_supplies": {
+      "vcc-pf-supply": {"phandle": "0xf", "node": "/pio-18", "name": "pio-18", "minimum_microvolt": 1800000, "maximum_microvolt": 1800000},
+      "vcc-pfo-supply": {"phandle": "0x10", "node": "/pio-33", "name": "pio-33", "minimum_microvolt": 3300000, "maximum_microvolt": 3300000}
+    }
+  },
+  "kernel": {
+    "package_member_sha256": "e1ca036e667f1976fb1a1944b6922df8a1c26d5870912dd8273e0fcc3bb4efec",
+    "container": "Android boot image; 2048-byte pages; 3972872-byte kernel member",
+    "gzip_offset_within_kernel_member": 15884,
+    "decompressed_bytes": 10730880,
+    "version_string_prefix": "Linux version 5.4.61 (3dp@user-07)",
+    "qualification": "Image string only; not the owner's running uname result"
+  },
+  "reproduction": "Locate the FDT at the pinned offset, validate its big-endian header and size, walk FDT_BEGIN_NODE/FDT_PROP/FDT_END_NODE tokens, resolve property-name strings and referenced phandles. Read-only parsing; no boot/update execution.",
+  "interpretation_limits": [
+    "An embedded FDT is not proof of the live bootloader-patched kernel device tree or final command line.",
+    "Hardware UART0 naming and Linux ttyS2 cannot be equated from these records alone.",
+    "PF/PFO supply references do not independently establish the physical UART header signal voltage or RX tolerance.",
+    "Do not change boot arguments to reconcile the names or choose a fixed-voltage adapter from these values alone.",
+    "A normal receive-only boot capture and verified header/signal levels remain required before transmitting."
+  ]
+}

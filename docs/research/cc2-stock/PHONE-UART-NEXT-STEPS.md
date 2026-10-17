@@ -27,6 +27,8 @@ A plain USB cable is not a qualified mainboard shell path. The printer's toolhea
 
 Before pin-by-pin wiring, obtain a clear picture showing the actual mainboard revision, the header and its surrounding orientation. The reference identifies EF-M5-V1.0.073 and a UART0/DSP 2x4 header; that does not establish the owner's revision or the physical mapping to Linux `ttyS2`.
 
+A deeper [embedded-device-tree check](access/evidence/UART-DT-FOLLOWUP.json) reinforces that distinction. One stock U-Boot-embedded tree names `console=ttyS2`, enables hardware UART0 on PF2/PF4, and marks hardware UART2 disabled. Its PF/PFO supplies reference both 1.8-V and 3.3-V fixed regulators. This is not the live boot-patched device tree or an electrical measurement: neither the console naming discrepancy nor the actual header signal voltage is resolved. Do not pick a 3.3-V-only adapter from the UART label or change boot arguments to force the names to agree.
+
 Power off/unplug before opening or attaching leads; keep clear of the PSU/mains area. After mapping/levels are verified, secure only printer GND to adapter GND and printer TX to adapter RX. Leave adapter VCC and printer RX disconnected. Use the printer's normal power for the normal boot after leads are secured.
 
 Start capture in the Android terminal. **115200, 8 data bits, no parity, 1 stop bit, no flow control** is a firmware-supported initial candidate, not a measured configuration. Save normal boot output privately. Do not press keys during the bootloader countdown or change boot arguments/environment. Garbled/no output means stop and resolve the wiring, voltage or terminal mapping; it is not evidence of an authentication failure.
