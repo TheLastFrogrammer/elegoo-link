@@ -4,6 +4,8 @@ Goal: obtain exact G-code, console output and media while preserving official pr
 
 Companion implementation: [Pi starter setup](../../../tools/research/PI-COMPANION-SETUP.md) now provides a Pi installer/removal path, supervised CDC-ACM receiver, fixed-bundle native exporter, temporary checksummed UART staging and a separately installed procd template. It does not bootstrap a shell, apply tweaks, access G-code/media or establish physical USB/update acceptance. No device hook was installed by this work.
 
+Starter software qualification: [CI run 39078741276](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39078741276) passed all 106 tests on each host Python version, 26 companion tests with the actual ARM executable, and 22 existing ARM probe tests, zero skips. Its **cc2-companion-starter** download contains the 21,756-byte exporter, source, Pi setup and UART snippets; all 21 packaged checksums and generated snippets were independently verified. See [validation record](PI-COMPANION-VALIDATION.json). Hardware acceptance remains pending. A failed transfer can spend 120 seconds waiting before the default 60-second retry interval; allow roughly three minutes for a new collection cycle.
+
 Latest companion investigation: [persistent Pi connection and hooks](PI-COMPANION-HOOKS.md). A fresh verification of the pinned image confirms built-in USB CDC-ACM support, actual boot/serial-hotplug extension points, stock outbound OpenSSH, and an update cleanup path targeting the root overlay. This supports a candidate UART-supervised Pi with optional USB serial transport; it does not establish plug-in shell access or update-proof printer hooks. Includes reproducible image evidence and a read-only owner worksheet.
 
 Read in this order:

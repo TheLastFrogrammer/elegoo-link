@@ -1,0 +1,67 @@
+{
+  "format": "cc2-pi-companion-validation-v1",
+  "checked_at": "2026-10-17",
+  "source_commit": "2223d184b5aeedc333f91522c181eb394bba47dc",
+  "workflow_run": {
+    "id": 39078741276,
+    "url": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39078741276",
+    "conclusion": "success"
+  },
+  "host_jobs": [
+    {
+      "id": 117531188360,
+      "python": "3.10",
+      "tests": 106,
+      "skipped": 0,
+      "conclusion": "success"
+    },
+    {
+      "id": 117531188599,
+      "python": "3.12",
+      "tests": 106,
+      "skipped": 0,
+      "conclusion": "success"
+    }
+  ],
+  "arm_job": {
+    "id": 117531272613,
+    "probe_tests": 22,
+    "usb_companion_tests": 26,
+    "skipped": 0,
+    "conclusion": "success"
+  },
+  "physical_printer_qualified": false,
+  "pi_hardware_installation_qualified": false,
+  "owner_access_provided": false,
+  "printer_modified": false,
+  "stock_firmware_executed": false,
+  "limitations": [
+    "Requires separately established owner Linux root shell; USB is not shell bootstrap.",
+    "Pi USB/power, printer UART electrical levels, actual enumeration/replug, target Pi OS services and resource usage remain unqualified.",
+    "No authenticated/encrypted peer transport: fixed physical USB read-only exports only; future writes require pairing/authorization.",
+    "Reported executable hash is compared with a research fingerprint; it is not full firmware/device attestation.",
+    "Exports only identity and finalized native capture files; no G-code/media/log collection or automatic console request.",
+    "No automatic UART recovery or tweak execution; optional printer hook requires separate hardware qualification.",
+    "Official updater targets rootfs_data cleanup; printer hook is update-disposable and unknown executable fingerprints fail its launcher gate.",
+    "120-second cooperative transfer budget plus 60-second default retry interval; filesystem/kernel stalls are not wall-time bounded.",
+    "Local systemd-analyze static verification could not fully check modprobe because this workspace lacks /sbin/modprobe; target service validation remains required."
+  ],
+  "artifact": {
+    "id": 12117908666,
+    "name": "cc2-companion-starter",
+    "size_in_bytes": 96255,
+    "sha256": "db1022fb5c9c6eba99a980b86caa0c31cf2521ff157b1c3e48c313099578392c",
+    "expires_at": "2026-11-16T23:23:44Z",
+    "download_page": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39078741276#artifacts"
+  },
+  "artifact_verification": {
+    "checksums_verified": 21,
+    "binary_bytes": 21756,
+    "binary_sha256": "5ec27ffc668ed7fbe6e866c6c32d98b28834e3ad8b9493065762094377e89c3d",
+    "source_sha256": {
+      "cc2_usb_export.c": "6c13e43e5a1203bc3ebdc3803e9088fd409e11bd85e12cd8bd369172e571083d"
+    },
+    "source_and_staging_exact": true,
+    "static_arm_elf_profile_verified": true
+  }
+}
