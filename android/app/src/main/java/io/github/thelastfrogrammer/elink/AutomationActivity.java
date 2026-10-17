@@ -310,7 +310,7 @@ public final class AutomationActivity extends Activity {
                 if (!a.header.isEmpty() && !a.header.matches("[A-Za-z0-9-]{1,60}")) { toast("A header name has only letters, digits and dashes (for example Authorization). It was left out."); a.header = ""; }
                 String value = fSecret.getText().toString();
                 try { CredentialStore store = new CredentialStore(this);
-                    if (a.header.isEmpty()) store.forget("automation:" + a.secretId); else if (!value.isEmpty()) store.save("automation:" + a.secretId, value, true); }
+                    if (a.header.isEmpty()) store.forget("automation:" + a.secretId); else if (!value.isEmpty()) store.saveSecret("automation:" + a.secretId, value); }
                 catch (Exception failed) { toast("Could not keep the header value safely."); }
                 if (!Automation.webhookUrlOk(a.url)) toast("The address must start with https:// or http://.");
             }

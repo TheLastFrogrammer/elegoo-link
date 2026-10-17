@@ -225,7 +225,7 @@ public final class PrinterService extends Service {
         cloudAccounts = new CloudAccountStore(this);
         cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
-        guardian = new GuardianRun(this); recorder.pictureKept = this::guard;
+        guardian = new GuardianRun(this); recorder.pictureKept = this::guard; PrintRecorder.active = recorder;
         automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);

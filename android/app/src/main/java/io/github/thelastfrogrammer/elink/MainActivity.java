@@ -21,7 +21,7 @@ import java.util.*;
 import java.util.concurrent.*;
 
 public final class MainActivity extends Activity {
-    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7, SHOWCASE = 8, SAVE_SHOWCASE = 9, GCODE_FOLDER = 10;
+    private static final int PICK_FILE = 1, PICK_SNAPSHOT = 3, CLOUD_LOGIN = 4, SAVE_GCODE = 5, SLICE = 6, SAVE_TIMELAPSE = 7, SHOWCASE = 8, SAVE_SHOWCASE = 9, GCODE_FOLDER = 10, BACKUP_SAVE = 11, BACKUP_OPEN = 12;
     private String pendingExportHash = "";
     private android.net.Uri pendingExportUri;
     private TextView inspection;
@@ -104,7 +104,7 @@ public final class MainActivity extends Activity {
     /** First run only: the three ways in. Hidden for good once the phone has connected or a model has been sliced. */
     private LinearLayout getStarted, heroCard;
     /** Print tab quick actions: navigation only, never a printer command. quickRow holds Live toolpath or Slice, then Camera; recordingsRow holds Layer alert (printing) or Print again (idle) and Print recordings; printExtrasRow the running print's Pictures. */
-    private LinearLayout quickRow, recordingsRow, printExtrasRow;
+    private LinearLayout quickRow, recordingsRow, printExtrasRow, rateRow; private Button rateButton;
     private Button quickSlice, quickCamera, quickAgain, picturesNow, printAutomations;
     /** Maintenance starts collapsed; the Emergency stop button stays outside the collapsed part. */
     private CloudAccountStore cloudAccounts;
@@ -399,6 +399,9 @@ public final class MainActivity extends Activity {
         printExtrasRow = row(hero);
         picturesNow = rowButton(printExtrasRow, "Pictures…", () -> pictureDialog(false), false);
         printAutomations = rowButton(printExtrasRow, "Automations…", this::printAutomationsDialog, false);
+        rateRow = row(hero);
+        rateButton = rowButton(rateRow, "", () -> { if (rateMeta != null) startActivity(new Intent(this, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, rateMeta.getAbsolutePath()).putExtra(RecordingsActivity.EXTRA_JOURNAL, true)); }, false);
+        rateRow.setVisibility(View.GONE);
         recordingsRow = row(hero);
         layerAlert = rowButton(recordingsRow, "Layer alert…", this::layerAlertDialog, false);
         quickAgain = rowButton(recordingsRow, "Print again…", () -> selectPage(HISTORY), false);
@@ -424,8 +427,8 @@ public final class MainActivity extends Activity {
         guardianCard.addView(guardianImage, new LinearLayout.LayoutParams(-1, -2));
         guardianText = A11y.polite(label(guardianCard, "", 13, MUTED, false));
         guardianButtons = row(guardianCard);
-        rowButton(guardianButtons, "Looks fine", () -> { if (printer != null && printer.guardian != null) printer.guardian.feedback(true); guardianButtons.setVisibility(View.GONE); }, false);
-        rowButton(guardianButtons, "Real problem", () -> { if (printer != null && printer.guardian != null) printer.guardian.feedback(false); guardianButtons.setVisibility(View.GONE); }, false);
+        rowButton(guardianButtons, "Looks fine", () -> guardianAnswer(true), false);
+        rowButton(guardianButtons, "Real problem", () -> guardianAnswer(false), false);
         guardianCard.setVisibility(View.GONE);
         LinearLayout controls = card("Controls"); controlsCard = controls;
         controlSource = label(controls, "", 13, MUTED, false);
@@ -600,6 +603,12 @@ public final class MainActivity extends Activity {
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(preferences, "Alerts need notification permission and the app watching the printer. They stop when you disconnect or when Android stops the app. "
             + "While a print runs, Layer alert… on the Print tab adds one for a layer you choose. Tapping an alert only opens the app.", 13, MUTED, false);
+        button(preferences, "Back up settings…", this::backupDialog);
+        button(preferences, "Restore from a backup…", () -> {
+            try { startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), BACKUP_OPEN); }
+            catch (Exception none) { message("This phone has no file picker."); }
+        });
+        label(preferences, "A backup holds your settings, saved printers, automation rules, added cameras and their line-ups, and spools; recordings if you choose. Passwords, access codes and camera addresses go in only with a backup password. The Elegoo sign-in is never included.", 12, MUTED, false);
         button(preferences, "Automation workshop…", () -> startActivity(new Intent(this, AutomationActivity.class)));
         label(preferences, "Rules for print events: notifications, webhooks, Home Assistant, other apps, and the printer's light (for example, off after the last print of the day). Templates can be shared.", 12, MUTED, false);
         buildHomeAssistant();
@@ -1353,6 +1362,28 @@ public final class MainActivity extends Activity {
                 + " (" + (learned > remaining ? "+" : "−") + StatusPresentation.span(Math.abs(learned - remaining)) + ")");
         return String.join(" · ", parts);
     }
+    /** The answer to a guardian alarm: tells the guardian, and keeps it in the print's journal. */
+    private void guardianAnswer(boolean fine) {
+        if (printer != null && printer.guardian != null) {
+            String said = printer.guardian.verdict;
+            printer.guardian.feedback(fine);
+            if (printer.recorder != null) { PrintRecorder recorder = printer.recorder; checks.execute(() -> recorder.noteGuardian(fine, said, System.currentTimeMillis())); }
+        }
+        guardianButtons.setVisibility(View.GONE);
+    }
+    /** "How did … come out?": the print that ended last, until it is rated (for two days), read off the main thread. */
+    private File rateMeta; private PrintRecorder.Recording rateRecording; private long rateCheckedAt;
+    private void refreshRatePrompt() {
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (printer == null || printer.recorder == null || now - rateCheckedAt < 20_000) return;
+        rateCheckedAt = now; PrintRecorder recorder = printer.recorder;
+        checks.execute(() -> {
+            File meta = recorder.lastFinished(); PrintRecorder.Recording read = null;
+            try { if (meta != null) read = PrintRecorder.Recording.read(meta); } catch (Exception unreadable) { }
+            PrintRecorder.Recording found = read;
+            main.post(() -> { rateMeta = meta; rateRecording = found; render(); });
+        });
+    }
     /** This print's automation choices: the day's last print (for rules that wait for it) and rules to skip. Nothing is sent to the printer here. */
     private void printAutomationsDialog() {
         String key = printKey(snapshot); if (key.isEmpty()) return;
@@ -1459,6 +1490,89 @@ public final class MainActivity extends Activity {
         startActivityForResult(save, SAVE_GCODE);
     }
 
+    // ------------------------------------------------------------------ backup and restore
+    private char[] backupPassword; private boolean backupRecordings;
+    private void backupDialog() {
+        LinearLayout body = dialogBody();
+        long size = Backup.recordingsSize(this);
+        CheckBox recordings = checkbox(body, "Include the print recordings and their pictures (" + Math.max(1, size / (1024 * 1024)) + " MB)", false);
+        CheckBox secrets = checkbox(body, "Include passwords, access codes and camera addresses, protected by a backup password", false);
+        EditText first = input(body, "Backup password", true), again = input(body, "The same password again", true);
+        Runnable showFields = () -> { int v = secrets.isChecked() ? View.VISIBLE : View.GONE; first.setVisibility(v); again.setVisibility(v); };
+        secrets.setOnCheckedChangeListener((view, on) -> showFields.run()); showFields.run();
+        label(body, "Without a backup password, printers, added cameras and webhooks come back without their passwords and addresses; enter them again after restoring. Keep the password safe: it cannot be recovered.", 12, MUTED, false);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Back up settings").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Choose where to save…", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            if (secrets.isChecked()) {
+                String a = first.getText().toString(), b = again.getText().toString();
+                if (a.length() < 8) { message("Use a backup password of at least 8 characters."); return; }
+                if (!a.equals(b)) { message("The two passwords are not the same."); return; }
+                backupPassword = a.toCharArray();
+            } else backupPassword = null;
+            backupRecordings = recordings.isChecked(); dialog.dismiss();
+            String name = "link-workshop-backup-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmm", Locale.ROOT).format(new Date()) + ".zip";
+            try { startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, name), BACKUP_SAVE); }
+            catch (Exception none) { message("This phone has no file picker."); }
+        }));
+        dialog.show();
+    }
+    private void writeBackup(android.net.Uri target, boolean recordings, char[] password) {
+        message("Writing the backup…");
+        checks.execute(() -> {
+            String text;
+            try (OutputStream out = getContentResolver().openOutputStream(target, "wt")) {
+                if (out == null) throw new IOException("no file");
+                Backup.Summary s = Backup.export(this, new java.io.BufferedOutputStream(out), recordings, password);
+                text = "Backup saved: " + s.describe() + ".";
+                Diagnostics.note(Diagnostics.MESSAGES, "backup written: " + s.prefs + " settings files, " + s.files + " data files, " + s.recordings + " recording files" + (s.secrets ? ", secrets protected" : ""));
+            } catch (Exception failed) { text = "The backup could not be written: " + StatusPresentation.clean(String.valueOf(failed.getMessage())); }
+            finally { if (password != null) java.util.Arrays.fill(password, ' '); }
+            String said = text; main.post(() -> message(said));
+        });
+    }
+    private void readBackup(android.net.Uri source) {
+        message("Reading the backup…");
+        checks.execute(() -> {
+            File copy = new File(getCacheDir(), "restore.zip");
+            try (InputStream in = getContentResolver().openInputStream(source); OutputStream out = new FileOutputStream(copy)) {
+                if (in == null) throw new IOException("no file");
+                Backup.copy(in, out, Backup.MAX_TOTAL);
+                Backup.Summary s = Backup.inspect(copy);
+                main.post(() -> confirmRestore(copy, s));
+            } catch (Exception failed) { copy.delete(); String said = "That backup could not be read: " + StatusPresentation.clean(String.valueOf(failed.getMessage())); main.post(() -> message(said)); }
+        });
+    }
+    private void confirmRestore(File copy, Backup.Summary s) {
+        LinearLayout body = dialogBody();
+        label(body, "Made " + (s.created > 0 ? new java.text.SimpleDateFormat("d MMM yyyy, HH:mm", Locale.getDefault()).format(new Date(s.created)) : "at an unknown time") + (s.app.isEmpty() ? "" : " by version " + s.app) + ".", 14, INK, false);
+        label(body, "It holds " + s.describe() + ".", 14, INK, false);
+        EditText password = input(body, "Backup password (for the passwords and addresses)", true); password.setVisibility(s.secrets ? View.VISIBLE : View.GONE);
+        label(body, "Restoring replaces this app's settings, automation rules and spools with the backup's, and adds its recordings (none are deleted). The app restarts afterwards." + (s.secrets ? " Without the password, everything else is restored and the passwords are left out." : ""), 12, MUTED, false);
+        new AlertDialog.Builder(this).setTitle("Restore this backup?").setView(body).setNegativeButton("Cancel", (d, w) -> copy.delete())
+            .setPositiveButton("Restore", (d, w) -> {
+                char[] secret = password.getText().toString().toCharArray();
+                message("Restoring…");
+                checks.execute(() -> {
+                    String text; boolean done = false;
+                    try { Backup.Summary restored = Backup.restore(this, copy, secret); done = true;
+                        text = "Restored" + (s.secrets && !restored.secrets ? " (without the passwords)" : "") + ". Restarting…";
+                        Diagnostics.note(Diagnostics.MESSAGES, "backup restored" + (restored.secrets ? " with secrets" : ""));
+                    } catch (Exception failed) { text = StatusPresentation.clean(String.valueOf(failed.getMessage())); }
+                    finally { java.util.Arrays.fill(secret, ' '); copy.delete(); }
+                    String said = text; boolean restart = done;
+                    main.post(() -> { message(said); if (restart) main.postDelayed(this::restartApp, 1200); });
+                });
+            }).show();
+    }
+    /** Starts the app afresh, so every part reads the restored settings. */
+    private void restartApp() {
+        stopService(new Intent(this, PrinterService.class));
+        android.app.PendingIntent start = android.app.PendingIntent.getActivity(this, 42, new Intent(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
+            android.app.PendingIntent.FLAG_IMMUTABLE | android.app.PendingIntent.FLAG_CANCEL_CURRENT);
+        android.app.AlarmManager alarms = getSystemService(android.app.AlarmManager.class);
+        if (alarms != null) alarms.set(android.app.AlarmManager.RTC, System.currentTimeMillis() + 600, start);
+        finishAffinity(); Runtime.getRuntime().exit(0);
+    }
     /** "Preview toolpath" of a printer file the phone has no copy of: once its download is in, open it in the toolpath viewer. */
     private void continuePreviewAfterDownload() {
         if (previewAfterDownload == null || printer == null) return;
@@ -2094,7 +2208,7 @@ public final class MainActivity extends Activity {
             settings.edit().putBoolean("haEnabled", on.isChecked()).putString("haHost", address).putInt("haPort", number <= 0 ? 1883 : number)
                 .putBoolean("haTls", tls.isChecked()).putString("haUser", user.getText().toString().trim()).apply();
             String secret = password.getText().toString();
-            if (!secret.isEmpty() && !address.isEmpty()) try { new CredentialStore(this).save("homeassistant:" + address, secret, true); } catch (Exception failed) { message("The password could not be saved securely on this phone."); return; }
+            if (!secret.isEmpty() && !address.isEmpty()) try { new CredentialStore(this).saveSecret("homeassistant:" + address, secret); } catch (Exception failed) { message("The password could not be saved securely on this phone."); return; }
             password.setText("");
             Diagnostics.note(Diagnostics.HOME_ASSISTANT, on.isChecked() ? "turned on" + (tls.isChecked() ? " (TLS)" : "") : "turned off");
             message(on.isChecked() ? "Saved. The next status update goes to Home Assistant." : "Saved. Home Assistant updates are off.");
@@ -2556,6 +2670,10 @@ public final class MainActivity extends Activity {
         quickAgain.setVisibility(idleOnline && hasHistory ? View.VISIBLE : View.GONE);
         spaceActions(quickRow); spaceActions(recordingsRow); spaceActions(printExtrasRow);
         printAutomations.setVisibility(inJobNow && !printKey(snapshot).isEmpty() ? View.VISIBLE : View.GONE);
+        refreshRatePrompt();
+        boolean rate = !inJobNow && rateRecording != null && !rateRecording.journal.rated() && System.currentTimeMillis() - Math.max(rateRecording.end, rateRecording.lastSample) < 48 * 3_600_000L;
+        rateRow.setVisibility(rate ? View.VISIBLE : View.GONE);
+        if (rate) rateButton.setText("How did " + StatusPresentation.clean(rateRecording.file.replaceFirst("(?i)\\.gcode$", "")) + " come out? Rate it…");
         printExtrasRow.setVisibility(picturesNow.getVisibility() == View.VISIBLE || printAutomations.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);
         job.setVisibility(job.getText().length() == 0 ? View.GONE : View.VISIBLE); detail.setVisibility(detail.getText().length() == 0 ? View.GONE : View.VISIBLE);
         String codes = StatusPresentation.faultCodes(snapshot);
@@ -2791,6 +2909,10 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
+        if (request == BACKUP_SAVE) { char[] password = backupPassword; backupPassword = null; boolean recordings = backupRecordings;
+            if (result == RESULT_OK && data != null && data.getData() != null) writeBackup(data.getData(), recordings, password); else if (password != null) java.util.Arrays.fill(password, ' ');
+            return; }
+        if (request == BACKUP_OPEN && result == RESULT_OK && data != null && data.getData() != null) { readBackup(data.getData()); return; }
         if (request == SAVE_TIMELAPSE && result == RESULT_OK && data != null && data.getData() != null && printer != null && printer.timelapseFile != null) {
             File source = printer.timelapseFile; android.net.Uri target = data.getData();
             checks.execute(() -> {
@@ -2848,7 +2970,7 @@ public final class MainActivity extends Activity {
         if (printer == null || pendingExportUri == null) return;
         printer.exportPhoneCopy(pendingExportUri, pendingExportHash); pendingExportUri = null; pendingExportHash = "";
     }
-    @Override protected void onStart() {
+    @Override protected void onStart() { rateCheckedAt = 0;
         super.onStart(); active = true; monitorCameraTried = false;
         // Background cloud watching runs as a started foreground service; start it while the app is visible.
         if (settings.getBoolean("cloudBackground", false) && cloudBackground != null && cloudBackground.isEnabled()) try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { }

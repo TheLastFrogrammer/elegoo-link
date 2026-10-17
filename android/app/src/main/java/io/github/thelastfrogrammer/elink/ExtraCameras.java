@@ -70,8 +70,8 @@ final class ExtraCameras {
     // Secrets: the address (it can hold a token) and the password, encrypted on the phone.
     static void setSecrets(Context context, Camera c, String url, String password) throws Exception {
         CredentialStore store = new CredentialStore(context);
-        if (url != null) store.save("camera-url:" + c.id, url, true);
-        if (password != null) { if (password.isEmpty()) store.forget("camera-password:" + c.id); else store.save("camera-password:" + c.id, password, true); }
+        if (url != null) store.saveSecret("camera-url:" + c.id, url);
+        if (password != null) { if (password.isEmpty()) store.forget("camera-password:" + c.id); else store.saveSecret("camera-password:" + c.id, password); }
     }
     static String url(Context context, Camera c) {
         try { CredentialStore store = new CredentialStore(context); return store.remembers("camera-url:" + c.id) ? store.load("camera-url:" + c.id) : ""; } catch (Exception unreadable) { return ""; }

@@ -54,9 +54,32 @@ public final class CredentialStore {
         } else edit.remove("cipher:" + host).remove("iv:" + host);
         if (!edit.commit()) throw new IllegalStateException("Could not save printer profile");
     }
+    /**
+     * Keeps any other secret (an added camera's address or password, a webhook token, the Home Assistant password) encrypted
+     * the same way, under its own key. Unlike save(), it is not a printer: no address check, and the printer profile's
+     * address stays as it is.
+     */
+    public void saveSecret(String key, String value) throws Exception {
+        if (key == null || key.isEmpty() || key.startsWith("host")) throw new IllegalArgumentException("Not a secret's name");
+        Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding"); cipher.init(Cipher.ENCRYPT_MODE, key(true));
+        cipher.updateAAD(key.getBytes(StandardCharsets.UTF_8));
+        SharedPreferences.Editor edit = prefs.edit().putBoolean("remember:" + key, true)
+            .putString("cipher:" + key, Base64.encodeToString(cipher.doFinal(value.getBytes(StandardCharsets.UTF_8)), Base64.NO_WRAP))
+            .putString("iv:" + key, Base64.encodeToString(cipher.getIV(), Base64.NO_WRAP));
+        if (!edit.commit()) throw new IllegalStateException("Could not save the secret");
+    }
+    /** Every remembered key (printer addresses and other secrets), for backups. */
+    public java.util.List<String> remembered() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (java.util.Map.Entry<String, ?> e : prefs.getAll().entrySet()) if (e.getKey().startsWith("remember:") && Boolean.TRUE.equals(e.getValue())) out.add(e.getKey().substring(9));
+        java.util.Collections.sort(out); return out;
+    }
     public void forget() { forget(host()); }
     public void forget(String host) { prefs.edit().remove("cipher:" + host).remove("iv:" + host).putBoolean("remember:" + host, false).apply(); }
+    /** Tests only: a key to use instead of the Android keystore (which unit tests do not have). */
+    static volatile SecretKey testKey;
     private SecretKey key(boolean create) throws Exception {
+        if (testKey != null) return testKey;
         KeyStore store = KeyStore.getInstance("AndroidKeyStore"); store.load(null);
         if (store.containsAlias(ALIAS)) return (SecretKey) store.getKey(ALIAS, null);
         if (!create) throw new IllegalStateException("Saved access code key is unavailable");

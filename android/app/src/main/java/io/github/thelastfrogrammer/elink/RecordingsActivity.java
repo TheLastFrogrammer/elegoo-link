@@ -15,10 +15,11 @@ import android.widget.*;
 import java.io.*;
 import java.text.SimpleDateFormat;
 import java.util.*;
+import org.json.JSONObject;
 
 /** Recorded prints: a list, and per print a summary, charts, a data table and CSV export. */
 public final class RecordingsActivity extends Activity {
-    public static final String EXTRA_META = "meta";
+    public static final String EXTRA_META = "meta", EXTRA_JOURNAL = "journal";
     private static final int EXPORT = 1, VIDEO = 2;
     /** The timelapse just made, waiting for a place to save it. */
     private File madeVideo;
@@ -118,6 +119,71 @@ public final class RecordingsActivity extends Activity {
         parts.add(text);
     }
 
+    // ---- The journal: stars, how it came out, what went wrong, notes and tags; saved as it changes ----
+    private PrintJournal editing; private File editingMeta;
+    private android.widget.EditText notesField, tagsField;
+    private void journalCard(PrintRecorder.Recording recording) {
+        editing = recording.journal; editingMeta = recording.meta;
+        LinearLayout card = card();
+        A11y.heading(label(card, "Journal", 17, ink, true));
+        int accent = dark ? 0xff5fd4c4 : 0xff00796b;
+        LinearLayout stars = new LinearLayout(this); stars.setOrientation(LinearLayout.HORIZONTAL); card.addView(stars);
+        TextView[] star = new TextView[5];
+        Runnable showStars = () -> { for (int i = 0; i < 5; i++) { star[i].setText(i < editing.stars ? "★" : "☆"); A11y.state(star[i], i < editing.stars ? "On" : "Off"); } };
+        for (int i = 0; i < 5; i++) {
+            int value = i + 1; star[i] = new TextView(this); star[i].setTextSize(30); star[i].setTextColor(accent); star[i].setGravity(android.view.Gravity.CENTER);
+            star[i].setMinWidth(dp(48)); star[i].setMinHeight(dp(48)); star[i].setContentDescription(value + (value == 1 ? " star" : " stars"));
+            star[i].setOnClickListener(v -> { editing.stars = editing.stars == value ? 0 : value; showStars.run(); saveJournal(); });
+            stars.addView(star[i]);
+        }
+        showStars.run();
+        LinearLayout results = new LinearLayout(this); results.setOrientation(LinearLayout.HORIZONTAL); card.addView(results);
+        List<Button> resultButtons = new ArrayList<>();
+        Runnable showResult = () -> { for (int i = 0; i < resultButtons.size(); i++) { boolean on = PrintJournal.RESULTS[i][0].equals(editing.result);
+            resultButtons.get(i).setTextColor(on ? (dark ? 0xff0e1417 : Color.WHITE) : accent);
+            ((android.graphics.drawable.RippleDrawable) resultButtons.get(i).getBackground()).getDrawable(0).setTint(on ? accent : (dark ? 0xff21343a : 0xffe2efed)); A11y.state(resultButtons.get(i), on ? "Chosen" : ""); } };
+        for (String[] r : PrintJournal.RESULTS) {
+            action(results, r[1], () -> { editing.result = editing.result.equals(r[0]) ? "" : r[0]; showResult.run(); saveJournal(); });
+            resultButtons.add((Button) results.getChildAt(results.getChildCount() - 1));
+        }
+        showResult.run();
+        LinearLayout problemRow = new LinearLayout(this); problemRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(problemRow);
+        TextView problems = label(card, "", 13, ink, false);
+        Runnable showProblems = () -> { List<String> names = new ArrayList<>(); for (String id : editing.reasons) names.add(PrintJournal.label(PrintJournal.REASONS, id));
+            problems.setText(names.isEmpty() ? "No problems noted." : "Problems: " + String.join(", ", names)); };
+        action(problemRow, "What went wrong…", () -> {
+            String[] labels = new String[PrintJournal.REASONS.length]; boolean[] checked = new boolean[labels.length];
+            for (int i = 0; i < labels.length; i++) { labels[i] = PrintJournal.REASONS[i][1]; checked[i] = editing.reasons.contains(PrintJournal.REASONS[i][0]); }
+            new android.app.AlertDialog.Builder(this).setTitle("What went wrong?").setMultiChoiceItems(labels, checked, (d, which, on) -> checked[which] = on)
+                .setNegativeButton("Cancel", null).setPositiveButton("Done", (d, w) -> {
+                    editing.reasons.clear(); for (int i = 0; i < labels.length; i++) if (checked[i]) editing.reasons.add(PrintJournal.REASONS[i][0]);
+                    showProblems.run(); saveJournal(); }).show();
+        });
+        showProblems.run();
+        notesField = new android.widget.EditText(this); notesField.setHint("Notes: settings tried, what to change next time…"); notesField.setText(editing.notes);
+        notesField.setTextColor(ink); notesField.setHintTextColor(muted); notesField.setMinHeight(dp(48)); notesField.setMinLines(2); card.addView(notesField, new LinearLayout.LayoutParams(-1, -2));
+        tagsField = new android.widget.EditText(this); tagsField.setHint("Tags, separated by commas: petg, functional, gift");
+        tagsField.setText(String.join(", ", editing.tags)); tagsField.setSingleLine(true); tagsField.setTextColor(ink); tagsField.setHintTextColor(muted); tagsField.setMinHeight(dp(48));
+        card.addView(tagsField, new LinearLayout.LayoutParams(-1, -2));
+        android.view.View.OnFocusChangeListener saveOnLeave = (v, has) -> { if (!has) saveJournal(); };
+        notesField.setOnFocusChangeListener(saveOnLeave); tagsField.setOnFocusChangeListener(saveOnLeave);
+        for (JSONObject g : editing.guardian)
+            label(card, "Print guardian, " + new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date(g.optLong("at"))) + ": "
+                + (g.optBoolean("fine") ? "you said it looked fine" : "you said it was a real problem") + (g.optString("said").isEmpty() ? "" : " (" + StatusPresentation.clean(g.optString("said")) + ")"), 12, muted, false);
+        if (getIntent().getBooleanExtra(EXTRA_JOURNAL, false)) card.post(() -> { android.view.View scroll = (android.view.View) content.getParent(); if (scroll instanceof ScrollView) ((ScrollView) scroll).smoothScrollTo(0, card.getTop() - dp(12)); });
+    }
+    private void saveJournal() {
+        if (editing == null || editingMeta == null) return;
+        if (notesField != null) editing.notes = Automation.cap(notesField.getText().toString().trim(), 2000);
+        if (tagsField != null) { editing.tags.clear(); editing.tags.addAll(PrintJournal.tags(tagsField.getText().toString())); }
+        if (editing.rated() && editing.ratedAt == 0) editing.ratedAt = System.currentTimeMillis();
+        PrintJournal saving = editing; File meta = editingMeta;
+        SAVES.execute(() -> { try { PrintRecorder.saveJournal(meta, saving); } catch (Exception failed) { runOnUiThread(() -> android.widget.Toast.makeText(this, "Could not save the journal.", android.widget.Toast.LENGTH_SHORT).show()); } });
+    }
+    /** Journal saves in order, off the main thread. */
+    private static final java.util.concurrent.ExecutorService SAVES = java.util.concurrent.Executors.newSingleThreadExecutor();
+    @Override protected void onPause() { super.onPause(); if (editing != null) saveJournal(); }
+
     // ---- Screens ----
 
     private void showList() {
@@ -132,15 +198,43 @@ public final class RecordingsActivity extends Activity {
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)));
             return;
         }
-        label("Each print is recorded automatically, newest first. Unfinished means the app stopped watching before the print ended.", 13, muted, false);
-        for (PrintRecorder.Recording recording : recordings) {
-            LinearLayout card = card();
-            TextView name = label(card, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")), 16, ink, true);
-            name.setSingleLine(true); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            label(card, rowSummary(recording, Locale.getDefault(), TimeZone.getDefault()), 13, muted, false);
-            card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(EXTRA_META, recording.meta.getAbsolutePath())));
+        label("Each print is recorded automatically, newest first. Unfinished means the app stopped watching before the print ended. Rate a print and note what went wrong on its page.", 13, muted, false);
+        // What went wrong, over every rated print: the journal's problems, most often first.
+        List<PrintJournal> journals = new ArrayList<>(); int rated = 0;
+        for (PrintRecorder.Recording r : recordings) { journals.add(r.journal); if (r.journal.rated()) rated++; }
+        java.util.Map<String, Integer> problems = PrintJournal.problemCounts(journals);
+        if (rated > 0 || !problems.isEmpty()) {
+            StringBuilder text = new StringBuilder(rated + " of " + recordings.size() + " prints rated.");
+            if (!problems.isEmpty()) { text.append(" Most common problems: "); int n = 0;
+                for (java.util.Map.Entry<String, Integer> e : problems.entrySet()) { if (n++ == 3) break; text.append(n > 1 ? ", " : "").append(PrintJournal.label(PrintJournal.REASONS, e.getKey()).toLowerCase(Locale.getDefault())).append(" (").append(e.getValue()).append(")"); }
+                text.append('.'); }
+            label(text.toString(), 13, ink, false);
         }
+        android.widget.EditText search = new android.widget.EditText(this); search.setHint("Search: name, notes, #tag, failed, warping…"); search.setSingleLine(true);
+        search.setTextColor(ink); search.setHintTextColor(muted); search.setMinHeight(dp(48)); search.setText(listQuery); content.addView(search, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); content.addView(results);
+        Runnable fill = () -> {
+            results.removeAllViews(); int shownCount = 0;
+            for (PrintRecorder.Recording recording : recordings) {
+                if (!PrintJournal.matches(recording.file, recording.journal, listQuery)) continue;
+                shownCount++;
+                LinearLayout card = card(results);
+                TextView name = label(card, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")), 16, ink, true);
+                name.setSingleLine(true); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+                label(card, rowSummary(recording, Locale.getDefault(), TimeZone.getDefault()), 13, muted, false);
+                String journal = recording.journal.summary();
+                if (!journal.isEmpty()) label(card, journal, 13, ink, false);
+                card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(EXTRA_META, recording.meta.getAbsolutePath())));
+            }
+            if (shownCount == 0) label(results, "No recording matches “" + listQuery.trim() + "”.", 14, muted, false);
+        };
+        search.addTextChangedListener(new android.text.TextWatcher() {
+            public void beforeTextChanged(CharSequence s, int a, int b, int c) { } public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            public void afterTextChanged(android.text.Editable s) { listQuery = s.toString(); fill.run(); }
+        });
+        fill.run();
     }
+    private String listQuery = "";
 
     private void showRecording(File meta) {
         content.removeAllViews();
@@ -164,6 +258,7 @@ public final class RecordingsActivity extends Activity {
         tile(tiles, "Duration", duration(recording.duration()), 0);
         tile(tiles, "Result", outcome(recording.outcome), dp(8));
         tile(tiles, "Ended", ended > 0 ? when(ended, Locale.getDefault(), TimeZone.getDefault()) : "—", dp(8));
+        journalCard(recording);
         // Filament fed (from the extruder position) and how the printer's estimate at 10 % compared with the real time.
         List<String> extra = new ArrayList<>();
         if (recording.extrudedMm > 1) extra.add(String.format(Locale.getDefault(), "Filament fed: %.2f m (≈ %.0f g of PLA-like filament)", recording.extrudedMm / 1000, PrintRecorder.grams(recording.extrudedMm, "PLA")));
@@ -549,10 +644,11 @@ public final class RecordingsActivity extends Activity {
         TextView view = new TextView(this); view.setText(text); view.setTextSize(size); view.setTextColor(color); if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setPadding(0, dp(3), 0, dp(3)); parent.addView(view); return view;
     }
-    private LinearLayout card() {
+    private LinearLayout card() { return card(content); }
+    private LinearLayout card(LinearLayout parent) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(12), dp(16), dp(12));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20)); card.setBackground(shape);
-        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); content.addView(card, layout); return card;
+        LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(12); parent.addView(card, layout); return card;
     }
     private void tile(LinearLayout row, String caption, String value, int gap) {
         LinearLayout tile = new LinearLayout(this); tile.setOrientation(LinearLayout.VERTICAL); tile.setPadding(dp(12), dp(10), dp(12), dp(10));

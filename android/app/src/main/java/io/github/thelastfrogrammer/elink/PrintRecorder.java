@@ -38,6 +38,8 @@ public final class PrintRecorder {
         public long printDuration = -1; public int startProgress = -1;
         /** The printer's estimate of the whole print (s) when it reached 10 %, or 0: compared with the real time when it ends. */
         public long estimate;
+        /** The person's notes on the print (PrintJournal). */
+        public PrintJournal journal = new PrintJournal();
         /** "Every 5 min", "Every layer", "Every 2 layers" or "No pictures". */
         public String pictureWords() { return pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") : pictureMinutes == 0 ? "No pictures" : pictureMinutes == 1 ? "Every minute" : "Every " + pictureMinutes + " minutes"; }
         Recording(File csv, File meta) { this.csv = csv; this.meta = meta; }
@@ -45,7 +47,8 @@ public final class PrintRecorder {
             return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("outcome", outcome).put("source", source)
                 .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
                 .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
-                .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate);
+                .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
+                .put("journal", journal.empty() ? null : journal.toJson());
         }
         static Recording read(File meta) throws Exception {
             String base = meta.getName().replaceFirst("\\.json$", "");
@@ -58,6 +61,7 @@ public final class PrintRecorder {
             recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictureLayers = json.optInt("picture_layers"); recording.pictures = json.optInt("pictures");
             recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
             recording.printDuration = json.optLong("print_duration", -1); recording.startProgress = json.optInt("start_progress", -1); recording.estimate = json.optLong("estimate", 0);
+            recording.journal = PrintJournal.fromJson(json.optJSONObject("journal"));
             return recording;
         }
         /** The folder of this recording's camera pictures, named by elapsed seconds (e.g. 0600.jpg). */
@@ -76,6 +80,37 @@ public final class PrintRecorder {
     private int picturedLayer = -1;
 
     public PrintRecorder(File directory) { this.directory = directory; }
+    /** The recorder the printer service runs, so a journal saved from a screen reaches the running print's copy. */
+    static volatile PrintRecorder active;
+
+    /**
+     * Saves a recording's journal. The running print's recording is changed in the recorder (which rewrites its file as it
+     * samples), any other recording in its file.
+     */
+    static void saveJournal(File meta, PrintJournal journal) throws Exception {
+        PrintRecorder recorder = active;
+        if (recorder != null) synchronized (recorder) {
+            if (recorder.current != null && recorder.current.meta.equals(meta)) { recorder.current.journal = journal; recorder.save(recorder.current); return; }
+        }
+        synchronized (PrintRecorder.class) {
+            Recording recording = Recording.read(meta); recording.journal = journal;
+            File temp = new File(meta.getPath() + ".tmp");
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(temp), StandardCharsets.UTF_8)) { writer.write(recording.toJson().toString()); }
+            if (!temp.renameTo(meta)) throw new IOException("could not save the journal");
+        }
+    }
+    /** Notes the guardian's alarm and the person's answer in the running print's journal. */
+    public synchronized void noteGuardian(boolean fine, String said, long now) {
+        if (current == null) return;
+        try { if (current.journal.guardian.size() < 50) current.journal.guardian.add(new JSONObject().put("at", now).put("fine", fine).put("said", Automation.cap(said, 300))); save(current); }
+        catch (Exception ignored) { }
+    }
+    /** The recording of the print that ended last (complete or stopped), or null; kept across app restarts. */
+    public File lastFinished() {
+        File note = new File(directory, "last-finished.txt");
+        try { String path = new String(java.nio.file.Files.readAllBytes(note.toPath()), StandardCharsets.UTF_8).trim(); File meta = new File(directory, path); return meta.isFile() ? meta : null; }
+        catch (IOException none) { return null; }
+    }
     public synchronized Recording current() { return current; }
     /** Seconds the running print has been going, on the monotonic clock `mono` (as passed to update), or -1 with no print. */
     public synchronized long elapsedSeconds(long mono) { return current == null ? -1 : Math.max(0, mono - current.monoStart) / 1000; }
@@ -276,6 +311,7 @@ public final class PrintRecorder {
         current.elapsed += since;
         current.outcome = outcome; current.end = current.lastSample + since;
         if (current.end == 0) current.end = now;
+        if (!"interrupted".equals(outcome)) try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), current.meta.getName().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
         save(current); current = null; lastLayer = -1; learnedRead = false;
     }
 
