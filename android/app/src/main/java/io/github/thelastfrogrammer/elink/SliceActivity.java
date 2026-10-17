@@ -37,6 +37,8 @@ public final class SliceActivity extends Activity {
     static final String RESULT_FILE = "slicedFile", RESULT_NAME = "slicedName", RESULT_PRINT_SETUP = "printSetup", TRAY_PLANS = "tray-plans";
     static final int ALL_PLATES = -1;
     static final String EXTRA_OPEN = "open";
+    /** Model files kept in Projects (paths under files/projects/assets), opened from a project. */
+    static final String EXTRA_MODEL_PATHS = "modelPaths";
     private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5, OBJECT_SETTINGS = 6, FIND_MODELS = 7;
     private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
@@ -165,7 +167,16 @@ public final class SliceActivity extends Activity {
         bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
         if (saved != null) restore(saved);
         else {
-            List<Uri> incoming = incomingModels(getIntent()); if (!incoming.isEmpty()) chooseFromZips(incoming);
+            List<Uri> incoming = incomingModels(getIntent());
+            // Only the project copies kept by this app, never other paths.
+            String[] kept = getIntent().getStringArrayExtra(EXTRA_MODEL_PATHS);
+            if (kept != null) for (String path : kept) {
+                try {
+                    File f = new File(path).getCanonicalFile(), keptRoot = new File(new File(getFilesDir(), "projects"), "assets").getCanonicalFile();
+                    if (f.isFile() && f.getPath().startsWith(keptRoot.getPath() + File.separator)) incoming.add(Uri.fromFile(f));
+                } catch (java.io.IOException ignored) { }
+            }
+            if (!incoming.isEmpty()) chooseFromZips(incoming);
             // Opened from "Find a feature" or a launcher shortcut straight to one of this screen's tools.
             String open = getIntent().getStringExtra(EXTRA_OPEN);
             if ("find".equals(open)) startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS);

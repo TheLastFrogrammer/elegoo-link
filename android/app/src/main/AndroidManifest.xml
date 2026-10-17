@@ -47,6 +47,7 @@
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
+        <activity android:name=".ProjectsActivity" android:exported="false" android:label="Projects" />
         <activity android:name=".LogsActivity" android:exported="false" android:label="Logs" />
         <activity android:name=".AutomationActivity" android:exported="false" android:label="Automation workshop" />
         <activity android:name=".FieldCheckActivity" android:exported="false" android:label="Field check" />

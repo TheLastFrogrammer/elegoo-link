@@ -508,6 +508,7 @@ public final class MainActivity extends Activity {
         }, false);
         button(files, "Find models online…", () -> startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "find"), SLICE));
         recentSlices = button(files, "Recent slices…", this::chooseRecentSlice);
+        button(files, "Projects…", () -> startActivity(new Intent(this, ProjectsActivity.class)));
         // The chosen file: preview, actions and the offline report, shown once there is one.
         fileDetails = new LinearLayout(this); fileDetails.setOrientation(LinearLayout.VERTICAL); files.addView(fileDetails);
         filePreview = new ImageView(this); filePreview.setContentDescription("Slicer preview of the selected G-code file"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -786,6 +787,11 @@ public final class MainActivity extends Activity {
         String[] titles = new String[recent.size()];
         for (int i = 0; i < titles.length; i++) titles[i] = recent.get(i).getName() + "\n" + (recent.get(i).length() / 1024) + " KB · " + android.text.format.DateUtils.getRelativeTimeSpanString(recent.get(i).lastModified());
         new AlertDialog.Builder(this).setTitle("Recent slices").setItems(titles, (d, which) -> { if (printer != null) printer.selectSliced(recent.get(which), recent.get(which).getName()); })
+            .setNeutralButton("Add one to a project…", (d, w) -> {
+                String[] names = new String[recent.size()]; for (int i = 0; i < names.length; i++) names[i] = recent.get(i).getName();
+                new AlertDialog.Builder(this).setTitle("Add to a project").setItems(names, (d2, which) -> startActivity(new Intent(this, ProjectsActivity.class)
+                    .putExtra(ProjectsActivity.EXTRA_ADD_PATH, recent.get(which).getAbsolutePath()).putExtra(ProjectsActivity.EXTRA_ADD_NAME, recent.get(which).getName()))).setNegativeButton("Cancel", null).show();
+            })
             .setNegativeButton("Close", null).show();
     }
     private void takeSliced() {

@@ -47,7 +47,7 @@ import javax.crypto.spec.SecretKeySpec;
 final class Backup {
     static final String FORMAT = "linkWorkshopBackup", SECRETS = "secrets.bin";
     static final int VERSION = 1, ITERATIONS = 150_000;
-    static final String[] FILES = {"automations.json", "automation-templates.json", "spools.json"};
+    static final String[] FILES = {"automations.json", "automation-templates.json", "spools.json", "projects/projects.json"};
     /** Data files holding webhook addresses: encrypted with a password, cut back without one. */
     static final java.util.Set<String> CONFIDENTIAL = new java.util.HashSet<>(java.util.Arrays.asList("automations.json", "automation-templates.json"));
     static final long MAX_ENTRY = 512L * 1024 * 1024, MAX_TOTAL = 8L * 1024 * 1024 * 1024;
@@ -308,6 +308,7 @@ final class Backup {
         while ((n = in.read(buffer)) > 0) { total += n; if (total > max) throw new IOException("A file in the backup is too large."); out.write(buffer, 0, n); }
     }
     private static void writeAtomic(File target, byte[] data) throws IOException {
+        File parent = target.getParentFile(); if (parent != null) parent.mkdirs();
         File temp = new File(target.getPath() + ".restore");
         try (OutputStream out = new FileOutputStream(temp)) { out.write(data); }
         if (!temp.renameTo(target)) throw new IOException("Could not write " + target.getName());
