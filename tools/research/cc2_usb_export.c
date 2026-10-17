@@ -31,13 +31,16 @@ static int64_t clock_ms(void) {
 }
 static int ready(int fd, short events, int64_t deadline) {
     while (!stopped) {
-        int64_t left = deadline - clock_ms();
+        int64_t now = clock_ms(), left;
         struct pollfd p = {fd, events, 0};
         int n;
+        if (now < 0) return -1;
+        left = deadline - now;
         if (left <= 0) return 0;
         n = poll(&p, 1, left > INT_MAX ? INT_MAX : (int)left);
         if (n < 0 && errno == EINTR) continue;
-        if (n <= 0 || (p.revents & (POLLHUP | POLLERR | POLLNVAL))) return -1;
+        if (n == 0) continue;
+        if (n < 0 || (p.revents & (POLLHUP | POLLERR | POLLNVAL))) return -1;
         if (p.revents & events) return 1;
     }
     return -1;

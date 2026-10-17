@@ -145,6 +145,12 @@ class CompanionTests(unittest.TestCase):
         with self.native() as (master, _process, _source):
             self.assertEqual(pi.receive(master, 5), pi.receive(master, 5))
 
+    def test_native_remains_available_after_idle_poll_deadline(self):
+        with self.native() as (master, process, _source):
+            time.sleep(5.1)
+            self.assertIsNone(process.poll())
+            self.assertEqual(pi.receive(master, 5), {"identity.json": identity()})
+
     def test_native_rejects_remote_path_or_shell_command(self):
         with self.native() as (master, process, _source):
             os.write(master, b"cat /etc/shadow; touch /tmp/cc2-must-not-exist\n")
