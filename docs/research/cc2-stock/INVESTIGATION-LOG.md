@@ -1,6 +1,6 @@
 # CC2 investigation log
 
-Recorded 17 October 2026. All current technical results below are offline findings. The owner's installed firmware, serial access, helper operation and camera hardware are not yet established.
+Recorded 17 October 2026. Firmware analysis below is offline; R15 separately records owner-supplied network observations. The owner's exact installed firmware, serial access, helper operation and camera hardware are not yet established.
 
 | ID | Claim or experiment | Status | Evidence | Remaining check |
 |---|---|---|---|---|
@@ -23,6 +23,7 @@ Recorded 17 October 2026. All current technical results below are offline findin
 | N02 | Stronger retained-copy identity in the Android app | Implemented in v0.65.0 source; content-addressed archive, explicit user choice per observed printer/job, stale scene guards | android/GCODE_IDENTITY.md; domain/activity/session tests; tools/viewer-check.js; android/VALIDATION.md | Device checklist; printer bytes remain unverified without an independent content reference |
 | N04-prep | Bounded stock-console reference recorder | Implemented with fixed discovered methods, complete frames, response IDs, quotas and private transcripts; all 45 tests pass in Linux CI on Python 3.10 and 3.12, including actual Unix sockets | tools/research/cc2_console_capture.py; CONSOLE-CAPTURE.md; CONSOLE-CLIENT-PROTOCOL.json; CONSOLE-CAPTURE-VALIDATION.json | Established owner access and a qualified runtime; no Python-named runtime found in pinned inventory; no printer console test performed |
 | R14 | Stock serial action can launch a shell directly | Actual askfirst ARM main waits for LF then execvp of the configured ash command; no authentication step in that function. Init lists tts/0, ttyS2 and tty1 | access/evidence/OWNER-ACCESS-BOOTSTRAP.json; OWNER-ACCESS-ROUTES.md | Actual header/terminal mapping, logic levels, installed build, observed prompt and UID |
+| R15 | Current owner network reachability | Owner screenshots show TCP 22 and 80 refused, 1883 and 8080 reachable; no application authentication or camera request in these checks | access/evidence/OWNER-NETWORK-OBSERVATIONS.json; prior app field results in android/PROTOCOL.md | Exact firmware and current mode are not shown. No new shell route established; avoid repeating completed PIN tests and camera probes |
 
 ## Process record
 
@@ -33,5 +34,6 @@ Recorded 17 October 2026. All current technical results below are offline findin
 - N02 follow-on: extended the existing archive and wired all retained-copy sources. Removed filename-only automatic live selection, added source/hash confirmation and conservative service-observed job scopes, and invalidated stale Java/JavaScript load results. This is an app implementation checkpoint; it does not change the offline firmware findings or establish physical access.
 - N03/N04 preparation: verified that the previous Android checkpoint's GitHub CI succeeded, recorded an owner UART/shell worksheet, and implemented the bounded console reference recorder. Rechecked the vendor's envelope/report shapes and generic-exception shutdown path. Local protocol fixtures use a test-only loopback connector because this workspace blocks Unix sockets; the new Linux CI workflow exercises the actual Unix connector on Python 3.10 and 3.12. No firmware was modified or printer contacted.
 - Console CI qualification: [run 39037683475](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39037683475) passed all 45 tests on each Python version with zero skips. Inspected both job logs, including successful native Unix connector/subscription and symlink-refusal cases. This verifies the host implementation, not owner access or printer-side operation.
+- Owner network checkpoint: transcribed the latest Termux results without private addresses or credentials. Reconciled them with the existing correct-PIN/no-status and working LAN-only download field records before proposing more tests. The owner has no UART adapter; laptop access is limited. No assistant printer connection, firmware change or further camera request was performed.
 
 New experiments should record input fingerprint, command/tool version, result, relevant redacted output and what the result does not establish. Keep raw diagnostic exports, signed URLs and camera identities outside the repository. A failed or absent file lookup is evidence too; never replace it with a filename-based claim of exact identity.

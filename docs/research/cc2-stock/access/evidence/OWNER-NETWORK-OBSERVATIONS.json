@@ -1,0 +1,65 @@
+{
+  "recorded_date": "2026-10-17",
+  "timezone": "America/Chicago",
+  "source": "Owner-supplied inline Termux screenshots; results transcribed, not independently reproduced",
+  "device": "Owner's CC2; exact board revision not established",
+  "installed_firmware": {
+    "owner_report": "Most recent firmware version",
+    "exact_version": null,
+    "match_to_inspected_stock_image": "Not established"
+  },
+  "current_mode": "Not shown in supplied screenshots",
+  "current_print_state": "Not shown in supplied screenshots",
+  "checks": [
+    {
+      "tcp_port": 22,
+      "suggested_service": "SSH",
+      "result": "ConnectionRefusedError [Errno 111] Connection refused",
+      "application_payload_sent": false,
+      "authentication_attempted": false
+    },
+    {
+      "tcp_port": 80,
+      "suggested_service": "HTTP",
+      "result": "[Errno 111] Connection refused",
+      "application_payload_sent": false,
+      "authentication_attempted": false
+    },
+    {
+      "tcp_port": 1883,
+      "suggested_service": "MQTT",
+      "result": "reachable",
+      "application_payload_sent": false,
+      "authentication_attempted": false
+    },
+    {
+      "tcp_port": 8080,
+      "suggested_service": "Local camera",
+      "result": "reachable",
+      "application_payload_sent": false,
+      "authentication_attempted": false
+    }
+  ],
+  "interpretation_limits": [
+    "Successful TCP connections do not verify service protocol, authentication, usable status, video, file access or a shell.",
+    "Refusal happens before application authentication; the LAN access code was not tested by these commands.",
+    "Refusal does not distinguish a missing listener from an active network rejection.",
+    "The port pattern matches prior cloud-mode field records but does not establish the current mode.",
+    "The assistant did not contact the printer."
+  ],
+  "prior_repository_evidence": {
+    "path": "android/PROTOCOL.md",
+    "dated": "2026-10-12",
+    "cloud_mode": "Correct PIN accepted by local MQTT broker and subscriptions; zero messages in 30 seconds. Earlier registration attempts timed out.",
+    "lan_only": "HTTP opened; internal and USB downloads succeeded with the saved LAN access code.",
+    "camera_caution": "Research records a third-party report of repeated cloud-mode camera probes stalling the service; this is not an observed fault in the current screenshot.",
+    "version_caveat": "Earlier results do not establish identical behavior on the owner's unspecified latest installed build."
+  },
+  "owner_hardware_constraints": {
+    "usb_uart_adapter_available": false,
+    "laptop": "Available, with limited convenient access",
+    "phone": "Android with working Termux Python"
+  },
+  "next_step": "Do not repeat identical credential or camera probes. Preserve exact-version uncertainty. UART remains the strongest unverified mainboard shell route and requires qualified hardware; continue offline preparation meanwhile.",
+  "private_data_policy": "No printer IP, serial, access code, pairing PIN, account token or raw diagnostic export included."
+}

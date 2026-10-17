@@ -23,6 +23,16 @@ This is stronger than the earlier generic "owner shell required" wording. The un
 
 SSH historical source: [pycentauri CC2 field notes](https://github.com/bjan/pycentauri/blob/main/docs/PROTOCOL.md#centauri-carbon-2-cc2-protocol-notes). Their SSH statement is historical and version-specific; other protocol claims are not adopted wholesale. Mainboard reference: [OpenCentauri CC2](https://docs.opencentauri.cc/hardware/CC2/mainboard/). Camera reference: [cc2_camera_fix](https://github.com/OpenCentauri/cc2_camera_fix).
 
+## Owner observations: do not repeat completed network experiments
+
+On 17 October the owner supplied Termux screenshots showing a refused TCP 22 connection, a refused TCP 80 connection, and successful TCP connections to ports 1883 and 8080. These were connection-only checks, with no MQTT authentication or camera request. Port numbers suggest service roles; a successful TCP connect alone does not establish the application protocol, a working camera, console access or coexistence. The owner reports the most recent firmware, but has not supplied its exact version string. The screenshots do not establish the current network mode or print state. See the [structured field record](access/evidence/OWNER-NETWORK-OBSERVATIONS.json).
+
+The existing [app field results](../../../android/PROTOCOL.md#field-results-owners-cc2-2026-10-12-app-0454) already record a correct cloud-mode PIN accepted by the local broker, followed by zero messages in a 30-second listen-only window. They also record working internal and USB file downloads with the LAN access code after switching to LAN Only. This earlier evidence is not a fresh test of the owner's unspecified latest build, but it means another identical PIN or port experiment is not a new owner-access lead.
+
+The same app research records a third-party report of repeated cloud-mode camera probes stalling port 8080 until a power cycle. Do not send further camera probes or infer streaming from the latest successful TCP connection. The latest owner screenshot does not show a camera fault.
+
+The access code is relevant to supported LAN services after their listeners are available; it cannot authenticate a TCP connection that has already been refused. No network-only mainboard shell bootstrap has been established. The owner currently has no USB UART adapter and has limited laptop access. Mainboard UART therefore remains a physical prerequisite to investigate, while the phone can be the capture terminal after compatible hardware and signal levels are established. Firmware analysis and native companion preparation can continue offline; neither gives the current phone a connection to the printer's local Unix socket.
+
 ## First: a bounded network check from the owner's LAN
 
 If Python is available in Termux or on a computer, replace the example address with the printer's current IP. This opens TCP 22 once and reads at most 256 bytes. It sends no application payload, credentials or commands.
