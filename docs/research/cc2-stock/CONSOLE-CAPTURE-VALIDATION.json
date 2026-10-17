@@ -1,0 +1,55 @@
+{
+  "recorded_utc": "2026-10-17T13:42:17.714634+00:00",
+  "baseline_commit": "10b61f5664b54e41021159ffec0edaadcb682ac8",
+  "previous_android_ci": {
+    "status": "success",
+    "run": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39036573920"
+  },
+  "local": {
+    "python": "3.12.14",
+    "command": "python -m unittest discover -s tools/research/tests -v",
+    "tests": 45,
+    "passed": 43,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 2,
+    "protocol_transport": "real loopback stream with a test-only connector adapter",
+    "native_unix": "blocked by execution environment; the two native integration cases were explicitly skipped"
+  },
+  "linux_ci": {
+    "workflow": ".github/workflows/research-tools.yml",
+    "python_matrix": [
+      "3.10",
+      "3.12"
+    ],
+    "native_unix_required": true,
+    "status": "pending"
+  },
+  "tool_sources": {
+    "tools/research/cc2_console_capture.py": {
+      "sha256": "649f0a7ed0c1941c1e311d48622b883622c88610fbe988cec3cd00bbae1dcbaa",
+      "bytes": 14059
+    },
+    "tools/research/tests/test_cc2_console_capture.py": {
+      "sha256": "fdf3f8e1e71aca8067039de9454fe67b4fc7472695b49155407c252a4f7a3795",
+      "bytes": 21941
+    }
+  },
+  "coverage": [
+    "fragmented/coalesced UTF-8 frames",
+    "integer IDs and stale/unmatched reply rejection",
+    "fixed method gate and advertised-only probes",
+    "private transcript plus summary payload omission",
+    "malformed/ambiguous/duplicate-key/non-finite JSON",
+    "remote errors, EOF, partial frames and early subscription closure",
+    "request/session/time/frame/receive/message/transcript limits",
+    "private modes and refusal to overwrite output",
+    "socket symlink refusal",
+    "actual Unix connector and subscription reports in Linux integration cases"
+  ],
+  "physical_printer_tested": false,
+  "owner_shell_established": false,
+  "firmware_modified": false,
+  "stock_python_runtime_established": false,
+  "limits": "Reference client and capture workflow only. No printer bootstrap, native helper, file transfer, firmware patch or persistence qualification."
+}

@@ -15,6 +15,8 @@ The first follow-on tool is ready: [offline capture inspector](../../../tools/re
 
 The second follow-on is implemented in Android v0.65.0 source: [retained-file identity and live-view selection](../../../android/GCODE_IDENTITY.md). This changes the app and requires device acceptance; it does not establish printer console access or bypass stock file serving.
 
+Console preparation now includes an [owner UART/shell worksheet](OWNER-CAPTURE-WORKSHEET.md) and a [bounded console reference recorder](../../../tools/research/CONSOLE-CAPTURE.md). The recorder needs an established local access path and Python 3.10+; a Python runtime is not confirmed in the stock image. Protocol/fixture validation is separate from printer qualification.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout

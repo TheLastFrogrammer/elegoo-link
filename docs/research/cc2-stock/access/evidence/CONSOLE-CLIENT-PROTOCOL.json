@@ -1,0 +1,34 @@
+{
+  "vendor_commit": "5a2ea7fc03e707552701b1a69f463699cbd39230",
+  "webhooks.cpp": {
+    "sha256": "5991a38fb1624567fda595c2e6543526fdb5316b8b47f38a4dbe56c8e37d9431",
+    "bytes": 34808,
+    "url": "https://github.com/elegooofficial/CentauriCarbon2/blob/5a2ea7fc03e707552701b1a69f463699cbd39230/elegoo/webhooks.cpp",
+    "observations": {
+      "process_received_and_send": "lines 83-181: JSON frames terminated by 0x03",
+      "generic_exception_path": "lines 155-159: published source invokes printer shutdown on an unexpected standard exception; binary/device equivalence not newly established",
+      "response_envelope": "lines 333-358: id and result or error; method sometimes included",
+      "endpoint_inventory": "lines 654-662: result.endpoints array",
+      "gcode_help_and_output": "lines 780-889: help map; subscribe_report uses response_template and output messages use id 0",
+      "object_inventory": "lines 921-989: result.objects array"
+    }
+  },
+  "whconsole.cpp": {
+    "sha256": "381eeaabbf2b49cb332bbe1e517a94974bd79088a3227b1ffb408ad798a202c0",
+    "bytes": 5044,
+    "url": "https://github.com/elegooofficial/CentauriCarbon2/blob/5a2ea7fc03e707552701b1a69f463699cbd39230/elegoo/whconsole.cpp",
+    "observations": {
+      "fragmentation": "lines 72-88: receive remainder is assigned to socket_data but not prepended to the next receive chunk",
+      "writes": "single send call; no loop to finish a short write"
+    }
+  },
+  "rootfs_inventory": {
+    "sha256": "6c57352c5c8645777d084f97b7915ed18be77ed2010fad6ae1f14066883a5db3",
+    "bytes": 538433,
+    "entry_count": 3996,
+    "python_named_paths": [],
+    "interpretation": "No Python-named runtime appears in this pinned inventory. Python 3.10+ on the printer is not established; no runtime installation is proposed."
+  },
+  "device_tested": false,
+  "firmware_modified": false
+}

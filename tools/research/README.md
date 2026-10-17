@@ -1,5 +1,7 @@
 # Offline CC2 capture inspector
 
+For an independently established stock console, see the separate [bounded console recorder](CONSOLE-CAPTURE.md). It does not create shell access; Python availability on stock firmware is not established. The offline inspector below remains suitable for already exported files on a workstation or Termux.
+
 `cc2_capture_inspect.py` summarizes files the owner has already exported. It never connects to a printer or cloud account, executes G-code, enables services or changes printer firmware. Python 3.10+ with the standard library is sufficient; no pip dependencies are needed. It can run on a workstation or in Termux with Python available.
 
 ## Use
@@ -49,7 +51,7 @@ The inspector uses read-only immutable SQLite access and refuses a nonempty adja
 python -m unittest discover -s tools/research/tests -v
 ```
 
-Sixteen tests use actual temporary SQLite databases and log files. They cover reference redaction/private opt-in, unchanged inputs and no new database sidecars, known/missing schema, table-versus-view handling, bounded BLOB/text/log output, row/event limits, incomplete JSON, repeated camera transitions, tail fragments, journal refusals, symlinks, malformed references, no overwrite and mixed successful/failed inputs.
+Sixteen inspector tests use actual temporary SQLite databases and log files. They cover reference redaction/private opt-in, unchanged inputs and no new database sidecars, known/missing schema, table-versus-view handling, bounded BLOB/text/log output, row/event limits, incomplete JSON, repeated camera transitions, tail fragments, journal refusals, symlinks, malformed references, no overwrite and mixed successful/failed inputs. The same discovery command also runs the separate console protocol and native-connector tests described in CONSOLE-CAPTURE.md.
 
 These tests establish host parser behavior. No genuine owner export, CC2 console, printer transfer or camera repair was exercised. Exit status: 0 for inspected inputs, 1 when an input failed but a report was generated, 2 for argument/output errors.
 

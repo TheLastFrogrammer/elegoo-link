@@ -1,0 +1,28 @@
+name: Research capture tools
+on:
+  push:
+    branches: [main, 'claude/**']
+    paths: ['tools/research/**', '.github/workflows/research-tools.yml']
+  pull_request:
+    paths: ['tools/research/**', '.github/workflows/research-tools.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      matrix:
+        python: ['3.10', '3.12']
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Native Unix sockets are available for the integration checks
+        run: python -c 'import socket; socket.socket(socket.AF_UNIX, socket.SOCK_STREAM).close()'
+      - name: Test offline records inspection and the bounded stock-console client
+        run: python -m unittest discover -s tools/research/tests -v

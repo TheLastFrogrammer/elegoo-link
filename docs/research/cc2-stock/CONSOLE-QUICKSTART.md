@@ -2,6 +2,8 @@
 
 Prerequisite: an already established owner shell on the printer, idle for the first test. This is a worksheet, not a remote-access installer. No commands here were run on a printer.
 
+Record the physical access observations in [the owner worksheet](OWNER-CAPTURE-WORKSHEET.md). A [bounded reference recorder](../../../tools/research/CONSOLE-CAPTURE.md) now handles complete frames, IDs, limits and private evidence when a Python-capable environment already has access to this socket. No Python-named runtime appears in the pinned stock inventory; the reference tool is not an unchanged-stock executable or an access bootstrap.
+
 Check that `/tmp/elegoo_uds` exists as a Unix socket and that `/opt/bin/debug_window` exists. The stock launch script supplies that socket path with `-a`.
 
 Run interactively:
@@ -30,3 +32,5 @@ The Unix socket also registers `gcode/script`; arbitrary scripts can move hardwa
 If requests fail, retain the error, build fingerprint and bounded logs; do not kill/restart the printer process to obtain a console. The generic ADB configuration script in rootfs is not a verified printer USB-shell route. Camera USB/ADB operates on a different computer.
 
 The bundled CLI can mishandle fragmented responses according to its published source. A production companion must buffer through each complete `0x03` frame, handle partial writes, match request IDs, bound buffers and keep one persistent connection.
+
+The pinned public webhooks source also invokes printer shutdown on an unexpected standard exception in request handling. Its exact installed-binary equivalence is not newly established here. Keep the first experiment to the listed inventory/help requests and the fixed subscription template; broad object queries, parameter fuzzing and malformed test traffic belong in local fixtures, not on a printer. [Source fingerprints and observations](access/evidence/CONSOLE-CLIENT-PROTOCOL.json).
