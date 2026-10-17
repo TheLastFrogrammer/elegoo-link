@@ -55,7 +55,7 @@ final class PictureVisits {
         long now = SystemClock.elapsedRealtime();
         boolean pictureDue = p.recorder != null && p.recorder.pictureDue(now);
         boolean enabled = settings.getBoolean(PREF, true), open = videoOpen.getAsBoolean(), local = p.ready() || !p.usingCloud(), fresh = p.cloudFresh(),
-            alongside = p.localCamera(), online = p.cloudOnline == 1, agreed = settings.getBoolean("cloudControlUnderstood", false), held = CloudCameraActivity.holdsChannel();
+            alongside = p.localCamera() || ExtraCameras.forPictures(p) != null, online = p.cloudOnline == 1, agreed = settings.getBoolean("cloudControlUnderstood", false), held = CloudCameraActivity.holdsChannel();
         if (due(enabled, open, local, fresh, alongside, online, agreed, held, CloudVideo.emptyStreak(), now - CloudVideo.emptyAt(), pictureDue)) { waitingFor(""); start(p); return; }
         boolean recording = p.recorder != null && p.recorder.current() != null;
         // The first reason that applies, in the order due() checks them; "no picture due" is the normal state and not noted.

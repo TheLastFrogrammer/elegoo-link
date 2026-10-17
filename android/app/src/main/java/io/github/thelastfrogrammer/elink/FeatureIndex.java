@@ -75,6 +75,7 @@ final class FeatureIndex {
         new Feature("pictures", "Camera pictures during prints", "pictures snapshots interval photos timelapse recording camera", SETTINGS, "Recording pictures", Prepare.NONE, true),
         new Feature("alerts", "Notifications", "notifications alerts done finished fault first layer picture watch stuck stall failure temperature", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
         new Feature("automations", "Automation workshop", "automation automations rules triggers webhook webhooks tasker ifttt ntfy discord light off after print last print of the day templates share", SETTINGS, "Automation workshop", Prepare.NONE, true),
+        new Feature("addedcameras", "Add a camera", "camera cameras webcam add extra second aftermarket ip camera esp32 mjpeg snapshot go2rtc timelapse angle", PRINT, "Add a camera…", Prepare.NONE, false),
         new Feature("guardian", "Print guardian (beta)", "guardian failure detection spaghetti blob detached knocked camera ai watch print", SETTINGS, "Print guardian (beta)", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),
         new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),

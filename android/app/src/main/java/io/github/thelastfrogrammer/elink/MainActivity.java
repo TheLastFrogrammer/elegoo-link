@@ -119,6 +119,9 @@ public final class MainActivity extends Activity {
     private JSONObject renderedFiles;
     private Cc2Discovery scanning;
     private MjpegPlayer cameraPlayer;
+    /** A camera the person added, playing (Print tab or Camera section), and which one. */
+    private ExtraCameras.Feed extraFeed; private ExtraCameras.Camera extraShown;
+    private Button monitorSourceButton; private LinearLayout extraList; private ImageView extraImage; private TextView extraInfo;
     private Bitmap lastFrame, pendingSnapshot;
     private String cameraHost = "";
     private String cameraReported = "";
@@ -346,6 +349,7 @@ public final class MainActivity extends Activity {
         LinearLayout cameraButtons = row(monitorBody);
         monitorCameraStart = rowButton(cameraButtons, "Watch camera", this::monitorCameraTap, false);
         rowButton(cameraButtons, "Hide camera", () -> hideMonitorCamera(true), false);
+        monitorSourceButton = rowButton(row(monitorBody), "Camera: the printer's ▾", this::chooseMonitorSource, false); ((View) monitorSourceButton.getParent()).setVisibility(View.GONE);
         monitorShow = rowButton(row(monitorCamera), "Show camera", () -> hideMonitorCamera(false), false);
         monitorImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(monitorImage, "Show the camera full screen");
         // A dark chamber: offer the printer's light (sent only on this tap, like Light on below).
@@ -1904,6 +1908,15 @@ public final class MainActivity extends Activity {
         cameraAddress = input(settings, "Camera address on this printer", false); cameraAddress.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         cameraQuery = button(settings, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
         label(settings, "The camera stops when you leave this tab or the app goes to the background. Monitoring keeps going. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
+        LinearLayout added = card("Added cameras");
+        label(added, "Cameras beside the printer's own: a webcam, an ESP32-CAM, an IP camera or a phone, anything that gives an MJPEG stream or a JPEG snapshot over the network. One of them can take the print pictures (recordings, timelapses, notifications), in cloud mode too.", 13, MUTED, false);
+        extraInfo = A11y.polite(label(added, "", 13, INK, false)); extraInfo.setVisibility(View.GONE);
+        extraImage = new ImageView(this); extraImage.setContentDescription("Picture from an added camera"); extraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); extraImage.setBackgroundColor(Color.BLACK);
+        added.addView(extraImage, new LinearLayout.LayoutParams(-1, dp(220))); extraImage.setVisibility(View.GONE);
+        extraImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(extraImage, "Show the camera full screen");
+        extraList = new LinearLayout(this); extraList.setOrientation(LinearLayout.VERTICAL); added.addView(extraList);
+        button(added, "Add a camera…", () -> editExtraCamera(null));
+        renderExtraCameras();
         LinearLayout lineUp = card("Camera in the 3D view");
         label(lineUp, "Shows the camera picture in the 3D view. Line it up once against the real bed, with or without a print.", 13, MUTED, false);
         button(lineUp, "Line up the camera in 3D…", () -> {
@@ -1981,7 +1994,7 @@ public final class MainActivity extends Activity {
         bar.addView(b, new LinearLayout.LayoutParams(0, -2, 1)); return b;
     }
     private void stopCamera() {
-        android.app.Dialog full = fullDialog; fullDialog = null; fullView = null; if (full != null && full.isShowing()) full.dismiss(); AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); stopCloudVideo(); }
+        android.app.Dialog full = fullDialog; fullDialog = null; fullView = null; if (full != null && full.isShowing()) full.dismiss(); AutoCloseable watcher = cameraRouteWatch; cameraRouteWatch = null; cameraRoute = null; if (watcher != null) try { watcher.close(); } catch (Exception ignored) { } MjpegPlayer player = cameraPlayer; cameraPlayer = null; if (player != null) player.close(); ExtraCameras.Feed added = extraFeed; extraFeed = null; extraShown = null; if (added != null) added.close(); if (cameraStart != null) cameraStart.setText("Start camera"); if (monitorCameraStart != null) monitorCameraStart.setText("Watch camera"); stopCloudVideo(); }
     /**
      * Camera check: the facts on this phone, then one camera-access request to Elegoo (signed in) and one picture from the
      * printer's camera stream (local connection only; in cloud mode the printer's camera port is off and left alone).
@@ -2487,18 +2500,21 @@ public final class MainActivity extends Activity {
         }
         // Camera on top while printing. It starts by itself only after the user started it here once, and only while this tab is on screen.
         boolean cloudCameraOk = !ready && printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1;
-        boolean showCamera = inJobNow && (ready || cloudCameraOk);
+        ExtraCameras.Camera addedSource = monitorExtra();
+        boolean showCamera = inJobNow && (ready || cloudCameraOk || addedSource != null);
+        ((View) monitorSourceButton.getParent()).setVisibility(extraCount > 0 ? View.VISIBLE : View.GONE);
+        monitorSourceButton.setText("Camera: " + (addedSource == null ? "the printer's" : addedSource.name) + " ▾");
         monitorCamera.setVisibility(showCamera ? View.VISIBLE : View.GONE);
         boolean cameraSectionOpen = opened[PRINT] == cameraSection;   // its own Start camera keeps the stream when nothing prints
-        if (page == PRINT && (cameraPlayer != null || cloudVideo != null) && !showCamera && !cameraSectionOpen) stopCamera();
+        if (page == PRINT && (cameraPlayer != null || cloudVideo != null || extraFeed != null) && !showCamera && !cameraSectionOpen) stopCamera();
         boolean ownCamera = ready || printer != null && printer.localCamera();   // the printer's own stream, locally or alongside the cloud
         boolean cameraHidden = settings.getBoolean("printCameraHidden", false);
         monitorBody.setVisibility(cameraHidden ? View.GONE : View.VISIBLE); ((View) monitorShow.getParent()).setVisibility(cameraHidden ? View.VISIBLE : View.GONE);
-        if (page == PRINT && active && showCamera && ownCamera && !cameraHidden && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
-        if (page == PRINT && active && showCamera && !ownCamera && !cameraHidden && cloudVideo == null && !monitorCameraTried && cloudOk && settings.getBoolean("monitorCloudCamera", false)) { monitorCameraTried = true; startCloudVideo(); }
-        monitorImage.setVisibility(showCamera && (ownCamera ? cameraPlayer != null || lastFrame != null : cloudVideo != null) ? View.VISIBLE : View.GONE);
-        monitorCameraStart.setText(cameraPlayer != null || cloudVideo != null ? "Stop camera" : "Watch camera");
-        monitorBadge.setText(cloudVideo != null ? (cloudVideo.playing() ? "● Live · cloud" : "Connecting…") : cameraPlayer != null ? "● Live" : "Last picture");
+        if (page == PRINT && active && showCamera && addedSource == null && ownCamera && !cameraHidden && cameraPlayer == null && !monitorCameraTried && settings.getBoolean("monitorCamera", false)) { monitorCameraTried = true; toggleCamera(); }
+        if (page == PRINT && active && showCamera && addedSource == null && !ownCamera && !cameraHidden && cloudVideo == null && !monitorCameraTried && cloudOk && settings.getBoolean("monitorCloudCamera", false)) { monitorCameraTried = true; startCloudVideo(); }
+        monitorImage.setVisibility(showCamera && (addedSource != null ? extraFeed != null : ownCamera ? cameraPlayer != null || lastFrame != null : cloudVideo != null) ? View.VISIBLE : View.GONE);
+        monitorCameraStart.setText(cameraPlayer != null || cloudVideo != null || extraFeed != null ? "Stop camera" : "Watch camera");
+        monitorBadge.setText(extraFeed != null && extraShown != null ? "● Live · " + extraShown.name : cloudVideo != null ? (cloudVideo.playing() ? "● Live · cloud" : "Connecting…") : cameraPlayer != null ? "● Live" : "Last picture");
         // Two empty channels in a row: the printer's camera service is probably stuck; say so before the next 20 s wait.
         if (!ready && cloudVideo == null && CloudVideo.emptyStreak() >= 2) {
             monitorCameraInfo.setText("The printer's camera has not answered " + CloudVideo.emptyStreak() + " times in a row. Its camera service is probably stuck: restart the printer, then tap Watch camera.");
@@ -3053,7 +3069,141 @@ public final class MainActivity extends Activity {
         render();
     }
     /** The Print tab camera button: the local stream here (remembered for next time), or the cloud camera screen when only the cloud reaches the printer. */
+    // ------------------------------------------------------------------ cameras the person added
+    private int extraCount = -1;
+    private ExtraCameras.Camera monitorExtra() {
+        String id = settings.getString("monitorSource", "");
+        return id.isEmpty() ? null : ExtraCameras.find(this, id);
+    }
+    private void chooseMonitorSource() {
+        List<ExtraCameras.Camera> cameras = ExtraCameras.list(this);
+        String[] names = new String[cameras.size() + 1]; names[0] = "The printer's camera";
+        for (int i = 0; i < cameras.size(); i++) names[i + 1] = cameras.get(i).name;
+        new AlertDialog.Builder(this).setTitle("Camera on the Print tab").setItems(names, (d, which) -> {
+            stopCamera();
+            settings.edit().putString("monitorSource", which == 0 ? "" : cameras.get(which - 1).id).apply();
+            if (which > 0) watchExtra(cameras.get(which - 1));
+            render();
+        }).setNegativeButton("Cancel", null).show();
+    }
+    private void watchExtra(ExtraCameras.Camera camera) {
+        stopCamera();
+        extraShown = camera; long openedAt = android.os.SystemClock.elapsedRealtime(); boolean[] first = {true};
+        Diagnostics.note(Diagnostics.CAMERA, "added camera “" + camera.name + "” opening (" + camera.kind + ")");
+        String source = "the added camera “" + camera.name + "”";
+        extraFeed = ExtraCameras.open(this, camera, new MjpegPlayer.Listener() {
+            public void frame(Bitmap image) {
+                if (isDestroyed() || extraShown != camera) return;
+                lastFrame = image;
+                if (first[0]) { first[0] = false; Diagnostics.note(Diagnostics.CAMERA, "added camera “" + camera.name + "”: first picture after " + (android.os.SystemClock.elapsedRealtime() - openedAt) + " ms, " + image.getWidth() + "x" + image.getHeight()); }
+                monitorImage.setImageBitmap(image); extraImage.setImageBitmap(image); extraImage.setVisibility(View.VISIBLE);
+                extraInfo.setText("Live · " + camera.name); extraInfo.setVisibility(View.VISIBLE);
+                monitorCameraInfo.setVisibility(View.GONE);
+                if (fullView != null) fullView.setImageBitmap(image);
+                tone(image);
+                if (printer != null) printer.offerFrame(image, source);
+            }
+            public void error(String text) {
+                Diagnostics.note(Diagnostics.CAMERA, "added camera “" + camera.name + "” failed" + (first[0] ? " before any picture" : "") + ": " + Diagnostics.scrub(text));
+                stopCamera(); String said = camera.name + ": " + text;
+                extraInfo.setText(said); extraInfo.setVisibility(View.VISIBLE); monitorCameraInfo.setText(said); monitorCameraInfo.setVisibility(View.VISIBLE); render();
+            }
+        });
+        if (monitorCameraStart != null) monitorCameraStart.setText("Stop camera");
+        renderExtraCameras();
+    }
+    private void renderExtraCameras() {
+        if (extraList == null) return;
+        extraList.removeAllViews();
+        List<ExtraCameras.Camera> cameras = ExtraCameras.list(this); extraCount = cameras.size();
+        for (ExtraCameras.Camera c : cameras) {
+            label(extraList, c.name + " · " + (ExtraCameras.SNAPSHOT.equals(c.kind) ? "snapshots" : "stream") + (c.rotation != 0 ? " · turned " + c.rotation + "°" : "") + (c.pictures ? " · takes the print pictures" : ""), 14, INK, true);
+            LinearLayout line = row(extraList);
+            boolean playing = extraFeed != null && extraShown != null && extraShown.id.equals(c.id);
+            rowButton(line, playing ? "Stop" : "Watch", () -> { if (playing) stopCamera(); else watchExtra(c); renderExtraCameras(); render(); }, false);
+            rowButton(line, "Edit…", () -> editExtraCamera(c), false);
+        }
+        if (extraImage != null && extraFeed == null) extraImage.setVisibility(View.GONE);
+    }
+    /** Adds (camera null) or edits a camera: name, address, sign-in, turn; Test shows what the address serves. */
+    private void editExtraCamera(ExtraCameras.Camera existing) {
+        ExtraCameras.Camera camera = existing != null ? existing : new ExtraCameras.Camera();
+        LinearLayout body = dialogBody();
+        EditText name = input(body, "Name", false); name.setText(existing == null ? "" : camera.name); name.setHint("Side camera");
+        EditText address = input(body, "Address", false); address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        address.setText(existing == null ? "" : ExtraCameras.url(this, camera)); address.setHint("http://192.168.1.50:8080/?action=stream");
+        label(body, "For example: mjpg-streamer or a Raspberry Pi webcam http://ADDRESS:8080/?action=stream (or ?action=snapshot); go2rtc http://ADDRESS:1984/api/stream.mjpeg?src=NAME; ESP32-CAM http://ADDRESS:81/stream; an IP-webcam phone app http://ADDRESS:8080/video; an IP camera's snapshot address. RTSP is not played directly: use the camera's snapshot address or a bridge such as go2rtc.", 12, MUTED, false);
+        EditText user = input(body, "User name (if the camera asks)", false); user.setText(camera.user);
+        EditText password = input(body, existing != null && !ExtraCameras.password(this, camera).isEmpty() ? "Password (kept; blank keeps it)" : "Password (if the camera asks)", true);
+        subheading(body, "Picture");
+        Spinner turn = spinner(body, new String[] {"As it comes", "Turned 90° right", "Turned upside down", "Turned 90° left"});
+        turn.setSelection(camera.rotation / 90);
+        CheckBox mirror = checkbox(body, "Mirror (left to right)", camera.mirror);
+        CheckBox pictures = checkbox(body, "Takes the print pictures instead of the printer's camera", camera.pictures);
+        label(body, "Print pictures go into recordings, timelapses, notifications, Home Assistant and automations. The print guardian checks only pictures from the printer's own camera.", 12, MUTED, false);
+        TextView result = A11y.polite(label(body, "", 13, INK, false));
+        ImageView preview = new ImageView(this); preview.setAdjustViewBounds(true); preview.setVisibility(View.GONE); body.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
+        String[] kind = {camera.kind}; boolean[] tested = {existing != null};
+        button(body, "Test", () -> {
+            String url = address.getText().toString().trim(), problem = ExtraCameras.problem(url);
+            if (!problem.isEmpty()) { result.setText(problem); result.setTextColor(ERROR); return; }
+            String pass = password.getText().toString().isEmpty() && existing != null ? ExtraCameras.password(this, camera) : password.getText().toString();
+            result.setText("Asking the camera…"); result.setTextColor(MUTED);
+            String who = user.getText().toString().trim();
+            checks.execute(() -> {
+                Bitmap[] picture = new Bitmap[1]; String found, error = null;
+                try { found = ExtraCameras.probe(url, ExtraCameras.connections(who, pass), picture); } catch (Exception failed) { found = null; error = ExtraCameras.describe(failed); }
+                String foundKind = found, why = error;
+                main.post(() -> {
+                    if (isDestroyed()) return;
+                    if (foundKind == null) { result.setText("Not working: " + why + "."); result.setTextColor(ERROR); preview.setVisibility(View.GONE); return; }
+                    kind[0] = foundKind; tested[0] = true;
+                    Bitmap shown = ExtraCameras.turn(picture[0], turn.getSelectedItemPosition() * 90, mirror.isChecked());
+                    result.setText("Works: " + (ExtraCameras.STREAM.equals(foundKind) ? "a live MJPEG stream" : "a snapshot picture (the app asks for a new one every second)") + ", " + picture[0].getWidth() + "×" + picture[0].getHeight() + ".");
+                    result.setTextColor(TEAL); preview.setImageBitmap(shown); preview.setVisibility(View.VISIBLE);
+                });
+            });
+        });
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle(existing == null ? "Add a camera" : "Edit " + camera.name).setView(scroll)
+            .setNegativeButton("Cancel", null).setPositiveButton("Save", null);
+        if (existing != null) builder.setNeutralButton("Remove", (d, w) -> new AlertDialog.Builder(this).setTitle("Remove " + camera.name + "?")
+            .setNegativeButton("Cancel", null).setPositiveButton("Remove", (d2, w2) -> {
+                if (extraShown != null && extraShown.id.equals(camera.id)) stopCamera();
+                List<ExtraCameras.Camera> all = ExtraCameras.list(this); all.removeIf(c -> c.id.equals(camera.id)); ExtraCameras.save(this, all); ExtraCameras.forget(this, camera);
+                if (camera.id.equals(settings.getString("monitorSource", ""))) settings.edit().putString("monitorSource", "").apply();
+                Diagnostics.note(Diagnostics.CAMERA, "added camera “" + camera.name + "” removed"); renderExtraCameras(); render();
+            }).show());
+        AlertDialog dialog = builder.create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String url = address.getText().toString().trim(), problem = ExtraCameras.problem(url);
+            if (!problem.isEmpty()) { result.setText(problem); result.setTextColor(ERROR); return; }
+            if (!tested[0]) {   // not tested: guess from the address (a snapshot address usually says so)
+                String lower = url.toLowerCase(Locale.ROOT);
+                kind[0] = lower.contains("snapshot") || lower.contains("snap") || lower.contains("frame.jp") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? ExtraCameras.SNAPSHOT : ExtraCameras.STREAM;
+            }
+            camera.name = Automation.cap(name.getText().toString().trim().isEmpty() ? "Camera" : name.getText().toString().trim(), 40);
+            camera.user = user.getText().toString().trim(); camera.kind = kind[0]; camera.rotation = turn.getSelectedItemPosition() * 90; camera.mirror = mirror.isChecked();
+            camera.pictures = pictures.isChecked();
+            try { ExtraCameras.setSecrets(this, camera, url, password.getText().toString().isEmpty() && existing != null ? null : password.getText().toString()); }
+            catch (Exception failed) { result.setText("Could not keep the address safely on this phone."); result.setTextColor(ERROR); return; }
+            List<ExtraCameras.Camera> all = ExtraCameras.list(this);
+            if (camera.pictures) for (ExtraCameras.Camera c : all) c.pictures = false;   // one camera takes the pictures
+            boolean replaced = false;
+            for (int i = 0; i < all.size(); i++) if (all.get(i).id.equals(camera.id)) { all.set(i, camera); replaced = true; }
+            if (!replaced) {
+                if (all.size() >= 8) { result.setText("At most 8 added cameras."); result.setTextColor(ERROR); return; }
+                all.add(camera);
+            }
+            ExtraCameras.save(this, all);
+            Diagnostics.note(Diagnostics.CAMERA, "added camera “" + camera.name + "” " + (existing == null ? "added" : "changed") + " (" + camera.kind + (camera.pictures ? ", takes the print pictures" : "") + ")");
+            dialog.dismiss(); renderExtraCameras(); render();
+        }));
+        dialog.show();
+    }
     private void monitorCameraTap() {
+        ExtraCameras.Camera chosen = monitorExtra();
+        if (chosen != null) { if (extraFeed != null) stopCamera(); else watchExtra(chosen); render(); return; }
         if (printer != null && (printer.ready() || printer.localCamera())) {
             boolean on = cameraPlayer == null;
             settings.edit().putBoolean("monitorCamera", on).apply(); monitorCameraTried = true;

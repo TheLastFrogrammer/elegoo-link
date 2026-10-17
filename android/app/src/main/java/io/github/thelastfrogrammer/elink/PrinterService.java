@@ -106,7 +106,7 @@ public final class PrinterService extends Service {
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();
-            if (!ready() && !localCamera() && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due, but in cloud mode pictures come only while a cloud video is open (Print tab, cloud camera or Live toolpath)"); }
+            if (!ready() && !localCamera() && ExtraCameras.forPictures(this) == null && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due, but in cloud mode pictures come only while a cloud video is open (Print tab, cloud camera or Live toolpath)"); }
             grab(null);
         }
     }
@@ -121,6 +121,27 @@ public final class PrinterService extends Service {
     private void grab(Frame then) {
         if (then != null) synchronized (grabWaiting) { grabWaiting.add(then); }
         long now = SystemClock.elapsedRealtime();
+        // A camera the person added and chose for print pictures takes them instead of the printer's own, locally or through the cloud.
+        ExtraCameras.Camera extra = ExtraCameras.forPictures(this);
+        if (extra != null) {
+            if (grabbing || now < grabRetryAt) { if (!grabbing) synchronized (grabWaiting) { grabWaiting.clear(); } return; }
+            grabbing = true; long started = now;
+            ExtraCameras.grab(this, extra, new MjpegPlayer.Listener() {
+                public void frame(android.graphics.Bitmap image) {
+                    grabbing = false;
+                    if (!grabOk) { grabOk = true; Diagnostics.note(Diagnostics.CAMERA, "picture from the added camera “" + extra.name + "”: OK after " + (SystemClock.elapsedRealtime() - started) + " ms, " + image.getWidth() + "x" + image.getHeight()); }
+                    if (destroyed) return;
+                    offerFrame(image, "the added camera “" + extra.name + "”");
+                    List<Frame> waiting; synchronized (grabWaiting) { waiting = new ArrayList<>(grabWaiting); grabWaiting.clear(); }
+                    for (Frame f : waiting) f.take(image);
+                }
+                public void error(String message) {
+                    grabbing = false; grabOk = false; grabRetryAt = SystemClock.elapsedRealtime() + 30_000; synchronized (grabWaiting) { grabWaiting.clear(); }
+                    Diagnostics.note(Diagnostics.CAMERA, "picture from the added camera “" + extra.name + "” failed: " + Diagnostics.scrub(message) + "; next try in 30 s");
+                }
+            });
+            return;
+        }
         boolean viaLocal = ready();
         if (grabbing || !(viaLocal ? route != null : localCamera()) || now < grabRetryAt) {
             String why = grabbing ? "" : !(viaLocal ? route != null : localCamera()) ? (viaLocal ? "no network route to the printer" : "no local camera in cloud mode") : "waiting " + (grabRetryAt - now) / 1000 + " s after a failure";
@@ -165,7 +186,10 @@ public final class PrinterService extends Service {
     void offerFrame(android.graphics.Bitmap image, String source) {
         if (image == null) return;
         long mono = SystemClock.elapsedRealtime();
-        if (recorder != null && recorder.pictureDue(mono)) {
+        // With an added camera chosen for print pictures, only its pictures go into the recording (a timelapse stays one view).
+        ExtraCameras.Camera picturesFrom = ExtraCameras.forPictures(this);
+        boolean fromChosen = picturesFrom == null ? !source.startsWith("the added camera") : source.equals("the added camera “" + picturesFrom.name + "”");
+        if (fromChosen && recorder != null && recorder.pictureDue(mono)) {
             java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg);
             recorder.savePicture(jpeg.toByteArray(), mono, source);
         }
@@ -1643,7 +1667,7 @@ public final class PrinterService extends Service {
     private long progressGrabAt;
     private android.graphics.Bitmap progressPicture() {
         long now = SystemClock.elapsedRealtime();
-        if (ready() && (progressGrabAt == 0 || now - progressGrabAt > 120_000)) {
+        if ((ready() || ExtraCameras.forPictures(this) != null) && (progressGrabAt == 0 || now - progressGrabAt > 120_000)) {
             progressGrabAt = now;
             grab(image -> updateNotification(true));
         }
@@ -1736,6 +1760,7 @@ public final class PrinterService extends Service {
     public GuardianRun guardian;   // made in onCreate (the service has no context before)
     private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb) {
         if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("guardian", true)) return;
+        if (ExtraCameras.forPictures(this) != null) { guardian.otherCamera(); changed(); return; }   // lined up for the printer's own camera only
         JSONObject now = liveStatus(), print = now.optJSONObject("print_status"), move = now.optJSONObject("gcode_move_inf");
         int total = print == null ? 0 : print.optInt("total_layer", 0);
         double[] head = move == null ? new double[] {Double.NaN, Double.NaN, Double.NaN}

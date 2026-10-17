@@ -105,6 +105,8 @@ final class GuardianRun {
         });
     }
 
+    /** Pictures come from a camera the person added: the line-up (and so the guardian) is for the printer's own camera. */
+    void otherCamera() { verdict = "Print pictures come from an added camera, so the guardian does not check them: it is lined up for the printer's own camera."; alarmed = false; overlay = null; }
     /** Lets go of the toolpath once nothing prints. */
     void release() { if (path != null) worker.execute(() -> { path = null; pathFor = ""; }); }
     void shutdown() { worker.shutdownNow(); }
