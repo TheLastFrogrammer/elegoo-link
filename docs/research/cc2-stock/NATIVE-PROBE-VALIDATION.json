@@ -1,0 +1,60 @@
+{
+  "recorded_date": "2026-10-17",
+  "scope": "Native first-contact recorder and strict offline inventory inspector; no printer contacted",
+  "native_request": {
+    "id": 1,
+    "method": "list_endpoints",
+    "params": {},
+    "terminator_hex": "03"
+  },
+  "native_capture_is_always_unverified": true,
+  "target_reference": {
+    "stock_image": "02.01.01.07",
+    "reference_file": "/bin/busybox",
+    "sha256": "f5c1bd1509e6b04e9268c367923161136cdf69d68e9577be53838c59e3bcf5a7",
+    "elf_class": 32,
+    "endianness": "little",
+    "machine": "ARM",
+    "elf_flags": "0x05000400",
+    "attributes": "ARMv7-A; VFPv3; NEONv1; VFP argument registers",
+    "owner_installed_build_match": false
+  },
+  "limits": {
+    "connections": 1,
+    "requests": 1,
+    "saved_received_bytes": 4194304,
+    "frame_bytes": 262144,
+    "complete_frames": 512,
+    "socket_phase_ceiling_ms": 30000,
+    "filesystem_io_has_separate_hard_deadline": false
+  },
+  "local": {
+    "compiler": "cc (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0",
+    "strict_compile_and_gcc_analyzer": "passed",
+    "new_tests": 22,
+    "new_tests_passed": 19,
+    "new_tests_skipped": 3,
+    "all_research_tests": 67,
+    "all_research_tests_passed": 62,
+    "all_research_tests_skipped": 5,
+    "skip_reason": "Workspace blocks native Unix sockets; explicit skips, test-only loopback stream fixtures used; no permission bypass attempted",
+    "cross_compiler": "Not installed; local apt setup unavailable under workspace permissions. Use ordinary Linux CI runner for cross compilation."
+  },
+  "ci": {
+    "status": "pending",
+    "workflow": ".github/workflows/research-tools.yml",
+    "host_python_versions": [
+      "3.10",
+      "3.12"
+    ],
+    "target": "Static Linux ARMv7-A EABI5 hard-float with musl 1.2.6",
+    "emulator": "qemu-arm -cpu cortex-a7",
+    "artifact_name": "cc2-native-first-probe-armv7"
+  },
+  "physical_printer_qualified": false,
+  "owner_access_provided": false,
+  "temporary_executable_transfer_qualified": false,
+  "file_or_log_export_implemented": false,
+  "firmware_modified": false,
+  "startup_or_update_survival_qualified": false
+}

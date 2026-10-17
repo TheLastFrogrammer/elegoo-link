@@ -23,6 +23,103 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Native Unix sockets are available for the integration checks
-        run: python -c 'import socket; socket.socket(socket.AF_UNIX, socket.SOCK_STREAM).close()'
+        run: |
+          python - <<'PY'
+          import socket, tempfile
+          with tempfile.TemporaryDirectory() as directory:
+              with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+                  connection.bind(directory + '/qualification.sock')
+          PY
       - name: Test offline records inspection and the bounded stock-console client
+        env:
+          CC2_REQUIRE_UNIX: '1'
         run: python -m unittest discover -s tools/research/tests -v
+  native-armv7:
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - name: Install the cross compiler and userspace ARM emulator
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y gcc-arm-linux-gnueabihf qemu-user
+      - name: Build the pinned small static C library
+        run: |
+          curl --fail --location --proto '=https' --max-time 120 \
+            https://musl.libc.org/releases/musl-1.2.6.tar.gz -o "$RUNNER_TEMP/musl-1.2.6.tar.gz"
+          # Source/hash provenance: Buildroot commit 6f8f031cef37ac39a39241bd7871caf542f549be.
+          printf '%s  %s\n' d585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a \
+            "$RUNNER_TEMP/musl-1.2.6.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/musl-1.2.6.tar.gz" -C "$RUNNER_TEMP"
+          cd "$RUNNER_TEMP/musl-1.2.6"
+          CC=arm-linux-gnueabihf-gcc CFLAGS='-Os -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard' \
+            ./configure --target=arm-linux-musleabihf --prefix="$RUNNER_TEMP/cc2-musl" --disable-shared
+          make -j2
+          make install
+          printf 'CC2_MUSL_PREFIX=%s\n' "$RUNNER_TEMP/cc2-musl" >> "$GITHUB_ENV"
+      - name: Build the static first-contact probe
+        run: |
+          mkdir -p build/native-first-probe
+          "$CC2_MUSL_PREFIX/bin/musl-gcc" -std=c11 -Os -static -s \
+            -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard \
+            -D_FILE_OFFSET_BITS=64 -fstack-protector-strong \
+            -Wall -Wextra -Werror tools/research/cc2_native_probe.c \
+            -o build/native-first-probe/cc2-native-probe-armv7
+          arm-linux-gnueabihf-readelf -h -A build/native-first-probe/cc2-native-probe-armv7
+          python - <<'PY'
+          import hashlib, json, os, pathlib, struct, subprocess
+          root = pathlib.Path('build/native-first-probe')
+          binary = root / 'cc2-native-probe-armv7'
+          raw = binary.read_bytes()
+          assert len(raw) <= 2 * 1024 * 1024
+          header = struct.unpack('<16sHHIIIIIHHHHHH', raw[:52])
+          assert header[0][:6] == b'\x7fELF\x01\x01'
+          assert header[1] == 2 and header[2] == 40
+          assert header[7] & 0xff000000 == 0x05000000 and header[7] & 0x400
+          assert header[9] == 32
+          segments = [struct.unpack('<8I', raw[header[5]+i*32:header[5]+(i+1)*32]) for i in range(header[10])]
+          assert not any(segment[0] in (2, 3) for segment in segments), 'Dynamic interpreter/dependency found'
+          manifest = {
+              'format': 'cc2-native-first-probe-build-v1',
+              'source_commit': os.environ['GITHUB_SHA'],
+              'target': 'Linux ARMv7-A little-endian EABI5 hard-float; static executable',
+              'libc': {'name': 'musl', 'version': '1.2.6',
+                       'source_sha256': 'd585fd3b613c66151fc3249e8ed44f77020cb5e6c1e635a616d3f9f82460512a'},
+              'binary': binary.name, 'bytes': len(raw), 'sha256': hashlib.sha256(raw).hexdigest(),
+              'compiler': subprocess.check_output(['arm-linux-gnueabihf-gcc', '--version'], text=True).splitlines()[0],
+              'emulator': subprocess.check_output(['qemu-arm', '--version'], text=True).splitlines()[0],
+              'physical_printer_qualified': False, 'owner_access_provided': False,
+              'source_sha256': {p: hashlib.sha256(pathlib.Path('tools/research', p).read_bytes()).hexdigest()
+                                for p in ['cc2_native_probe.c', 'cc2_native_capture_inspect.py', 'cc2_console_capture.py']},
+          }
+          (root / 'BUILD-MANIFEST.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          print(json.dumps(manifest))
+          PY
+      - name: Exercise the actual ARM executable through QEMU and real Unix sockets
+        env:
+          CC2_REQUIRE_UNIX: '1'
+          CC2_NATIVE_PROBE: build/native-first-probe/cc2-native-probe-armv7
+          CC2_NATIVE_RUNNER: qemu-arm -cpu cortex-a7
+        run: python -m unittest discover -s tools/research/tests -p test_cc2_native_probe.py -v
+      - name: Package the probe, source, offline inspector and instructions
+        run: |
+          cp tools/research/cc2_native_probe.c tools/research/cc2_native_capture_inspect.py \
+            tools/research/cc2_console_capture.py tools/research/NATIVE-FIRST-PROBE.md build/native-first-probe/
+          cp "$RUNNER_TEMP/musl-1.2.6/COPYRIGHT" build/native-first-probe/musl-COPYRIGHT
+          compiler_major="$(arm-linux-gnueabihf-gcc -dumpversion | cut -d. -f1)"
+          cp "/usr/share/doc/gcc-$compiler_major-arm-linux-gnueabihf/copyright" build/native-first-probe/GCC-COPYRIGHT
+          cd build/native-first-probe
+          sha256sum cc2-native-probe-armv7 cc2_native_probe.c cc2_native_capture_inspect.py \
+            cc2_console_capture.py NATIVE-FIRST-PROBE.md BUILD-MANIFEST.json musl-COPYRIGHT GCC-COPYRIGHT > SHA256SUMS
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cc2-native-first-probe-armv7
+          path: build/native-first-probe/
+          if-no-files-found: error
+          retention-days: 30

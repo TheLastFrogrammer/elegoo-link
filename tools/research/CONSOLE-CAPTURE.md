@@ -8,6 +8,8 @@ Use an already established owner shell, an idle printer, access to its existing 
 
 A phone, Pi or laptop cannot directly open the printer's `/tmp/elegoo_uds`. A Python-capable owner environment or an independently qualified forwarding arrangement is a separate prerequisite. This tool creates neither SSH access nor forwarding, and exposes no TCP service. The [bundled `debug_window` workflow](../../docs/research/cc2-stock/CONSOLE-QUICKSTART.md) remains the initial stock-shell option when a Python runtime is absent.
 
+A separate [native first-contact recorder](NATIVE-FIRST-PROBE.md) now prepares one fixed inventory request and private bounded raw capture without printer-side Python. Its host-side inspector uses this module's strict parsing helpers. It is deliberately smaller than this full reference client and still requires an owner shell, executable transfer/startup qualification and actual printer acceptance.
+
 On a qualified environment with access to that local socket:
 
 ```sh

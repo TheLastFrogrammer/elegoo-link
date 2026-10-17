@@ -19,6 +19,8 @@ Console preparation now includes an [owner UART/shell worksheet](OWNER-CAPTURE-W
 
 The [owner-access route analysis](OWNER-ACCESS-ROUTES.md) now verifies the stock askfirst executable's direct shell-launch behavior and compares historical SSH, current UART, USB/ADB and recovery leads. Start with the installed firmware version and a bounded SSH-banner check before opening the printer.
 
+The [phone/UART next-step sequence](PHONE-UART-NEXT-STEPS.md) now incorporates the owner's completed network checks and missing adapter. A [native first-contact probe](../../../tools/research/NATIVE-FIRST-PROBE.md) prepares one fixed endpoint-inventory request without printer-side Python, with private bounded raw capture and strict offline inspection. Its ARM build/emulator qualification is separate from physical printer acceptance and owner bootstrap.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout

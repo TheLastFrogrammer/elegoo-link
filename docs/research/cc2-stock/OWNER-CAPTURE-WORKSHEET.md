@@ -38,6 +38,8 @@ Do not enable ADB, switch LAN/WAN modes, restart the printer process, install a 
 
 Use [CONSOLE-QUICKSTART.md](CONSOLE-QUICKSTART.md) for the bundled client. If a suitable Python environment already has access to the socket, the [bounded reference recorder](../../../tools/research/CONSOLE-CAPTURE.md) handles framing and evidence capture. It cannot create owner access or directly reach a printer socket from a phone/Pi.
 
+For an unchanged printer without Python, the [native first-contact probe](../../../tools/research/NATIVE-FIRST-PROBE.md) is a prepared single-inventory alternative after executable transfer/startup qualification. It records a raw capture for offline inspection on the phone. It does not send the help/list/subscription requests below; mark those as not performed rather than inferring them from advertised endpoint names.
+
 | Observation | Owner record |
 |---|---|
 | Client used and version/source fingerprint | |
