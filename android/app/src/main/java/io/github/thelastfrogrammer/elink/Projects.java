@@ -94,6 +94,8 @@ final class Projects {
     static final class Project {
         String id = UUID.randomUUID().toString(), title = "", description = "";
         boolean archived; long created, updated;
+        /** The cover page's choices (CoverPage.Options as JSON); empty for the defaults. */
+        JSONObject cover = new JSONObject();
         final List<Part> parts = new ArrayList<>();
         final List<Attachment> attachments = new ArrayList<>();
 
@@ -108,11 +110,12 @@ final class Projects {
             JSONArray partList = new JSONArray(); for (Part p : parts) partList.put(p.toJson());
             JSONArray links = new JSONArray(); for (Attachment a : attachments) links.put(new JSONObject().put("asset", a.assetId).put("part", a.partId));
             return new JSONObject().put("id", id).put("title", title).put("description", description).put("archived", archived)
-                .put("created", created).put("updated", updated).put("parts", partList).put("attachments", links);
+                .put("created", created).put("updated", updated).put("parts", partList).put("attachments", links).put("cover", cover);
         }
         static Project fromJson(JSONObject o) throws JSONException {
             Project p = new Project(); p.id = need(o, "id"); p.title = Automation.cap(o.optString("title"), 120); p.description = Automation.cap(o.optString("description"), 4000);
             p.archived = o.optBoolean("archived"); p.created = o.optLong("created"); p.updated = o.optLong("updated");
+            JSONObject cover = o.optJSONObject("cover"); if (cover != null && cover.toString().length() < 8000) p.cover = cover;
             JSONArray parts = o.optJSONArray("parts"); for (int i = 0; parts != null && i < parts.length(); i++) p.parts.add(Part.fromJson(parts.getJSONObject(i)));
             JSONArray links = o.optJSONArray("attachments");
             for (int i = 0; links != null && i < links.length(); i++) {
@@ -298,6 +301,7 @@ final class Projects {
             default: return type.startsWith("image/") ? "image" : "document";
         }
     }
+    static boolean isRole(String id) { for (String[] e : ROLES) if (e[0].equals(id)) return true; return false; }
     static String label(String[][] list, String id) { for (String[] e : list) if (e[0].equals(id)) return e[1]; return id; }
     /** A web address that can be opened: http(s) with a host. */
     static boolean webOk(String url) { return Automation.webhookUrlOk(url); }

@@ -40,6 +40,11 @@ public class ProjectsScreenTest {
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) { Button b = button(((ViewGroup) view).getChildAt(i), text); if (b != null) return b; }
         return null;
     }
+    @SuppressWarnings("unchecked") private static <T extends View> T find(View view, Class<T> type) {
+        if (type.isInstance(view)) return (T) view;
+        if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) { T t = find(((ViewGroup) view).getChildAt(i), type); if (t != null) return t; }
+        return null;
+    }
     private static void shot(Activity activity, String name) throws Exception {
         String dir = System.getProperty("screenshots", ""); if (dir.isEmpty()) return;
         View root = activity.getWindow().getDecorView();
@@ -86,6 +91,23 @@ public class ProjectsScreenTest {
         List<String> files = texts(screen.getWindow().getDecorView());
         assertTrue(files.toString(), files.contains("In: Shadow-story lamp › Retaining clip; Storage shelf"));
         shot(screen, "project-files.png");
+
+        // Cover page: drawn in the background and shown; choices kept with the project.
+        button(screen.getWindow().getDecorView(), "Overview").performClick(); settle();
+        button(screen.getWindow().getDecorView(), "Cover page…").performClick(); settle(); settle();
+        android.widget.ImageView preview = find(screen.getWindow().getDecorView(), android.widget.ImageView.class);
+        assertNotNull(preview); assertNotNull("the preview is drawn", preview.getDrawable());
+        assertTrue(preview.getContentDescription().toString().startsWith("Cover page preview: Shadow-story lamp"));
+        button(screen.getWindow().getDecorView(), "Blue").performClick(); settle(); settle();
+        assertEquals("#1565C0", screen.bookForTest().project(lamp.id).cover.getString("accent"));
+        shot(screen, "project-cover.png");
+        button(screen.getWindow().getDecorView(), "‹ Shadow-story lamp").performClick(); settle();
+        button(screen.getWindow().getDecorView(), "Share or export…").performClick(); settle();
+        android.app.AlertDialog share = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
+        assertNotNull(button(share.getWindow().getDecorView(), "Share the project file…"));
+        assertNotNull(button(share.getWindow().getDecorView(), "Share as text (the outline)"));
+        share.dismiss();
+        button(screen.getWindow().getDecorView(), "Files (3)").performClick(); settle();
 
         // Made again (rotation): the same screen comes back.
         controller.recreate(); settle();

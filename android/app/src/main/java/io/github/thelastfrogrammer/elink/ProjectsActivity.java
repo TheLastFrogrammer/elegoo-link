@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.database.Cursor;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -25,8 +26,8 @@ import java.util.concurrent.Executors;
  */
 public final class ProjectsActivity extends Activity {
     static final String EXTRA_PROJECT = "project", EXTRA_ADD_PATH = "addPath", EXTRA_ADD_NAME = "addName";
-    private static final int PICK_COPY = 1, PICK_LINK = 2, PICK_RELINK = 3, EXPORT = 4;
-    private static final String HOME = "home", OVERVIEW = "overview", PARTS = "parts", FILES = "files", PART = "part", UNASSIGNED = "unassigned", ARCHIVED = "archived";
+    private static final int PICK_COPY = 1, PICK_LINK = 2, PICK_RELINK = 3, EXPORT = 4, SAVE_ARCHIVE = 5, IMPORT = 6, SAVE_COVER_PNG = 7, SAVE_COVER_PDF = 8;
+    private static final String HOME = "home", OVERVIEW = "overview", PARTS = "parts", FILES = "files", PART = "part", UNASSIGNED = "unassigned", ARCHIVED = "archived", COVER = "cover";
 
     private final Handler main = new Handler(Looper.getMainLooper());
     /** Reads, copies, hashes and saves, one at a time and in order. */
@@ -40,6 +41,8 @@ public final class ProjectsActivity extends Activity {
     private String pickProject = "", pickPart = "", relinkAsset = "", exportAsset = "";
     /** A file handed over from another screen (a recent slice), waiting for a project to go into. */
     private String handedPath, handedName;
+    /** A project file from another app, waiting for the projects to load. */
+    private Uri incoming;
     /** Linked files' state, checked in the background: available, permission needed, missing, changed. */
     private final Map<String, String> availability = new HashMap<>();
 
@@ -56,10 +59,13 @@ public final class ProjectsActivity extends Activity {
         } else {
             String wanted = getIntent().getStringExtra(EXTRA_PROJECT); if (wanted != null) { projectId = wanted; screen = OVERVIEW; }
             handedPath = getIntent().getStringExtra(EXTRA_ADD_PATH); handedName = getIntent().getStringExtra(EXTRA_ADD_NAME);
+            // A project file opened or shared from another app: read, then added only when the person says so.
+            Intent in = getIntent(); Uri shared = Intent.ACTION_VIEW.equals(in.getAction()) ? in.getData() : Intent.ACTION_SEND.equals(in.getAction()) ? in.getParcelableExtra(Intent.EXTRA_STREAM) : null;
+            if (shared != null) incoming = shared;
         }
         if (android.os.Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::back);
         ui.label(content, "Loading projects…", 14, ui.muted, false);
-        worker.execute(() -> { Projects.Book loaded = Projects.load(dir); main.post(() -> { if (isDestroyed()) return; book = loaded; render(); if (handedPath != null) offerHanded(); }); });
+        worker.execute(() -> { Projects.Book loaded = Projects.load(dir); main.post(() -> { if (isDestroyed()) return; book = loaded; render(); if (handedPath != null) offerHanded(); if (incoming != null) { Uri u = incoming; incoming = null; importFrom(u); } }); });
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
@@ -70,6 +76,7 @@ public final class ProjectsActivity extends Activity {
     /** Back goes up one screen (part to parts, project to the list) before it leaves. */
     private void back() {
         if (screen.equals(PART)) { screen = PARTS; render(); }
+        else if (screen.equals(COVER)) { screen = OVERVIEW; render(); }
         else if (!screen.equals(HOME)) { screen = HOME; render(); }
         else finish();
     }
@@ -87,6 +94,7 @@ public final class ProjectsActivity extends Activity {
     }
     private long now() { return System.currentTimeMillis(); }
     private void toast(String text) { Toast.makeText(this, text, Toast.LENGTH_LONG).show(); }
+    Projects.Book bookForTest() { return book; }
     private Projects.Project project() { return book == null ? null : book.project(projectId); }
 
     // ------------------------------------------------------------------ screens
@@ -100,6 +108,7 @@ public final class ProjectsActivity extends Activity {
             case UNASSIGNED: unassigned(); break;
             case ARCHIVED: home(true); break;
             case OVERVIEW: case PARTS: case FILES: projectScreen(project); break;
+            case COVER: coverScreen(project); break;
             case PART: { Projects.Part part = project.part(partId); if (part == null) { screen = PARTS; projectScreen(project); } else partScreen(project, part); break; }
             default: home(false);
         }
@@ -108,7 +117,7 @@ public final class ProjectsActivity extends Activity {
     private void home(boolean archived) {
         A11y.heading(ui.label(content, archived ? "Archived projects" : "Projects", 22, ui.ink, true));
         ui.label(content, archived ? "Projects put away. Open one to bring it back." : "Plan what you are making: its parts (even before they have a model), how many of each, and the files and links that belong to it.", 13, ui.muted, false);
-        if (!archived) ui.button(content, "New project", this::newProject, true);
+        if (!archived) { LinearLayout row = ui.row(content); ui.rowButton(row, "New project", this::newProject, true); ui.rowButton(row, "Import a project…", this::importPick, false); }
         int shown = 0;
         for (Projects.Project p : book.projects) {
             if (p.archived != archived) continue;
@@ -191,6 +200,11 @@ public final class ProjectsActivity extends Activity {
         LinearLayout row = ui.row(next);
         ui.rowButton(row, "Add planned part", () -> editPart(p, null), true);
         ui.rowButton(row, "Add files", () -> addFiles(p, ""), false);
+        LinearLayout share = ui.card(content, "Share");
+        ui.label(share, "Send the project to someone (or another phone) as one file they can import, or as a plain outline; and make a cover page.", 13, ui.muted, false);
+        LinearLayout shareRow = ui.row(share);
+        ui.rowButton(shareRow, "Share or export…", () -> exportDialog(p), true);
+        ui.rowButton(shareRow, "Cover page…", () -> { screen = COVER; render(); }, false);
         ui.button(content, p.archived ? "Bring back from the archive" : "Archive this project", () -> { p.archived = !p.archived; p.updated = now(); save(); render(); }, false);
         ui.button(content, "Delete this project…", () -> deleteProject(p), false);
     }
@@ -455,6 +469,9 @@ public final class ProjectsActivity extends Activity {
         super.onActivityResult(request, result, data);
         if (result != RESULT_OK || data == null || book == null) return;
         if (request == EXPORT) { exportTo(data.getData()); return; }
+        if (request == SAVE_ARCHIVE) { writeArchive(data.getData()); return; }
+        if (request == IMPORT) { if (data.getData() != null) importFrom(data.getData()); return; }
+        if (request == SAVE_COVER_PNG || request == SAVE_COVER_PDF) { saveCover(data.getData(), request == SAVE_COVER_PDF); return; }
         List<Uri> uris = new ArrayList<>();
         if (data.getClipData() != null) for (int i = 0; i < data.getClipData().getItemCount(); i++) uris.add(data.getClipData().getItemAt(i).getUri());
         else if (data.getData() != null) uris.add(data.getData());
@@ -590,6 +607,232 @@ public final class ProjectsActivity extends Activity {
             } catch (Exception failed) { said = "Could not save the copy: " + failed.getMessage(); }
             String text = said; main.post(() -> toast(text));
         });
+    }
+
+    // ------------------------------------------------------------------ share, export and import
+
+    private ProjectArchive.Options exportOptions = new ProjectArchive.Options();
+    private boolean exportCover = true;
+    private void exportDialog(Projects.Project p) {
+        LinearLayout body = form();
+        long kept = 0; int linked = 0, web = 0, keptCount = 0;
+        for (String id : p.allAssets()) { Projects.Asset a = book.asset(id); if (a == null) continue;
+            if (a.storage.equals(Projects.MANAGED)) { kept += Math.max(0, a.size); keptCount++; } else if (a.storage.equals(Projects.EXTERNAL)) linked++; else web++; }
+        ui.label(body, "One file (" + ProjectArchive.EXTENSION + ") with the parts, notes and files, which Link Workshop on another phone imports as a new project.", 13, ui.muted, false);
+        CheckBox files = check(body, "Include the files kept in the app (" + keptCount + ", " + size(kept) + ")", exportOptions.keptFiles); files.setEnabled(keptCount > 0);
+        CheckBox links = check(body, "Include web links (" + web + ")", exportOptions.webLinks); links.setEnabled(web > 0);
+        CheckBox notes = check(body, "Include notes and the description", exportOptions.notes);
+        CheckBox cover = check(body, "Include the cover page", exportCover);
+        if (linked > 0) ui.label(body, linked + (linked == 1 ? " linked file stays" : " linked files stay") + " out: they are on this phone only. The project lists them so they can be added again.", 12, ui.muted, false);
+        ui.label(body, "Web links go in as they are: leave them out if one holds a private key.", 12, ui.muted, false);
+        Runnable take = () -> { exportOptions.keptFiles = files.isChecked(); exportOptions.webLinks = links.isChecked(); exportOptions.notes = notes.isChecked(); exportCover = cover.isChecked(); };
+        AlertDialog[] dialog = new AlertDialog[1];
+        ui.button(body, "Share the project file…", () -> { take.run(); dialog[0].dismiss(); shareArchive(p); }, true);
+        ui.button(body, "Save the project file…", () -> { take.run(); dialog[0].dismiss(); pickProject = p.id;
+            Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(ProjectArchive.MIME).putExtra(Intent.EXTRA_TITLE, fileName(p.title) + ProjectArchive.EXTENSION);
+            try { startActivityForResult(save, SAVE_ARCHIVE); } catch (android.content.ActivityNotFoundException none) { toast("No file saver is available on this phone."); } }, false);
+        ui.button(body, "Share as text (the outline)", () -> { take.run(); dialog[0].dismiss();
+            startActivity(Intent.createChooser(new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, p.title)
+                .putExtra(Intent.EXTRA_TEXT, ProjectArchive.outline(book, p, exportOptions.notes)), "Share " + p.title)); }, false);
+        dialog[0] = new AlertDialog.Builder(this).setTitle("Share " + p.title).setView(scroll(body)).setNegativeButton("Close", null).show();
+    }
+    private CheckBox check(LinearLayout parent, String text, boolean on) {
+        CheckBox box = new CheckBox(this); box.setText(text); box.setTextColor(ui.ink); box.setMinHeight(ui.dp(48)); box.setChecked(on); parent.addView(box); return box;
+    }
+    static String fileName(String title) { String t = title.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim(); return t.isEmpty() ? "project" : Automation.cap(t, 80); }
+    private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return ""; } }
+    /** Writes the archive (with the cover page if wanted) to `out`, in the background, then runs `done` with the report or the error. */
+    private void writeArchiveTo(Projects.Project p, java.util.concurrent.Callable<java.io.OutputStream> target, java.util.function.BiConsumer<ProjectArchive.Report, String> done) {
+        String text; try { text = book.toJson(); } catch (Exception impossible) { return; }
+        ProjectArchive.Options options = new ProjectArchive.Options(); options.keptFiles = exportOptions.keptFiles; options.webLinks = exportOptions.webLinks; options.notes = exportOptions.notes;
+        boolean withCover = exportCover; String id = p.id, app = appVersion();
+        toast("Preparing " + p.title + "…");
+        worker.execute(() -> {
+            ProjectArchive.Report report = null; String problem = null;
+            try {
+                Projects.Book copy = Projects.Book.fromJson(text); Projects.Project project = copy.project(id);
+                if (withCover) options.coverPng = CoverPage.png(CoverPage.content(copy, project, CoverPage.Options.fromJson(project.cover), now()), CoverPage.Options.fromJson(project.cover), coverPicture(copy, project));
+                try (java.io.OutputStream out = target.call()) { report = ProjectArchive.export(dir, copy, project, options, out, app, now()); }
+            } catch (Exception failed) { problem = failed.getMessage() == null ? failed.getClass().getSimpleName() : failed.getMessage(); }
+            ProjectArchive.Report r = report; String why = problem;
+            main.post(() -> { if (!isDestroyed()) done.accept(r, why); });
+        });
+    }
+    private void shareArchive(Projects.Project p) {
+        File out = ShareProvider.fresh(this, fileName(p.title) + ProjectArchive.EXTENSION);
+        writeArchiveTo(p, () -> new java.io.FileOutputStream(out), (report, problem) -> {
+            if (report == null) { toast("Could not make the project file: " + problem); return; }
+            Uri uri = ShareProvider.uriFor(this, out);
+            Intent send = new Intent(Intent.ACTION_SEND).setType(ProjectArchive.MIME).putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, p.title)
+                .putExtra(Intent.EXTRA_TEXT, p.title + ": a Link Workshop project (" + report.describe() + ")").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            send.setClipData(android.content.ClipData.newRawUri(p.title, uri));
+            startActivity(Intent.createChooser(send, "Share " + p.title));
+        });
+    }
+    private void writeArchive(Uri target) {
+        Projects.Project p = book.project(pickProject); if (p == null || target == null) return;
+        writeArchiveTo(p, () -> getContentResolver().openOutputStream(target), (report, problem) -> toast(report == null ? "Could not save the project file: " + problem : "Saved: " + report.describe()));
+    }
+    private void importPick() {
+        Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+            .putExtra(Intent.EXTRA_MIME_TYPES, new String[] {ProjectArchive.MIME, "application/zip", "application/octet-stream"});
+        try { startActivityForResult(pick, IMPORT); } catch (android.content.ActivityNotFoundException none) { toast("No file picker is available on this phone."); }
+    }
+    /** Reads a project file (copied to the cache first), shows what it holds, and adds it only when the person says so. */
+    private void importFrom(Uri uri) {
+        File copy = new File(getCacheDir(), "import" + ProjectArchive.EXTENSION);
+        toast("Reading the project file…");
+        worker.execute(() -> {
+            ProjectArchive.Imported read = null; String problem = null;
+            try (InputStream in = getContentResolver().openInputStream(uri); java.io.OutputStream out = new java.io.FileOutputStream(copy)) {
+                if (in == null) throw new java.io.IOException("it could not be opened");
+                byte[] buffer = new byte[65536]; long total = 0; int n;
+                while ((n = in.read(buffer)) > 0) { total += n; if (total > ProjectArchive.MAX_TOTAL + 64L * 1024 * 1024) throw new java.io.IOException("it is too large"); out.write(buffer, 0, n); }
+                out.close();
+                read = ProjectArchive.read(copy, dir, now());
+            } catch (Exception failed) { problem = failed.getMessage() == null ? failed.getClass().getSimpleName() : failed.getMessage(); }
+            finally { copy.delete(); }
+            ProjectArchive.Imported got = read; String why = problem;
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (got == null) { new AlertDialog.Builder(this).setTitle("Not imported").setMessage("The project file could not be read: " + why).setPositiveButton("OK", null).show(); return; }
+                new AlertDialog.Builder(this).setTitle("Import “" + got.title + "”?").setMessage(got.report.describe() + "\n\nIt is added as a new project; nothing here is replaced.")
+                    .setNegativeButton("Cancel", (d, w) -> worker.execute(() -> { for (Projects.Asset a : got.assets) if (a.storage.equals(Projects.MANAGED)) Projects.deleteBytes(dir, a); }))
+                    .setPositiveButton("Import", (d, w) -> {
+                        List<Projects.Asset> duplicates = ProjectArchive.adopt(book, got);
+                        worker.execute(() -> { for (Projects.Asset a : duplicates) Projects.deleteBytes(dir, a); });
+                        save(); projectId = got.project.id; screen = OVERVIEW; render();
+                    }).setCancelable(false).show();
+            });
+        });
+    }
+
+    // ------------------------------------------------------------------ cover page
+
+    private ImageView coverPreview; private TextView coverStatus; private int coverDrawn;
+    private void coverScreen(Projects.Project p) {
+        ui.button(content, "‹ " + p.title, () -> { screen = OVERVIEW; render(); }, false);
+        A11y.heading(ui.label(content, "Cover page", 22, ui.ink, true));
+        CoverPage.Options o = CoverPage.Options.fromJson(p.cover);
+        coverPreview = new ImageView(this); coverPreview.setAdjustViewBounds(true); coverPreview.setBackgroundColor(ui.surface);
+        content.addView(coverPreview, new LinearLayout.LayoutParams(-1, -2));
+        coverStatus = A11y.polite(ui.label(content, "Drawing…", 12, ui.muted, false));
+        LinearLayout row = ui.row(content);
+        ui.rowButton(row, "Share…", () -> shareCover(p), true);
+        ui.rowButton(row, "Save PNG…", () -> saveCoverPick(p, false), false);
+        ui.rowButton(row, "Save PDF…", () -> saveCoverPick(p, true), false);
+
+        LinearLayout look = ui.card(content, "Look");
+        ui.label(look, "Style", 13, ui.ink, false);
+        List<String> styles = new ArrayList<>(); int style = 0; for (int i = 0; i < CoverPage.STYLES.length; i++) { styles.add(CoverPage.STYLES[i][1]); if (CoverPage.STYLES[i][0].equals(o.style)) style = i; }
+        Spinner styleSpinner = ui.spinner(look, styles, style);
+        ui.label(look, "Colour", 13, ui.ink, false);
+        LinearLayout swatches = new LinearLayout(this); swatches.setOrientation(LinearLayout.HORIZONTAL);
+        HorizontalScrollView swatchScroll = new HorizontalScrollView(this); swatchScroll.addView(swatches); look.addView(swatchScroll);
+        for (String[] accent : CoverPage.ACCENTS) {
+            Button b = new Button(this); b.setText(accent[1]); b.setAllCaps(false); b.setTextColor(android.graphics.Color.WHITE); b.setMinHeight(ui.dp(48));
+            android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setCornerRadius(ui.dp(12)); shape.setColor(android.graphics.Color.parseColor(accent[0]));
+            if (accent[0].equals(o.accent)) shape.setStroke(ui.dp(4), ui.ink);
+            b.setBackground(shape); b.setContentDescription(accent[1] + (accent[0].equals(o.accent) ? ", chosen" : ""));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2); lp.rightMargin = ui.dp(8); swatches.addView(b, lp);
+            b.setOnClickListener(v -> { o.accent = accent[0]; keepCover(p, o); render(); });
+        }
+        ui.label(look, "Page", 13, ui.ink, false);
+        List<String> pages = new ArrayList<>(); int page = 0; for (int i = 0; i < CoverPage.PAGES.length; i++) { pages.add((String) CoverPage.PAGES[i][1]); if (CoverPage.PAGES[i][0].equals(o.page)) page = i; }
+        Spinner pageSpinner = ui.spinner(look, pages, page);
+        ui.label(look, "Picture", 13, ui.ink, false);
+        List<Projects.Asset> images = new ArrayList<>(); for (String id : p.allAssets()) { Projects.Asset a = book.asset(id); if (a != null && a.role.equals("image") && a.storage.equals(Projects.MANAGED)) images.add(a); }
+        List<String> pictureNames = new ArrayList<>(Collections.singletonList(images.isEmpty() ? "None (add an image to the project's files)" : "None")); int pic = 0;
+        for (int i = 0; i < images.size(); i++) { pictureNames.add(images.get(i).name); if (images.get(i).id.equals(o.picture)) pic = i + 1; }
+        Spinner pictureSpinner = ui.spinner(look, pictureNames, pic);
+        CheckBox large = check(look, "Large title", o.largeTitle);
+
+        LinearLayout words = ui.card(content, "Words");
+        EditText subtitle = field(words, "Subtitle (empty: the project's description)", o.subtitle, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        EditText maker = field(words, "Made by (optional)", o.maker, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        EditText footer = field(words, "Footer (optional): a link, a licence, a note", o.footer, InputType.TYPE_CLASS_TEXT);
+        ui.button(words, "Use these words", () -> { o.subtitle = Automation.cap(subtitle.getText().toString().trim(), 200); o.maker = Automation.cap(maker.getText().toString().trim(), 80);
+            o.footer = Automation.cap(footer.getText().toString().trim(), 200); keepCover(p, o); drawCover(p, o); }, false);
+
+        LinearLayout show = ui.card(content, "What it shows");
+        for (String[] section : CoverPage.SECTIONS) {
+            CheckBox box = check(show, section[1], o.sections.contains(section[0]));
+            box.setOnCheckedChangeListener((v, on) -> { if (on) o.sections.add(section[0]); else o.sections.remove(section[0]); keepCover(p, o); drawCover(p, o); });
+        }
+        AdapterView.OnItemSelectedListener changed = new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> a, View v, int position, long id) {
+                String nextStyle = CoverPage.STYLES[Math.max(0, styleSpinner.getSelectedItemPosition())][0], nextPage = (String) CoverPage.PAGES[Math.max(0, pageSpinner.getSelectedItemPosition())][0];
+                int pi = pictureSpinner.getSelectedItemPosition(); String nextPicture = pi <= 0 || pi > images.size() ? "" : images.get(pi - 1).id;
+                if (nextStyle.equals(o.style) && nextPage.equals(o.page) && nextPicture.equals(o.picture)) return;
+                o.style = nextStyle; o.page = nextPage; o.picture = nextPicture; keepCover(p, o); drawCover(p, o);
+            }
+            public void onNothingSelected(AdapterView<?> a) { }
+        };
+        styleSpinner.setOnItemSelectedListener(changed); pageSpinner.setOnItemSelectedListener(changed); pictureSpinner.setOnItemSelectedListener(changed);
+        large.setOnCheckedChangeListener((v, on) -> { o.largeTitle = on; keepCover(p, o); drawCover(p, o); });
+        drawCover(p, o);
+    }
+    private void keepCover(Projects.Project p, CoverPage.Options o) { try { p.cover = o.toJson(); save(); } catch (Exception impossible) { } }
+    /** The cover's picture: a kept image of the project, read at most about 1600 pixels across. */
+    private Bitmap coverPicture(Projects.Book from, Projects.Project p) {
+        CoverPage.Options o = CoverPage.Options.fromJson(p.cover);
+        Projects.Asset a = o.picture.isEmpty() ? null : from.asset(o.picture); File f = a == null ? null : Projects.managedFile(dir, a);
+        if (f == null || !f.isFile()) return null;
+        android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options(); bounds.inJustDecodeBounds = true; android.graphics.BitmapFactory.decodeFile(f.getPath(), bounds);
+        android.graphics.BitmapFactory.Options read = new android.graphics.BitmapFactory.Options(); read.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(1, Math.max(bounds.outWidth, bounds.outHeight) / 1600)));
+        return android.graphics.BitmapFactory.decodeFile(f.getPath(), read);
+    }
+    /** Draws the cover in the background and shows it; only the latest drawing is shown. */
+    private void drawCover(Projects.Project p, CoverPage.Options o) {
+        int ticket = ++coverDrawn; CoverPage.Content c = CoverPage.content(book, p, o, now());
+        String picture = o.picture; Projects.Asset a = picture.isEmpty() ? null : book.asset(picture);
+        CoverPage.Options copy = CoverPage.Options.fromJson(safeJson(o));
+        worker.execute(() -> {
+            Bitmap image = null;
+            if (a != null) { Projects.Book one = new Projects.Book(); one.assets.add(a); Projects.Project q = new Projects.Project(); q.cover = safeJson(copy); image = coverPicture(one, q); }
+            Bitmap page = CoverPage.render(c, copy, image);
+            int w = Math.min(1080, page.getWidth()); Bitmap shown = Bitmap.createScaledBitmap(page, w, Math.round(page.getHeight() * (w / (float) page.getWidth())), true);
+            if (shown != page) page.recycle();
+            main.post(() -> {
+                if (isDestroyed() || ticket != coverDrawn || coverPreview == null) return;
+                coverPreview.setImageBitmap(shown);
+                coverPreview.setContentDescription("Cover page preview: " + c.title + (c.subtitle.isEmpty() ? "" : ", " + c.subtitle) + ". " + (c.parts.size() + c.purchased.size() + c.tasks.size()) + " items listed.");
+                coverStatus.setText(copy.page()[1] + " · " + copy.width() + " × " + copy.height() + " px");
+            });
+        });
+    }
+    private static org.json.JSONObject safeJson(CoverPage.Options o) { try { return o.toJson(); } catch (Exception e) { return new org.json.JSONObject(); } }
+    /** Renders the full-size cover in the background and hands over PNG bytes or writes a PDF. */
+    private void coverBytes(Projects.Project p, boolean pdf, java.util.concurrent.Callable<java.io.OutputStream> target, Runnable after) {
+        CoverPage.Options o = CoverPage.Options.fromJson(p.cover); CoverPage.Content c = CoverPage.content(book, p, o, now());
+        String text; try { text = book.toJson(); } catch (Exception impossible) { return; }
+        String id = p.id;
+        worker.execute(() -> {
+            String said = null;
+            try (java.io.OutputStream out = target.call()) {
+                Projects.Book copy = Projects.Book.fromJson(text); Bitmap image = coverPicture(copy, copy.project(id));
+                if (pdf) CoverPage.pdf(c, o, image, out); else out.write(CoverPage.png(c, o, image));
+            } catch (Exception failed) { said = "Could not make the cover page: " + failed.getMessage(); }
+            String problem = said; main.post(() -> { if (problem != null) toast(problem); else after.run(); });
+        });
+    }
+    private void shareCover(Projects.Project p) {
+        File out = ShareProvider.fresh(this, fileName(p.title) + " cover.png");
+        coverBytes(p, false, () -> new java.io.FileOutputStream(out), () -> {
+            Uri uri = ShareProvider.uriFor(this, out);
+            Intent send = new Intent(Intent.ACTION_SEND).setType("image/png").putExtra(Intent.EXTRA_STREAM, uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            send.setClipData(android.content.ClipData.newRawUri(p.title, uri));
+            startActivity(Intent.createChooser(send, "Share the cover page"));
+        });
+    }
+    private void saveCoverPick(Projects.Project p, boolean pdf) {
+        pickProject = p.id;
+        Intent save = new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType(pdf ? "application/pdf" : "image/png").putExtra(Intent.EXTRA_TITLE, fileName(p.title) + " cover" + (pdf ? ".pdf" : ".png"));
+        try { startActivityForResult(save, pdf ? SAVE_COVER_PDF : SAVE_COVER_PNG); } catch (android.content.ActivityNotFoundException none) { toast("No file saver is available on this phone."); }
+    }
+    private void saveCover(Uri target, boolean pdf) {
+        Projects.Project p = book.project(pickProject); if (p == null || target == null) return;
+        coverBytes(p, pdf, () -> getContentResolver().openOutputStream(target), () -> toast("Saved the cover page."));
     }
 
     /** A fresh file into the book (main thread); a copy whose bytes are already kept is dropped and the kept one used. */

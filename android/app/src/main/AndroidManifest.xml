@@ -47,7 +47,16 @@
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
-        <activity android:name=".ProjectsActivity" android:exported="false" android:label="Projects" />
+        <activity android:name=".ProjectsActivity" android:exported="true" android:label="Projects">
+            <!-- A shared project file (.lwproject) opened or shared from another app: imported only after the person confirms. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/vnd.linkworkshop.project+zip" />
+            </intent-filter>
+        </activity>
+        <provider android:name=".ShareProvider" android:authorities="${applicationId}.share" android:exported="false" android:grantUriPermissions="true" />
         <activity android:name=".LogsActivity" android:exported="false" android:label="Logs" />
         <activity android:name=".AutomationActivity" android:exported="false" android:label="Automation workshop" />
         <activity android:name=".FieldCheckActivity" android:exported="false" android:label="Field check" />
