@@ -1921,7 +1921,7 @@ public final class MainActivity extends Activity {
         label(lineUp, "Shows the camera picture in the 3D view. Line it up once against the real bed, with or without a print.", 13, MUTED, false);
         button(lineUp, "Line up the camera in 3D…", () -> {
             if (printer == null) return;
-            Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true)); };
+            Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true).putExtra(GcodeViewerActivity.EXTRA_CAMERA, "")); };
             cloudGate(!printer.ready() && printer.usingCloud(), open);
         });
     }
@@ -3122,6 +3122,9 @@ public final class MainActivity extends Activity {
             boolean playing = extraFeed != null && extraShown != null && extraShown.id.equals(c.id);
             rowButton(line, playing ? "Stop" : "Watch", () -> { if (playing) stopCamera(); else watchExtra(c); renderExtraCameras(); render(); }, false);
             rowButton(line, "Edit…", () -> editExtraCamera(c), false);
+            rowButton(line, "Line up in 3D…", () -> { if (printer == null) return;
+                Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true).putExtra(GcodeViewerActivity.EXTRA_CAMERA, c.id)); };
+                cloudGate(!printer.ready() && printer.usingCloud(), open); }, false);
         }
         if (extraImage != null && extraFeed == null) extraImage.setVisibility(View.GONE);
     }
@@ -3140,7 +3143,7 @@ public final class MainActivity extends Activity {
         turn.setSelection(camera.rotation / 90);
         CheckBox mirror = checkbox(body, "Mirror (left to right)", camera.mirror);
         CheckBox pictures = checkbox(body, "Takes the print pictures instead of the printer's camera", camera.pictures);
-        label(body, "Print pictures go into recordings, timelapses, notifications, Home Assistant and automations. The print guardian checks only pictures from the printer's own camera.", 12, MUTED, false);
+        label(body, "Print pictures go into recordings, timelapses, notifications, Home Assistant and automations. The print guardian checks them once this camera is lined up in 3D (Line up in 3D…).", 12, MUTED, false);
         TextView result = A11y.polite(label(body, "", 13, INK, false));
         ImageView preview = new ImageView(this); preview.setAdjustViewBounds(true); preview.setVisibility(View.GONE); body.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
         String[] kind = {camera.kind}; boolean[] tested = {existing != null};

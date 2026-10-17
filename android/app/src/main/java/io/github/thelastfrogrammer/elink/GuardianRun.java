@@ -76,8 +76,15 @@ final class GuardianRun {
         small.getPixels(rgb, 0, PrintGuardian.W, 0, 0, PrintGuardian.W, PrintGuardian.H);
 
         android.content.SharedPreferences hints = context.getSharedPreferences("viewer-hints", Context.MODE_PRIVATE);
-        boolean linedUp = hints.getInt("cameraSpot", 0) == GcodeViewerActivity.LINED_UP && !GcodeViewerActivity.savedPoints(hints).isEmpty();
-        double[] camera = GcodeViewerActivity.cameraFor(hints, path.layerZ(at));
+        // The camera that takes the print pictures (an added one, or the printer's own) and its own line-up.
+        ExtraCameras.Camera added = ExtraCameras.forPictures(context);
+        String id = added == null ? "" : added.id;
+        boolean linedUp = GcodeViewerActivity.linedUp(hints, id);
+        if (added != null && !linedUp) {
+            verdict = "Print pictures come from “" + added.name + "”. Line it up in Live toolpath (More…, Camera: " + added.name + ", then Line up the camera by hand) so the guardian can check them.";
+            return;
+        }
+        double[] camera = GcodeViewerActivity.cameraFor(hints, path.layerZ(at), id);
         int filament = trayRgb;
         if (filament < 0) { String hex = path.filamentColour(0); if (hex != null) filament = Integer.parseInt(hex.substring(1), 16); }
         if (filament < 0) { verdict = "The filament's colour is not known, so the guardian cannot tell filament from background."; return; }
@@ -88,7 +95,7 @@ final class GuardianRun {
         PrintGuardian.Result result = PrintGuardian.analyse(rgb, filament, expected, bed, headMask);
         boolean raise = watch.add(result, at + 1);
         checks++; alarmed = watch.alarmed;
-        verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.");
+        verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")");
         overlay = overlay(rgb, result);
         if (checks == 1 || checks % 10 == 0 || raise)
             Diagnostics.note(Diagnostics.GUARDIAN, "check " + checks + " at layer " + layer + ": print area " + Math.round(result.coverage * 100) + " % filament, bed " + Math.round(result.outside * 1000) / 10.0

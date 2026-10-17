@@ -40,7 +40,7 @@ import org.json.JSONObject;
  * printed part, and the rest of the current layer shows as a ghost ahead of the nozzle.
  */
 public final class GcodeViewerActivity extends Activity implements PrinterService.Observer {
-    static final String EXTRA_FILE = "file", EXTRA_NAME = "name", EXTRA_FOLLOW = "follow", EXTRA_ALIGN = "align";
+    static final String EXTRA_FILE = "file", EXTRA_NAME = "name", EXTRA_FOLLOW = "follow", EXTRA_ALIGN = "align", EXTRA_CAMERA = "camera";
     private static final int CHOOSE = 1;
     private static final String ORIGIN = "https://appassets.androidplatform.net";
     /** Feature colors in GcodeToolpath.FEATURES order; also sent to the viewer page. */
@@ -75,6 +75,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private double alignZ;
     private CameraFrames cameraFrames;
     private boolean cameraStarted, cameraCloud;
+    /** The added camera playing in the view, or null (the printer's own camera or none). */
+    private ExtraCameras.Camera addedCamera;
     private int frameNumber;
 
     private final ServiceConnection connection = new ServiceConnection() {
@@ -115,6 +117,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         followMode = getIntent().getBooleanExtra(EXTRA_FOLLOW, false);
         alignOnly = followMode && getIntent().getBooleanExtra(EXTRA_ALIGN, false);
         following = followMode;
+        // The camera shown: the one asked for (an added camera's "Line up in 3D…"), else the last one chosen here.
+        String askedCamera = getIntent().getStringExtra(EXTRA_CAMERA);
+        if (askedCamera != null) viewerPrefs().edit().putString("viewCamera", askedCamera).apply();
+        camId = viewerPrefs().getString("viewCamera", "");
+        if (!camId.isEmpty() && ExtraCameras.find(this, camId) == null) { camId = ""; viewerPrefs().edit().putString("viewCamera", "").apply(); }
         // The live preview opens as it was left: line types shown, travel moves, and (once loaded) the view itself.
         if (followMode) { hidden = viewerPrefs().getInt("liveHidden", hidden); showTravel = viewerPrefs().getBoolean("liveTravel", showTravel); }
         build();
@@ -293,10 +300,19 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         return new WebResourceResponse(type, null, new ByteArrayInputStream(body));
     }
 
+    /** An added camera's picture turned and mirrored as it is set to be (the printer's own pictures pass as they are). */
+    private byte[] turned(byte[] jpeg) {
+        ExtraCameras.Camera added = addedCamera;
+        if (jpeg == null || added == null || added.rotation == 0 && !added.mirror) return jpeg;
+        try {
+            android.graphics.Bitmap picture = ExtraCameras.turn(ExtraCameras.decode(jpeg), added.rotation, added.mirror);
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(); picture.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, out); return out.toByteArray();
+        } catch (Exception unreadable) { return jpeg; }
+    }
     /** The newest camera picture for the scene; the page asks for one only after it has shown the previous one. */
     private WebResourceResponse serveFrame(String name) {
         CameraFrames frames = cameraFrames;
-        byte[] frame = frames == null || !name.startsWith("frame.jpg") ? null : frames.take();
+        byte[] frame = frames == null || !name.startsWith("frame.jpg") ? null : turned(frames.take());
         if (frame == null) return new WebResourceResponse("text/plain", "utf-8", 404, "Not found", null, new ByteArrayInputStream(new byte[0]));
         return new WebResourceResponse("image/jpeg", null, new ByteArrayInputStream(frame));
     }
@@ -418,20 +434,33 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
      * value (so how the camera relates to the bed is measured, not assumed); with one, or with a preset, the camera simply
      * sits higher above the bed by as much as the bed went down.
      */
-    private double[] currentParams() { return cameraFor(viewerPrefs(), bedZ); }
+    private double[] currentParams() { return cameraFor(viewerPrefs(), bedZ, camId); }
+    /**
+     * Which camera the view shows and lines up: "" for the printer's own, else an added camera's id. Each camera keeps its
+     * own line-up (and picture delay) under its own keys.
+     */
+    private String camId = "";
+    static String camKey(String base, String id) { return id == null || id.isEmpty() ? base : base + "@" + id; }
+    private String ck(String base) { return camKey(base, camId); }
+    /** Where an added camera starts before it is lined up: above the front of the bed (the printer's own starts at its real spot). */
+    static int defaultSpot(String id) { return id == null || id.isEmpty() ? 0 : 4; }
+    static double[] cameraFor(android.content.SharedPreferences prefs, double bedZ) { return cameraFor(prefs, bedZ, ""); }
     /** The camera (as lined up in this viewer, else the chosen spot) for the bed at height bedZ; also used by the print guardian. */
-    static double[] cameraFor(android.content.SharedPreferences prefs, double bedZ) {
-        int spot = prefs.getInt("cameraSpot", 0);
-        java.util.List<double[]> points = spot == LINED_UP ? savedPoints(prefs) : java.util.Collections.emptyList();
+    static double[] cameraFor(android.content.SharedPreferences prefs, double bedZ, String id) {
+        int spot = prefs.getInt(camKey("cameraSpot", id), defaultSpot(id));
+        java.util.List<double[]> points = spot == LINED_UP ? savedPoints(prefs, id) : java.util.Collections.emptyList();
         if (!points.isEmpty()) return modelAt(points, bedZ);
-        double[] c = spotParams(spot == LINED_UP ? 0 : spot); c[2] += bedZ; return c;
+        double[] c = spotParams(spot == LINED_UP ? defaultSpot(id) : spot); c[2] += bedZ; return c;
     }
+    /** Whether this camera has been lined up by hand (so the picture and the toolpath match). */
+    static boolean linedUp(android.content.SharedPreferences prefs, String id) { return prefs.getInt(camKey("cameraSpot", id), defaultSpot(id)) == LINED_UP && !savedPoints(prefs, id).isEmpty(); }
     /** Saved line-ups as {bed Z, x, y, height above the bed, turn, tilt, view angle, lens}. */
-    private java.util.List<double[]> savedPoints() { return savedPoints(viewerPrefs()); }
-    static java.util.List<double[]> savedPoints(android.content.SharedPreferences prefs) {
-        java.util.List<double[]> points = parsePoints(prefs.getString("cameraPoints", null));
+    private java.util.List<double[]> savedPoints() { return savedPoints(viewerPrefs(), camId); }
+    static java.util.List<double[]> savedPoints(android.content.SharedPreferences prefs) { return savedPoints(prefs, ""); }
+    static java.util.List<double[]> savedPoints(android.content.SharedPreferences prefs, String id) {
+        java.util.List<double[]> points = parsePoints(prefs.getString(camKey("cameraPoints", id), null));
         if (points.isEmpty()) {   // v0.14.5 kept one line-up with the bed at 0
-            double[] old = parseParams(prefs.getString("cameraCustomBed0", null));
+            double[] old = parseParams(prefs.getString(camKey("cameraCustomBed0", id), null));
             if (old != null) { double[] point = new double[9]; System.arraycopy(old, 0, point, 1, 8); points.add(point); }
         }
         return points;
@@ -486,6 +515,22 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void startCamera() {
         if (!cameraWanted() || cameraStarted || printer == null || web == null || !pageReady || path == null && !alignOnly) return;
         if (aligning == null) try { web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
+        ExtraCameras.Camera added = camId.isEmpty() ? null : ExtraCameras.find(this, camId);
+        if (added != null) {
+            // A camera the person added: its stream or snapshots, with its own line-up.
+            String url = ExtraCameras.url(this, added);
+            if (!ExtraCameras.problem(url).isEmpty()) { cameraMessage("The camera “" + added.name + "” has no usable address. Edit it in Print, Camera, Added cameras."); return; }
+            PrinterHttp.ConnectionFactory factory = ExtraCameras.connections(added.user, ExtraCameras.password(this, added));
+            cameraStarted = true; cameraCloud = false; addedCamera = added;
+            CameraFrames.Listener listener = new CameraFrames.Listener() {
+                public void frame() { main.post(() -> { if (web != null && cameraFrames != null) { web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); frameAt = System.currentTimeMillis(); keepLocalPicture(); } }); }
+                public void error(String message) { main.post(() -> { cameraStarted = false; cameraFrames = null; cameraMessage(added.name + ": " + message + " Check it in Print, Camera, Added cameras."); }); }
+            };
+            cameraFrames = ExtraCameras.SNAPSHOT.equals(added.kind) ? CameraFrames.snapshots(url, factory, 1000, listener) : new CameraFrames(url, factory, listener);
+            cameraMessage("Camera: " + added.name + (linedUp(viewerPrefs(), camId) ? "." : ". Line it up by hand (More…, Line up the camera by hand) so the picture matches the toolpath."));
+            return;
+        }
+        addedCamera = null;
         if (printer.ready() || printer.localCamera()) {
             // Locally, or alongside the cloud when the printer's own stream was found to work on this Wi-Fi.
             boolean alongside = !printer.ready();
@@ -533,7 +578,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void stopCamera() {
         CameraFrames frames = cameraFrames; cameraFrames = null; if (frames != null) frames.close();
         if (cameraStarted && cameraCloud && web != null) web.evaluateJavascript("viewer.cameraStop()", null);
-        cameraStarted = false;
+        cameraStarted = false; addedCamera = null;
     }
     private void cameraMessage(String text) {
         if (text == null || text.isEmpty()) return;
@@ -545,12 +590,26 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         viewerPrefs().edit().putBoolean("camera", on).apply();
         if (on) startCamera(); else { stopCamera(); if (web != null) web.evaluateJavascript("viewer.showPrinterCamera(null)", null); }
     }
+    private ExtraCameras.Camera addedOrNull() { return camId.isEmpty() ? null : ExtraCameras.find(this, camId); }
+    /** The printer's own camera or an added one; each keeps its own line-up. */
+    private void chooseCamera() {
+        List<ExtraCameras.Camera> cameras = ExtraCameras.list(this);
+        String[] names = new String[cameras.size() + 1]; names[0] = "The printer's camera";
+        for (int i = 0; i < cameras.size(); i++) names[i + 1] = cameras.get(i).name + (linedUp(viewerPrefs(), cameras.get(i).id) ? " (lined up)" : " (not lined up yet)");
+        new AlertDialog.Builder(this).setTitle("Camera in the view").setItems(names, (d, which) -> {
+            stopCamera();
+            camId = which == 0 ? "" : cameras.get(which - 1).id;
+            viewerPrefs().edit().putString("viewCamera", camId).apply();
+            if (!cameraWanted()) viewerPrefs().edit().putBoolean("camera", true).apply();
+            startCamera(); sendLockstep();
+        }).setNegativeButton("Cancel", null).show();
+    }
     private void cameraSpotDialog() {
         new AlertDialog.Builder(this).setTitle("Where is the camera?")
-            .setSingleChoiceItems(CAMERA_SPOTS, viewerPrefs().getInt("cameraSpot", 0), (d, which) -> {
+            .setSingleChoiceItems(CAMERA_SPOTS, viewerPrefs().getInt(ck("cameraSpot"), defaultSpot(camId)), (d, which) -> {
                 d.dismiss();
                 if (which == LINED_UP) { startAligning(); return; }
-                viewerPrefs().edit().putInt("cameraSpot", which).apply();
+                viewerPrefs().edit().putInt(ck("cameraSpot"), which).apply();
                 try { if (web != null && cameraWanted()) web.evaluateJavascript("viewer.showPrinterCamera(" + livePose(currentParams()) + ")", null); } catch (Exception ignored) { }
             }).setNegativeButton("Cancel", null).show();
     }
@@ -693,7 +752,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         alignSheet.addView(rule, new LinearLayout.LayoutParams(-1, dp(1)));
         LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); buttons.setPadding(dp(16), dp(4), dp(16), dp(12));
         rowButton(buttons, "Cancel", () -> finishAligning(false));
-        Button reset = rowButton(buttons, "Reset", () -> { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
+        Button reset = rowButton(buttons, "Reset", () -> { aligning = spotParams(defaultSpot(camId)); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); });
         reset.setContentDescription("Reset to the default camera");
         primaryButton(buttons, "Save", this::saveLineUp);
         alignSheet.addView(buttons);
@@ -907,7 +966,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
      * Taps saved at other bed heights (one set per height), so a fit can use them all: the camera stays on the frame while
      * the bed moves, so they describe one camera whose height above the bed changes by exactly the bed's Z.
      */
-    private java.util.List<CameraFit.TapSet> savedTaps() { return parseTaps(viewerPrefs().getString("cameraTaps", null)); }
+    private java.util.List<CameraFit.TapSet> savedTaps() { return parseTaps(viewerPrefs().getString(ck("cameraTaps"), null)); }
     static java.util.List<CameraFit.TapSet> parseTaps(String text) {
         java.util.List<CameraFit.TapSet> sets = new java.util.ArrayList<>();
         if (text == null) return sets;
@@ -980,7 +1039,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
     private String bedText() {
         String now = bed.describe(System.currentTimeMillis()) + " ";
-        java.util.List<CameraFit.TapSet> taps = viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedTaps() : java.util.Collections.emptyList();
+        java.util.List<CameraFit.TapSet> taps = viewerPrefs().getInt(ck("cameraSpot"), defaultSpot(camId)) == LINED_UP ? savedTaps() : java.util.Collections.emptyList();
         if (!taps.isEmpty()) {
             StringBuilder heights = new StringBuilder();
             for (CameraFit.TapSet set : taps) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.0f", set.z));
@@ -988,13 +1047,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 + "Tapping at heights far apart (Z 5, 100, 200) pins it down best.";
         }
         StringBuilder heights = new StringBuilder();
-        if (viewerPrefs().getInt("cameraSpot", 0) == LINED_UP) for (double[] point : savedPoints()) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.1f", point[0]));
+        if (viewerPrefs().getInt(ck("cameraSpot"), defaultSpot(camId)) == LINED_UP) for (double[] point : savedPoints()) heights.append(heights.length() > 0 ? ", " : "").append(String.format(Locale.getDefault(), "%.1f", point[0]));
         return now + (heights.length() == 0 ? "No line-ups saved yet." : "Line-ups saved at bed Z " + heights + " mm.")
             + " Line up from taps and Save at two or more bed heights (use Move the bed below): the taps from all of them are fitted as one camera.";
     }
     private void forgetLineUps() {
-        viewerPrefs().edit().remove("cameraPoints").remove("cameraTaps").remove("cameraCustomBed0").putInt("cameraSpot", 0).apply();
-        if (aligning != null) { aligning = spotParams(0); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); }
+        viewerPrefs().edit().remove(ck("cameraPoints")).remove(ck("cameraTaps")).remove(ck("cameraCustomBed0")).putInt(ck("cameraSpot"), defaultSpot(camId)).apply();
+        if (aligning != null) { aligning = spotParams(defaultSpot(camId)); aligning[2] += bedZ; for (int i = 0; i < ALIGN_NAMES.length; i++) syncAlignRow(i); pushAlign(); }
     }
     /**
      * Save, if the bed's height is known. Taps made now are only kept at a confirmed height; a line-up made with the sliders
@@ -1016,8 +1075,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             // With taps (from any height), the camera is one camera on the frame: saved once, it follows the bed exactly.
             // Without, as before: a line-up per bed height, fitted with a line.
             java.util.List<double[]> points = !sets.isEmpty() ? addPoint(new java.util.ArrayList<>(), alignZ, aligning)
-                : addPoint(viewerPrefs().getInt("cameraSpot", 0) == LINED_UP ? savedPoints() : new java.util.ArrayList<>(), alignZ, aligning);
-            viewerPrefs().edit().putString("cameraPoints", pointsJson(points)).putString("cameraTaps", tapsJson(sets)).remove("cameraCustomBed0").putInt("cameraSpot", LINED_UP).apply();
+                : addPoint(viewerPrefs().getInt(ck("cameraSpot"), defaultSpot(camId)) == LINED_UP ? savedPoints() : new java.util.ArrayList<>(), alignZ, aligning);
+            viewerPrefs().edit().putString(ck("cameraPoints"), pointsJson(points)).putString(ck("cameraTaps"), tapsJson(sets)).remove(ck("cameraCustomBed0")).putInt(ck("cameraSpot"), LINED_UP).apply();
             Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "bed height for this line-up: %s, Z %s, status %d s old",
                 bed.state(System.currentTimeMillis()), bed.homed() ? "homed" : "not homed", Math.max(-1, bed.age(System.currentTimeMillis()) / 1000)));
             Diagnostics.note(Diagnostics.FOLLOW, String.format(Locale.ROOT, "camera lined up by hand at bed Z %.2f; all line-ups {bed Z, x, y, height, turn, tilt, view, lens}: %s", alignZ, pointsJson(points)));
@@ -1102,7 +1161,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             return new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(frameAt)) + " · arrival (stream has no time)";
         if (delay <= 0) return "delay not known";
         String when = new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date(System.currentTimeMillis() - delay));
-        boolean measured = viewerPrefs().getBoolean("autoDelay", true) && measuredDelay > 0;
+        boolean measured = viewerPrefs().getBoolean(ck("autoDelay"), true) && measuredDelay > 0;
         return String.format(Locale.getDefault(), "%s · %.1f s behind · %s", when, delay / 1000.0, measured ? "measured" : "manual");
     }
     private void load(File file, String name) {
@@ -1212,10 +1271,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private int measuredDelay; private long liveAt;
     private TextView delayNote;
     /** How long the drawing waits for the camera: the measured cloud delay when that is chosen and known, otherwise the slider. */
-    private long effectiveDelay() { return viewerPrefs().getBoolean("autoDelay", true) && measuredDelay > 0 ? measuredDelay : viewerPrefs().getInt("liveDelay", 0) * 100L; }
+    private long effectiveDelay() { return viewerPrefs().getBoolean(ck("autoDelay"), true) && measuredDelay > 0 ? measuredDelay : viewerPrefs().getInt(ck("liveDelay"), 0) * 100L; }
     /** Lockstep: the page keeps the live positions with their times and draws each camera picture's moment itself. */
     private String delayText() {
-        boolean auto = viewerPrefs().getBoolean("autoDelay", true);
+        boolean auto = viewerPrefs().getBoolean(ck("autoDelay"), true);
         return measuredDelay > 0 ? String.format(Locale.getDefault(), "Cloud camera delay measured now: %.1f s%s", measuredDelay / 1000.0, auto ? " (used instead of the slider)." : " (not used; the slider is).")
             : "Measured only for the cloud camera, once its video plays; until then the slider is used.";
     }
@@ -1229,7 +1288,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** Through the cloud, the print's recording takes its camera pictures from the cloud video shown here (locally the service takes them). */
     private boolean picturing;
     private void takeCloudPicture() {
-        if (picturing || printer == null || printer.recorder == null || printer.ready() || web == null || !pageReady) return;
+        if (picturing || printer == null || printer.recorder == null || printer.ready() || web == null || !pageReady || addedCamera != null || ExtraCameras.forPictures(this) != null) return;
         long mono = android.os.SystemClock.elapsedRealtime();
         if (!printer.recorder.pictureDue(mono)) return;
         picturing = true;
@@ -1246,8 +1305,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** Locally the printer gives one camera stream at a time: while it plays here, the print's recording takes its pictures from it. */
     private void keepLocalPicture() {
         if (printer == null || printer.recorder == null || cameraFrames == null) return;
+        // Only the camera chosen for print pictures (the printer's own unless an added one is), so a timelapse keeps one view.
+        ExtraCameras.Camera pictures = ExtraCameras.forPictures(this), added = addedCamera;
+        if (added != null ? pictures == null || !pictures.id.equals(added.id) : pictures != null) return;
         long mono = android.os.SystemClock.elapsedRealtime();
-        if (printer.recorder.pictureDue(mono)) printer.recorder.savePicture(cameraFrames.latest(), mono, "Live toolpath's camera stream");
+        if (printer.recorder.pictureDue(mono)) printer.recorder.savePicture(turned(cameraFrames.latest()), mono, added != null ? "the added camera “" + added.name + "”" : "Live toolpath's camera stream");
     }
     private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
     private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }
@@ -1290,9 +1352,11 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (followMode) {
             boolean on = cameraWanted();
             groupHeading(body, "Camera");
-            moreButton(body, dialog, on ? "Hide the printer's camera" : "Show the printer's camera in the view", this::toggleCamera);
+            List<ExtraCameras.Camera> cameras = ExtraCameras.list(this);
+            if (!cameras.isEmpty()) moreButton(body, dialog, "Camera: " + (addedOrNull() == null ? "the printer's" : addedOrNull().name) + "…", this::chooseCamera);
+            moreButton(body, dialog, on ? "Hide the camera" : "Show the camera in the view", this::toggleCamera);
             if (on) {
-                moreButton(body, dialog, "Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt("cameraSpot", 0)))] + "…", this::cameraSpotDialog);
+                moreButton(body, dialog, "Camera position: " + CAMERA_SPOTS[Math.max(0, Math.min(CAMERA_SPOTS.length - 1, viewerPrefs().getInt(ck("cameraSpot"), defaultSpot(camId))))] + "…", this::cameraSpotDialog);
                 moreButton(body, dialog, "Look from the camera", () -> { if (web != null) web.evaluateJavascript("viewer.setView('printer')", null); });
                 moreButton(body, dialog, "Camera overlay: grid and strength…", this::overlayDialog);
                 moreButton(body, dialog, "Line up the camera by hand…", this::startAligning);
@@ -1436,7 +1500,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             // Delay in tenths of a second, 0–10 s.
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink); body.addView(label);   // above: − slider + below
-            SeekBar bar = new SeekBar(this); bar.setMax(100); bar.setProgress(viewerPrefs().getInt("liveDelay", 0));
+            SeekBar bar = new SeekBar(this); bar.setMax(100); bar.setProgress(viewerPrefs().getInt(ck("liveDelay"), 0));
             bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
             row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1)); A11y.labelFor(label, bar);
             Runnable showValue = () -> { String v = String.format(Locale.getDefault(), "%.1f s", bar.getProgress() / 10.0); label.setText("Delay to match the camera: " + v); A11y.state(bar, v); };
@@ -1446,20 +1510,20 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 Button nudge = new Button(this); nudge.setText(step < 0 ? "−" : "+"); nudge.setTextSize(18); nudge.setTextColor(teal); nudge.setMinWidth(dp(48)); nudge.setMinimumWidth(dp(48));
                 GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12)); nudge.setBackground(shape);
                 nudge.setContentDescription(step < 0 ? "Less delay, a tenth of a second" : "More delay, a tenth of a second");
-                nudge.setOnClickListener(v -> { int value = Math.max(0, Math.min(100, bar.getProgress() + step)); bar.setProgress(value); viewerPrefs().edit().putInt("liveDelay", value).apply(); showValue.run(); });
+                nudge.setOnClickListener(v -> { int value = Math.max(0, Math.min(100, bar.getProgress() + step)); bar.setProgress(value); viewerPrefs().edit().putInt(ck("liveDelay"), value).apply(); showValue.run(); });
                 LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(56), -2); nudge.setMinHeight(dp(48)); nudge.setMinimumHeight(dp(48)); nudge.setPadding(0, 0, 0, 0);
                 if (step < 0) row.addView(nudge, 0, size); else row.addView(nudge, size);
             }
             bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
-                @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (fromUser) { viewerPrefs().edit().putInt("liveDelay", value).apply(); showValue.run(); } }
+                @Override public void onProgressChanged(SeekBar b, int value, boolean fromUser) { if (fromUser) { viewerPrefs().edit().putInt(ck("liveDelay"), value).apply(); showValue.run(); } }
                 @Override public void onStartTrackingTouch(SeekBar b) { }
                 @Override public void onStopTrackingTouch(SeekBar b) { }
             });
             body.addView(row);
             label(body, "If the printhead in the picture trails the drawing, raise this until they move together. Often 2–5 s through the cloud.", 12, muted, false);
             android.widget.CheckBox auto = new android.widget.CheckBox(this); auto.setTextColor(ink); auto.setMinHeight(dp(48));
-            auto.setText("Use the cloud camera's measured delay"); auto.setChecked(viewerPrefs().getBoolean("autoDelay", true));
-            auto.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean("autoDelay", on).apply(); delayNote.setText(delayText()); sendLockstep(); });
+            auto.setText("Use the cloud camera's measured delay"); auto.setChecked(viewerPrefs().getBoolean(ck("autoDelay"), true));
+            auto.setOnCheckedChangeListener((v, on) -> { viewerPrefs().edit().putBoolean(ck("autoDelay"), on).apply(); delayNote.setText(delayText()); sendLockstep(); });
             body.addView(auto);
             delayNote = A11y.polite(label(body, delayText(), 12, muted, false));
             android.widget.CheckBox step = new android.widget.CheckBox(this); step.setTextColor(ink); step.setMinHeight(dp(48));

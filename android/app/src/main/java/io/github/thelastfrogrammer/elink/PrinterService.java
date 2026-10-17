@@ -1760,7 +1760,6 @@ public final class PrinterService extends Service {
     public GuardianRun guardian;   // made in onCreate (the service has no context before)
     private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb) {
         if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("guardian", true)) return;
-        if (ExtraCameras.forPictures(this) != null) { guardian.otherCamera(); changed(); return; }   // lined up for the printer's own camera only
         JSONObject now = liveStatus(), print = now.optJSONObject("print_status"), move = now.optJSONObject("gcode_move_inf");
         int total = print == null ? 0 : print.optInt("total_layer", 0);
         double[] head = move == null ? new double[] {Double.NaN, Double.NaN, Double.NaN}
