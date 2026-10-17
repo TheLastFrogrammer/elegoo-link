@@ -17,6 +17,8 @@ The second follow-on is implemented in Android v0.65.0 source: [retained-file id
 
 Console preparation now includes an [owner UART/shell worksheet](OWNER-CAPTURE-WORKSHEET.md) and a [bounded console reference recorder](../../../tools/research/CONSOLE-CAPTURE.md). The recorder needs an established local access path and Python 3.10+; a Python runtime is not confirmed in the stock image. Protocol/fixture validation is separate from printer qualification.
 
+The [owner-access route analysis](OWNER-ACCESS-ROUTES.md) now verifies the stock askfirst executable's direct shell-launch behavior and compares historical SSH, current UART, USB/ADB and recovery leads. Start with the installed firmware version and a bounded SSH-banner check before opening the printer.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout

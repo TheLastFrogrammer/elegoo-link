@@ -1,0 +1,218 @@
+{
+  "baseline": "stock CC2 02.01.01.07",
+  "rootfs_sha256": "20375a79e1ee2748f43fd39a62e5a48b23b945ed048dbe52a54d0a1f37b1acae",
+  "firmware_executed": false,
+  "printer_contacted": false,
+  "files": {
+    "/etc/inittab": {
+      "sha256": "e27a334193973696bc63468c9c7df8b61da3509b6c8c158bcd105f182f6c3cea",
+      "bytes": 169
+    },
+    "/etc/profile": {
+      "sha256": "800e2bb90cf3a6e1f7ab0fbcf5ca2e4ce4efd91da78b7607b9895c6f4311eb48",
+      "bytes": 984
+    },
+    "/etc/rc.local": {
+      "sha256": "17d7b9cf93ba8853f41ab3bc84ef1dc61b5bbf309cb78137c5fe1ea6b7bf33d8",
+      "bytes": 1132
+    },
+    "/sbin/init": {
+      "sha256": "ba87b2632eed9057d43abb43624e774a3ca7ebfe9076150ecddcb2a22e3b3977",
+      "bytes": 17952
+    },
+    "/sbin/procd": {
+      "sha256": "70f6b9edc09823b1eff7d9c7bfdaa3f2f84e3538c28d092e049d2819d24609d8",
+      "bytes": 60052
+    },
+    "/sbin/askfirst": {
+      "sha256": "75ac13ee340dec69ad45dd785ee735262512de8cb6df8df3daa290c20f83e657",
+      "bytes": 5472
+    },
+    "/sbin/swupdate_cmd.sh": {
+      "sha256": "24425006f8c3b00d30d2b7e847633a989962df8615b08f366094b4f5f514a8f4",
+      "bytes": 3021
+    },
+    "/lib/preinit/99_10_failsafe_login": {
+      "sha256": "7fc7017da751ef6fe8010126b71633333372208f776cfe2bb42f200220782717",
+      "bytes": 449
+    }
+  },
+  "configured_console_actions": [
+    "tts/0::askfirst:/bin/ash --login",
+    "ttyS2::askfirst:/bin/ash --login",
+    "tty1::askfirst:/bin/ash --login"
+  ],
+  "askfirst_plt": {
+    "0x4f8": "__cxa_finalize",
+    "0x504": "getchar",
+    "0x510": "execvp",
+    "0x51c": "puts",
+    "0x528": "__libc_start_main",
+    "0x534": "__gmon_start__",
+    "0x540": "__printf_chk",
+    "0x54c": "abort"
+  },
+  "askfirst_main": [
+    {
+      "address": "0x558",
+      "mnemonic": "push",
+      "operands": "{r4, r5, r6, lr}"
+    },
+    {
+      "address": "0x55c",
+      "mnemonic": "mov",
+      "operands": "r5, r0"
+    },
+    {
+      "address": "0x560",
+      "mnemonic": "ldr",
+      "operands": "r0, [pc, #0x5c]"
+    },
+    {
+      "address": "0x564",
+      "mnemonic": "mov",
+      "operands": "r4, r1"
+    },
+    {
+      "address": "0x568",
+      "mnemonic": "add",
+      "operands": "r0, pc, r0"
+    },
+    {
+      "address": "0x56c",
+      "mnemonic": "bl",
+      "operands": "#0x51c"
+    },
+    {
+      "address": "0x570",
+      "mnemonic": "bl",
+      "operands": "#0x504"
+    },
+    {
+      "address": "0x574",
+      "mnemonic": "cmn",
+      "operands": "r0, #1"
+    },
+    {
+      "address": "0x578",
+      "mnemonic": "beq",
+      "operands": "#0x5a0"
+    },
+    {
+      "address": "0x57c",
+      "mnemonic": "cmp",
+      "operands": "r0, #0xa"
+    },
+    {
+      "address": "0x580",
+      "mnemonic": "bne",
+      "operands": "#0x570"
+    },
+    {
+      "address": "0x584",
+      "mnemonic": "cmp",
+      "operands": "r5, #1"
+    },
+    {
+      "address": "0x588",
+      "mnemonic": "bgt",
+      "operands": "#0x5a8"
+    },
+    {
+      "address": "0x58c",
+      "mnemonic": "ldr",
+      "operands": "r1, [pc, #0x34]"
+    },
+    {
+      "address": "0x590",
+      "mnemonic": "ldr",
+      "operands": "r2, [r4]"
+    },
+    {
+      "address": "0x594",
+      "mnemonic": "add",
+      "operands": "r1, pc, r1"
+    },
+    {
+      "address": "0x598",
+      "mnemonic": "mov",
+      "operands": "r0, #1"
+    },
+    {
+      "address": "0x59c",
+      "mnemonic": "bl",
+      "operands": "#0x540"
+    },
+    {
+      "address": "0x5a0",
+      "mnemonic": "mvn",
+      "operands": "r0, #0"
+    },
+    {
+      "address": "0x5a4",
+      "mnemonic": "pop",
+      "operands": "{r4, r5, r6, pc}"
+    },
+    {
+      "address": "0x5a8",
+      "mnemonic": "ldr",
+      "operands": "r0, [r4, #4]"
+    },
+    {
+      "address": "0x5ac",
+      "mnemonic": "add",
+      "operands": "r1, r4, #4"
+    },
+    {
+      "address": "0x5b0",
+      "mnemonic": "bl",
+      "operands": "#0x510"
+    },
+    {
+      "address": "0x5b4",
+      "mnemonic": "ldr",
+      "operands": "r1, [pc, #0x10]"
+    },
+    {
+      "address": "0x5b8",
+      "mnemonic": "ldr",
+      "operands": "r2, [r4, #4]"
+    },
+    {
+      "address": "0x5bc",
+      "mnemonic": "add",
+      "operands": "r1, pc, r1"
+    },
+    {
+      "address": "0x5c0",
+      "mnemonic": "b",
+      "operands": "#0x598"
+    }
+  ],
+  "ash_symlink_target": "busybox",
+  "server_inventory": {
+    "sshd_named_paths": [],
+    "openssh_client_metadata": [
+      "/usr/lib/opkg/info/openssh-client-utils.control",
+      "/usr/lib/opkg/info/openssh-client-utils.list",
+      "/usr/lib/opkg/info/openssh-client.conffiles",
+      "/usr/lib/opkg/info/openssh-client.control",
+      "/usr/lib/opkg/info/openssh-client.list",
+      "/usr/lib/opkg/info/openssh-keygen.control",
+      "/usr/lib/opkg/info/openssh-keygen.list",
+      "/usr/lib/opkg/info/openssh-moduli.control",
+      "/usr/lib/opkg/info/openssh-moduli.list"
+    ],
+    "sshd_account_is_not_server_evidence": true
+  },
+  "interpretation": {
+    "direct_shell": "Configured action invokes ash in login-shell mode; the inspected askfirst main waits for LF then execvp(argv[1], argv+1), with no authentication step in that function. Confirm the actual prompt and UID on hardware.",
+    "unproven": [
+      "physical header to ttyS2 mapping",
+      "signal logic voltage",
+      "actual installed image and overlays",
+      "owner network services and credentials"
+    ],
+    "stale_hooks": "rc.local debug-install command is commented and target install.sh is absent. Failsafe script names Dropbear, but no corresponding named binaries appear in this inventory. Neither establishes a stock remote login route."
+  }
+}
