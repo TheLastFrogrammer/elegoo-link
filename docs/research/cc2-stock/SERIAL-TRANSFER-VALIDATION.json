@@ -21,7 +21,47 @@
     "binary_executed": false
   },
   "ci_validation": {
-    "status": "pending new packaged workflow run"
+    "status": "passed",
+    "run": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39042718858",
+    "source_commit": "3edc40afd742c68170393c4a89a16f01101ef034",
+    "tested_tree": "813fa87aad730c25674e986aeda7eec25c57409d",
+    "host_jobs": [
+      {
+        "job_id": 117425267032,
+        "python": "3.10",
+        "tests_passed": 80,
+        "skipped": 0
+      },
+      {
+        "job_id": 117425267123,
+        "python": "3.12",
+        "tests_passed": 80,
+        "skipped": 0
+      }
+    ],
+    "arm_job": {
+      "job_id": 117425329119,
+      "tests_passed": 22,
+      "skipped": 0,
+      "emulator": "qemu-arm -cpu cortex-a7",
+      "actual_static_arm_binary": true
+    },
+    "logs_inspected": true,
+    "artifact": {
+      "artifact_id": 12104951503,
+      "zip_bytes": 85786,
+      "zip_sha256": "c589c5b40196235c2a2d7f90de6815e2a35f3b9b3684fedd372a28611a7273e7",
+      "packaged_files": 15,
+      "checksums_verified": 14,
+      "source_matches_tested_checkout": true,
+      "binary_bytes": 25852,
+      "binary_sha256": "523dac21dee64fa942ff4fcd9514925c08915d80ef62b68da877f3515f6d76ad",
+      "stage_id": "523dac21dee6-1",
+      "native_printer_executed": false
+    },
+    "artifact_download": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39042718858/artifacts/12104951503",
+    "artifact_expires_at": "2026-11-16T14:55:22Z",
+    "qualification": "Host and emulator software checks only. Actual printer, stock BusyBox/terminal transfer, shell privilege and WAN coexistence remain unverified."
   },
   "device_qualification": {
     "owner_shell": false,

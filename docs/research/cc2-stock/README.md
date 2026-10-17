@@ -25,6 +25,8 @@ Native qualification checkpoint: [run 39039995345](https://github.com/TheLastFro
 
 The [deeper stock connection and sourcing pass](CONNECTION-SOURCING.md) recovers kernel UART numbering/baud behavior, the conditional PF regulator path and exact BusyBox transfer applets. A new [serial transfer tool](../../../tools/research/SERIAL-TRANSFER.md) prepares a temporary native-probe upload and recovers the three fixed capture files with printer-side size/hash checks. The CI bundle includes ready-generated snippets for its actual ARM binary. The guide also compares exact adapter SKUs, prices and phone connection requirements.
 
+Transfer qualification: [run 39042718858](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39042718858) passed all 80 research tests on each host Python version and all 22 ARM/QEMU probe tests, zero skips. The [downloadable bundle](https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39042718858/artifacts/12104951503) was independently checked for ZIP/file digests, source correspondence and generated snippets. [Validation record](SERIAL-TRANSFER-VALIDATION.json). Actual printer/terminal transfer and owner access remain pending.
+
 The complete method list is also available as [CSV](CC2-API-METHODS.csv) and [JSON](baseline/evidence/API-METHOD-MAP.json). Numbered APIPrinter methods and local UDS methods are different namespaces.
 
 ## Evidence layout
