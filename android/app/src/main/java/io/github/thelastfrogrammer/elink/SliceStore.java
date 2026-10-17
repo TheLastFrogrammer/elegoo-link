@@ -32,6 +32,19 @@ final class SliceStore {
         return target;
     }
 
+    /**
+     * Whether a path handed between screens is one of this app's own slices: a file directly in the kept slices or in the
+     * cache's sliced folder, with a plain printer name. Anything else (another app's path, a path climbing out) is refused.
+     */
+    static boolean ownOutput(Context context, String path, String name) {
+        if (path == null || name == null || name.isEmpty() || name.contains("/") || name.contains("\\") || name.equals("..") || name.equals(".")) return false;
+        try {
+            File file = new File(path).getCanonicalFile(), parent = file.getParentFile();
+            if (parent == null || !file.isFile()) return false;
+            return parent.equals(directory(context).getCanonicalFile()) || parent.equals(new File(context.getCacheDir(), "sliced").getCanonicalFile());
+        } catch (IOException error) { return false; }
+    }
+
     /** Newest first. */
     static List<File> list(Context context) {
         File[] files = directory(context).listFiles((dir, n) -> n.endsWith(".gcode"));

@@ -21,6 +21,8 @@ final class PrintGuardian {
         int expectedPixels, bedPixels;
         boolean[] expected, bed, material, head;
         String note = "";
+        /** No usable colour: every filament colour looks like the bed, so filament cannot be told from it. */
+        boolean undecided;
     }
 
     /** Grid cell of a projected point, or -1 when it falls outside the picture. */
@@ -82,9 +84,22 @@ final class PrintGuardian {
         return out;
     }
 
-    static Result analyse(int[] rgb, int filament, boolean[] expected, boolean[] bed, boolean[] head) {
+    static Result analyse(int[] rgb, int filament, boolean[] expected, boolean[] bed, boolean[] head) { return analyse(rgb, new int[] {filament}, expected, bed, head); }
+    /**
+     * As above with every filament colour printed so far: filament is any pixel that looks like one of them, so the parts in
+     * an earlier colour still count after a colour change. A colour that matches most of the bare bed cannot be told from it
+     * and is left out; with none left the result is undecided.
+     */
+    static Result analyse(int[] rgb, int[] filaments, boolean[] expected, boolean[] bed, boolean[] head) {
         Result r = new Result(); r.expected = expected; r.bed = bed; r.head = head;
-        r.material = material(rgb, filament);
+        r.material = new boolean[rgb.length]; int usable = 0;
+        for (int filament : filaments) {
+            boolean[] m = material(rgb, filament); int bare = 0, matched = 0;
+            for (int i = 0; i < rgb.length; i++) if (bed[i] && !expected[i] && !head[i]) { bare++; if (m[i]) matched++; }
+            if (bare > 0 && matched > bare / 2) continue;
+            usable++; for (int i = 0; i < rgb.length; i++) r.material[i] |= m[i];
+        }
+        r.undecided = usable == 0;
         int covered = 0, outsideMaterial = 0;
         for (int i = 0; i < rgb.length; i++) {
             if (head[i]) continue;

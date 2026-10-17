@@ -130,9 +130,11 @@ public final class PrintRecorder {
         return current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L;
     }
     /** Keeps a JPEG camera picture with the running print, named by its elapsed time; false when there is no print to keep it with. */
-    public synchronized boolean savePicture(byte[] jpeg, long mono) { return savePicture(jpeg, mono, "camera"); }
+    public synchronized boolean savePicture(byte[] jpeg, long mono) { return savePicture(jpeg, mono, "camera", PRINTER_CAMERA); }
+    /** The printer's own camera's id in `savePicture`; an added camera is "added:" and its id. */
+    static final String PRINTER_CAMERA = "printer";
     /** As above, naming where the picture came from for the camera log (the first picture of a print, every tenth, and every failure). */
-    public synchronized boolean savePicture(byte[] jpeg, long mono, String source) {
+    public synchronized boolean savePicture(byte[] jpeg, long mono, String source, String cameraId) {
         if (current == null) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: no print is being recorded"); return false; }
         if (jpeg == null || jpeg.length < 100) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: empty picture (" + (jpeg == null ? 0 : jpeg.length) + " bytes)"); return false; }
         File folder = current.pictureFolder(); folder.mkdirs();
@@ -142,11 +144,11 @@ public final class PrintRecorder {
         picturedMono = mono; picturedLayer = lastLayer; current.pictures++; save(current);
         if (current.pictures == 1 || current.pictures % 10 == 0) Diagnostics.note(Diagnostics.CAMERA, "picture " + current.pictures + " of this print kept from " + source + " (" + jpeg.length / 1024 + " KB)");
         PictureKept told = pictureKept;
-        if (told != null) { String rgb = activeTray()[1]; told.kept(current, jpeg, lastLayer, rgb.isEmpty() ? -1 : Integer.parseInt(rgb)); }
+        if (told != null) { String rgb = activeTray()[1]; told.kept(current, jpeg, lastLayer, rgb.isEmpty() ? -1 : Integer.parseInt(rgb), cameraId); }
         return true;
     }
     /** Told about each kept picture with the printer's layer then and the active tray's colour (-1 when unknown), e.g. for the print guardian. Called with the recorder locked: hand the work off. */
-    interface PictureKept { void kept(Recording recording, byte[] jpeg, int layer, int trayRgb); }
+    interface PictureKept { void kept(Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId); }
     volatile PictureKept pictureKept;
     /** Seconds since the running print's last picture (monotonic `mono`), or -1 when none yet / no print. */
     public synchronized long secondsSincePicture(long mono) { return current == null || current.pictures == 0 || picturedMono < 0 ? -1 : Math.max(0, mono - picturedMono) / 1000; }

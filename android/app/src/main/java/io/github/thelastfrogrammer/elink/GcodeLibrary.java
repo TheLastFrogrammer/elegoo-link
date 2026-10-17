@@ -57,10 +57,25 @@ public final class GcodeLibrary {
         }
     }
 
+    /**
+     * The copy's file name for a printer name. Plain names stay as they are; a name with other characters (accents, CJK,
+     * symbols) keeps its readable part plus a short hash of the exact name, so different names never share a copy.
+     */
     static String safeName(String name) {
         if (name == null) return null;
         String base = name.substring(name.lastIndexOf('/') + 1).trim();
         if (base.isEmpty() || base.equals(".") || base.equals("..") || base.length() > 200) return null;
-        return base.replaceAll("[^A-Za-z0-9 _.()+-]", "_");
+        String plain = base.replaceAll("[^A-Za-z0-9 _.()+-]", "_");
+        if (plain.equals(base)) return plain;
+        int dot = plain.lastIndexOf('.');
+        String stem = dot > 0 ? plain.substring(0, dot) : plain, extension = dot > 0 ? plain.substring(dot) : "";
+        return stem + "~" + hash(base) + extension;
+    }
+    private static String hash(String text) {
+        try {
+            byte[] digest = java.security.MessageDigest.getInstance("SHA-256").digest(text.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder out = new StringBuilder(); for (int i = 0; i < 6; i++) out.append(String.format(Locale.ROOT, "%02x", digest[i] & 0xff));
+            return out.toString();
+        } catch (java.security.NoSuchAlgorithmException impossible) { throw new IllegalStateException(impossible); }
     }
 }

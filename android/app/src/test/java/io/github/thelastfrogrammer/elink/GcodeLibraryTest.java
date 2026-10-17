@@ -29,7 +29,7 @@ public class GcodeLibraryTest {
         GcodeLibrary library = new GcodeLibrary(dir);
         File stored = library.put(temp("x"), "../../evil name?.gcode");
         assertEquals(dir.getCanonicalFile(), stored.getCanonicalFile().getParentFile());
-        assertEquals("evil name_.gcode", stored.getName());
+        assertTrue(stored.getName(), stored.getName().matches("evil name_~[0-9a-f]{12}\\.gcode"));
         assertNull(GcodeLibrary.safeName(".."));
         try { library.put(temp("x"), "dir/"); fail(); } catch (java.io.IOException expected) { }
     }

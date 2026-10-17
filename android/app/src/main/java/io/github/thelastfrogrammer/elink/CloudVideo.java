@@ -173,7 +173,7 @@ final class CloudVideo {
     private void keep(String dataUrl) {
         byte[] jpeg = decode(dataUrl); PrinterService p = printer.get();
         if (jpeg == null) return;   // between the printer's stop and the rejoin there is no frame; the next check tries again
-        if (p != null && p.recorder != null) p.recorder.savePicture(jpeg, android.os.SystemClock.elapsedRealtime(), oneShot ? "a short cloud picture visit" : "the Print tab's cloud video");
+        if (p != null) p.keepPicture(jpeg, android.os.SystemClock.elapsedRealtime(), PrintRecorder.PRINTER_CAMERA, oneShot ? "a short cloud picture visit" : "the Print tab's cloud video");
         if (oneShot && afterPicture != null) { Runnable done = afterPicture; afterPicture = null; main.post(done); }
     }
     private static byte[] decode(String dataUrl) {

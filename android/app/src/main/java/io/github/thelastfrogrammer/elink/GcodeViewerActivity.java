@@ -1299,8 +1299,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             try {
                 Object text = new org.json.JSONTokener(value).nextValue();
                 String url = text instanceof String ? (String) text : "";
-                if (url.startsWith("data:image/jpeg;base64,") && printer != null && printer.recorder != null)
-                    printer.recorder.savePicture(android.util.Base64.decode(url.substring(23), android.util.Base64.DEFAULT), mono, "Live toolpath's cloud video");
+                if (url.startsWith("data:image/jpeg;base64,") && printer != null)
+                    printer.keepPicture(android.util.Base64.decode(url.substring(23), android.util.Base64.DEFAULT), mono, PrintRecorder.PRINTER_CAMERA, "Live toolpath's cloud video");
             } catch (Exception ignored) { }
         });
     }
@@ -1311,7 +1311,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         ExtraCameras.Camera pictures = ExtraCameras.forPictures(this), added = addedCamera;
         if (added != null ? pictures == null || !pictures.id.equals(added.id) : pictures != null) return;
         long mono = android.os.SystemClock.elapsedRealtime();
-        if (printer.recorder.pictureDue(mono)) printer.recorder.savePicture(turned(cameraFrames.latest()), mono, added != null ? "the added camera “" + added.name + "”" : "Live toolpath's camera stream");
+        if (printer.recorder.pictureDue(mono)) printer.keepPicture(turned(cameraFrames.latest()), mono, added != null ? "added:" + added.id : PrintRecorder.PRINTER_CAMERA, added != null ? "the added camera “" + added.name + "”" : "Live toolpath's camera stream");
     }
     private boolean lockstep() { return followMode && following && viewerPrefs().getBoolean("lockstep", false); }
     private void sendLockstep() { js("viewer.setLockstep({on:" + lockstep() + ",delayMs:" + effectiveDelay() + "})"); }

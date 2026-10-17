@@ -226,8 +226,8 @@ public final class CloudCameraActivity extends Activity {
 
     private void keepPicture(String dataUrl) {
         String prefix = "data:image/jpeg;base64,";
-        if (!dataUrl.startsWith(prefix) || printer == null || printer.recorder == null) return;
-        try { printer.recorder.savePicture(Base64.decode(dataUrl.substring(prefix.length()), Base64.DEFAULT), android.os.SystemClock.elapsedRealtime(), "the cloud camera screen"); }
+        if (!dataUrl.startsWith(prefix) || printer == null) return;
+        try { printer.keepPicture(Base64.decode(dataUrl.substring(prefix.length()), Base64.DEFAULT), android.os.SystemClock.elapsedRealtime(), PrintRecorder.PRINTER_CAMERA, "the cloud camera screen"); }
         catch (IllegalArgumentException unreadable) { }
     }
     private void saveSnapshot(String dataUrl) {

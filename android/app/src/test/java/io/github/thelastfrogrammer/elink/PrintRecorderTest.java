@@ -167,7 +167,7 @@ public class PrintRecorderTest {
         assertTrue(recorder.update(1_000, 1_000, status(2075, "a.gcode", 1, 1), "local", "CC2"));
         assertEquals("Every 2 layers", recorder.current().pictureWords());
         assertTrue("the first layer gets a picture", recorder.pictureDue(1_000));
-        assertTrue(recorder.savePicture(new byte[200], 1_000, "test"));
+        assertTrue(recorder.savePicture(new byte[200], 1_000, "test", PrintRecorder.PRINTER_CAMERA));
         assertFalse(recorder.pictureDue(600_000));   // hours later, still layer 1: no picture by time
         recorder.update(700_000, 700_000, status(2075, "a.gcode", 2, 2), "local", "CC2");
         assertFalse("one layer on", recorder.pictureDue(700_000));

@@ -48,7 +48,7 @@ public class DiagnosticsTest {
         assertTrue(Diagnostics.recent("Nothing here", 3).isEmpty());
         // A picture names its source in the log; one without a print says why it was not kept.
         PrintRecorder recorder = new PrintRecorder(Files.createTempDirectory("recordings").toFile());
-        assertFalse(recorder.savePicture(new byte[200], 1_000, "the Print tab's cloud video"));
+        assertFalse(recorder.savePicture(new byte[200], 1_000, "the Print tab's cloud video", PrintRecorder.PRINTER_CAMERA));
         assertTrue(Diagnostics.recent(Diagnostics.CAMERA, 1).get(0).endsWith("picture from the Print tab's cloud video not kept: no print is being recorded"));
         assertEquals(-1, recorder.secondsSincePicture(1_000));
     }

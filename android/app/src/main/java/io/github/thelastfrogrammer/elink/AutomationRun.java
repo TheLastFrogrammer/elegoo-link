@@ -41,12 +41,16 @@ final class AutomationRun {
         void notifyPerson(int id, String title, String text, android.graphics.Bitmap picture);
         /** Tells Home Assistant (no-op when the link is off), with a chart PNG for its chart camera when given; returns what happened for the log. */
         String homeAssistantEvent(JSONObject event, byte[] chart);
-        /** The running print's newest camera picture as JPEG, or null. */
-        byte[] latestPicture();
-        /** The running print's recorded samples for a chart, or null when there is no recording yet. Reads the disk: not on the main thread. */
-        List<double[]> chartRows();
+        /** The print being recorded now, or null. Main thread; reads nothing from disk. */
+        PrintRecorder.Recording recordingNow();
+        /** Which printer over which connection events come from now ("" when none): a delayed action checks it is still the same. */
+        String printerKey();
+        /** That print's newest camera picture as JPEG (null: the print being recorded, or else the last finished one), or null. Not on the main thread. */
+        byte[] latestPicture(PrintRecorder.Recording recording);
+        /** That print's recorded samples for a chart (null as above), or null when there is none. Reads the disk: not on the main thread. */
+        List<double[]> chartRows(PrintRecorder.Recording recording);
         /** Those samples drawn as a PNG chart, or null with too few. Main thread. */
-        byte[] chartPng(List<double[]> rows);
+        byte[] chartPng(PrintRecorder.Recording recording, List<double[]> rows);
     }
 
     private final Context context;
@@ -121,33 +125,43 @@ final class AutomationRun {
         int minute = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE);
         Automation.ThisPrint print = thisPrint(context);
         Map<String, String> valuesNow = null;
+        // What the event belongs to, fixed now: the print (its pictures and chart) and the printer. A delayed rule uses these,
+        // not whatever is current when it runs.
+        PrintRecorder.Recording recording = host.recordingNow(); String printerKey = host.printerKey();
         for (Automation.Rule rule : current()) {
             if (!rule.ifField.isEmpty() && valuesNow == null) valuesNow = values(host.liveStatus());
             if (!Automation.matches(rule, event, minute, print, valuesNow)) continue;
             if (rule.delayMinutes > 0) {
                 Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" runs in " + rule.delayMinutes + " min (" + event.type + ")");
-                main.postDelayed(() -> run(rule, event, false), rule.delayMinutes * 60_000L);
-            } else run(rule, event, false);
+                String id = rule.id;
+                main.postDelayed(() -> {
+                    // Turned off, deleted or changed meanwhile: the rule as it is now decides.
+                    Automation.Rule saved = null; for (Automation.Rule r : current()) if (r.id.equals(id)) saved = r;
+                    if (saved == null || !saved.enabled) { Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" did not run: it was turned off or deleted while waiting"); return; }
+                    run(saved, event, false, recording, printerKey);
+                }, rule.delayMinutes * 60_000L);
+            } else run(rule, event, false, recording, printerKey);
         }
     }
 
     /** Runs a rule's actions once (main thread). `test`: from the workshop's Test button, with a sample event. */
-    void run(Automation.Rule rule, Automation.Event event, boolean test) {
+    void run(Automation.Rule rule, Automation.Event event, boolean test) { run(rule, event, test, host.recordingNow(), host.printerKey()); }
+    private void run(Automation.Rule rule, Automation.Event event, boolean test, PrintRecorder.Recording recording, String printerKey) {
         // The status values now, with the event's own on top (its file and layer are those of the moment it happened).
         Map<String, String> values = values(host.liveStatus());
         for (Map.Entry<String, String> e : event.values(System.currentTimeMillis(), java.util.TimeZone.getDefault()).entrySet()) if (!e.getValue().isEmpty() || !values.containsKey(e.getKey())) values.put(e.getKey(), e.getValue());
         String label = "\"" + rule.name + "\"" + (test ? " (test)" : "");
         boolean wantPicture = false, wantChart = false; for (Automation.Action a : rule.actions) { wantPicture |= a.picture; wantChart |= a.chart; }
-        if (!wantPicture && !wantChart) { actions(rule, event, values, label, null, null, false, false); return; }
+        if (!wantPicture && !wantChart) { actions(rule, event, values, label, null, null, false, false, printerKey); return; }
         // Pictures and recordings are read off the main thread; the chart is drawn back on it, then the actions run.
         boolean picturesWanted = wantPicture, chartWanted = wantChart;
         web.execute(() -> {
-            byte[] picture = picturesWanted ? host.latestPicture() : null;
-            List<double[]> rows = chartWanted ? host.chartRows() : null;
-            main.post(() -> actions(rule, event, values, label, picture, rows == null ? null : host.chartPng(rows), picturesWanted, chartWanted));
+            byte[] picture = picturesWanted ? host.latestPicture(recording) : null;
+            List<double[]> rows = chartWanted ? host.chartRows(recording) : null;
+            main.post(() -> actions(rule, event, values, label, picture, rows == null ? null : host.chartPng(recording, rows), picturesWanted, chartWanted, printerKey));
         });
     }
-    private void actions(Automation.Rule rule, Automation.Event event, Map<String, String> values, String label, byte[] picture, byte[] chart, boolean wantPicture, boolean wantChart) {
+    private void actions(Automation.Rule rule, Automation.Event event, Map<String, String> values, String label, byte[] picture, byte[] chart, boolean wantPicture, boolean wantChart, String printerKey) {
         if (wantPicture && picture == null) Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": no camera picture of this print yet; sent without it");
         if (wantChart && chart == null) Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": no recording to chart yet; sent without it");
         for (Automation.Action a : rule.actions) {
@@ -158,7 +172,10 @@ final class AutomationRun {
                         host.notifyPerson(100 + Math.abs(rule.id.hashCode() % 1000), Automation.fill(a.title.isEmpty() ? "{event_name}" : a.title, values, false), Automation.fill(a.text.isEmpty() ? "{file}" : a.text, values, false),
                             shown == null ? null : android.graphics.BitmapFactory.decodeByteArray(shown, 0, shown.length));
                         Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": notification shown"); break;
-                    case Automation.LIGHT: light(label, a.on); break;
+                    case Automation.LIGHT:
+                        // Only on the printer the event came from: never redirected to another printer or connection.
+                        if (printerKey != null && !printerKey.equals(host.printerKey())) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": light not sent: the printer or connection changed since the event"); break; }
+                        light(label, a.on); break;
                     case Automation.WEBHOOK:
                         if (a.needsAddress) { Diagnostics.note(Diagnostics.AUTOMATIONS, label + ": webhook not sent: its address must be entered again (it came from a share or a backup)"); break; }
                         webhook(label, a, values, a.picture ? picture : null, a.chart ? chart : null, true); break;

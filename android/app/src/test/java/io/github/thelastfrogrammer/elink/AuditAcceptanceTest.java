@@ -151,4 +151,46 @@ public class AuditAcceptanceTest {
         // A Home Assistant webhook id is in the path.
         assertEquals("http://homeassistant.local:8123/", Automation.siteOf("http://homeassistant.local:8123/api/webhook/secret-id"));
     }
+
+    /** F10: an unchanged two-colour print does not alarm when the active colour changes. */
+    @Test public void aColourChangeOnAnUnchangedPrintDoesNotAlarm() {
+        int n = PrintGuardian.W * PrintGuardian.H; int[] image = new int[n]; Arrays.fill(image, 0x404040);
+        boolean[] expected = new boolean[n], bed = new boolean[n], head = new boolean[n];
+        for (int i = 0; i < 100; i++) { expected[i] = true; image[i] = i < 90 ? 0xff0000 : 0x0000ff; }
+        for (int i = 100; i < 1100; i++) bed[i] = true;
+        PrintGuardian.Result red = PrintGuardian.analyse(image, new int[] {0xff0000}, expected, bed, head);
+        PrintGuardian.Result both = PrintGuardian.analyse(image, new int[] {0xff0000, 0x0000ff}, expected, bed, head);
+        assertEquals(0.9, red.coverage, 0.001); assertEquals(1.0, both.coverage, 0.001);
+        PrintGuardian.Watch watch = new PrintGuardian.Watch(); for (int i = 0; i < 4; i++) watch.add(red, 10);
+        for (int i = 0; i < 5; i++) assertFalse(watch.add(both, 10));
+        // A filament the colour of the bed cannot be judged.
+        Arrays.fill(image, 100, 1100, 0x404040);
+        assertTrue(PrintGuardian.analyse(image, new int[] {0x404040}, expected, bed, head).undecided);
+    }
+
+    /** F11: different printer names never share a phone copy. */
+    @Test public void distinctUnicodeNamesKeepTheirOwnCopies() throws Exception {
+        java.nio.file.Path dir = java.nio.file.Files.createTempDirectory("audit-library-"); GcodeLibrary library = new GcodeLibrary(dir.toFile());
+        java.io.File a = java.io.File.createTempFile("audit-a-", ".gcode"), b = java.io.File.createTempFile("audit-b-", ".gcode");
+        try {
+            java.nio.file.Files.write(a.toPath(), "G1 X1\n".getBytes()); java.nio.file.Files.write(b.toPath(), "G1 X99\n".getBytes());
+            java.io.File first = library.put(a, "模型.gcode"), second = library.put(b, "测试.gcode");
+            assertNotEquals(first, second);
+            assertEquals("G1 X1\n", new String(java.nio.file.Files.readAllBytes(library.find("模型.gcode").toPath())));
+            assertEquals("plain names are unchanged", "Benchy_PLA.gcode", GcodeLibrary.safeName("/local/Benchy_PLA.gcode"));
+        } finally { for (java.io.File f : dir.toFile().listFiles()) f.delete(); dir.toFile().delete(); a.delete(); b.delete(); }
+    }
+
+    /** F13: a huge entry that is skipped still counts against the unpacking limit. */
+    @Test public void aGiantIgnoredZipEntryIsRefused() throws Exception {
+        java.nio.file.Path z = java.nio.file.Files.createTempFile("audit-ignored-", ".zip"), out = java.nio.file.Files.createTempDirectory("audit-unzip-");
+        try (java.util.zip.ZipOutputStream zip = new java.util.zip.ZipOutputStream(java.nio.file.Files.newOutputStream(z))) {
+            zip.putNextEntry(new java.util.zip.ZipEntry("ignored.txt")); byte[] zeros = new byte[1024 * 1024];
+            for (int i = 0; i < 1024; i++) zip.write(zeros); zip.write(1); zip.closeEntry();
+            zip.putNextEntry(new java.util.zip.ZipEntry("part.stl")); zip.write(new byte[] {1}); zip.closeEntry();
+        }
+        try { ModelSites.unzipModels(z.toFile(), out.toFile()); fail("expected the limit"); }
+        catch (java.io.IOException expected) { assertTrue(expected.getMessage(), expected.getMessage().contains("1 GB")); }
+        finally { java.io.File[] left = out.toFile().listFiles(); if (left != null) for (java.io.File f : left) f.delete(); out.toFile().delete(); z.toFile().delete(); }
+    }
 }

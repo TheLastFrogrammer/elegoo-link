@@ -669,9 +669,12 @@ public final class MainActivity extends Activity {
         if (setup != null) { awaitPrintSetup(setup); intent.removeExtra(SliceActivity.RESULT_PRINT_SETUP); }
         String path = intent.getStringExtra(SliceActivity.RESULT_FILE), name = intent.getStringExtra(SliceActivity.RESULT_NAME);
         if (path == null || name == null) return;
-        // Only the app's own sliced output is accepted.
-        File file = new File(path), sliced = new File(getCacheDir(), "sliced");
-        try { if (!file.getCanonicalFile().getParentFile().equals(sliced.getCanonicalFile()) || !file.isFile()) return; } catch (IOException error) { return; }
+        // Only the app's own sliced output is accepted: kept slices, or the cache when keeping one failed.
+        if (!SliceStore.ownOutput(this, path, name)) {
+            Diagnostics.note(Diagnostics.FILES, "a sliced file handed over was not taken: not one of this app's slices");
+            android.widget.Toast.makeText(this, "That sliced file could not be taken in. Find it under Recent slices on the Files tab.", android.widget.Toast.LENGTH_LONG).show();
+            intent.removeExtra(SliceActivity.RESULT_FILE); return;
+        }
         pendingSlicedFile = path; pendingSlicedName = name; intent.removeExtra(SliceActivity.RESULT_FILE);
         settings.edit().putBoolean("everSliced", true).apply();
         selectPage(FILES); takeSliced();
@@ -3225,7 +3228,7 @@ public final class MainActivity extends Activity {
                 monitorCameraInfo.setVisibility(View.GONE);
                 if (fullView != null) fullView.setImageBitmap(image);
                 tone(image);
-                if (printer != null) printer.offerFrame(image, source);
+                if (printer != null) printer.offerFrame(image, "added:" + camera.id, source);
             }
             public void error(String text) {
                 Diagnostics.note(Diagnostics.CAMERA, "added camera “" + camera.name + "” failed" + (first[0] ? " before any picture" : "") + ": " + Diagnostics.scrub(text));

@@ -259,7 +259,8 @@ final class ModelSites {
     static final long MAX_UNZIPPED = 1024L * 1024 * 1024;
     /**
      * Unpacks the model files of a ZIP into `folder` (flattened: no folders, so nothing can land outside it; a name already
-     * taken gets a number), at most MAX_ZIP_ENTRIES entries and MAX_UNZIPPED bytes in all. Returns the model files.
+     * taken gets a number), at most MAX_ZIP_ENTRIES entries and MAX_UNZIPPED bytes in all, skipped entries included. Returns
+ * the model files.
      */
     static List<File> unzipModels(File zipFile, File folder) throws IOException {
         List<File> out = new ArrayList<>(); long written = 0; int entries = 0;
@@ -268,7 +269,12 @@ final class ModelSites {
             while ((entry = zip.getNextEntry()) != null) {
                 if (++entries > MAX_ZIP_ENTRIES) throw new IOException("The ZIP holds too many files.");
                 String name = safeName(entry.getName());
-                if (entry.isDirectory() || name.startsWith(".") || entry.getName().contains("__MACOSX") || !MODEL_TYPES.contains(extension(name))) continue;
+                if (entry.isDirectory() || name.startsWith(".") || entry.getName().contains("__MACOSX") || !MODEL_TYPES.contains(extension(name))) {
+                    // Skipped, but still unpacked by the stream to reach the next entry: its bytes count against the same limit.
+                    int n;
+                    while ((n = zip.read(buffer)) >= 0) { written += n; if (written > MAX_UNZIPPED) throw new IOException("The ZIP unpacks to more than 1 GB."); }
+                    continue;
+                }
                 File target = new File(folder, name);
                 for (int i = 2; target.exists(); i++) { int dot = name.lastIndexOf('.'); target = new File(folder, name.substring(0, dot) + " (" + i + ")" + name.substring(dot)); }
                 try (OutputStream file = new FileOutputStream(target)) {

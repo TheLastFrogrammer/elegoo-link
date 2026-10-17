@@ -62,4 +62,19 @@ public class AuditSessionTest {
         PrinterService.saveRenewed(store, renewedA, renewedA.withTokens("A", "a3", "ra3", 99, 0));
         assertNull("signed out: nothing comes back", store.load());
     }
+
+    /** F08: kept slices are taken in from another app's Slice; other paths and odd names are refused. */
+    @Test public void keptSlicesAreAcceptedAndOtherPathsRefused() throws Exception {
+        Context context = RuntimeEnvironment.getApplication();
+        java.io.File kept = new java.io.File(SliceStore.directory(context), "Part.gcode"); java.nio.file.Files.write(kept.toPath(), "G1".getBytes());
+        java.io.File cache = new java.io.File(context.getCacheDir(), "sliced"); cache.mkdirs();
+        java.io.File fresh = new java.io.File(cache, "Fresh.gcode"); java.nio.file.Files.write(fresh.toPath(), "G1".getBytes());
+        java.io.File elsewhere = new java.io.File(context.getFilesDir(), "Other.gcode"); java.nio.file.Files.write(elsewhere.toPath(), "G1".getBytes());
+        assertTrue(SliceStore.ownOutput(context, kept.getPath(), "Part.gcode"));
+        assertTrue(SliceStore.ownOutput(context, fresh.getPath(), "Fresh.gcode"));
+        assertFalse(SliceStore.ownOutput(context, elsewhere.getPath(), "Other.gcode"));
+        assertFalse(SliceStore.ownOutput(context, new java.io.File(SliceStore.directory(context), "../Other.gcode").getPath(), "Other.gcode"));
+        assertFalse(SliceStore.ownOutput(context, kept.getPath(), "../x.gcode"));
+        assertFalse(SliceStore.ownOutput(context, "/etc/passwd", "passwd"));
+    }
 }

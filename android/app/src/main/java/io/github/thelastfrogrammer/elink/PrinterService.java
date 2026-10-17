@@ -131,7 +131,7 @@ public final class PrinterService extends Service {
                     grabbing = false;
                     if (!grabOk) { grabOk = true; Diagnostics.note(Diagnostics.CAMERA, "picture from the added camera “" + extra.name + "”: OK after " + (SystemClock.elapsedRealtime() - started) + " ms, " + image.getWidth() + "x" + image.getHeight()); }
                     if (destroyed) return;
-                    offerFrame(image, "the added camera “" + extra.name + "”");
+                    offerFrame(image, "added:" + extra.id, "the added camera “" + extra.name + "”");
                     List<Frame> waiting; synchronized (grabWaiting) { waiting = new ArrayList<>(grabWaiting); grabWaiting.clear(); }
                     for (Frame f : waiting) f.take(image);
                 }
@@ -164,7 +164,7 @@ public final class PrinterService extends Service {
                 if (!grabOk) { grabOk = true; Diagnostics.note(Diagnostics.CAMERA, "single picture from the printer's camera: OK after " + (SystemClock.elapsedRealtime() - grabStart) + " ms, " + image.getWidth() + "x" + image.getHeight() + (viaLocal ? "" : " (alongside the cloud)")); }
                 main.post(() -> {
                     if (destroyed) return;
-                    offerFrame(image, "a single picture from the printer's camera" + (viaLocal ? "" : " (alongside the cloud)"));
+                    offerFrame(image, PrintRecorder.PRINTER_CAMERA, "a single picture from the printer's camera" + (viaLocal ? "" : " (alongside the cloud)"));
                     List<Frame> waiting; synchronized (grabWaiting) { waiting = new ArrayList<>(grabWaiting); grabWaiting.clear(); }
                     for (Frame f : waiting) f.take(image);
                 });
@@ -182,18 +182,26 @@ public final class PrinterService extends Service {
     /** Camera log: the last skip reason noted (each noted once until a grab runs), and whether the last grab worked (success is noted once per run of successes). */
     private String grabSkipNoted = ""; private boolean grabOk;
     /** A camera frame from anywhere in the app: kept as the print's picture when one is due, and shown in the progress notification. */
-    public void offerFrame(android.graphics.Bitmap image) { offerFrame(image, "the camera stream on screen"); }
-    void offerFrame(android.graphics.Bitmap image, String source) {
+    public void offerFrame(android.graphics.Bitmap image) { offerFrame(image, PrintRecorder.PRINTER_CAMERA, "the camera stream on screen"); }
+    /** `cameraId`: PrintRecorder.PRINTER_CAMERA, or "added:" and the added camera's id. */
+    void offerFrame(android.graphics.Bitmap image, String cameraId, String source) {
         if (image == null) return;
         long mono = SystemClock.elapsedRealtime();
-        // With an added camera chosen for print pictures, only its pictures go into the recording (a timelapse stays one view).
-        ExtraCameras.Camera picturesFrom = ExtraCameras.forPictures(this);
-        boolean fromChosen = picturesFrom == null ? !source.startsWith("the added camera") : source.equals("the added camera “" + picturesFrom.name + "”");
-        if (fromChosen && recorder != null && recorder.pictureDue(mono)) {
+        if (takesPictures(cameraId) && recorder != null && recorder.pictureDue(mono)) {
             java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); image.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg);
-            recorder.savePicture(jpeg.toByteArray(), mono, source);
+            recorder.savePicture(jpeg.toByteArray(), mono, source, cameraId);
         }
         if (offeredAt == 0 || mono - offeredAt > 30_000) { offeredAt = mono; progressPicture = scaled(image, 640); progressPictureKey = "live"; progressGrabAt = mono; }
+    }
+    /** Whether this camera takes the print's pictures: the added one chosen for them, or else the printer's own. Every kept picture goes through here, so a timelapse stays one view. */
+    boolean takesPictures(String cameraId) {
+        ExtraCameras.Camera chosen = ExtraCameras.forPictures(this);
+        return chosen == null ? PrintRecorder.PRINTER_CAMERA.equals(cameraId) : ("added:" + chosen.id).equals(cameraId);
+    }
+    /** A JPEG for the print's recording from any screen (cloud video, the toolpath viewer): kept only from the camera that takes the pictures. */
+    public boolean keepPicture(byte[] jpeg, long mono, String cameraId, String source) {
+        if (recorder == null || !takesPictures(cameraId)) return false;
+        return recorder.savePicture(jpeg, mono, source, cameraId);
     }
     private boolean cloudVisible, cloudPolling;
     public JSONObject cloudStatus = new JSONObject();
@@ -1799,15 +1807,19 @@ public final class PrinterService extends Service {
     }
     /** Print guardian (beta): each kept picture compared with the toolpath so far (see GuardianRun). Notify only, never acts on the printer. */
     public GuardianRun guardian;   // made in onCreate (the service has no context before)
-    private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb) {
+    private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId) {
         if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("guardian", true)) return;
         JSONObject now = liveStatus(), print = now.optJSONObject("print_status"), move = now.optJSONObject("gcode_move_inf");
         int total = print == null ? 0 : print.optInt("total_layer", 0);
         double[] head = move == null ? new double[] {Double.NaN, Double.NaN, Double.NaN}
             : new double[] {move.optDouble("x", Double.NaN), move.optDouble("y", Double.NaN), move.optDouble("z", Double.NaN)};
-        guardian.check(recording, jpeg, layer, total, head, trayRgb, this::guardianAlarm, this::changed);
+        guardian.check(recording, jpeg, layer, total, head, trayRgb, cameraId, this::guardianAlarm, this::changed);
     }
     private void guardianAlarm(String reason, android.graphics.Bitmap overlay) {
+        // The alarm is an event for automations (webhooks, Home Assistant) whether or not the phone may show notifications;
+        // the permission only decides the notification itself.
+        Diagnostics.note(Diagnostics.NOTIFICATIONS, "print guardian: " + reason);
+        if (automations != null) automations.outside(wanted ? automations.local : automations.cloud, Automation.GUARDIAN, reason, liveStatus(), wanted ? host : cloudName);
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
         NotificationManager manager = getSystemService(NotificationManager.class);
         manager.createNotificationChannel(new NotificationChannel("printer-alerts", "Print completion and faults", NotificationManager.IMPORTANCE_DEFAULT));
@@ -1818,8 +1830,6 @@ public final class PrinterService extends Service {
             .setStyle(overlay == null ? new Notification.BigTextStyle().bigText(text) : new Notification.BigPictureStyle().bigPicture(overlay).setSummaryText(text));
         if (overlay != null) builder.setLargeIcon(scaled(overlay, 128));
         manager.notify(6, builder.build());
-        Diagnostics.note(Diagnostics.NOTIFICATIONS, "print guardian: " + reason);
-        if (automations != null) automations.outside(wanted ? automations.local : automations.cloud, Automation.GUARDIAN, reason, liveStatus(), wanted ? host : cloudName);
     }
     /** Automation workshop rules (see AutomationRun); made in onCreate. */
     public AutomationRun automations;
@@ -1852,22 +1862,33 @@ public final class PrinterService extends Service {
             }
             return v;
         }
-        public byte[] latestPicture() {
+        public PrintRecorder.Recording recordingNow() { return recorder == null ? null : recorder.current(); }
+        public String printerKey() { return ready() ? "local:" + serial : usingCloud() ? "cloud:" + cloudSerial : ""; }
+        /** The given print, or the one being recorded, or else the last one that finished. */
+        private PrintRecorder.Recording which(PrintRecorder.Recording recording) {
+            if (recording != null) return recording;
             PrintRecorder.Recording running = recorder == null ? null : recorder.current();
-            List<java.io.File> pictures = running == null ? null : PrintRecorder.pictures(running);
+            if (running != null || recorder == null) return running;
+            java.io.File meta = recorder.lastFinished();
+            try { return meta == null ? null : PrintRecorder.Recording.read(meta); } catch (Exception unreadable) { return null; }
+        }
+        public byte[] latestPicture(PrintRecorder.Recording recording) {
+            PrintRecorder.Recording chosen = which(recording);
+            List<java.io.File> pictures = chosen == null ? null : PrintRecorder.pictures(chosen);
             if (pictures != null && !pictures.isEmpty()) try { return java.nio.file.Files.readAllBytes(pictures.get(pictures.size() - 1).toPath()); } catch (Exception unreadable) { }
+            // The picture on screen only stands in for the print being recorded now.
             android.graphics.Bitmap shown = progressPicture;
-            if (shown == null) return null;
+            if (shown == null || recorder == null || chosen != recorder.current()) return null;
             java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); shown.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg); return jpeg.toByteArray();
         }
-        public List<double[]> chartRows() {
-            PrintRecorder.Recording running = recorder == null ? null : recorder.current();
-            if (running == null) return null;
-            try { return PrintRecorder.samples(running); } catch (Exception unreadable) { return null; }
+        public List<double[]> chartRows(PrintRecorder.Recording recording) {
+            PrintRecorder.Recording chosen = which(recording);
+            if (chosen == null) return null;
+            try { return PrintRecorder.samples(chosen); } catch (Exception unreadable) { return null; }
         }
-        public byte[] chartPng(List<double[]> rows) {
-            PrintRecorder.Recording running = recorder == null ? null : recorder.current();
-            try { return PrintChart.png(PrinterService.this, running, rows); } catch (Exception failed) { return null; }
+        public byte[] chartPng(PrintRecorder.Recording recording, List<double[]> rows) {
+            PrintRecorder.Recording chosen = recording != null ? recording : recorder == null ? null : recorder.current();
+            try { return PrintChart.png(PrinterService.this, chosen, rows); } catch (Exception failed) { return null; }
         }
         public void notifyPerson(int id, String title, String text, android.graphics.Bitmap picture) {
             if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;

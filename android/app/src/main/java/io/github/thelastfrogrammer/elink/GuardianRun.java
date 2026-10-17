@@ -18,7 +18,8 @@ final class GuardianRun {
 
     private final Context context;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    private String printId = "", pathFor = "";
+    private String printId = "", pathFor = "", watchedCamera = "";
+    private final java.util.Set<Integer> printedColours = new java.util.LinkedHashSet<>();
     private volatile GcodeToolpath path;
     private PrintGuardian.Watch watch = new PrintGuardian.Watch();
     /** The latest check: picture with the expected print in teal and filament-coloured pixels off the print in red. */
@@ -30,16 +31,19 @@ final class GuardianRun {
     GuardianRun(Context context) { this.context = context.getApplicationContext(); }
 
     /** Checks one kept picture. `layer`/`total`: the printer's layer report; `head`: nozzle x, y, z (NaN when not reported); `trayRgb`: active tray colour or -1. */
-    void check(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, Alarm alarm, Runnable changed) {
+    /** `cameraId`: the camera the picture came from (PrintRecorder.PRINTER_CAMERA or "added:" and its id), fixed when it was kept. */
+    void check(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, Alarm alarm, Runnable changed) {
         worker.execute(() -> {
-            try { run(recording, jpeg, layer, total, head, trayRgb, alarm); }
+            try { run(recording, jpeg, layer, total, head, trayRgb, cameraId, alarm); }
             catch (Throwable failed) { verdict = "Could not check this picture."; Diagnostics.note(Diagnostics.GUARDIAN, "check failed: " + failed.getClass().getSimpleName()); }
             changed.run();
         });
     }
 
-    private void run(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, Alarm alarm) throws Exception {
-        if (!recording.id.equals(printId)) { printId = recording.id; watch = new PrintGuardian.Watch(); overlay = null; alarmed = false; checks = 0; verdict = ""; }
+    private void run(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, Alarm alarm) throws Exception {
+        if (!recording.id.equals(printId)) { printId = recording.id; watch = new PrintGuardian.Watch(); overlay = null; alarmed = false; checks = 0; verdict = ""; watchedCamera = cameraId; printedColours.clear(); }
+        // Coverage learned from one camera means nothing for another: a different camera starts the comparison again.
+        if (!cameraId.equals(watchedCamera)) { watchedCamera = cameraId; watch = new PrintGuardian.Watch(); alarmed = false; }
         File file = new GcodeLibrary(new File(context.getFilesDir(), "gcode-library")).find(recording.file);
         if (file == null) {
             if (!verdict.startsWith("No copy")) Diagnostics.note(Diagnostics.GUARDIAN, "no phone copy of this print's G-code; not checking");
@@ -76,23 +80,28 @@ final class GuardianRun {
         small.getPixels(rgb, 0, PrintGuardian.W, 0, 0, PrintGuardian.W, PrintGuardian.H);
 
         android.content.SharedPreferences hints = context.getSharedPreferences("viewer-hints", Context.MODE_PRIVATE);
-        // The camera that takes the print pictures (an added one, or the printer's own) and its own line-up.
-        ExtraCameras.Camera added = ExtraCameras.forPictures(context);
-        String id = added == null ? "" : added.id;
+        // The camera this picture came from (not whichever is chosen now) and its own line-up.
+        String id = cameraId.startsWith("added:") ? cameraId.substring(6) : "";
+        ExtraCameras.Camera added = id.isEmpty() ? null : ExtraCameras.find(context, id);
+        if (!id.isEmpty() && added == null) { verdict = "The camera that took this picture was removed."; return; }
         boolean linedUp = GcodeViewerActivity.linedUp(hints, id);
         if (added != null && !linedUp) {
             verdict = "Print pictures come from “" + added.name + "”. Line it up in Live toolpath (More…, Camera: " + added.name + ", then Line up the camera by hand) so the guardian can check them.";
             return;
         }
         double[] camera = GcodeViewerActivity.cameraFor(hints, path.layerZ(at), id);
-        int filament = trayRgb;
-        if (filament < 0) { String hex = path.filamentColour(0); if (hex != null) filament = Integer.parseInt(hex.substring(1), 16); }
-        if (filament < 0) { verdict = "The filament's colour is not known, so the guardian cannot tell filament from background."; return; }
+        // Every colour printed so far in this print (the active tray's at each check), so a colour change does not make the
+        // parts in the earlier colour look gone.
+        if (trayRgb >= 0) printedColours.add(trayRgb);
+        if (printedColours.isEmpty()) { String hex = path.filamentColour(0); if (hex != null) printedColours.add(Integer.parseInt(hex.substring(1), 16)); }
+        if (printedColours.isEmpty()) { verdict = "The filament's colour is not known, so the guardian cannot tell filament from background."; return; }
+        int[] colours = new int[printedColours.size()]; int k = 0; for (int c : printedColours) colours[k++] = c;
 
         boolean[] expected = PrintGuardian.expectedMask(path, at, camera, aspect, linedUp ? 2 : 4);
         boolean[] bed = PrintGuardian.bedMask(camera, aspect);
         boolean[] headMask = PrintGuardian.headMask(camera, aspect, head[0], head[1], head[2]);
-        PrintGuardian.Result result = PrintGuardian.analyse(rgb, filament, expected, bed, headMask);
+        PrintGuardian.Result result = PrintGuardian.analyse(rgb, colours, expected, bed, headMask);
+        if (result.undecided) { verdict = "The filament looks too much like the bed in this picture, so it is not checked."; overlay = null; return; }
         boolean raise = watch.add(result, at + 1);
         checks++; alarmed = watch.alarmed;
         verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")");
