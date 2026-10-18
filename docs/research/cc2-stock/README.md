@@ -1,5 +1,7 @@
 # CC2 stock firmware and file-access research
 
+Latest source-to-feature pass: [COMPANION-FEATURE-PLACEMENTS.md](COMPANION-FEATURE-PLACEMENTS.md) maps proposed file recovery, live status, projects, thumbnails, media, diagnostics, configuration history and startup to specific stock functions/interfaces. It independently checks 36 functions across both verified executables against 11 pinned source files and seven image files, and identifies source/binary drift in the camera monitor and send routine. Includes reproducible [evidence](access/evidence/COMPANION-PLACEMENTS.json) and an offline mapping tool. These are integration sites, not newly enabled device capabilities.
+
 Goal: obtain exact G-code, console output and media while preserving official printer firmware and its update path. Full LAN/WAN command coexistence is a separate goal. No device installation or firmware modification was performed by this investigation.
 
 Companion implementation: [Pi starter setup](../../../tools/research/PI-COMPANION-SETUP.md) now provides a Pi installer/removal path, supervised CDC-ACM receiver, fixed-bundle native exporter, temporary checksummed UART staging and a separately installed procd template. It does not bootstrap a shell, apply tweaks, access G-code/media or establish physical USB/update acceptance. No device hook was installed by this work.

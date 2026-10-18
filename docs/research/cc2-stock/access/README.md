@@ -1,5 +1,7 @@
 # CC2 stock access follow-up
 
+The newer [feature placement map](../COMPANION-FEATURE-PLACEMENTS.md) connects companion features to actual status/file/lifecycle/media/configuration sites. Reproduce its combined source/binary evidence with `tools/map_companion_placements.py --rootfs VERIFIED_ROOTFS --source PINNED_VENDOR_CHECKOUT --output NEW_REPORT.json`. Unlike the older address-based scripts below, this tool takes explicit input/output paths, verifies both binary hashes and selected source Git objects, and never executes firmware. The report distinguishes source-version differences from shipping behavior.
+
 This package extends the original Stock Firmware Investigation with the complete API map, stock console quickstart, cloud-download/database traces, media paths and camera findings. Read STOCK-ACCESS-FOLLOWUP.md first. CONSOLE-QUICKSTART.md requires an already established owner shell; it does not create one.
 
 No vendor firmware binaries, camera dumps, credentials, signed download URLs or executable printer patches are included. The annotated disassembly is analysis output from the exact binaries identified by the report. This work was performed offline and has not been qualified on a printer.

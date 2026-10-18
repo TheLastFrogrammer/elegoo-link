@@ -1,5 +1,7 @@
 # Ordered next steps
 
+Concrete placement map: [COMPANION-FEATURE-PLACEMENTS.md](COMPANION-FEATURE-PLACEMENTS.md). After the fixed native inventory, qualify `objects/list` and one idle status snapshot; the shipping dispatch reaches VirtualSD file path/position/size and PrintStats lifecycle data. Next implement a bounded status adapter and one finalized G-code reader, with independent content hashing and honest job association. Embedded thumbnails can be parsed from those archived bytes on the Pi. The map also identifies media finalization, camera source/binary differences, configuration rename behavior and the boundary between an external helper and a compiled firmware fork.
+
 Pi setup implementation: [PI-COMPANION-SETUP.md](../../../tools/research/PI-COMPANION-SETUP.md). Start hardware qualification with identity-only USB export, then one finalized fixed-inventory capture. The optional boot hook requires independent temporary-transport qualification, matching executable/helper fingerprints and an observed USB route. UART bootstrap/recovery, authenticated maintenance operations and G-code/media exports remain separate steps.
 
 Research baseline: dde7699 / v0.64.0. Follow-on app implementation: v0.65.0 / build 156, based on 7239d9b. Device access is not established. Keep the vendor printer executable intact and do not toggle mode to work around file access.

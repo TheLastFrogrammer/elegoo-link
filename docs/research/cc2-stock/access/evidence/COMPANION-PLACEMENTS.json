@@ -1,0 +1,3455 @@
+{
+  "format": "cc2-companion-placement-evidence-v1",
+  "recorded_date_utc": "2026-10-18",
+  "baseline": "02.01.01.07",
+  "rootfs_sha256": "20375a79e1ee2748f43fd39a62e5a48b23b945ed048dbe52a54d0a1f37b1acae",
+  "firmware_executed": false,
+  "printer_contacted": false,
+  "vendor_source": {
+    "commit": "5a2ea7fc03e707552701b1a69f463699cbd39230",
+    "files": {
+      "elegoo/extras/virtual_sdcard.cpp": {
+        "bytes": 60324,
+        "sha256": "6be062766c196b523cc2fb2da08ea3eff4aeca686ef82474839dbef8ecc62817",
+        "selected_lines": [
+          {
+            "line": 738,
+            "text": "        json VirtualSD::get_status()"
+          },
+          {
+            "line": 749,
+            "text": "        std::string VirtualSD::file_path()"
+          },
+          {
+            "line": 1121,
+            "text": "        void VirtualSD::_load_file(std::shared_ptr<GCodeCommand> gcmd,"
+          },
+          {
+            "line": 1160,
+            "text": "                current_file_name = filename;"
+          },
+          {
+            "line": 1230,
+            "text": "        double VirtualSD::work_handler(double eventtime)"
+          },
+          {
+            "line": 1250,
+            "text": "            print_stats->note_start();"
+          },
+          {
+            "line": 1335,
+            "text": "                this->next_file_position = next_file_position;"
+          },
+          {
+            "line": 1361,
+            "text": "                file_position = next_file_position;"
+          },
+          {
+            "line": 1390,
+            "text": "                print_stats->note_error(error_message);"
+          },
+          {
+            "line": 1392,
+            "text": "                print_stats->note_pause();"
+          },
+          {
+            "line": 1394,
+            "text": "                print_stats->note_complete();"
+          },
+          {
+            "line": 1398,
+            "text": "                print_stats->note_error(error_message);"
+          },
+          {
+            "line": 1402,
+            "text": "                print_stats->note_pause();"
+          },
+          {
+            "line": 1412,
+            "text": "                print_stats->note_complete();"
+          }
+        ]
+      },
+      "elegoo/extras/print_stats.cpp": {
+        "bytes": 8836,
+        "sha256": "eccdb96b92e7ba6816c57caef434771012c24c5cc6a4feca3db91c19c971ce06",
+        "selected_lines": [
+          {
+            "line": 63,
+            "text": "void PrintStats::set_current_file(const std::string& filename)"
+          },
+          {
+            "line": 69,
+            "text": "void PrintStats::note_start()"
+          },
+          {
+            "line": 89,
+            "text": "        \"elegoo:print_stats\", state);"
+          },
+          {
+            "line": 92,
+            "text": "void PrintStats::note_pause()"
+          },
+          {
+            "line": 107,
+            "text": "        \"elegoo:print_stats\", state);"
+          },
+          {
+            "line": 110,
+            "text": "void PrintStats::note_complete()"
+          },
+          {
+            "line": 115,
+            "text": "void PrintStats::note_error(const std::string& message)"
+          },
+          {
+            "line": 120,
+            "text": "void PrintStats::note_cancel()"
+          },
+          {
+            "line": 171,
+            "text": "        \"elegoo:print_stats\", state);"
+          },
+          {
+            "line": 174,
+            "text": "json PrintStats::get_status(double eventtime)"
+          },
+          {
+            "line": 220,
+            "text": "    status[\"filename\"] = filename;"
+          },
+          {
+            "line": 221,
+            "text": "    status[\"total_duration\"] = total_duration + print_duration_before_power_loss;"
+          },
+          {
+            "line": 222,
+            "text": "    status[\"print_duration\"] = total_duration + print_duration_before_power_loss - init_duration - time_paused;"
+          },
+          {
+            "line": 223,
+            "text": "    status[\"filament_used\"] = filament_used;"
+          },
+          {
+            "line": 224,
+            "text": "    status[\"state\"] = state;"
+          },
+          {
+            "line": 225,
+            "text": "    status[\"message\"] = error_message;"
+          },
+          {
+            "line": 227,
+            "text": "        status[\"info\"][\"total_layer\"] = json::value_t::null;"
+          },
+          {
+            "line": 229,
+            "text": "        status[\"info\"][\"total_layer\"] = info_total_layer;"
+          },
+          {
+            "line": 232,
+            "text": "        status[\"info\"][\"current_layer\"] = 0;"
+          },
+          {
+            "line": 234,
+            "text": "        status[\"info\"][\"current_layer\"] = info_current_layer;"
+          },
+          {
+            "line": 259,
+            "text": "void PrintStats::note_finish(const std::string& state,"
+          },
+          {
+            "line": 280,
+            "text": "        \"elegoo:print_stats\", state);"
+          }
+        ]
+      },
+      "elegoo/webhooks.cpp": {
+        "bytes": 34807,
+        "sha256": "401356b79a11867bee0ada3b5e6a5781a6b11cb08569d0f2fcb257ddcc2d5101",
+        "selected_lines": [
+          {
+            "line": 18,
+            "text": "const double SUBSCRIPTION_REFRESH_TIME = 0.5;"
+          },
+          {
+            "line": 881,
+            "text": "    json template_response = web_request->get_dict(\"response_template\");"
+          },
+          {
+            "line": 913,
+            "text": "    webhooks->register_endpoint(\"objects/list\", [this](std::shared_ptr<WebRequest> req)"
+          },
+          {
+            "line": 915,
+            "text": "    webhooks->register_endpoint(\"objects/query\", [this](std::shared_ptr<WebRequest> req)"
+          },
+          {
+            "line": 917,
+            "text": "    webhooks->register_endpoint(\"objects/subscribe\", [this](std::shared_ptr<WebRequest> req)"
+          },
+          {
+            "line": 991,
+            "text": "double QueryStatusHelper::do_query(double eventtime)"
+          },
+          {
+            "line": 1030,
+            "text": "                        res = query[obj_name] = elegoo::extras::getStatus(po, obj_name, eventtime);"
+          },
+          {
+            "line": 1100,
+            "text": "    return eventtime + SUBSCRIPTION_REFRESH_TIME;"
+          },
+          {
+            "line": 1104,
+            "text": "void QueryStatusHelper::handle_query(std::shared_ptr<WebRequest> web_request, bool is_subscribe)"
+          },
+          {
+            "line": 1107,
+            "text": "    json objects = web_request->get_dict(\"objects\");"
+          },
+          {
+            "line": 1130,
+            "text": "    json template_response = web_request->get_dict(\"response_template\");"
+          },
+          {
+            "line": 1165,
+            "text": "void QueryStatusHelper::handle_subscribe(std::shared_ptr<WebRequest> web_request)"
+          }
+        ]
+      },
+      "elegoo/extras/extras_factory.cpp": {
+        "bytes": 23360,
+        "sha256": "cec492ae45d5142a149a01540e5060be0b709f941824679bf0e61643d8ba1722",
+        "selected_lines": [
+          {
+            "line": 24,
+            "text": "Any ExtrasFactory::create_extras("
+          },
+          {
+            "line": 313,
+            "text": "json getStatus(Any object, const std::string&object_name, double eventtime) {"
+          },
+          {
+            "line": 412,
+            "text": "    else if (object.type() == typeid(std::shared_ptr<VirtualSD>)) {"
+          },
+          {
+            "line": 413,
+            "text": "        // SPDLOG_DEBUG(\"VirtualSD->get_status\");"
+          },
+          {
+            "line": 423,
+            "text": "    else if (object.type() == typeid(std::shared_ptr<PrintStats>)) {"
+          },
+          {
+            "line": 424,
+            "text": "        // SPDLOG_DEBUG(\"PrintStats->get_status\");"
+          },
+          {
+            "line": 444,
+            "text": "    else if (object.type() == typeid(std::shared_ptr<PrintStats>)) {"
+          },
+          {
+            "line": 582,
+            "text": "    } else if (object.type() == typeid(std::shared_ptr<VirtualSD>)) {"
+          }
+        ]
+      },
+      "elegoo/printer.cpp": {
+        "bytes": 12267,
+        "sha256": "3436edd4ccfd3898d5ed6eaa2d2a32f06858cf448fca1a311074b3f8920b0ef6",
+        "selected_lines": [
+          {
+            "line": 126,
+            "text": "Any Printer::load_object(std::shared_ptr<ConfigWrapper> config,"
+          },
+          {
+            "line": 135,
+            "text": "    Any object = ExtrasFactory::create_extras(init_func, config->getsection(section));"
+          }
+        ]
+      },
+      "elegoo/configfile.cpp": {
+        "bytes": 36924,
+        "sha256": "1adea797d61fdb8365f85ec8bb630464288f1f5b4af849e720491209edab8e6c",
+        "selected_lines": [
+          {
+            "line": 572,
+            "text": "    std::string autosave_filename = printer->get_start_args()[\"autosave_file\"];"
+          },
+          {
+            "line": 578,
+            "text": "    if (access(autosave_filename.c_str(), F_OK) != 0)"
+          },
+          {
+            "line": 580,
+            "text": "        FILE *fp = fopen(autosave_filename.c_str(), \"wb+\");"
+          },
+          {
+            "line": 582,
+            "text": "        chmod(autosave_filename.c_str(), 0777);"
+          },
+          {
+            "line": 584,
+            "text": "    std::string auto_savedata = read_config_file(autosave_filename);"
+          },
+          {
+            "line": 634,
+            "text": "json PrinterConfig::get_status(double eventtime)"
+          },
+          {
+            "line": 640,
+            "text": "    status[\"warnings\"] = this->status_warnings;"
+          },
+          {
+            "line": 641,
+            "text": "    status[\"save_config_pending\"] = this->save_config_pending;"
+          },
+          {
+            "line": 642,
+            "text": "    status[\"save_config_pending_items\"] = this->status_save_pending;"
+          },
+          {
+            "line": 682,
+            "text": "void PrinterConfig::cmd_SAVE_CONFIG(std::shared_ptr<GCodeCommand> gcmd)"
+          },
+          {
+            "line": 701,
+            "text": "    std::string cfgname = printer->get_start_args()[\"autosave_file\"];"
+          },
+          {
+            "line": 737,
+            "text": "        if (std::rename(cfgname.c_str(), backup_name.c_str()) != 0)"
+          },
+          {
+            "line": 742,
+            "text": "        if (std::rename(temp_name.c_str(), cfgname.c_str()) != 0)"
+          }
+        ]
+      },
+      "elegoo/common/logger.cpp": {
+        "bytes": 2602,
+        "sha256": "ebb30f41ea4e0714afb7ccc04f7616b3f2dee890b078b523d970a57d4b82af0d",
+        "selected_lines": [
+          {
+            "line": 42,
+            "text": "void ElegooLog::init_log(std::string logger_name,"
+          },
+          {
+            "line": 51,
+            "text": "    std::string log_file_name = \"elegoo.log\";"
+          },
+          {
+            "line": 57,
+            "text": "    auto file_sink = std::make_shared<spdlog::sinks::rotating_file_sink_mt>(logFile, 10*1024*1024, 1);"
+          },
+          {
+            "line": 76,
+            "text": "    logger->set_level(static_cast<spdlog::level::level_enum>(log_level));"
+          },
+          {
+            "line": 80,
+            "text": "    SPDLOG_INFO(\"elegoo log init finish!\");"
+          }
+        ]
+      },
+      "elegoo/CMakeLists.txt": {
+        "bytes": 6079,
+        "sha256": "1f44f52b089eb5ce700bd66652c61289660a8553143b47c25efa78bd78b784d6",
+        "selected_lines": [
+          {
+            "line": 107,
+            "text": "    turbo_core"
+          },
+          {
+            "line": 174,
+            "text": "    turbo_core    "
+          }
+        ]
+      },
+      "elegoo/extras/ai_camera/module/comm/server_socket.cpp": {
+        "bytes": 4334,
+        "sha256": "86e09da0209be16522883fead833e78ffb3d3542e0fd85e0842f11240da06fae",
+        "selected_lines": [
+          {
+            "line": 17,
+            "text": "bool ClientConnection::send(const std::string& message) {"
+          },
+          {
+            "line": 19,
+            "text": "    ssize_t bytes_sent = ::send(m_sockfd, message.c_str(), message.size(), 0);"
+          },
+          {
+            "line": 86,
+            "text": "bool ServerSocket::sendMsg(const std::string& message) {"
+          },
+          {
+            "line": 93,
+            "text": "        m0_client_connection->send(message);"
+          },
+          {
+            "line": 96,
+            "text": "        m1_client_connection->send(message);"
+          },
+          {
+            "line": 101,
+            "text": "void ServerSocket::serverLoop0() {"
+          },
+          {
+            "line": 121,
+            "text": "void ServerSocket::serverLoop1() {"
+          }
+        ]
+      },
+      "elegoo/extras/ai_camera/module/control.cpp": {
+        "bytes": 3704,
+        "sha256": "8971f72fa2d1583e6c87d375a4bfb39375222eafae4be0636ea7e0d4c3fdfda1",
+        "selected_lines": [
+          {
+            "line": 75,
+            "text": "void Control::CameraStatusMonitor() {"
+          },
+          {
+            "line": 76,
+            "text": "  bool status = CommonTools::isFileExists(\"/dev/video0\");"
+          },
+          {
+            "line": 80,
+            "text": "      SPDLOG_WARN(\"Camera device insertion!\");"
+          },
+          {
+            "line": 88,
+            "text": "      SPDLOG_WARN(\"Camera device pull out!\");"
+          }
+        ]
+      },
+      "elegoo/extras/ai_camera/module/util/time_lapse_control.cpp": {
+        "bytes": 11771,
+        "sha256": "c5e6f9dba2cf59dec83659d0aaf08b6a51df3794808dccf1a5fc35fb8c1654be",
+        "selected_lines": [
+          {
+            "line": 93,
+            "text": "bool TimeLapseVideo::Composite(const std::string& video_name, int width, int height, int fps)"
+          },
+          {
+            "line": 102,
+            "text": "    this->video_path_ = this->video_dir_ + this->video_name_;"
+          },
+          {
+            "line": 111,
+            "text": "    if (encoder->encode_from_directory(pic_dir_link, this->video_path_, width, height, fps)) {"
+          },
+          {
+            "line": 112,
+            "text": "        SPDLOG_INFO(\"\u2705 Video saved to {}\", video_path_);"
+          },
+          {
+            "line": 119,
+            "text": "    cmd = \"rm -rf \" + pic_dir_link;"
+          },
+          {
+            "line": 123,
+            "text": "    cmd = \"rm -rf \\'\" + pic_dir + \"\\'\";"
+          }
+        ]
+      }
+    },
+    "network_record_sources_present": [],
+    "qualification": "Public source is an older reference; binary matches are checked separately, not assumed."
+  },
+  "binaries": {
+    "/opt/bin/elegoo_printer": {
+      "sha256": "8039081f9c4b01e720d838d4ab6e4515a8979b9a71a33bd4164321c282e06074",
+      "bytes": 29274740,
+      "functions": [
+        {
+          "function": "elegoo::extras::VirtualSD::get_status[abi:cxx11]()",
+          "va": "0x4b96d0",
+          "bytes": 1176,
+          "strings": [
+            {
+              "at": "0x4b96ec",
+              "value": "file_path"
+            },
+            {
+              "at": "0x4b9748",
+              "value": "progress"
+            },
+            {
+              "at": "0x4b97a8",
+              "value": "is_active"
+            },
+            {
+              "at": "0x4b9808",
+              "value": "file_position"
+            },
+            {
+              "at": "0x4b985c",
+              "value": "file_size"
+            },
+            {
+              "at": "0x4b98b0",
+              "value": "power_outage"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x4b9704",
+              "target": "0x4b9b68",
+              "name": "elegoo::extras::VirtualSD::file_path[abi:cxx11]"
+            },
+            {
+              "at": "0x4b9758",
+              "target": "0x4b9c00",
+              "name": "elegoo::extras::VirtualSD::progress"
+            },
+            {
+              "at": "0x4b97b8",
+              "target": "0x4b9c88",
+              "name": "elegoo::extras::VirtualSD::is_active"
+            },
+            {
+              "at": "0x4b98cc",
+              "target": "0x4c2c74",
+              "name": "elegoo::extras::VirtualSD::file_exists"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::extras::VirtualSD::file_path[abi:cxx11]()",
+          "va": "0x4b9b68",
+          "bytes": 152,
+          "strings": [],
+          "calls": []
+        },
+        {
+          "function": "elegoo::extras::VirtualSD::_load_file(std::shared_ptr<GCodeCommand>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, bool)",
+          "va": "0x4c22c8",
+          "bytes": 1308,
+          "strings": [
+            {
+              "at": "0x4c23b8",
+              "value": "Unable to open file"
+            },
+            {
+              "at": "0x4c249c",
+              "value": "_load_file"
+            },
+            {
+              "at": "0x4c24b4",
+              "value": "VirtualSD File opened: {}, Size:{}"
+            },
+            {
+              "at": "0x4c2680",
+              "value": "virtual_sdcard file open"
+            },
+            {
+              "at": "0x4c2720",
+              "value": "Unable to open file: "
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x4c236c",
+              "target": "0xbeac4",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::basic_ifstream"
+            },
+            {
+              "at": "0x4c2378",
+              "target": "0xc012c",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::is_open"
+            },
+            {
+              "at": "0x4c2518",
+              "target": "0x4c9cf4",
+              "name": "std::remove_reference<std::basic_ifstream<char, std::char_traits<char> >&>::type&& std::move<std::basic_ifstream<char, std::char_traits<char> >&>"
+            },
+            {
+              "at": "0x4c2528",
+              "target": "0xbf9b8",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::operator="
+            },
+            {
+              "at": "0x4c2590",
+              "target": "0x4a4238",
+              "name": "elegoo::extras::PrintStats::set_current_file"
+            },
+            {
+              "at": "0x4c259c",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            },
+            {
+              "at": "0x4c2624",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::extras::VirtualSD::work_handler(double)",
+          "va": "0x4c2d68",
+          "bytes": 5676,
+          "strings": [
+            {
+              "at": "0x4c2da8",
+              "value": "work_handler"
+            },
+            {
+              "at": "0x4c2e00",
+              "value": "Starting SD card print (position "
+            },
+            {
+              "at": "0x4c2fd4",
+              "value": "virtual_sdcard seek"
+            },
+            {
+              "at": "0x4c32a0",
+              "value": "virtual_sdcard read bad"
+            },
+            {
+              "at": "0x4c340c",
+              "value": "The printing time is too short. Increase the wait time to ensure the status is properly reported. size: {}"
+            },
+            {
+              "at": "0x4c348c",
+              "value": "Finished SD card print"
+            },
+            {
+              "at": "0x4c3508",
+              "value": "Done printing file"
+            },
+            {
+              "at": "0x4c3b0c",
+              "value": "Exiting SD card print (position "
+            },
+            {
+              "at": "0x4c3ca8",
+              "value": "print_stats->note_cancel"
+            },
+            {
+              "at": "0x4c3d1c",
+              "value": "print_stats->note_complete"
+            },
+            {
+              "at": "0x4c3fbc",
+              "value": "error_message {}"
+            },
+            {
+              "at": "0x4c4144",
+              "value": "PAUSE"
+            },
+            {
+              "at": "0x4c41bc",
+              "value": "virtual_sdcard dispatch"
+            },
+            {
+              "at": "0x4c4260",
+              "value": "virtual_sdcard on_error"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x4c3084",
+              "target": "0x4a4274",
+              "name": "elegoo::extras::PrintStats::note_start"
+            },
+            {
+              "at": "0x4c3194",
+              "target": "0x4bab18",
+              "name": "elegoo::extras::VirtualSD::run_prepare_work"
+            },
+            {
+              "at": "0x4c3230",
+              "target": "0xbfd6c",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::close"
+            },
+            {
+              "at": "0x4c3250",
+              "target": "0xbfa30",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::basic_ifstream"
+            },
+            {
+              "at": "0x4c3264",
+              "target": "0xbf9b8",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::operator="
+            },
+            {
+              "at": "0x4c3274",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            },
+            {
+              "at": "0x4c3348",
+              "target": "0xbfd6c",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::close"
+            },
+            {
+              "at": "0x4c3364",
+              "target": "0xbfa30",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::basic_ifstream"
+            },
+            {
+              "at": "0x4c3374",
+              "target": "0xbf9b8",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::operator="
+            },
+            {
+              "at": "0x4c3380",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            },
+            {
+              "at": "0x4c3c14",
+              "target": "0x4a47b4",
+              "name": "elegoo::extras::PrintStats::note_error"
+            },
+            {
+              "at": "0x4c3c30",
+              "target": "0xc012c",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::is_open"
+            },
+            {
+              "at": "0x4c3c60",
+              "target": "0x4a4508",
+              "name": "elegoo::extras::PrintStats::note_pause"
+            },
+            {
+              "at": "0x4c3d98",
+              "target": "0x4a46d0",
+              "name": "elegoo::extras::PrintStats::note_complete"
+            },
+            {
+              "at": "0x4c3eac",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            },
+            {
+              "at": "0x4c3ebc",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::extras::VirtualSD::VirtualSD(std::shared_ptr<ConfigWrapper>)",
+          "va": "0x4ada8c",
+          "bytes": 9680,
+          "strings": [
+            {
+              "at": "0x4adc14",
+              "value": "VirtualSD"
+            },
+            {
+              "at": "0x4adc2c",
+              "value": "VirtualSD init!"
+            },
+            {
+              "at": "0x4adcf8",
+              "value": "/opt/usr/record/power_outage.json"
+            },
+            {
+              "at": "0x4add3c",
+              "value": "elegoo:ready"
+            },
+            {
+              "at": "0x4addf4",
+              "value": "elegoo:shutdown"
+            },
+            {
+              "at": "0x4adeb0",
+              "value": "por:power_off"
+            },
+            {
+              "at": "0x4adf6c",
+              "value": "path"
+            },
+            {
+              "at": "0x4adfa4",
+              "value": "_invalid_"
+            },
+            {
+              "at": "0x4ae150",
+              "value": "print_stats"
+            },
+            {
+              "at": "0x4ae258",
+              "value": "cavity_fan"
+            },
+            {
+              "at": "0x4ae46c",
+              "value": "gcode_macro"
+            },
+            {
+              "at": "0x4ae560",
+              "value": "print_start_gcode"
+            },
+            {
+              "at": "0x4ae6d0",
+              "value": "print_start_gcode2"
+            },
+            {
+              "at": "0x4ae83c",
+              "value": "move_to_waste_box"
+            },
+            {
+              "at": "0x4ae9ac",
+              "value": "extrude_filament"
+            },
+            {
+              "at": "0x4aeb18",
+              "value": "on_error_gcode"
+            },
+            {
+              "at": "0x4aec08",
+              "value": "gcode"
+            },
+            {
+              "at": "0x4aed2c",
+              "value": "M20"
+            },
+            {
+              "at": "0x4aed84",
+              "value": "M21"
+            },
+            {
+              "at": "0x4aeddc",
+              "value": "M23"
+            },
+            {
+              "at": "0x4aee34",
+              "value": "M24"
+            },
+            {
+              "at": "0x4aee8c",
+              "value": "M25"
+            },
+            {
+              "at": "0x4aeee4",
+              "value": "M26"
+            },
+            {
+              "at": "0x4aef3c",
+              "value": "M27"
+            },
+            {
+              "at": "0x4af26c",
+              "value": "SDCARD_RESET_FILE"
+            },
+            {
+              "at": "0x4af314",
+              "value": "RESET_PRINT_TIME"
+            },
+            {
+              "at": "0x4af34c",
+              "value": "RESET PRINT TIME"
+            },
+            {
+              "at": "0x4af3f4",
+              "value": "SDCARD_PRINT_FILE"
+            },
+            {
+              "at": "0x4af49c",
+              "value": "AI_SCORE_DET"
+            },
+            {
+              "at": "0x4af4d4",
+              "value": "AI SCORE DET"
+            },
+            {
+              "at": "0x4af57c",
+              "value": "POWER_OUTAGE_RESUME"
+            },
+            {
+              "at": "0x4af5b4",
+              "value": "Resume printing after power outage"
+            },
+            {
+              "at": "0x4af65c",
+              "value": "SET_POWER_OUTAGE_ENABLE"
+            },
+            {
+              "at": "0x4af738",
+              "value": "VirtualSD init success!!"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x4adb54",
+              "target": "0xbfa30",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::basic_ifstream"
+            },
+            {
+              "at": "0x4add60",
+              "target": "0x4c43e8",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4ade18",
+              "target": "0x4c44b0",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4aded0",
+              "target": "0x4c4578",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4ae030",
+              "target": "0x255dbc",
+              "name": "api_module::ConfigManager::getInstance"
+            },
+            {
+              "at": "0x4ae03c",
+              "target": "0x920ac4",
+              "name": "api_module::ConfigManager::get_power_outage_resume_enabled"
+            },
+            {
+              "at": "0x4aed14",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aed34",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4aed68",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aed8c",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4aedc0",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aede4",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4aee18",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aee3c",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4aee70",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aee94",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4aeec8",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aeeec",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4aef20",
+              "target": "0x4c9ee8",
+              "name": "std::_Bind_helper<std::__or_<std::is_integral<std::decay<void "
+            },
+            {
+              "at": "0x4aef44",
+              "target": "0x4c9aa4",
+              "name": "std::pair<std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::function<void "
+            },
+            {
+              "at": "0x4af198",
+              "target": "0x4c4640",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4af288",
+              "target": "0x4c4708",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4af330",
+              "target": "0x4c47d0",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4af410",
+              "target": "0x4c4898",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4af4b8",
+              "target": "0x4c4960",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4af598",
+              "target": "0x4c4a28",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4af678",
+              "target": "0x4c4af0",
+              "name": "std::function<void "
+            },
+            {
+              "at": "0x4affb8",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::extras::PrintStats::get_status[abi:cxx11](double)",
+          "va": "0x4a5114",
+          "bytes": 3604,
+          "strings": [
+            {
+              "at": "0x4a52a4",
+              "value": "canvas_nozzle_fan_off"
+            },
+            {
+              "at": "0x4a52e4",
+              "value": "front_cover_detected"
+            },
+            {
+              "at": "0x4a534c",
+              "value": "canvas_wrap_filament"
+            },
+            {
+              "at": "0x4a538c",
+              "value": "tangling_detected"
+            },
+            {
+              "at": "0x4a53f4",
+              "value": "canvas_locked_rotor"
+            },
+            {
+              "at": "0x4a5438",
+              "value": "filament_detected"
+            },
+            {
+              "at": "0x4a54a0",
+              "value": "beep_enabled"
+            },
+            {
+              "at": "0x4a552c",
+              "value": "beep_left_time"
+            },
+            {
+              "at": "0x4a55b8",
+              "value": "beep_A"
+            },
+            {
+              "at": "0x4a565c",
+              "value": "beep_B"
+            },
+            {
+              "at": "0x4a56e8",
+              "value": "beep_C"
+            },
+            {
+              "at": "0x4a5774",
+              "value": "beep_D"
+            },
+            {
+              "at": "0x4a581c",
+              "value": "cavity_temperature_mode"
+            },
+            {
+              "at": "0x4a585c",
+              "value": "mode"
+            },
+            {
+              "at": "0x4a58a8",
+              "value": "filename"
+            },
+            {
+              "at": "0x4a58f0",
+              "value": "total_duration"
+            },
+            {
+              "at": "0x4a594c",
+              "value": "print_duration"
+            },
+            {
+              "at": "0x4a59bc",
+              "value": "filament_used"
+            },
+            {
+              "at": "0x4a5a04",
+              "value": "state"
+            },
+            {
+              "at": "0x4a5a4c",
+              "value": "message"
+            },
+            {
+              "at": "0x4a5aa4",
+              "value": "info"
+            },
+            {
+              "at": "0x4a5ab8",
+              "value": "total_layer"
+            },
+            {
+              "at": "0x4a5b7c",
+              "value": "current_layer"
+            },
+            {
+              "at": "0x4a5c28",
+              "value": "bed_mesh_detected"
+            },
+            {
+              "at": "0x4a5c70",
+              "value": "print_duration_before_power_loss"
+            },
+            {
+              "at": "0x4a5cb8",
+              "value": "total_duration_before_power_loss"
+            },
+            {
+              "at": "0x4a5d00",
+              "value": "machine_status"
+            },
+            {
+              "at": "0x4a5d70",
+              "value": "machine_sub_status"
+            },
+            {
+              "at": "0x4a5de0",
+              "value": "print_progress"
+            },
+            {
+              "at": "0x4a5e28",
+              "value": "print_time_remaining"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x4a51a8",
+              "target": "0x4a5f8c",
+              "name": "elegoo::extras::PrintStats::update_filament_usage"
+            },
+            {
+              "at": "0x4a5d10",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x4a5d24",
+              "target": "0x8926a0",
+              "name": "api_module::DeviceStatus::get_machine_status"
+            },
+            {
+              "at": "0x4a5d68",
+              "target": "0x39de6c",
+              "name": "api_module::MachineStatus::~MachineStatus"
+            },
+            {
+              "at": "0x4a5d80",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x4a5d94",
+              "target": "0x8926a0",
+              "name": "api_module::DeviceStatus::get_machine_status"
+            },
+            {
+              "at": "0x4a5dd8",
+              "target": "0x39de6c",
+              "name": "api_module::MachineStatus::~MachineStatus"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::extras::PrintStats::note_start()",
+          "va": "0x4a4274",
+          "bytes": 660,
+          "strings": [
+            {
+              "at": "0x4a4350",
+              "value": "position"
+            },
+            {
+              "at": "0x4a438c",
+              "value": "printing"
+            },
+            {
+              "at": "0x4a43c0",
+              "value": "note_start"
+            },
+            {
+              "at": "0x4a43d8",
+              "value": "{} state {}"
+            },
+            {
+              "at": "0x4a4454",
+              "value": "elegoo:print_stats"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "elegoo::extras::PrintStats::note_finish(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+          "va": "0x4a6140",
+          "bytes": 528,
+          "strings": [
+            {
+              "at": "0x4a6184",
+              "value": "note_finish"
+            },
+            {
+              "at": "0x4a619c",
+              "value": "{} state {} error_message {}"
+            },
+            {
+              "at": "0x4a62b0",
+              "value": "elegoo:print_stats"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "QueryStatusHelper::handle_list(std::shared_ptr<WebRequest>)",
+          "va": "0x2da5f4",
+          "bytes": 3980,
+          "strings": [
+            {
+              "at": "0x2da6e8",
+              "value": "configfile"
+            },
+            {
+              "at": "0x2da714",
+              "value": "gcode"
+            },
+            {
+              "at": "0x2da740",
+              "value": "mcu"
+            },
+            {
+              "at": "0x2da76c",
+              "value": "toolhead"
+            },
+            {
+              "at": "0x2da798",
+              "value": "webhooks"
+            },
+            {
+              "at": "0x2da7c4",
+              "value": "bed_mesh"
+            },
+            {
+              "at": "0x2da7f0",
+              "value": "controller_fan"
+            },
+            {
+              "at": "0x2da81c",
+              "value": "exclude_object"
+            },
+            {
+              "at": "0x2da848",
+              "value": "fan_generic"
+            },
+            {
+              "at": "0x2da874",
+              "value": "fan"
+            },
+            {
+              "at": "0x2da8a0",
+              "value": "filament_switch_sensor"
+            },
+            {
+              "at": "0x2da8cc",
+              "value": "gcode_button"
+            },
+            {
+              "at": "0x2da8f8",
+              "value": "gcode_move"
+            },
+            {
+              "at": "0x2da924",
+              "value": "heater_fan"
+            },
+            {
+              "at": "0x2da950",
+              "value": "heater_bed"
+            },
+            {
+              "at": "0x2da97c",
+              "value": "heaters"
+            },
+            {
+              "at": "0x2da9a8",
+              "value": "idle_timeout"
+            },
+            {
+              "at": "0x2da9d4",
+              "value": "input_shaper"
+            },
+            {
+              "at": "0x2daa00",
+              "value": "led"
+            },
+            {
+              "at": "0x2daa2c",
+              "value": "motion_report"
+            },
+            {
+              "at": "0x2daa58",
+              "value": "output_pin"
+            },
+            {
+              "at": "0x2daa84",
+              "value": "pause_resume"
+            },
+            {
+              "at": "0x2daab0",
+              "value": "print_stats"
+            },
+            {
+              "at": "0x2daadc",
+              "value": "probe"
+            },
+            {
+              "at": "0x2dab08",
+              "value": "pwm_cycle_time"
+            },
+            {
+              "at": "0x2dab34",
+              "value": "pwm_tool"
+            },
+            {
+              "at": "0x2dab60",
+              "value": "query_endstops"
+            },
+            {
+              "at": "0x2dab8c",
+              "value": "save_variables"
+            },
+            {
+              "at": "0x2dabb8",
+              "value": "system_stats"
+            },
+            {
+              "at": "0x2dabe4",
+              "value": "stepper_enable"
+            },
+            {
+              "at": "0x2dac10",
+              "value": "temperature_fan"
+            },
+            {
+              "at": "0x2dac3c",
+              "value": "temperature_sensor"
+            },
+            {
+              "at": "0x2dac68",
+              "value": "tmc"
+            },
+            {
+              "at": "0x2dac94",
+              "value": "virtual_sdcard"
+            },
+            {
+              "at": "0x2dacc0",
+              "value": "extruder"
+            },
+            {
+              "at": "0x2dacec",
+              "value": "corexy"
+            },
+            {
+              "at": "0x2db0ec",
+              "value": "objects"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "QueryStatusHelper::do_query(double)",
+          "va": "0x2db580",
+          "bytes": 4568,
+          "strings": [
+            {
+              "at": "0x2dbf54",
+              "value": "canvas_dev"
+            },
+            {
+              "at": "0x2dbfd0",
+              "value": "canvas_lite"
+            },
+            {
+              "at": "0x2dc05c",
+              "value": "connected"
+            },
+            {
+              "at": "0x2dc128",
+              "value": "do_query"
+            },
+            {
+              "at": "0x2dc140",
+              "value": "canvas connection state : {}"
+            },
+            {
+              "at": "0x2dc2e8",
+              "value": "id"
+            },
+            {
+              "at": "0x2dc338",
+              "value": "params"
+            },
+            {
+              "at": "0x2dc34c",
+              "value": "eventtime"
+            },
+            {
+              "at": "0x2dc3ac",
+              "value": "status"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x2db97c",
+              "target": "0x4fefd0",
+              "name": "elegoo::extras::getStatus"
+            }
+          ]
+        },
+        {
+          "function": "QueryStatusHelper::handle_query(std::shared_ptr<WebRequest>, bool)",
+          "va": "0x2dd0cc",
+          "bytes": 2868,
+          "strings": [
+            {
+              "at": "0x2dd114",
+              "value": "objects"
+            },
+            {
+              "at": "0x2dd1a8",
+              "value": "handle_query"
+            },
+            {
+              "at": "0x2dd1c0",
+              "value": "handle_query is_subscribe {} : {}"
+            },
+            {
+              "at": "0x2dd370",
+              "value": "Invalid Argument"
+            },
+            {
+              "at": "0x2dd524",
+              "value": "response_template"
+            },
+            {
+              "at": "0x2dd83c",
+              "value": "webhooks"
+            },
+            {
+              "at": "0x2dd92c",
+              "value": "params"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x2dd738",
+              "target": "0x2dc7c4",
+              "name": "QueryStatusHelper::handle_query"
+            },
+            {
+              "at": "0x2dd7bc",
+              "target": "0x2dcafc",
+              "name": "QueryStatusHelper::handle_query"
+            },
+            {
+              "at": "0x2ddaf8",
+              "target": "0x2dc7c4",
+              "name": "QueryStatusHelper::handle_query"
+            },
+            {
+              "at": "0x2ddb18",
+              "target": "0x2dcafc",
+              "name": "QueryStatusHelper::handle_query"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::extras::getStatus(Any, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, double)",
+          "va": "0x4fefd0",
+          "bytes": 6124,
+          "strings": [
+            {
+              "at": "0x4ff010",
+              "value": "getStatus"
+            },
+            {
+              "at": "0x4ff028",
+              "value": "getStatus: Failed to get object #1 {}"
+            },
+            {
+              "at": "0x5004d0",
+              "value": "getStatus: Failed to get object #2 {}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x4ff230",
+              "target": "0x143508",
+              "name": "PrinterConfig::get_status[abi:cxx11]"
+            },
+            {
+              "at": "0x4ffd4c",
+              "target": "0x4b96d0",
+              "name": "elegoo::extras::VirtualSD::get_status[abi:cxx11]"
+            },
+            {
+              "at": "0x4ffeec",
+              "target": "0x4a5114",
+              "name": "elegoo::extras::PrintStats::get_status[abi:cxx11]"
+            },
+            {
+              "at": "0x50023c",
+              "target": "0x4a5114",
+              "name": "elegoo::extras::PrintStats::get_status[abi:cxx11]"
+            }
+          ]
+        },
+        {
+          "function": "api_module::GcodeParser::get_thumbnail(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+          "va": "0x8eaf3c",
+          "bytes": 992,
+          "strings": [
+            {
+              "at": "0x8eaf64",
+              "value": "get_thumbnail"
+            },
+            {
+              "at": "0x8eaf7c",
+              "value": "get thumbnail from file: {}"
+            },
+            {
+              "at": "0x8eb0d0",
+              "value": "; thumbnail begin"
+            },
+            {
+              "at": "0x8eb10c",
+              "value": "; thumbnail begin %dx%d %d"
+            },
+            {
+              "at": "0x8eb158",
+              "value": "thumbnail format error: {}"
+            },
+            {
+              "at": "0x8eb1c8",
+              "value": "; thumbnail end"
+            },
+            {
+              "at": "0x8eb234",
+              "value": "; "
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x8eaff0",
+              "target": "0xbea58",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::basic_ifstream"
+            },
+            {
+              "at": "0x8eb078",
+              "target": "0x92332c",
+              "name": "api_module::getline_1024"
+            },
+            {
+              "at": "0x8eb2e0",
+              "target": "0xbfd6c",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::close"
+            },
+            {
+              "at": "0x8eb308",
+              "target": "0xbe9ec",
+              "name": "std::basic_ifstream<char, std::char_traits<char> >::~basic_ifstream"
+            }
+          ]
+        },
+        {
+          "function": "api_module::RecordManager::get_udisk_thumbnail_by_filename(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)",
+          "va": "0x8f20c8",
+          "bytes": 460,
+          "strings": [
+            {
+              "at": "0x8f211c",
+              "value": "get_udisk_thumbnail_by_filename"
+            },
+            {
+              "at": "0x8f2134",
+              "value": "Failed to create GcodeParser"
+            },
+            {
+              "at": "0x8f2214",
+              "value": "Thumbnail for file {} not found"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x8f21b8",
+              "target": "0x8eaf3c",
+              "name": "api_module::GcodeParser::get_thumbnail"
+            }
+          ]
+        },
+        {
+          "function": "api_module::RecordManager::get_thumbnail_by_filename(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&)",
+          "va": "0x8f1f50",
+          "bytes": 376,
+          "strings": [
+            {
+              "at": "0x8f204c",
+              "value": "get_thumbnail_by_filename"
+            },
+            {
+              "at": "0x8f2064",
+              "value": "Thumbnail for file {} not found"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "api_module::DeviceStatus::add_task(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >)",
+          "va": "0x891734",
+          "bytes": 1904,
+          "strings": [
+            {
+              "at": "0x891920",
+              "value": "print_status"
+            },
+            {
+              "at": "0x891934",
+              "value": "uuid"
+            },
+            {
+              "at": "0x891998",
+              "value": "filename"
+            },
+            {
+              "at": "0x8919fc",
+              "value": "remaining_time_sec"
+            },
+            {
+              "at": "0x891a60",
+              "value": "print_duration"
+            },
+            {
+              "at": "0x891ac0",
+              "value": "total_duration"
+            },
+            {
+              "at": "0x891b24",
+              "value": "file_create_time"
+            },
+            {
+              "at": "0x891b88",
+              "value": "total_layer"
+            },
+            {
+              "at": "0x891bec",
+              "value": "current_layer"
+            },
+            {
+              "at": "0x891c3c",
+              "value": "machine_status"
+            },
+            {
+              "at": "0x891c50",
+              "value": "progress"
+            },
+            {
+              "at": "0x891ce0",
+              "value": "add_task"
+            },
+            {
+              "at": "0x891cf8",
+              "value": "Add print task: id: {}, name: {}, printer_time: {}, time lapse: {}"
+            },
+            {
+              "at": "0x891e0c",
+              "value": "add_task: applied pending cloud print_task_id={}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x891750",
+              "target": "0x7d592c",
+              "name": "api_module::TaskInfo::TaskInfo"
+            },
+            {
+              "at": "0x89176c",
+              "target": "0x896668",
+              "name": "api_module::TaskInfo::operator="
+            },
+            {
+              "at": "0x8917f8",
+              "target": "0x87d3e0",
+              "name": "api_module::DeviceStatus::generate_uuid[abi:cxx11]"
+            },
+            {
+              "at": "0x891884",
+              "target": "0x886bac",
+              "name": "api_module::DeviceStatus::get_file_create_time"
+            },
+            {
+              "at": "0x8918b0",
+              "target": "0x8ec260",
+              "name": "api_module::RecordManager::getInstance"
+            },
+            {
+              "at": "0x8918c0",
+              "target": "0x8f22c4",
+              "name": "api_module::RecordManager::get_print_time"
+            },
+            {
+              "at": "0x8918ec",
+              "target": "0x886be4",
+              "name": "api_module::DeviceStatus::get_file_total_layer"
+            },
+            {
+              "at": "0x891ca4",
+              "target": "0x88d98c",
+              "name": "api_module::DeviceStatus::ready_post_change_message"
+            },
+            {
+              "at": "0x891cc0",
+              "target": "0x2551f4",
+              "name": "communication::UdsAICameraClient::get_instance"
+            },
+            {
+              "at": "0x891ccc",
+              "target": "0x7cc2dc",
+              "name": "communication::UdsAICameraClient::reset_wire_value"
+            },
+            {
+              "at": "0x891e94",
+              "target": "0x4c9918",
+              "name": "api_module::TaskInfo::~TaskInfo"
+            }
+          ]
+        },
+        {
+          "function": "api_module::DeviceStatus::save_task(api_module::ETaskStatus)",
+          "va": "0x8921a0",
+          "bytes": 972,
+          "strings": [
+            {
+              "at": "0x8921f4",
+              "value": "save_task"
+            },
+            {
+              "at": "0x89220c",
+              "value": "save_task called but no active print task, skip"
+            },
+            {
+              "at": "0x8923a4",
+              "value": "history_task"
+            },
+            {
+              "at": "0x8923ec",
+              "value": "id"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x89227c",
+              "target": "0x886bac",
+              "name": "api_module::DeviceStatus::get_file_create_time"
+            },
+            {
+              "at": "0x8922cc",
+              "target": "0x25606c",
+              "name": "communication::NetworkManager::get_instance"
+            },
+            {
+              "at": "0x8922d8",
+              "target": "0x895170",
+              "name": "communication::NetworkManager::is_wan_normal"
+            },
+            {
+              "at": "0x892314",
+              "target": "0x4c9790",
+              "name": "api_module::TaskInfo::TaskInfo"
+            },
+            {
+              "at": "0x892328",
+              "target": "0x886c1c",
+              "name": "api_module::DeviceStatus::get_task_iot_json[abi:cxx11]"
+            },
+            {
+              "at": "0x892334",
+              "target": "0x4c9918",
+              "name": "api_module::TaskInfo::~TaskInfo"
+            },
+            {
+              "at": "0x892478",
+              "target": "0x25606c",
+              "name": "communication::NetworkManager::get_instance"
+            },
+            {
+              "at": "0x8924b0",
+              "target": "0x811c80",
+              "name": "communication::NetworkManager::report_event_message"
+            },
+            {
+              "at": "0x892504",
+              "target": "0x2563d8",
+              "name": "api_module::DeviceUiMessageHandle::get_instance"
+            },
+            {
+              "at": "0x892524",
+              "target": "0x4c9790",
+              "name": "api_module::TaskInfo::TaskInfo"
+            },
+            {
+              "at": "0x892534",
+              "target": "0x9332d4",
+              "name": "api_module::DeviceUiMessageHandle::report_history_task"
+            },
+            {
+              "at": "0x892540",
+              "target": "0x4c9918",
+              "name": "api_module::TaskInfo::~TaskInfo"
+            },
+            {
+              "at": "0x892544",
+              "target": "0x8ec260",
+              "name": "api_module::RecordManager::getInstance"
+            },
+            {
+              "at": "0x892560",
+              "target": "0x8ed180",
+              "name": "api_module::RecordManager::add_task"
+            }
+          ]
+        },
+        {
+          "function": "api_module::DeviceStatus::get_task_iot_json[abi:cxx11](api_module::TaskInfo)",
+          "va": "0x886c1c",
+          "bytes": 604,
+          "strings": [
+            {
+              "at": "0x886c44",
+              "value": "task_id"
+            },
+            {
+              "at": "0x886c88",
+              "value": "task_name"
+            },
+            {
+              "at": "0x886cd0",
+              "value": "begin_time"
+            },
+            {
+              "at": "0x886d18",
+              "value": "end_time"
+            },
+            {
+              "at": "0x886d60",
+              "value": "task_status"
+            },
+            {
+              "at": "0x886da8",
+              "value": "file_create_time"
+            },
+            {
+              "at": "0x886e14",
+              "value": "print_task_id"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "api_module::RecordManager::add_task(api_module::TaskInfo const&)",
+          "va": "0x8ed180",
+          "bytes": 980,
+          "strings": [
+            {
+              "at": "0x8ed228",
+              "value": "add_task"
+            },
+            {
+              "at": "0x8ed240",
+              "value": "Task record is full, removing oldest task to add new one."
+            },
+            {
+              "at": "0x8ed2f4",
+              "value": "Adding power outage task, updated its information id {} name {} status {}."
+            },
+            {
+              "at": "0x8ed3b0",
+              "value": "Failed to update task in database: {}"
+            },
+            {
+              "at": "0x8ed434",
+              "value": "Adding history task to record: id {} name {} status {}"
+            },
+            {
+              "at": "0x8ed4f0",
+              "value": "Failed to add task to database: {}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x8ed208",
+              "target": "0x8edc30",
+              "name": "api_module::RecordManager::delete_task"
+            },
+            {
+              "at": "0x8ed360",
+              "target": "0x823484",
+              "name": "api_module::SQLDatabase::getInstance"
+            },
+            {
+              "at": "0x8ed370",
+              "target": "0x911c68",
+              "name": "api_module::SQLDatabase::update_task"
+            },
+            {
+              "at": "0x8ed4a0",
+              "target": "0x823484",
+              "name": "api_module::SQLDatabase::getInstance"
+            },
+            {
+              "at": "0x8ed4b0",
+              "target": "0x9116e8",
+              "name": "api_module::SQLDatabase::add_task"
+            }
+          ]
+        },
+        {
+          "function": "api_module::RecordManager::update_task_delay_video_status_finish(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, api_module::ELapseVideoStatus, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int)",
+          "va": "0x8ed820",
+          "bytes": 1040,
+          "strings": [
+            {
+              "at": "0x8ed860",
+              "value": "update_task_delay_video_status_finish"
+            },
+            {
+              "at": "0x8ed878",
+              "value": "Updating task time lapse video: dest_file_name: {}"
+            },
+            {
+              "at": "0x8ed95c",
+              "value": "Comparing with task time lapse video: src_file_name: {}"
+            },
+            {
+              "at": "0x8edae4",
+              "value": "update_task_delay_video_status_finish_timer"
+            },
+            {
+              "at": "0x8edb64",
+              "value": "Updated task {} time lapse video finish status to {}, url: {}, size: {}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x8ed84c",
+              "target": "0x8f25e8",
+              "name": "api_module::RecordManager::remove_extension"
+            },
+            {
+              "at": "0x8ed930",
+              "target": "0x8f26ec",
+              "name": "api_module::RecordManager::get_file_name"
+            },
+            {
+              "at": "0x8eda70",
+              "target": "0x2e8344",
+              "name": "api_module::TimerManager::getInstance"
+            },
+            {
+              "at": "0x8eda90",
+              "target": "0x4c9790",
+              "name": "api_module::TaskInfo::TaskInfo"
+            },
+            {
+              "at": "0x8edb08",
+              "target": "0x93d274",
+              "name": "api_module::TimerManager::add_timer_task"
+            },
+            {
+              "at": "0x8edb38",
+              "target": "0x8ed73c",
+              "name": "api_module::RecordManager::update_task_delay_video_status_finish"
+            }
+          ]
+        },
+        {
+          "function": "PrinterConfig::get_status[abi:cxx11](double)",
+          "va": "0x143508",
+          "bytes": 424,
+          "strings": [
+            {
+              "at": "0x143530",
+              "value": "config"
+            },
+            {
+              "at": "0x143578",
+              "value": "settings"
+            },
+            {
+              "at": "0x1435c0",
+              "value": "warnings"
+            },
+            {
+              "at": "0x143608",
+              "value": "save_config_pending"
+            },
+            {
+              "at": "0x143650",
+              "value": "save_config_pending_items"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "PrinterConfig::cmd_SAVE_CONFIG(std::shared_ptr<GCodeCommand>)",
+          "va": "0x143aa0",
+          "bytes": 3300,
+          "strings": [
+            {
+              "at": "0x143ae0",
+              "value": "gcode"
+            },
+            {
+              "at": "0x143b78",
+              "value": "M400"
+            },
+            {
+              "at": "0x143c58",
+              "value": "#*# "
+            },
+            {
+              "at": "0x143cdc",
+              "value": "\n\n"
+            },
+            {
+              "at": "0x143dec",
+              "value": "autosave_file"
+            },
+            {
+              "at": "0x143e90",
+              "value": "wb+"
+            },
+            {
+              "at": "0x143fc4",
+              "value": "_backup"
+            },
+            {
+              "at": "0x143fdc",
+              "value": "_temp"
+            },
+            {
+              "at": "0x144034",
+              "value": ".cfg"
+            },
+            {
+              "at": "0x1440a8",
+              "value": "_backup.cfg"
+            },
+            {
+              "at": "0x144110",
+              "value": "_temp.cfg"
+            },
+            {
+              "at": "0x144158",
+              "value": "cmd_SAVE_CONFIG"
+            },
+            {
+              "at": "0x144170",
+              "value": "CFG {} BACKUP {} TEMP {}"
+            },
+            {
+              "at": "0x144230",
+              "value": "Unable to open temp file for writing"
+            },
+            {
+              "at": "0x1442fc",
+              "value": "Unable to rename original config file to backup"
+            },
+            {
+              "at": "0x14437c",
+              "value": "Unable to rename temp file to config file"
+            },
+            {
+              "at": "0x144624",
+              "value": "Exception during SAVE_CONFIG: "
+            },
+            {
+              "at": "0x144688",
+              "value": "Unable to write config file during SAVE_CONFIG"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x143bd4",
+              "target": "0x145e54",
+              "name": "PrinterConfig::build_config_string[abi:cxx11]"
+            },
+            {
+              "at": "0x143c7c",
+              "target": "0x146408",
+              "name": "PrinterConfig::trim"
+            },
+            {
+              "at": "0x143ccc",
+              "target": "0x146408",
+              "name": "PrinterConfig::trim"
+            },
+            {
+              "at": "0x143d90",
+              "target": "0x146538",
+              "name": "PrinterConfig::join"
+            },
+            {
+              "at": "0x143e98",
+              "target": "0xbf61c",
+              "name": "fopen"
+            },
+            {
+              "at": "0x143ec4",
+              "target": "0xbf874",
+              "name": "fclose"
+            },
+            {
+              "at": "0x143ed8",
+              "target": "0x144784",
+              "name": "PrinterConfig::read_config_file"
+            },
+            {
+              "at": "0x143eec",
+              "target": "0x144990",
+              "name": "PrinterConfig::find_autosave_data"
+            },
+            {
+              "at": "0x143f00",
+              "target": "0x145d40",
+              "name": "PrinterConfig::build_config_wrapper"
+            },
+            {
+              "at": "0x143f2c",
+              "target": "0x144fb4",
+              "name": "PrinterConfig::strip_duplicates"
+            },
+            {
+              "at": "0x143f74",
+              "target": "0x146408",
+              "name": "PrinterConfig::trim"
+            },
+            {
+              "at": "0x1442c8",
+              "target": "0xbf3d0",
+              "name": "rename"
+            },
+            {
+              "at": "0x144348",
+              "target": "0xbf3d0",
+              "name": "rename"
+            }
+          ]
+        },
+        {
+          "function": "PrinterConfig::read_main_config()",
+          "va": "0x142e80",
+          "bytes": 1120,
+          "strings": [
+            {
+              "at": "0x142ecc",
+              "value": "config_file"
+            },
+            {
+              "at": "0x142f5c",
+              "value": "autosave_file"
+            },
+            {
+              "at": "0x143014",
+              "value": "wb+"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x142fc4",
+              "target": "0x144784",
+              "name": "PrinterConfig::read_config_file"
+            },
+            {
+              "at": "0x14301c",
+              "target": "0xbf61c",
+              "name": "fopen"
+            },
+            {
+              "at": "0x14302c",
+              "target": "0xbf874",
+              "name": "fclose"
+            },
+            {
+              "at": "0x14305c",
+              "target": "0x144784",
+              "name": "PrinterConfig::read_config_file"
+            },
+            {
+              "at": "0x143084",
+              "target": "0x144990",
+              "name": "PrinterConfig::find_autosave_data"
+            },
+            {
+              "at": "0x143098",
+              "target": "0x145d40",
+              "name": "PrinterConfig::build_config_wrapper"
+            },
+            {
+              "at": "0x1430c8",
+              "target": "0x144fb4",
+              "name": "PrinterConfig::strip_duplicates"
+            },
+            {
+              "at": "0x1430f8",
+              "target": "0x145d40",
+              "name": "PrinterConfig::build_config_wrapper"
+            },
+            {
+              "at": "0x143140",
+              "target": "0x145d40",
+              "name": "PrinterConfig::build_config_wrapper"
+            },
+            {
+              "at": "0x14316c",
+              "target": "0x145eec",
+              "name": "PrinterConfig::build_status"
+            }
+          ]
+        },
+        {
+          "function": "elegoo::common::ElegooLog::init_log(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, int, bool)",
+          "va": "0x8685e0",
+          "bytes": 1328,
+          "strings": [
+            {
+              "at": "0x868630",
+              "value": "elegoo.log"
+            },
+            {
+              "at": "0x8686b8",
+              "value": "[%Y-%m-%d %H:%M:%S.%e] [%^%l%$] [%s:%#] [%t] %v"
+            },
+            {
+              "at": "0x868944",
+              "value": "init_log"
+            },
+            {
+              "at": "0x86895c",
+              "value": "elegoo log init finish!"
+            }
+          ],
+          "calls": []
+        },
+        {
+          "function": "communication::HTTPServer::handle_file_download(std::shared_ptr<HttpRequest> const&, std::shared_ptr<hv::HttpResponseWriter> const&, communication::FilePathType)",
+          "va": "0x84dee0",
+          "bytes": 2724,
+          "strings": [
+            {
+              "at": "0x84df5c",
+              "value": "handle_file_download"
+            },
+            {
+              "at": "0x84df74",
+              "value": "Printer is busy, cannot handle download request"
+            },
+            {
+              "at": "0x84e010",
+              "value": "Handling file download request from client: {}"
+            },
+            {
+              "at": "0x84e080",
+              "value": "X-Token"
+            },
+            {
+              "at": "0x84e128",
+              "value": "Invalid or missing token in the request."
+            },
+            {
+              "at": "0x84e1fc",
+              "value": "Failed to add client: {}"
+            },
+            {
+              "at": "0x84e2f4",
+              "value": "file_name"
+            },
+            {
+              "at": "0x84e33c",
+              "value": "File name is missing in the request."
+            },
+            {
+              "at": "0x84e3d4",
+              "value": "rb"
+            },
+            {
+              "at": "0x84e424",
+              "value": "Failed to open file: {}"
+            },
+            {
+              "at": "0x84e4a4",
+              "value": "attachment; filename=\""
+            },
+            {
+              "at": "0x84e4d4",
+              "value": "Content-Disposition"
+            },
+            {
+              "at": "0x84e534",
+              "value": "Content-Length"
+            },
+            {
+              "at": "0x84e6e0",
+              "value": "Waited too long for write buffer to clear"
+            },
+            {
+              "at": "0x84e7b8",
+              "value": "Failed to write chunked response for file: {}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x84df0c",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x84df20",
+              "target": "0x8926a0",
+              "name": "api_module::DeviceStatus::get_machine_status"
+            },
+            {
+              "at": "0x84df40",
+              "target": "0x39de6c",
+              "name": "api_module::MachineStatus::~MachineStatus"
+            },
+            {
+              "at": "0x84e098",
+              "target": "0x85183c",
+              "name": "communication::HTTPServer::check_token"
+            },
+            {
+              "at": "0x84e0bc",
+              "target": "0x8519f0",
+              "name": "communication::HTTPServer::contains_client"
+            },
+            {
+              "at": "0x84e184",
+              "target": "0x8519f0",
+              "name": "communication::HTTPServer::contains_client"
+            },
+            {
+              "at": "0x84e1a8",
+              "target": "0x851db8",
+              "name": "communication::HTTPServer::add_client"
+            },
+            {
+              "at": "0x84e260",
+              "target": "0x8519f0",
+              "name": "communication::HTTPServer::contains_client"
+            },
+            {
+              "at": "0x84e278",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x84e28c",
+              "target": "0x8926a0",
+              "name": "api_module::DeviceStatus::get_machine_status"
+            },
+            {
+              "at": "0x84e2c0",
+              "target": "0x39de6c",
+              "name": "api_module::MachineStatus::~MachineStatus"
+            },
+            {
+              "at": "0x84e390",
+              "target": "0x851fc8",
+              "name": "communication::HTTPServer::remove_client"
+            },
+            {
+              "at": "0x84e3ac",
+              "target": "0x851bb4",
+              "name": "communication::HTTPServer::get_file_path"
+            },
+            {
+              "at": "0x84e47c",
+              "target": "0x851fc8",
+              "name": "communication::HTTPServer::remove_client"
+            },
+            {
+              "at": "0x84e564",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x84e578",
+              "target": "0x88eacc",
+              "name": "api_module::DeviceStatus::set_status"
+            },
+            {
+              "at": "0x84e740",
+              "target": "0x851fc8",
+              "name": "communication::HTTPServer::remove_client"
+            },
+            {
+              "at": "0x84e744",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x84e754",
+              "target": "0x88ee04",
+              "name": "api_module::DeviceStatus::set_sub_status"
+            },
+            {
+              "at": "0x84e81c",
+              "target": "0x851fc8",
+              "name": "communication::HTTPServer::remove_client"
+            },
+            {
+              "at": "0x84e820",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x84e830",
+              "target": "0x88ee04",
+              "name": "api_module::DeviceStatus::set_sub_status"
+            },
+            {
+              "at": "0x84e86c",
+              "target": "0x851fc8",
+              "name": "communication::HTTPServer::remove_client"
+            },
+            {
+              "at": "0x84e870",
+              "target": "0x87ab00",
+              "name": "api_module::DeviceStatus::getInstance"
+            },
+            {
+              "at": "0x84e880",
+              "target": "0x88ee04",
+              "name": "api_module::DeviceStatus::set_sub_status"
+            },
+            {
+              "at": "0x84e8f4",
+              "target": "0x39de6c",
+              "name": "api_module::MachineStatus::~MachineStatus"
+            }
+          ]
+        },
+        {
+          "function": "communication::WanStrategy::start()",
+          "va": "0x81d644",
+          "bytes": 708,
+          "strings": [
+            {
+              "at": "0x81d664",
+              "value": "start"
+            },
+            {
+              "at": "0x81d67c",
+              "value": "Starting WAN strategy"
+            },
+            {
+              "at": "0x81d710",
+              "value": "Network is connected, starting WAN strategy."
+            },
+            {
+              "at": "0x81d7f0",
+              "value": "Network is not connected, WAN strategy will not start."
+            },
+            {
+              "at": "0x81d8ac",
+              "value": "Scheduled network status check_network_status_task_id_  {} "
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x81d6c4",
+              "target": "0x2551f4",
+              "name": "communication::UdsAICameraClient::get_instance"
+            },
+            {
+              "at": "0x81d6d0",
+              "target": "0x7d2170",
+              "name": "communication::UdsAICameraClient::stop_local_video_monitor"
+            },
+            {
+              "at": "0x81d6d8",
+              "target": "0x81a38c",
+              "name": "communication::WanStrategy::get_network_status"
+            },
+            {
+              "at": "0x81d764",
+              "target": "0x2563d8",
+              "name": "api_module::DeviceUiMessageHandle::get_instance"
+            },
+            {
+              "at": "0x81d77c",
+              "target": "0x92f218",
+              "name": "api_module::DeviceUiMessageHandle::report_network_status"
+            },
+            {
+              "at": "0x81d784",
+              "target": "0x81a3bc",
+              "name": "communication::WanStrategy::start_run"
+            },
+            {
+              "at": "0x81d7ac",
+              "target": "0x2563d8",
+              "name": "api_module::DeviceUiMessageHandle::get_instance"
+            },
+            {
+              "at": "0x81d7c4",
+              "target": "0x92f218",
+              "name": "api_module::DeviceUiMessageHandle::report_network_status"
+            },
+            {
+              "at": "0x81d838",
+              "target": "0x2e8344",
+              "name": "api_module::TimerManager::getInstance"
+            },
+            {
+              "at": "0x81d874",
+              "target": "0x93d274",
+              "name": "api_module::TimerManager::add_timer_task"
+            }
+          ]
+        },
+        {
+          "function": "communication::HTTPClient::download_file(char const*, char const*, std::function<void (unsigned int, unsigned int, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+          "va": "0x8022b0",
+          "bytes": 2292,
+          "strings": [
+            {
+              "at": "0x802338",
+              "value": ".download"
+            },
+            {
+              "at": "0x8023b8",
+              "value": "wb"
+            },
+            {
+              "at": "0x802644",
+              "value": "download_file"
+            },
+            {
+              "at": "0x80265c",
+              "value": "File download canceled (incomplete)"
+            },
+            {
+              "at": "0x8026d4",
+              "value": "File download failed: resp={}, status={}"
+            },
+            {
+              "at": "0x802710",
+              "value": "null"
+            },
+            {
+              "at": "0x80271c",
+              "value": "ok"
+            },
+            {
+              "at": "0x802828",
+              "value": "Expected file size: {}, actual file size: {}"
+            },
+            {
+              "at": "0x80292c",
+              "value": "%02x"
+            },
+            {
+              "at": "0x802988",
+              "value": "MD5 mismatch! expected: {}, actual: {}"
+            },
+            {
+              "at": "0x802a40",
+              "value": "File downloaded{}."
+            },
+            {
+              "at": "0x802a6c",
+              "value": " and MD5 verified"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x80253c",
+              "target": "0x802280",
+              "name": "communication::HTTPClient::download_file"
+            },
+            {
+              "at": "0x802a14",
+              "target": "0xbf3d0",
+              "name": "rename"
+            },
+            {
+              "at": "0x802b44",
+              "target": "0x802280",
+              "name": "communication::HTTPClient::download_file"
+            }
+          ]
+        },
+        {
+          "function": "api_module::RecordManager::read_udisk_files(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, std::deque<api_module::FileDetail, std::allocator<api_module::FileDetail> >&)",
+          "va": "0x8ee480",
+          "bytes": 1352,
+          "strings": [
+            {
+              "at": "0x8ee4e8",
+              "value": "read_udisk_files"
+            },
+            {
+              "at": "0x8ee500",
+              "value": "get all files from {}"
+            },
+            {
+              "at": "0x8ee648",
+              "value": ".."
+            },
+            {
+              "at": "0x8ee66c",
+              "value": "FOUND."
+            },
+            {
+              "at": "0x8ee734",
+              "value": "folder"
+            },
+            {
+              "at": "0x8ee784",
+              "value": ".gcode"
+            },
+            {
+              "at": "0x8ee7d4",
+              "value": "file"
+            },
+            {
+              "at": "0x8ee940",
+              "value": "U disk files parsed: {}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x8ee4a0",
+              "target": "0x8ee2c0",
+              "name": "api_module::RecordManager::check_path_level"
+            },
+            {
+              "at": "0x8ee5c4",
+              "target": "0x8f23a8",
+              "name": "api_module::RecordManager::is_udisk_mounted"
+            },
+            {
+              "at": "0x8ee700",
+              "target": "0x8961d4",
+              "name": "api_module::FileDetail::FileDetail"
+            },
+            {
+              "at": "0x8ee808",
+              "target": "0x8962c0",
+              "name": "api_module::FileDetail::~FileDetail"
+            }
+          ]
+        },
+        {
+          "function": "api_module::RecordManager::get_udisk_file_details(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >, api_module::FileDetail&)",
+          "va": "0x8f1228",
+          "bytes": 1528,
+          "strings": [
+            {
+              "at": "0x8f1280",
+              "value": "get_udisk_file_details"
+            },
+            {
+              "at": "0x8f1298",
+              "value": "Get U disk file details from {}"
+            },
+            {
+              "at": "0x8f1348",
+              "value": "File {} does not exist"
+            },
+            {
+              "at": "0x8f1474",
+              "value": "folder"
+            },
+            {
+              "at": "0x8f14ac",
+              "value": ".gcode"
+            },
+            {
+              "at": "0x8f14f8",
+              "value": "file"
+            },
+            {
+              "at": "0x8f1614",
+              "value": "File {} has 0 layers, re-parsing to update details."
+            },
+            {
+              "at": "0x8f16d0",
+              "value": "Parsed file: {}, size: {}, layer: {}, print_time: {}, total_filament_used: {}"
+            },
+            {
+              "at": "0x8f178c",
+              "value": "Failed to parse file: {}"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x8f1598",
+              "target": "0x8faad0",
+              "name": "api_module::FileDetail::operator="
+            },
+            {
+              "at": "0x8f1670",
+              "target": "0x8ed020",
+              "name": "api_module::RecordManager::get_udisk_gcode_details"
+            }
+          ]
+        }
+      ]
+    },
+    "/opt/bin/ai_camera": {
+      "sha256": "ad888fec26ce214427eda038ae70b76cf68155f365c669ed647c1c09bad7a1f7",
+      "bytes": 4369420,
+      "functions": [
+        {
+          "function": "znp::ServerSocket::sendMsg(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+          "va": "0x1528c4",
+          "bytes": 500,
+          "strings": [
+            {
+              "at": "0x152984",
+              "value": "sendMsg"
+            },
+            {
+              "at": "0x15299c",
+              "value": "no client connected"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x152a1c",
+              "target": "0x152140",
+              "name": "znp::ClientConnection::send"
+            },
+            {
+              "at": "0x152a50",
+              "target": "0x152140",
+              "name": "znp::ClientConnection::send"
+            }
+          ]
+        },
+        {
+          "function": "znp::ClientConnection::send(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&)",
+          "va": "0x152140",
+          "bytes": 532,
+          "strings": [
+            {
+              "at": "0x152184",
+              "value": "send"
+            },
+            {
+              "at": "0x15219c",
+              "value": "send:{}"
+            },
+            {
+              "at": "0x1522b4",
+              "value": "send failed"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x152260",
+              "target": "0x7b800",
+              "name": "send"
+            }
+          ],
+          "selected_send_loop_instructions": [
+            {
+              "at": "0x1521f0",
+              "instruction": "sub r3, fp, #0x58"
+            },
+            {
+              "at": "0x1521f4",
+              "instruction": "mov r0, r3"
+            },
+            {
+              "at": "0x1521f8",
+              "instruction": "bl #0x7b974"
+            },
+            {
+              "at": "0x1521fc",
+              "instruction": "mov r2, r0"
+            },
+            {
+              "at": "0x152200",
+              "instruction": "ldr r3, [fp, #-0x10]"
+            },
+            {
+              "at": "0x152204",
+              "instruction": "cmp r2, r3"
+            },
+            {
+              "at": "0x152208",
+              "instruction": "movhi r3, #1"
+            },
+            {
+              "at": "0x15220c",
+              "instruction": "movls r3, #0"
+            },
+            {
+              "at": "0x152210",
+              "instruction": "uxtb r3, r3"
+            },
+            {
+              "at": "0x152214",
+              "instruction": "cmp r3, #0"
+            },
+            {
+              "at": "0x152218",
+              "instruction": "beq #0x152320"
+            },
+            {
+              "at": "0x15221c",
+              "instruction": "ldr r3, [fp, #-0x60]"
+            },
+            {
+              "at": "0x152220",
+              "instruction": "ldr r4, [r3]"
+            },
+            {
+              "at": "0x152224",
+              "instruction": "sub r3, fp, #0x58"
+            },
+            {
+              "at": "0x152228",
+              "instruction": "mov r0, r3"
+            },
+            {
+              "at": "0x15222c",
+              "instruction": "bl #0x7b8b4"
+            },
+            {
+              "at": "0x152230",
+              "instruction": "mov r2, r0"
+            },
+            {
+              "at": "0x152234",
+              "instruction": "ldr r3, [fp, #-0x10]"
+            },
+            {
+              "at": "0x152238",
+              "instruction": "add r5, r2, r3"
+            },
+            {
+              "at": "0x15223c",
+              "instruction": "sub r3, fp, #0x58"
+            },
+            {
+              "at": "0x152240",
+              "instruction": "mov r0, r3"
+            },
+            {
+              "at": "0x152244",
+              "instruction": "bl #0x7b974"
+            },
+            {
+              "at": "0x152248",
+              "instruction": "mov r2, r0"
+            },
+            {
+              "at": "0x15224c",
+              "instruction": "ldr r3, [fp, #-0x10]"
+            },
+            {
+              "at": "0x152250",
+              "instruction": "sub r2, r2, r3"
+            },
+            {
+              "at": "0x152254",
+              "instruction": "mov r3, #0x4000"
+            },
+            {
+              "at": "0x152258",
+              "instruction": "mov r1, r5"
+            },
+            {
+              "at": "0x15225c",
+              "instruction": "mov r0, r4"
+            },
+            {
+              "at": "0x152260",
+              "instruction": "bl #0x7b800"
+            },
+            {
+              "at": "0x152264",
+              "instruction": "mov r3, r0"
+            },
+            {
+              "at": "0x152304",
+              "instruction": "ldr r3, [fp, #-0x14]"
+            },
+            {
+              "at": "0x152308",
+              "instruction": "ldr r2, [fp, #-0x10]"
+            },
+            {
+              "at": "0x15230c",
+              "instruction": "add r3, r2, r3"
+            },
+            {
+              "at": "0x152310",
+              "instruction": "str r3, [fp, #-0x10]"
+            },
+            {
+              "at": "0x152314",
+              "instruction": "b #0x1521f0"
+            },
+            {
+              "at": "0x152318",
+              "instruction": "nop "
+            },
+            {
+              "at": "0x15231c",
+              "instruction": "b #0x1521f0"
+            }
+          ]
+        },
+        {
+          "function": "znp::ServerSocket::serverLoop0()",
+          "va": "0x152c48",
+          "bytes": 592,
+          "strings": [
+            {
+              "at": "0x152ca8",
+              "value": "serverLoop0"
+            },
+            {
+              "at": "0x152cc0",
+              "value": "client0 connected"
+            },
+            {
+              "at": "0x152df8",
+              "value": "client0 disconnected"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x152c70",
+              "target": "0x1527d8",
+              "name": "znp::ServerSocket::acceptConnection"
+            },
+            {
+              "at": "0x152d40",
+              "target": "0x152354",
+              "name": "znp::ClientConnection::receive"
+            },
+            {
+              "at": "0x152da0",
+              "target": "0x152ab8",
+              "name": "znp::parseBuffer"
+            }
+          ]
+        },
+        {
+          "function": "znp::ServerSocket::serverLoop1()",
+          "va": "0x152e98",
+          "bytes": 592,
+          "strings": [
+            {
+              "at": "0x152ef8",
+              "value": "serverLoop1"
+            },
+            {
+              "at": "0x152f10",
+              "value": "client1 connected"
+            },
+            {
+              "at": "0x153048",
+              "value": "client1 disconnected"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x152ec0",
+              "target": "0x1527d8",
+              "name": "znp::ServerSocket::acceptConnection"
+            },
+            {
+              "at": "0x152f90",
+              "target": "0x152354",
+              "name": "znp::ClientConnection::receive"
+            },
+            {
+              "at": "0x152ff0",
+              "target": "0x152ab8",
+              "name": "znp::parseBuffer"
+            }
+          ]
+        },
+        {
+          "function": "znp::TimeLapseVideo::Composite(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> > const&, int, int, int)",
+          "va": "0x18e324",
+          "bytes": 1616,
+          "strings": [
+            {
+              "at": "0x18e370",
+              "value": "/tmp/pic_link"
+            },
+            {
+              "at": "0x18e394",
+              "value": "ln -s '"
+            },
+            {
+              "at": "0x18e418",
+              "value": "Composite"
+            },
+            {
+              "at": "0x18e430",
+              "value": "cmd {}"
+            },
+            {
+              "at": "0x18e4a4",
+              "value": ".mp4"
+            },
+            {
+              "at": "0x18e558",
+              "value": "no such pid_dir: {} "
+            },
+            {
+              "at": "0x18e700",
+              "value": "rm -rf "
+            },
+            {
+              "at": "0x18e7c4",
+              "value": "rm -rf '"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x18e5e4",
+              "target": "0x1a811c",
+              "name": "ImageToVideoEncoder::encode_from_directory"
+            }
+          ]
+        },
+        {
+          "function": "znp::Control::CameraStatusMonitor()",
+          "va": "0xea324",
+          "bytes": 728,
+          "strings": [
+            {
+              "at": "0xea34c",
+              "value": "/dev/video1"
+            },
+            {
+              "at": "0xea3d8",
+              "value": "CameraStatusMonitor"
+            },
+            {
+              "at": "0xea3f0",
+              "value": "Camera device insertion!"
+            },
+            {
+              "at": "0xea4d8",
+              "value": "Camera device pull out!"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0xea3c4",
+              "target": "0xea008",
+              "name": "znp::Control::Start"
+            },
+            {
+              "at": "0xea450",
+              "target": "0x155484",
+              "name": "znp::MessageCameraInsert"
+            },
+            {
+              "at": "0xea464",
+              "target": "0x154ed8",
+              "name": "znp::MessageParseString"
+            },
+            {
+              "at": "0xea488",
+              "target": "0x1528c4",
+              "name": "znp::ServerSocket::sendMsg"
+            },
+            {
+              "at": "0xea4ac",
+              "target": "0xea16c",
+              "name": "znp::Control::Stop"
+            },
+            {
+              "at": "0xea538",
+              "target": "0x1555e0",
+              "name": "znp::MessageCameraPullOut"
+            },
+            {
+              "at": "0xea54c",
+              "target": "0x154ed8",
+              "name": "znp::MessageParseString"
+            },
+            {
+              "at": "0xea570",
+              "target": "0x1528c4",
+              "name": "znp::ServerSocket::sendMsg"
+            }
+          ]
+        },
+        {
+          "function": "znp::V4L2::GetFramesThread()",
+          "va": "0x146990",
+          "bytes": 3728,
+          "strings": [
+            {
+              "at": "0x1469c0",
+              "value": "GetFramesThread"
+            },
+            {
+              "at": "0x1469d8",
+              "value": "Fd error!"
+            },
+            {
+              "at": "0x146a4c",
+              "value": "start GetFramesThread!"
+            },
+            {
+              "at": "0x146c18",
+              "value": "V4L2 [{}] DQBUF failed(x{}): {}"
+            },
+            {
+              "at": "0x146d3c",
+              "value": "V4L2 [{}] got empty frame(x{}), index[{}]"
+            },
+            {
+              "at": "0x146df4",
+              "value": "V4L2 [{}] Requeue buffer failed: {}"
+            },
+            {
+              "at": "0x147060",
+              "value": "V4L2 [{}] first frame received, size {} bytes"
+            },
+            {
+              "at": "0x1470f0",
+              "value": "V4L2 [{}] camera recovered, frames resumed"
+            },
+            {
+              "at": "0x147158",
+              "value": "frames resumed"
+            },
+            {
+              "at": "0x1471a8",
+              "value": "streaming"
+            },
+            {
+              "at": "0x1472dc",
+              "value": "V4L2 [{}] no valid frame for {} ms (dqbuf_fail={}, empty={}), light restart (attempt {})"
+            },
+            {
+              "at": "0x147364",
+              "value": "light restart"
+            },
+            {
+              "at": "0x1473d0",
+              "value": "V4L2 [{}] no valid frame for {} ms (dqbuf_fail={}, empty={}), full reopen (attempt {})"
+            },
+            {
+              "at": "0x147458",
+              "value": "full reopen"
+            },
+            {
+              "at": "0x1474cc",
+              "value": "V4L2 [{}] camera not delivering '{}' frames after {} recovery attempts, suspected hardware/firmware fault"
+            },
+            {
+              "at": "0x14754c",
+              "value": "no frame after "
+            },
+            {
+              "at": "0x147564",
+              "value": " recovery attempts"
+            },
+            {
+              "at": "0x147698",
+              "value": "GetFramesThread Over!"
+            }
+          ],
+          "calls": [
+            {
+              "at": "0x147174",
+              "target": "0x144510",
+              "name": "znp::V4L2::ReportHealth"
+            },
+            {
+              "at": "0x1471c4",
+              "target": "0x144510",
+              "name": "znp::V4L2::ReportHealth"
+            },
+            {
+              "at": "0x1472a4",
+              "target": "0x14690c",
+              "name": "znp::V4L2::GetFramesThread"
+            },
+            {
+              "at": "0x147380",
+              "target": "0x144510",
+              "name": "znp::V4L2::ReportHealth"
+            },
+            {
+              "at": "0x1473a0",
+              "target": "0x14624c",
+              "name": "znp::V4L2::RestartStreaming"
+            },
+            {
+              "at": "0x147474",
+              "target": "0x144510",
+              "name": "znp::V4L2::ReportHealth"
+            },
+            {
+              "at": "0x147494",
+              "target": "0x146418",
+              "name": "znp::V4L2::ReopenDevice"
+            },
+            {
+              "at": "0x147580",
+              "target": "0x144510",
+              "name": "znp::V4L2::ReportHealth"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "image_files": {
+    "/opt/inst/printer_dsp.cfg": {
+      "sha256": "0cb2216fea47b045f5bab2c88f1812560af2ae347e6c0b213788a9b54bc8fdfb",
+      "bytes": 36181,
+      "selected_lines": [
+        {
+          "line": 262,
+          "text": "[virtual_sdcard]"
+        },
+        {
+          "line": 263,
+          "text": "path= /opt/usr/gcode"
+        }
+      ]
+    },
+    "/opt/bin/run_printer.sh": {
+      "sha256": "c26d495c6ea4870cb36a42c0e291db59caf2a9cfaa8782a3befeb766106581e0",
+      "bytes": 2172,
+      "selected_lines": [
+        {
+          "line": 13,
+          "text": "DEF_CFG_DIR=/opt/inst"
+        },
+        {
+          "line": 14,
+          "text": "USR_CFG_DIR=/opt/usr/cfg"
+        },
+        {
+          "line": 15,
+          "text": "CFG_FILE=printer_dsp.cfg"
+        },
+        {
+          "line": 16,
+          "text": "PRODUCT_TEST_CFG_FILE=product_test.cfg"
+        },
+        {
+          "line": 17,
+          "text": "AUTO_SAVE_CFG_FILE=autosave.cfg"
+        },
+        {
+          "line": 37,
+          "text": "    LD_BIND_NOW=1 elegoo_printer $DEF_CFG_DIR/$CFG_FILE -s $USR_CFG_DIR/$AUTO_SAVE_CFG_FILE -a $UDS_FILE&"
+        }
+      ]
+    },
+    "/etc/init_dir.sh": {
+      "sha256": "1378bf0a4ab4750485d984260f622b3b9e0288cc7e23fd7d4885b3b072983633",
+      "bytes": 2763,
+      "selected_lines": [
+        {
+          "line": 4,
+          "text": "/opt/usr/record"
+        },
+        {
+          "line": 6,
+          "text": "/opt/usr/logs"
+        },
+        {
+          "line": 7,
+          "text": "/opt/usr/gcode/local"
+        },
+        {
+          "line": 8,
+          "text": "/opt/usr/gcode_img"
+        },
+        {
+          "line": 9,
+          "text": "/opt/usr/video"
+        },
+        {
+          "line": 10,
+          "text": "/opt/usr/picture"
+        },
+        {
+          "line": 116,
+          "text": "   ln -s /mnt/exUDISK/ /opt/usr/gcode/udisk"
+        }
+      ]
+    },
+    "/etc/hotplug.d/block/10-mount": {
+      "sha256": "a5b1f4145534e4567a154baad280d2c61a51a864726c26e2a60da501c03d8e4e",
+      "bytes": 6076,
+      "selected_lines": [
+        {
+          "line": 3,
+          "text": "MOUNT_POINT=\"/mnt/exUDISK\""
+        },
+        {
+          "line": 81,
+          "text": "mount_device() {"
+        },
+        {
+          "line": 110,
+          "text": "            if command -v mount >/dev/null && mount -t exfat -o help >/dev/null 2>&1; then"
+        },
+        {
+          "line": 111,
+          "text": "                mount -t exfat -o utf8,rw,async \"$dev_path\" \"$MOUNT_POINT\""
+        },
+        {
+          "line": 119,
+          "text": "            mount -t vfat -o utf8,rw,async \"$dev_path\" \"$MOUNT_POINT\""
+        },
+        {
+          "line": 160,
+          "text": "if [ \"$ACTION\" = \"remove\" ]; then"
+        },
+        {
+          "line": 165,
+          "text": "if [ \"$ACTION\" != \"add\" ] || [ -z \"$DEVNAME\" ]; then"
+        },
+        {
+          "line": 174,
+          "text": "DEVICE=$(basename \"$DEVNAME\")"
+        },
+        {
+          "line": 176,
+          "text": "if ! echo \"$DEVICE\" | grep -qE '^(sd[a-z])([0-9]+)?$'; then"
+        },
+        {
+          "line": 184,
+          "text": "if echo \"$DEVICE\" | grep -qE '^sd[a-z]$'; then"
+        },
+        {
+          "line": 201,
+          "text": "if echo \"$DEVICE\" | grep -qE '^sd[a-z][0-9]+$'; then"
+        },
+        {
+          "line": 214,
+          "text": "if [ -b \"/dev/$DISK\" ] && ! echo \"$DEVICE\" | grep -q '[0-9]'; then"
+        }
+      ]
+    },
+    "/etc/init.d/printer": {
+      "sha256": "6e7c875d40386854028779fdd1573c45a5ce4a69aba828227fff1bb568f7020f",
+      "bytes": 4318,
+      "selected_lines": [
+        {
+          "line": 3,
+          "text": "START=95"
+        },
+        {
+          "line": 9,
+          "text": "printer_cmd=\"run_printer.sh\""
+        },
+        {
+          "line": 99,
+          "text": "        usr_ext4=$(df -Th | awk '$2 ~ /^ext4$/ && $7 == \"'\"/opt/usr\"'\" {print $2}')"
+        },
+        {
+          "line": 100,
+          "text": "        if [ \"$usr_ext4\" = \"ext4\" ]; then"
+        },
+        {
+          "line": 152,
+          "text": "\t\trun_printer.sh start &"
+        }
+      ]
+    },
+    "/etc/rc.common": {
+      "sha256": "3a08c9bf74bc18ea4b119a50c65f7120faf8be926e88ee2fb8269628f1e38f4a",
+      "bytes": 2407,
+      "selected_lines": [
+        {
+          "line": 99,
+          "text": "[ -n \"$USE_PROCD\" ] && {"
+        },
+        {
+          "line": 102,
+          "text": "\t. $IPKG_INSTROOT/lib/functions/procd.sh"
+        }
+      ]
+    },
+    "/sbin/swupdate_cmd.sh": {
+      "sha256": "24425006f8c3b00d30d2b7e847633a989962df8615b08f366094b4f5f514a8f4",
+      "bytes": 3021,
+      "selected_lines": [
+        {
+          "line": 45,
+          "text": "        swu_next=$(fw_printenv -n swu_next 2>/dev/null)"
+        },
+        {
+          "line": 46,
+          "text": "        echo \"swu_next: ##$swu_next##\""
+        },
+        {
+          "line": 47,
+          "text": "        if [ x\"$swu_next\" = \"xreboot\" ]; then"
+        },
+        {
+          "line": 48,
+          "text": "\t\t\tfw_setenv swu_next"
+        },
+        {
+          "line": 49,
+          "text": "\t\t\tfw_setenv parts_clean rootfs_data"
+        }
+      ]
+    }
+  },
+  "qualification": "Direct static call/string evidence, not a complete indirect call graph or a live API/USB qualification."
+}
