@@ -181,7 +181,7 @@ public final class ProjectsActivity extends Activity {
 
     /** The project's header: where it stands (a small overline), its name and purpose, then its views. */
     private void projectScreen(Projects.Project p) {
-        ui.button(content, "‹ All projects", () -> { screen = HOME; render(); }, false);
+        back("‹ All projects", () -> { screen = HOME; render(); });
         overline(content, "PROJECT / " + (p.archived ? "ARCHIVED" : p.assembled ? "ASSEMBLED" : "ACTIVE"));
         A11y.heading(ui.label(content, p.title, 24, ui.ink, true));
         if (!p.description.isEmpty()) { TextView d = ui.label(content, p.description, 13, ui.muted, false); d.setMaxLines(3); d.setEllipsize(android.text.TextUtils.TruncateAt.END); }
@@ -224,6 +224,14 @@ public final class ProjectsActivity extends Activity {
         ui.rowButton(shareRow, "Share or export…", () -> exportDialog(p), false);
         ui.rowButton(shareRow, "Cover page…", () -> { screen = COVER; render(); }, false);
         ui.button(content, "Project options…", () -> projectOptions(p), false);
+    }
+    /** A plain back link at the top of a page (text only, as on the main screen), not a full-width button. */
+    private Button back(String text, Runnable action) {
+        Button b = ui.button(content, text, action, false);
+        b.setBackground(null); b.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START); b.setPadding(ui.dp(4), 0, ui.dp(12), 0);
+        LinearLayout.LayoutParams layout = (LinearLayout.LayoutParams) b.getLayoutParams(); layout.width = LinearLayout.LayoutParams.WRAP_CONTENT; b.setLayoutParams(layout);
+        b.setContentDescription("Back to " + text.replace("‹ ", ""));
+        return b;
     }
     /** Renaming, archiving and deleting, together and away from the everyday buttons. */
     private void projectOptions(Projects.Project p) {
@@ -538,7 +546,7 @@ public final class ProjectsActivity extends Activity {
     private static int number(EditText field) { try { return Integer.parseInt(field.getText().toString().trim()); } catch (NumberFormatException e) { return -1; } }
 
     private void partScreen(Projects.Project p, Projects.Part part) {
-        ui.button(content, "‹ " + p.title, () -> { screen = PARTS; render(); }, false);
+        back("‹ " + p.title, () -> { screen = PARTS; render(); });
         overline(content, (part.group.isEmpty() ? "" : part.group.toUpperCase(Locale.getDefault()) + " / ") + Projects.label(Projects.KINDS, part.kind).toUpperCase(Locale.getDefault()));
         A11y.heading(ui.label(content, part.name + (part.counted() ? " × " + part.quantity : ""), 22, ui.ink, true));
         ui.label(content, partLine(book, p, part) + (part.design.isEmpty() || part.design.equals("revise") ? "" : " · " + Projects.label(Projects.DESIGN, part.design)), 13, ui.muted, false);
@@ -964,7 +972,7 @@ public final class ProjectsActivity extends Activity {
     }
 
     private void unassigned() {
-        ui.button(content, "‹ All projects", () -> { screen = HOME; render(); }, false);
+        back("‹ All projects", () -> { screen = HOME; render(); });
         A11y.heading(ui.label(content, "Files in no project", 22, ui.ink, true));
         ui.label(content, "Files that were taken off every project. Add one to a project, or delete it.", 13, ui.muted, false);
         List<Projects.Asset> loose = book.unassigned();
@@ -1136,7 +1144,7 @@ public final class ProjectsActivity extends Activity {
 
     private ImageView coverPreview; private TextView coverStatus; private int coverDrawn;
     private void coverScreen(Projects.Project p) {
-        ui.button(content, "‹ " + p.title, () -> { screen = OVERVIEW; render(); }, false);
+        back("‹ " + p.title, () -> { screen = OVERVIEW; render(); });
         A11y.heading(ui.label(content, "Cover page", 22, ui.ink, true));
         CoverPage.Options o = CoverPage.Options.fromJson(p.cover);
         coverPreview = new ImageView(this); coverPreview.setAdjustViewBounds(true); coverPreview.setBackgroundColor(ui.surface);

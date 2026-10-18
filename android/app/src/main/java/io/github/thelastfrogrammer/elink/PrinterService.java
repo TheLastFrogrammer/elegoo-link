@@ -115,6 +115,7 @@ public final class PrinterService extends Service {
         recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5)); recorder.setDefaultPictureLayers(settings.getInt("pictureLayers", 0));
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name, "local".equals(source) ? filePrinterId() : cloudSerial);
+        keepAwakeForRecording(recorder.current() != null);
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();
@@ -1820,6 +1821,26 @@ public final class PrinterService extends Service {
         Intent open = new Intent(this, MainActivity.class).putExtra(MainActivity.EXTRA_FEATURE, feature).addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         return PendingIntent.getActivity(this, request, open, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
+    /**
+     * While a print is being recorded with the app out of sight, the phone's processor would sleep with the screen and the
+     * recording (status samples, camera pictures, the cloud's checks) would stop until something woke it. A partial wake lock
+     * keeps it running for this, only while a print is recorded by the background service, renewed with each status and let go
+     * ten minutes after the last one (a print that ends, a connection that drops). The screen still turns off.
+     */
+    private android.os.PowerManager.WakeLock recordingLock;
+    private void keepAwakeForRecording(boolean recording) {
+        boolean wanted = recording && foreground && !destroyed;
+        if (wanted) {
+            if (recordingLock == null) {
+                android.os.PowerManager power = (android.os.PowerManager) getSystemService(POWER_SERVICE); if (power == null) return;
+                recordingLock = power.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "LinkWorkshop:recording"); recordingLock.setReferenceCounted(false);
+            }
+            if (!recordingLock.isHeld()) Diagnostics.note(Diagnostics.STATUS, "recording a print in the background: keeping the phone awake (screen off is fine)");
+            recordingLock.acquire(10 * 60_000L);
+        } else if (recordingLock != null && recordingLock.isHeld()) {
+            recordingLock.release(); Diagnostics.note(Diagnostics.STATUS, "no print being recorded in the background: the phone may sleep again");
+        }
+    }
     private void startMonitoring() {
         if (android.os.Build.VERSION.SDK_INT >= 29) startForeground(NOTIFICATION, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE);
         else startForeground(NOTIFICATION, notification());
@@ -1945,6 +1966,7 @@ public final class PrinterService extends Service {
         if (cloudControl != null) cloudControl.close(); CloudLive live = cloudLive; if (live != null) cloudWorker.execute(live::close); cloudWorker.shutdown();
         if (session != null) session.close(); session = null; code = "";
         probeWorker.shutdownNow(); files.shutdownNow(); if (selectedFile != null) selectedFile.delete();
+        keepAwakeForRecording(false);
         if (foreground) stopForeground(STOP_FOREGROUND_REMOVE); super.onDestroy();
     }
 }

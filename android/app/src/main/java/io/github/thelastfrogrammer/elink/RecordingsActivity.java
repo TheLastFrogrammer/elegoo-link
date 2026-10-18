@@ -95,6 +95,31 @@ public final class RecordingsActivity extends Activity {
         return format.format(new Date(millis));
     }
 
+    /** A stretch without readings longer than this means the app was not watching (closed, or the phone asleep). */
+    static final long GAP_MS = 3 * 60_000L;
+    /**
+     * How fully the app watched the print: stretches with no readings, and pictures against what the interval asked for.
+     * "" when it watched throughout and the pictures kept up.
+     */
+    static String coverage(List<double[]> rows, PrintRecorder.Recording r) {
+        int time = PrintRecorder.column("time_ms");
+        int gaps = 0; long missed = 0;
+        for (int i = 1; i < rows.size(); i++) {
+            double a = rows.get(i - 1)[time], b = rows.get(i)[time];
+            if (Double.isNaN(a) || Double.isNaN(b)) continue;
+            long gap = (long) (b - a);
+            if (gap > GAP_MS) { gaps++; missed += gap; }
+        }
+        List<String> parts = new ArrayList<>();
+        if (gaps > 0) parts.add("The app was not watching " + (gaps == 1 ? "once" : gaps + " times") + ", " + duration(missed) + " in all (the app was closed or the phone asleep), so readings there are missing.");
+        if (r.pictureLayers == 0 && r.pictureMinutes > 0 && r.duration() > 0) {
+            long expected = r.duration() / (r.pictureMinutes * 60_000L);
+            if (expected >= 2 && r.pictures < expected * 0.6)
+                parts.add("Pictures: " + r.pictures + " of about " + expected + " (every " + r.pictureMinutes + " min). Through the cloud, pictures come only while the app is open; a camera on this network or an added camera keeps taking them in the background.");
+        }
+        return String.join("\n", parts);
+    }
+
     /** One list row's second line: when, how long and the result. */
     static String rowSummary(PrintRecorder.Recording recording, Locale locale, TimeZone zone) {
         return when(recording.start, locale, zone) + " · " + duration(recording.duration()) + " · " + outcome(recording.outcome);
@@ -264,6 +289,8 @@ public final class RecordingsActivity extends Activity {
         if (recording.extrudedMm > 1) extra.add(String.format(Locale.getDefault(), "Filament fed: %.2f m (≈ %.0f g of PLA-like filament)", recording.extrudedMm / 1000, PrintRecorder.grams(recording.extrudedMm, "PLA")));
         double q = PrintRecorder.ratio(recording);
         if (!Double.isNaN(q)) extra.add(String.format(Locale.getDefault(), "The printer estimated %s at 10 %%; it took %s (%+.0f %%).", duration(recording.estimate * 1000), duration(Math.round(recording.estimate * q) * 1000), (q - 1) * 100));
+        String coverage = coverage(rows, recording);
+        if (!coverage.isEmpty()) extra.add(coverage);
         if (!extra.isEmpty()) label(String.join("\n", extra), 13, muted, false);
         String last = lastReading(rows);
         if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, readingLines(last), 13, muted, false); }

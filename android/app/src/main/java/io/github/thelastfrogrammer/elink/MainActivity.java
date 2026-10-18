@@ -194,7 +194,7 @@ public final class MainActivity extends Activity {
         profiles = new ProfileStore(this);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND);
         ScrollView scroll = new ScrollView(this); scroll.setFillViewport(true); scroll.setBackgroundColor(BACKGROUND); mainScroll = scroll;
-        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
+        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(2), dp(16), dp(24)); scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
@@ -203,27 +203,32 @@ public final class MainActivity extends Activity {
             } else view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
             return insets;
         });
-        // Header: printer name, connection chip, model/firmware line.
-        // With large text the chip goes under the title, so the printer name gets the full width.
+        // Header, fixed above the scrolling page: the printer's name (tap to switch), its connection chip and a search button on one
+        // line; the model and what the connection can do on one line each beneath (tap them for the whole text).
         boolean largeText = getResources().getConfiguration().fontScale >= 1.3f;
-        LinearLayout header = new LinearLayout(this); header.setOrientation(largeText ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        header.setGravity(largeText ? Gravity.START : Gravity.CENTER_VERTICAL); content.addView(header);
+        LinearLayout bar = new LinearLayout(this); bar.setOrientation(LinearLayout.VERTICAL); bar.setPadding(dp(16), dp(8), dp(6), dp(6)); bar.setBackgroundColor(BACKGROUND);
+        root.addView(bar, 0, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); bar.addView(header);
         title = new TextView(this); title.setText("Link Workshop");
-        title.setTextSize(24); title.setTextColor(INK); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); A11y.heading(title); header.addView(title, largeText ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1));
-        summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4));
-        LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(-2, -2); if (largeText) chipLayout.topMargin = dp(4); header.addView(summary, chipLayout);
-        identity = label(content, "Centauri Carbon 2", 13, MUTED, false);
-        reach = label(content, "", 12, MUTED, false); reach.setVisibility(View.GONE);
-        // "Find a feature": on every tab, a search-style bar that jumps to any feature by name or everyday words.
-        Button find = new Button(this); find.setText("Find a feature…"); find.setAllCaps(false); find.setTextSize(14); find.setTextColor(MUTED);
-        find.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); find.setMinHeight(dp(48)); find.setMinimumHeight(dp(48)); find.setPadding(dp(14), 0, dp(14), 0);
-        android.graphics.drawable.Drawable lens = getDrawable(android.R.drawable.ic_menu_search);
-        if (lens != null) { lens = lens.mutate(); lens.setTint(MUTED); lens.setBounds(0, 0, dp(22), dp(22)); find.setCompoundDrawables(lens, null, null, null); find.setCompoundDrawablePadding(dp(8)); }
-        GradientDrawable findShape = new GradientDrawable(); findShape.setColor(SURFACE); findShape.setCornerRadius(dp(24)); findShape.setStroke(dp(1), (MUTED & 0x00ffffff) | 0x40000000); find.setBackground(findShape);
+        title.setTextSize(20); title.setTextColor(INK); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        title.setMaxLines(largeText ? 2 : 1); title.setEllipsize(android.text.TextUtils.TruncateAt.END); title.setMinHeight(dp(48)); title.setGravity(Gravity.CENTER_VERTICAL);
+        A11y.heading(title); header.addView(title, new LinearLayout.LayoutParams(0, -2, 1));
+        summary = new TextView(this); summary.setTextSize(12); summary.setTypeface(Typeface.DEFAULT, Typeface.BOLD); summary.setPadding(dp(10), dp(4), dp(10), dp(4)); summary.setMaxLines(1);
+        LinearLayout.LayoutParams chipLayout = new LinearLayout.LayoutParams(-2, -2); chipLayout.leftMargin = dp(8); header.addView(summary, chipLayout);
+        // "Find a feature": on every tab, jumps to any feature by name or everyday words.
+        android.widget.ImageButton find = new android.widget.ImageButton(this); find.setImageResource(android.R.drawable.ic_menu_search); find.setImageTintList(ColorStateList.valueOf(INK));
+        find.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
         find.setContentDescription("Find a feature"); find.setOnClickListener(v -> featureDialog());
+        header.addView(find, new LinearLayout.LayoutParams(dp(48), dp(48)));
         title.setOnClickListener(v -> switchPrinter()); A11y.clickLabel(title, "Switch printer");
-        LinearLayout.LayoutParams findLayout = new LinearLayout.LayoutParams(-1, -2); findLayout.topMargin = dp(8); content.addView(find, findLayout);
+        identity = label(bar, "Centauri Carbon 2", 12, MUTED, false); identity.setSingleLine(true); identity.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        reach = label(bar, "", 12, MUTED, false); reach.setVisibility(View.GONE); reach.setSingleLine(true); reach.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        for (TextView line : new TextView[] {identity, reach}) {
+            line.setPadding(0, 0, dp(10), 0);
+            line.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(title.getText().toString().replace(" ▾", ""))
+                .setMessage(identity.getText() + (reach.getText().length() == 0 ? "" : "\n\n" + reach.getText())).setPositiveButton("Close", null).show());
+            A11y.clickLabel(line, "Show the printer's details");
+        }
         // Results of actions show here, on every tab, until tapped away or replaced.
         feedback = new TextView(this); feedback.setTextSize(14); feedback.setTextColor(INK); feedback.setPadding(dp(14), dp(10), dp(14), dp(10));
         GradientDrawable banner = new GradientDrawable(); banner.setColor(TILE); banner.setCornerRadius(dp(14)); banner.setStroke(dp(1), (TEAL & 0x00ffffff) | 0x55000000); feedback.setBackground(banner);
@@ -1555,6 +1560,13 @@ public final class MainActivity extends Activity {
         List<String> names = new ArrayList<>(); List<Runnable> actions = new ArrayList<>();
         for (Button option : new Button[] {picturesNow, layerAlert, printAutomations})
             if (option.getVisibility() == View.VISIBLE) { names.add(option == printAutomations ? "Automations for this print…" : option.getText().toString()); actions.add(option::performClick); }
+        // Through the cloud with background watching off, the recording stops when the app closes: offer to keep it going.
+        if (printer != null && printer.usingCloud() && !printer.cloudBackground() && !cloudBackground.isChecked()) {
+            names.add("Keep recording when the app is closed…");
+            actions.add(() -> new AlertDialog.Builder(this).setTitle("Keep recording when the app is closed?")
+                .setMessage("The app keeps watching through the Elegoo cloud in the background, with a notification, so this print's recording carries on. It checks about every 30 seconds while a print runs; the phone stays awake for it until the print ends. Camera pictures through the cloud still need the app open. Turn it off again in Settings › Printer connection.")
+                .setNegativeButton("Not now", null).setPositiveButton("Keep recording", (d, w) -> cloudBackground.setChecked(true)).show());
+        }
         names.add("Camera tools…"); actions.add(() -> openSection(cameraSection));
         new AlertDialog.Builder(this).setTitle("Print options").setItems(names.toArray(new String[0]), (d, which) -> actions.get(which).run()).setNegativeButton("Close", null).show();
     }
@@ -2173,14 +2185,6 @@ public final class MainActivity extends Activity {
         new AlertDialog.Builder(this).setTitle("Change print speed?").setMessage("This changes the speed mode of the current print. On some firmware, a filament change can reset it.").setNegativeButton("Cancel", null).setPositiveButton("Apply", (d, w) -> { if (printer != null) printer.speed(which); }).show();
     }).setNegativeButton("Cancel", null).show(); }
     private void buildCamera() {
-        // Camera check: read-only, on the Camera screen's own card; its result also goes into the diagnostics report.
-        LinearLayout checkCard = card("Camera check");
-        label(checkCard, "Checks what each camera needs and tries it once: camera access from Elegoo, and the printer's camera on this network when connected locally. Sends nothing to the printer.", 13, MUTED, false);
-        cameraCheckButton = button(checkCard, "Run camera check", this::cameraCheck);
-        button(checkCard, "Camera log…", () -> startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.CAMERA)));
-        // Cloud mode only: the printer has not joined its video channel on its own; Elegoo's camera question may be what starts it.
-        cameraAskButton = button(checkCard, "Try: ask the printer for its camera…", this::askCloudCamera);
-        cameraCheckText = label(checkCard, "", 12, INK, false); cameraCheckText.setTextIsSelectable(true); cameraCheckText.setTypeface(Typeface.MONOSPACE); cameraCheckText.setVisibility(View.GONE);
         // Order: the cloud card and the local card trade places in renderCamera (local first when the printer is on this network).
         LinearLayout cloudCard = card("Cloud camera"); cameraCloudCard = cloudCard;
         cloudCameraHint = label(cloudCard, "", 13, MUTED, false);
@@ -2204,9 +2208,10 @@ public final class MainActivity extends Activity {
         cameraStart = button(card, "Start camera", this::toggleCamera);
         cameraImage = new ImageView(this); cameraImage.setContentDescription("Live printer camera"); cameraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); cameraImage.setBackgroundColor(Color.BLACK); card.addView(cameraImage, new LinearLayout.LayoutParams(-1, dp(240)));
         // The picture's size toggles between the normal and the large height; the button names the size it switches to.
-        button(card, "Full screen (zoom and brighten)", this::cameraFullScreen);
+        LinearLayout pictureRow = row(card);
+        rowButton(pictureRow, "Full screen", this::cameraFullScreen, false).setContentDescription("Full screen: zoom and brighten");
         cameraImage.setOnClickListener(v -> cameraFullScreen()); A11y.clickLabel(cameraImage, "Show the camera full screen");
-        cameraSnapshot = button(card, "Save snapshot to phone…", this::saveSnapshot);
+        cameraSnapshot = rowButton(pictureRow, "Snapshot…", this::saveSnapshot, false); cameraSnapshot.setContentDescription("Save a snapshot to the phone");
         // Setup details sit behind one collapsed header; the header speaks its state.
         Button settingsToggle = button(card, "", () -> { });
         LinearLayout settings = new LinearLayout(this); settings.setOrientation(LinearLayout.VERTICAL); settings.setVisibility(View.GONE);
@@ -2222,7 +2227,7 @@ public final class MainActivity extends Activity {
         cameraQuery = button(settings, "Get camera address from printer", () -> { if (printer != null) printer.camera(); });
         label(settings, "The camera stops when you leave this tab or the app goes to the background. Monitoring keeps going. Redirects and camera addresses on other devices are blocked.", 13, MUTED, false);
         LinearLayout added = card("Added cameras");
-        label(added, "Cameras beside the printer's own: a webcam, an ESP32-CAM, an IP camera or a phone, anything that gives an MJPEG stream or a JPEG snapshot over the network. One of them can take the print pictures (recordings, timelapses, notifications), in cloud mode too.", 13, MUTED, false);
+        label(added, "A webcam, ESP32-CAM, IP camera or phone beside the printer (an MJPEG stream or JPEG snapshot). One can take the print pictures, in cloud mode too.", 13, MUTED, false);
         extraInfo = A11y.polite(label(added, "", 13, INK, false)); extraInfo.setVisibility(View.GONE);
         extraImage = new ImageView(this); extraImage.setContentDescription("Picture from an added camera"); extraImage.setScaleType(ImageView.ScaleType.FIT_CENTER); extraImage.setBackgroundColor(Color.BLACK);
         added.addView(extraImage, new LinearLayout.LayoutParams(-1, dp(220))); extraImage.setVisibility(View.GONE);
@@ -2230,13 +2235,21 @@ public final class MainActivity extends Activity {
         extraList = new LinearLayout(this); extraList.setOrientation(LinearLayout.VERTICAL); added.addView(extraList);
         button(added, "Add a camera…", () -> editExtraCamera(null));
         renderExtraCameras();
-        LinearLayout lineUp = card("Camera in the 3D view");
-        label(lineUp, "Shows the camera picture in the 3D view. Line it up once against the real bed, with or without a print.", 13, MUTED, false);
-        button(lineUp, "Line up the camera in 3D…", () -> {
+        // Lining up and checking, as quiet rows: the check is diagnostics, kept last.
+        LinearLayout tools = card(null);
+        listRow(tools, "Line up the camera in 3D…", "Once, against the real bed, with or without a print", false, () -> {
             if (printer == null) return;
             Runnable open = () -> { stopCamera(); startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true).putExtra(GcodeViewerActivity.EXTRA_ALIGN, true).putExtra(GcodeViewerActivity.EXTRA_CAMERA, "")); };
             cloudGate(!printer.ready() && printer.usingCloud(), open);
         });
+        listRow(tools, "Camera check", "Tries each camera once; sends nothing to the printer", true, () -> cameraCheckButton.performClick());
+        listRow(tools, "Camera log…", "What each camera did, with times", true, () -> startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.CAMERA)));
+        // Holders: render() keeps their state; the check's result shows under the rows.
+        LinearLayout checkHolder = new LinearLayout(this); checkHolder.setVisibility(View.GONE); tools.addView(checkHolder);
+        cameraCheckButton = button(checkHolder, "Run camera check", this::cameraCheck);
+        // Cloud mode only: the printer has not joined its video channel on its own; Elegoo's camera question may be what starts it.
+        cameraAskButton = button(tools, "Try: ask the printer for its camera…", this::askCloudCamera);
+        cameraCheckText = label(tools, "", 12, INK, false); cameraCheckText.setTextIsSelectable(true); cameraCheckText.setTypeface(Typeface.MONOSPACE); cameraCheckText.setVisibility(View.GONE);
     }
     private void toggleCamera() {
         if (cameraPlayer != null) { stopCamera(); return; }
@@ -3209,7 +3222,10 @@ public final class MainActivity extends Activity {
         pictureVisits.resume();
         if (Showcase.stage == Showcase.END) main.postDelayed(this::showcaseEnd, 400);
     }
-    @Override protected void onStop() { active = false; stopCamera(); pictureVisits.pause(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
+    @Override protected void onStop() {
+        if (printer != null && printer.usingCloud() && !printer.cloudBackground() && printer.recorder != null && printer.recorder.current() != null)
+            Diagnostics.note(Diagnostics.STATUS, "the print's recording pauses while the app is closed: watching through the cloud in the background is off (Print options or Settings turn it on)");
+        active = false; stopCamera(); pictureVisits.pause(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
     @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); if (ShowcaseService.listener == showcaseListener && !isChangingConfigurations()) ShowcaseService.listener = null; if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }

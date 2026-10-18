@@ -64,6 +64,9 @@ public class ViewerFileIdentityTest {
         }
     }
     private void selectCurrent() throws Exception {
+        // A fresh report first, as a live printer sends every few seconds: on a slow, busy test machine the setup's report
+        // can be older than the tracker's 45 s gap by now.
+        report("CC2-A", 2, 10, 100);
         GcodeJobTracker.Job job = service.fileJob(); library.selectForJob(artifact, job.printer, job.token); activity.changed(); waitForWorker();
     }
     @Test public void aSameNameRetainedCopyIsOfferedButNeverLoadedAutomatically() throws Exception {

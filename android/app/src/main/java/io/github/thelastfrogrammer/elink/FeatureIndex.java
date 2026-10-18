@@ -38,7 +38,7 @@ final class FeatureIndex {
         new Feature("toolpath", "Live toolpath", "toolpath gcode viewer layers 3d preview live follow print", PRINT, "Live toolpath", Prepare.NONE, true),
         new Feature("camera", "Watch the camera", "camera video watch stream live view webcam", PRINT, "Camera", Prepare.NONE, false),
         new Feature("camera-3d", "Line up the camera in 3D", "camera line up align overlay 3d position lens", PRINT, "Line up the camera in 3D", Prepare.NONE, true),
-        new Feature("snapshot", "Camera snapshot", "snapshot photo picture save image", PRINT, "Save snapshot", Prepare.NONE, false),
+        new Feature("snapshot", "Camera snapshot", "snapshot photo picture save image", PRINT, "Snapshot", Prepare.NONE, false),
         new Feature("light", "Printer light", "light lamp led illumination", PRINT, "Light o", Prepare.NONE, false).or("Controls"),
         // Printer
         new Feature("temperature", "Set heater temperatures", "temperature heat preheat nozzle bed hotend", PRINTER, "Set heater temperatures", Prepare.NONE, true).or("Temperatures, fans & speed"),
@@ -85,7 +85,7 @@ final class FeatureIndex {
         new Feature("print-options", "Print options", "print options pictures interval layer alert automations this print", PRINT, "Print options…", Prepare.NONE, true).or("Controls"),
         new Feature("homeassistant", "Home Assistant", "home assistant mqtt broker dashboard sensors automation smart home", SETTINGS, "Send to Home Assistant", Prepare.NONE, false),
         new Feature("logs", "View logs", "logs log events history debug errors camera connection commands messages", SETTINGS, "View logs", Prepare.NONE, true),
-        new Feature("cameracheck", "Camera check", "camera check test video not working diagnose stream cloud", PRINT, "Run camera check", Prepare.NONE, false),
+        new Feature("cameracheck", "Camera check", "camera check test video not working diagnose stream cloud", PRINT, "Camera check", Prepare.NONE, false),
         new Feature("diagnostics", "Share diagnostics", "diagnostics logs report bug share", SETTINGS, "Share diagnostics", Prepare.NONE, true),
         new Feature("help", "Connection help", "help connection trouble lan only access code where", SETTINGS, "Connection help", Prepare.NONE, true),
         new Feature("about", "About and licences", "about licence license version open source", SETTINGS, "About & licenses", Prepare.NONE, true)));
