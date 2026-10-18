@@ -83,6 +83,21 @@ public class SlicerIntegrationTest {
         return count;
     }
 
+    /** A STEP model loads (meshed by the engine like the desktop slicer does) and slices. */
+    @Test public void stepModelsSlice() throws Exception {
+        File step = new File(context().getCacheDir(), "screw.step");
+        try (InputStream in = getClass().getResourceAsStream("/step/screw.step"); OutputStream out = new FileOutputStream(step)) {
+            byte[] buffer = new byte[65536]; int n; while ((n = in.read(buffer)) > 0) out.write(buffer, 0, n);
+        }
+        File output = new File(context().getCacheDir(), "screw.gcode");
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Collections.singletonList(PLA));
+            slicer.slice(Collections.singletonList(step), selection, output, null);
+        }
+        String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+        assertTrue(gcode.contains(";TYPE:Outer wall") || gcode.contains("; FEATURE: Outer wall"));
+    }
+
     /** Blockers stop supports where they are; enforcers add them, also with supports only where enforced. */
     @Test public void supportBlockersAndEnforcers() throws Exception {
         // A shelf: a 10 mm pillar under the left end of a 40 x 20 mm slab 10 mm up; the rest overhangs. Placed at (100, 100): bed x 80..120.
