@@ -63,6 +63,16 @@ public class AutomationTest {
         assertTrue(Automation.matches(off, done, 600, print));
         Automation.Event other = new Automation.Event(Automation.FINISHED); other.key = "job2";
         assertFalse("the mark belongs to its own print", Automation.matches(off, other, 600, print));
+        // The cloud's polled status and its live reports can name the same print with and without its uuid.
+        Automation.ThisPrint saved = new Automation.ThisPrint(); saved.key = "Clip-1.gcode"; saved.file = "Clip-1.gcode"; saved.lastOfDay = true;
+        Automation.Event withUuid = new Automation.Event(Automation.FINISHED); withUuid.key = "4f1c-uuid"; withUuid.file = "Clip-1.gcode";
+        assertTrue("marked while the status had no uuid, finished with one", Automation.matches(off, withUuid, 600, saved));
+        saved = Automation.ThisPrint.fromJson(new Automation.ThisPrint().forPrint("4f1c-uuid", "Clip-1.gcode").toJsonOrEmpty());
+        saved.lastOfDay = true;
+        Automation.Event withoutUuid = new Automation.Event(Automation.FINISHED); withoutUuid.key = "Clip-1.gcode"; withoutUuid.file = "Clip-1.gcode";
+        assertTrue("marked with the uuid, finished without it", Automation.matches(off, withoutUuid, 600, saved));
+        Automation.Event another = new Automation.Event(Automation.FINISHED); another.key = "9a9a-uuid"; another.file = "Lid.gcode";
+        assertFalse(Automation.matches(off, another, 600, saved));
         print.muted.add(off.id);
         assertFalse("muted for this print", Automation.matches(off, done, 600, print));
         off.enabled = false; print.muted.clear();

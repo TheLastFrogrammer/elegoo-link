@@ -22,10 +22,17 @@ final class MainThreadWatch {
             long stallStart = 0; String where = "";
             while (true) {
                 main.post(() -> beat = SystemClock.elapsedRealtime());
+                long asleep = SystemClock.elapsedRealtime();
                 try { Thread.sleep(500); } catch (InterruptedException stop) { return; }
+                // This thread itself was held far past its half second: the phone slept or Android paused the whole app, so
+                // the screen thread was not busy either. Start the count again.
+                if (SystemClock.elapsedRealtime() - asleep > 1_500) { if (stallStart == 0) beat = SystemClock.elapsedRealtime(); continue; }
                 long late = SystemClock.elapsedRealtime() - beat;
                 if (late > 2_000 && stallStart == 0) {
-                    stallStart = beat; where = frames(Looper.getMainLooper().getThread().getStackTrace());
+                    StackTraceElement[] stack = Looper.getMainLooper().getThread().getStackTrace();
+                    // Waiting for its next message: idle, with the heartbeat not yet delivered (the app was just resumed).
+                    if (idle(stack)) { beat = SystemClock.elapsedRealtime(); continue; }
+                    stallStart = beat; where = frames(stack);
                     Diagnostics.note(AREA, "screen thread busy for over 2 s, in: " + where);
                 } else if (late <= 1_000 && stallStart != 0) {
                     Diagnostics.note(AREA, "screen thread free again after " + (beat - stallStart) / 100 / 10.0 + " s (was in: " + where + ")");
@@ -43,6 +50,11 @@ final class MainThreadWatch {
                     if (seen.size() < 20 && seen.add(where)) Diagnostics.note(AREA, violation.getClass().getSimpleName().replace("Violation", "") + " on the screen thread, in: " + where);
                 }).build());
         }
+    }
+
+    /** Whether the screen thread is waiting for its next message (nothing of the app's own running). */
+    static boolean idle(StackTraceElement[] stack) {
+        return stack.length > 0 && stack[0].getMethodName().equals("nativePollOnce") && stack[0].getClassName().endsWith("MessageQueue");
     }
 
     /** The app's own frames, innermost first (at most 6), plus the innermost frame overall when it is a library's. */

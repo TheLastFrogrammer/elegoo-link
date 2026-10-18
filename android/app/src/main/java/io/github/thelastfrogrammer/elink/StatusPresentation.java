@@ -134,7 +134,8 @@ public final class StatusPresentation {
         for (String part : parts) if (part != null && !part.trim().isEmpty()) text.append(text.length() > 0 ? " · " : "").append(part.trim());
         return text.toString();
     }
-    public static String clean(String value) { return value.replaceAll("[\\p{Cntrl}]", " ").substring(0, Math.min(value.length(), 160)); }
+    private static final java.util.regex.Pattern CONTROL = java.util.regex.Pattern.compile("[\\p{Cntrl}]");
+    public static String clean(String value) { return CONTROL.matcher(value).replaceAll(" ").substring(0, Math.min(value.length(), 160)); }
 
     /** The viewer's one plain line when the phone holds no copy of the G-code being printed. */
     static final String NO_FILE_LINE = "Choose the G-code used for this print. A matching name or size cannot confirm its contents.";

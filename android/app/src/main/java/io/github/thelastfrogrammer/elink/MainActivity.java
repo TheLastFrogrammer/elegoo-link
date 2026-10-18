@@ -1396,7 +1396,8 @@ public final class MainActivity extends Activity {
     /** This print's automation choices: the day's last print (for rules that wait for it) and rules to skip. Nothing is sent to the printer here. */
     private void printAutomationsDialog() {
         String key = printKey(snapshot); if (key.isEmpty()) return;
-        Automation.ThisPrint mine = AutomationRun.thisPrint(this).forPrint(key);
+        JSONObject printing = snapshot.optJSONObject("print_status"); String file = printing == null ? "" : printing.optString("filename", "");
+        Automation.ThisPrint mine = AutomationRun.thisPrint(this).forPrint(key, file);
         List<Automation.Rule> on = new ArrayList<>(); for (Automation.Rule r : AutomationRun.rules(this)) if (r.enabled) on.add(r);
         String[] items = new String[on.size() + 1]; boolean[] checked = new boolean[items.length];
         items[0] = "This is the last print of the day"; checked[0] = mine.lastOfDay;
@@ -1406,7 +1407,7 @@ public final class MainActivity extends Activity {
             .setNeutralButton("Workshop…", (d, w) -> startActivity(new Intent(this, AutomationActivity.class)))
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Save", (d, w) -> {
-                mine.lastOfDay = checked[0]; mine.muted.clear();
+                mine.lastOfDay = checked[0]; mine.muted.clear(); mine.key = key; if (!file.isEmpty()) mine.file = file; mine.savedAt = System.currentTimeMillis();
                 for (int i = 0; i < on.size(); i++) if (!checked[i + 1]) mine.muted.add(on.get(i).id);
                 AutomationRun.saveThisPrint(this, mine);
                 Diagnostics.note(Diagnostics.AUTOMATIONS, "this print: " + (mine.lastOfDay ? "last of the day" : "not the last of the day") + ", " + mine.muted.size() + " rules skipped");

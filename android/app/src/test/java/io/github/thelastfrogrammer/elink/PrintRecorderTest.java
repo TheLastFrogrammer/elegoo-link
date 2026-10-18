@@ -214,4 +214,26 @@ public class PrintRecorderTest {
         assertEquals(1100, recorder.learnedRemaining(50_100_000L), 1);
         assertTrue("fewer than three prints teach nothing", Double.isNaN(PrintRecorder.learnedRatio(all.subList(0, 2))));
     }
+
+    /** The end of a print reported once more, or reported without its uuid (cloud poll versus live report), is not a new print. */
+    @Test public void theEndOfAPrintDoesNotStartAnotherRecording() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        JSONObject noUuid = status(2075, "clip.gcode", 1, 1); noUuid.getJSONObject("print_status").put("uuid", "");
+        recorder.update(0, noUuid, "cloud", "CC2");
+        recorder.update(20_000, status(2075, "clip.gcode", 2, 5), "cloud", "CC2");     // the uuid appears: the same print
+        recorder.update(40_000, status(2077, "clip.gcode", 24, 99), "cloud", "CC2");
+        JSONObject endAgain = status(2077, "clip.gcode", 24, 100); endAgain.getJSONObject("print_status").put("uuid", "");
+        assertFalse(recorder.update(45_000, endAgain, "cloud", "CC2"));
+        assertFalse(recorder.update(50_000, status(2077, "clip.gcode", 24, 100), "cloud", "CC2"));
+        recorder.update(60_000, idle(), "cloud", "CC2");
+        List<PrintRecorder.Recording> all = recorder.list();
+        assertEquals(1, all.size());
+        assertEquals("complete", all.get(0).outcome); assertEquals("uuid-clip.gcode", all.get(0).id);
+        // Printed again after going idle: a new recording.
+        recorder.update(70_000, status(2075, "clip.gcode", 1, 1), "cloud", "CC2");
+        assertEquals(2, recorder.list().size());
+        // A different uuid for the same file is a different print.
+        assertFalse(PrintRecorder.samePrint("uuid-1", "clip.gcode", "uuid-2", "clip.gcode"));
+        assertTrue(PrintRecorder.samePrint("clip.gcode", "clip.gcode", "uuid-2", "clip.gcode"));
+    }
 }

@@ -71,6 +71,8 @@ public final class PrintRecorder {
 
     private final File directory;
     private Recording current;
+    /** The print last closed as complete or stopped, until the printer goes idle. */
+    private String endedKey = "", endedFile = "";
     private int lastLayer = -1;
     private long sampledMono = Long.MIN_VALUE / 2, picturedMono = Long.MIN_VALUE / 2;
     private JSONObject canvas;
@@ -173,13 +175,21 @@ public final class PrintRecorder {
         int state = machine.optInt("status", -1), sub = machine.optInt("sub_status", -1);
         String file = print == null ? "" : print.optString("filename", "");
         String key = print == null ? "" : print.optString("uuid", ""); if (key.isEmpty()) key = file;
+        boolean last = sub == 2077 || sub == 2504;
         if (state != 2 || key.isEmpty()) {
             if (current != null && state == 1) finish(now, mono, "ended");
+            if (state == 1) { endedKey = ""; endedFile = ""; }
             return false;
         }
-        if (current != null && !current.id.equals(key)) finish(now, mono, "interrupted");
+        // The printer keeps reporting a finished print until it goes idle: those reports belong to the recording just closed.
+        if (current == null && last && samePrint(key, file, endedKey, endedFile)) return false;
+        if (current != null && samePrint(key, file, current.id, current.file)) {
+            // Named with its uuid now (the cloud's polled status and its live reports differ): the same print, kept by the uuid.
+            if (!key.equals(file) && current.id.equals(current.file)) { current.id = key; save(current); }
+        } else if (current != null) finish(now, mono, "interrupted");
+        if (current == null && last) return false;   // a print seen only at its end is not recorded
         if (current == null) {
-            current = resumable(key, now);
+            current = resumable(key, file, now);
             if (current == null) current = begin(now, key, file, printer, source);
             // Elapsed time counts on from what was recorded before (a resumed print), measured with the monotonic clock from here.
             current.monoStart = mono - current.elapsed;
@@ -187,7 +197,6 @@ public final class PrintRecorder {
             lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2; picturedLayer = -1;
         }
         int layer = print.optInt("current_layer", -1);
-        boolean last = sub == 2077 || sub == 2504;
         if (mono - sampledMono < MIN_INTERVAL_MS && layer == lastLayer && !last) return false;
         append(now, mono, status, source, sub);
         lastLayer = layer; sampledMono = mono;
@@ -232,9 +241,19 @@ public final class PrintRecorder {
     }
     public static int column(String name) { return Arrays.asList(COLUMNS).indexOf(name); }
 
-    private Recording resumable(String key, long now) {
+    /**
+     * Whether two reports name the same print: the same key, or the same file where one of them had no uuid (its key is then
+     * the file name). Two different uuids are two prints, even of the same file.
+     */
+    static boolean samePrint(String key, String file, String otherKey, String otherFile) {
+        if (key.isEmpty() || otherKey.isEmpty()) return false;
+        if (key.equals(otherKey)) return true;
+        return !file.isEmpty() && file.equals(otherFile) && (key.equals(file) || otherKey.equals(otherFile));
+    }
+
+    private Recording resumable(String key, String file, long now) {
         for (Recording recording : list())
-            if (key.equals(recording.id) && "printing".equals(recording.outcome) && now - recording.lastSample < RESUME_WINDOW_MS) return recording;
+            if (samePrint(key, file, recording.id, recording.file) && "printing".equals(recording.outcome) && now - recording.lastSample < RESUME_WINDOW_MS) return recording;
         return null;
     }
 
@@ -314,6 +333,7 @@ public final class PrintRecorder {
         current.outcome = outcome; current.end = current.lastSample + since;
         if (current.end == 0) current.end = now;
         if (!"interrupted".equals(outcome)) try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), current.meta.getName().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
+        if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; }
         save(current); current = null; lastLayer = -1; learnedRead = false;
     }
 

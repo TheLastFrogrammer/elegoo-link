@@ -124,13 +124,23 @@ final class AutomationRun {
         java.util.Calendar now = java.util.Calendar.getInstance();
         int minute = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE);
         Automation.ThisPrint print = thisPrint(context);
+        // A new print: choices kept for an earlier print of the same file no longer apply (made more than 10 minutes before).
+        if (event.type.equals(Automation.STARTED) && (print.lastOfDay || !print.muted.isEmpty()) && print.isFor(event.key, event.file)
+                && System.currentTimeMillis() - print.savedAt > 10 * 60_000L) {
+            Diagnostics.note(Diagnostics.AUTOMATIONS, "a new print started: the earlier print's choices (last of the day, skipped rules) were cleared");
+            print = new Automation.ThisPrint(); saveThisPrint(context, print);
+        }
         Map<String, String> valuesNow = null;
         // What the event belongs to, fixed now: the print (its pictures and chart) and the printer. A delayed rule uses these,
         // not whatever is current when it runs.
         PrintRecorder.Recording recording = host.recordingNow(); String printerKey = host.printerKey();
         for (Automation.Rule rule : current()) {
             if (!rule.ifField.isEmpty() && valuesNow == null) valuesNow = values(host.liveStatus());
-            if (!Automation.matches(rule, event, minute, print, valuesNow)) continue;
+            if (!Automation.matches(rule, event, minute, print, valuesNow)) {
+                if (rule.enabled && rule.lastPrintOnly && rule.event.equals(event.type) && !print.forPrint(event.key, event.file).lastOfDay)
+                    Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" did not run: this print was not marked as the last of the day (Print tab, Automations…)");
+                continue;
+            }
             if (rule.delayMinutes > 0) {
                 Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" runs in " + rule.delayMinutes + " min (" + event.type + ")");
                 String id = rule.id;

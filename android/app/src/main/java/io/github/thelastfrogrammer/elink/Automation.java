@@ -182,17 +182,33 @@ final class Automation {
         }
     }
 
-    /** The running print's own choices (Print tab, Automations…): marked as the day's last print, and rules muted for it. */
+    /**
+     * The running print's own choices (Print tab, Automations…): marked as the day's last print, and rules muted for it. Kept
+     * with the print's key (its uuid, or its file name) and its file name: the cloud's polled status and its live reports can
+     * name the same print differently (one with the uuid, one without), so either one finds it.
+     */
     static final class ThisPrint {
-        String key = ""; boolean lastOfDay; final Set<String> muted = new HashSet<>();
-        JSONObject toJson() throws JSONException { return new JSONObject().put("key", key).put("lastOfDay", lastOfDay).put("muted", new JSONArray(new ArrayList<>(muted))); }
+        String key = "", file = ""; boolean lastOfDay; long savedAt; final Set<String> muted = new HashSet<>();
+        JSONObject toJson() throws JSONException { return new JSONObject().put("key", key).put("file", file).put("lastOfDay", lastOfDay).put("savedAt", savedAt).put("muted", new JSONArray(new ArrayList<>(muted))); }
         static ThisPrint fromJson(String text) {
             ThisPrint p = new ThisPrint();
-            try { JSONObject o = new JSONObject(text); p.key = o.optString("key"); p.lastOfDay = o.optBoolean("lastOfDay"); JSONArray m = o.optJSONArray("muted");
+            try { JSONObject o = new JSONObject(text); p.key = o.optString("key"); p.file = o.optString("file"); p.lastOfDay = o.optBoolean("lastOfDay"); p.savedAt = o.optLong("savedAt");
+                JSONArray m = o.optJSONArray("muted");
                 for (int i = 0; m != null && i < m.length(); i++) p.muted.add(m.getString(i)); } catch (Exception unreadable) { }
             return p;
         }
-        ThisPrint forPrint(String printKey) { if (printKey.equals(key)) return this; ThisPrint fresh = new ThisPrint(); fresh.key = printKey; return fresh; }
+        String toJsonOrEmpty() { try { return toJson().toString(); } catch (JSONException impossible) { return "{}"; } }
+        /** Whether these choices are for the print with this key and file. */
+        boolean isFor(String printKey, String printFile) {
+            if (!printKey.isEmpty() && printKey.equals(key)) return true;
+            String mine = file.isEmpty() ? key : file;
+            return !mine.isEmpty() && (mine.equals(printFile) || mine.equals(printKey));
+        }
+        ThisPrint forPrint(String printKey) { return forPrint(printKey, ""); }
+        ThisPrint forPrint(String printKey, String printFile) {
+            if (isFor(printKey, printFile)) return this;
+            ThisPrint fresh = new ThisPrint(); fresh.key = printKey; fresh.file = printFile; return fresh;
+        }
     }
 
     static boolean matches(Rule rule, Event event, int minuteOfDay, ThisPrint print) { return matches(rule, event, minuteOfDay, print, null); }
@@ -208,7 +224,7 @@ final class Automation {
         }
         if (rule.event.equals(LAYER) && !(rule.layer > 0 && event.fromLayer < rule.layer && event.layer >= rule.layer)) return false;
         if (!inWindow(minuteOfDay, rule.fromMinute, rule.toMinute)) return false;
-        ThisPrint p = print == null ? new ThisPrint() : print.forPrint(event.key);
+        ThisPrint p = print == null ? new ThisPrint() : print.forPrint(event.key, event.file);
         if (rule.lastPrintOnly && !p.lastOfDay) return false;
         return !p.muted.contains(rule.id);
     }
@@ -439,6 +455,8 @@ final class Automation {
             String name = print == null ? "" : print.optString("filename", ""), key = print == null ? "" : print.optString("uuid", ""); if (key.isEmpty()) key = name;
             int layer = print == null ? -1 : print.optInt("current_layer", -1);
             if (state == 2 && !key.isEmpty()) {
+                // Named with and without its uuid by different reports: the same print, kept by the uuid once known.
+                if (!key.equals(job) && PrintRecorder.samePrint(key, name, job, file)) { if (!key.equals(name)) job = key; key = job; }
                 // The same file printed again straight after it ended (no idle report between two cloud polls): a new print.
                 boolean again = key.equals(job) && ended && sub != 2077 && sub != 2504 && layer >= 0 && layer <= 1;
                 if (!key.equals(job) || again) {
