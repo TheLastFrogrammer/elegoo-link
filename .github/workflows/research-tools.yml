@@ -37,6 +37,7 @@ jobs:
       - name: Test offline records inspection and the bounded stock-console client
         env:
           CC2_REQUIRE_UNIX: '1'
+          CC2_REQUIRE_PROC: '1'
         run: python -m unittest discover -s tools/research/tests -v
   native-armv7:
     needs: validate
@@ -144,6 +145,43 @@ jobs:
           CC2_USB_EXPORT: build/cc2-companion-starter/cc2-usb-export-armv7
           CC2_USB_RUNNER: qemu-arm -cpu cortex-a7
         run: python -m unittest discover -s tools/research/tests -p test_cc2_companion.py -v
+      - name: Build the fixed status and bounded G-code range recorders
+        run: |
+          for reader in status file; do
+            "$CC2_MUSL_PREFIX/bin/musl-gcc" -std=c11 -Os -static -s \
+              -march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=hard \
+              -D_FILE_OFFSET_BITS=64 -fstack-protector-strong -Wall -Wextra -Werror \
+              "tools/research/cc2_native_$reader.c" -o "build/cc2-companion-starter/cc2-native-$reader-armv7"
+          done
+          python - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('build/cc2-companion-starter')
+          for profile, sources in [('status', ['cc2_native_status.c', 'cc2_native_probe.c']), ('file', ['cc2_native_file.c'])]:
+              binary = root / ('cc2-native-' + profile + '-armv7')
+              manifest = json.loads(pathlib.Path('build/native-first-probe/BUILD-MANIFEST.json').read_text())
+              manifest.update(format='cc2-native-' + profile + '-build-v1', binary=binary.name,
+                              bytes=binary.stat().st_size, sha256=hashlib.sha256(binary.read_bytes()).hexdigest(),
+                              source_sha256={name: hashlib.sha256(pathlib.Path('tools/research', name).read_bytes()).hexdigest() for name in sources})
+              (root / (profile.upper() + '-BUILD-MANIFEST.json')).write_text(json.dumps(manifest, indent=2) + '\n')
+          PY
+          python tools/research/cc2_readonly.py prepare-binary --profile native-status \
+            --binary build/cc2-companion-starter/cc2-native-status-armv7 \
+            --manifest build/cc2-companion-starter/STATUS-BUILD-MANIFEST.json \
+            --output build/cc2-companion-starter/uart-status
+          python tools/research/cc2_readonly.py prepare-binary --profile native-file \
+            --binary build/cc2-companion-starter/cc2-native-file-armv7 \
+            --manifest build/cc2-companion-starter/FILE-BUILD-MANIFEST.json \
+            --output build/cc2-companion-starter/uart-file
+      - name: Exercise the actual ARM status and file recorders
+        env:
+          CC2_REQUIRE_UNIX: '1'
+          CC2_REQUIRE_PROC: '1'
+          CC2_NATIVE_STATUS: build/cc2-companion-starter/cc2-native-status-armv7
+          CC2_NATIVE_FILE: build/cc2-companion-starter/cc2-native-file-armv7
+          CC2_NATIVE_RUNNER: qemu-arm -cpu cortex-a7
+        run: |
+          python -m unittest discover -s tools/research/tests -p test_cc2_readonly.py -v
+          python -m unittest discover -s tools/research/tests -p test_cc2_file_ranges.py -v
       - name: Package the probe, source, inspectors and transfer instructions
         run: |
           cp tools/research/cc2_native_probe.c tools/research/cc2_native_capture_inspect.py \
@@ -168,7 +206,12 @@ jobs:
             tools/research/cc2_usb_export.c tools/research/cc2_native_probe.c \
             tools/research/cc2_console_capture.py tools/research/cc2_serial_transfer.py \
             tools/research/cc2_native_capture_inspect.py tools/research/PI-COMPANION-SETUP.md \
+            tools/research/cc2_native_status.c tools/research/cc2_native_file.c \
+            tools/research/cc2_readonly.py tools/research/cc2_file_ranges.py tools/research/READONLY-STATUS-AND-FILES.md \
             build/cc2-companion-starter/
+          cp build/native-first-probe/cc2-native-probe-armv7 build/cc2-companion-starter/
+          cp build/native-first-probe/BUILD-MANIFEST.json build/cc2-companion-starter/PROBE-BUILD-MANIFEST.json
+          cp -r build/native-first-probe/uart-transfer build/cc2-companion-starter/uart-probe
           cp -r tools/research/companion build/cc2-companion-starter/
           cp build/native-first-probe/musl-COPYRIGHT build/native-first-probe/GCC-COPYRIGHT build/cc2-companion-starter/
           python - <<'PY'

@@ -76,13 +76,13 @@ class CompanionTests(unittest.TestCase):
         self.root = Path(self.temp.name)
 
     @contextlib.contextmanager
-    def native(self, files=None):
+    def native(self, files=None, profile="capture"):
         source = self.root / "source"
         pi.private_files(source, files or {"identity.json": identity()})
         master, slave = pty.openpty()
         os.set_blocking(master, False)
         original = termios.tcgetattr(slave)
-        process = subprocess.Popen(self.command + ["--device", os.ttyname(slave), "--bundle", str(source)],
+        process = subprocess.Popen(self.command + ["--device", os.ttyname(slave), "--bundle", str(source), "--profile", profile],
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         try:
             deadline = time.monotonic() + 5
@@ -134,6 +134,38 @@ class CompanionTests(unittest.TestCase):
         with self.native() as (master, _process, _source):
             files = pi.receive(master, timeout=5)
         self.assertEqual(files, {"identity.json": identity()})
+
+    def test_v2_readonly_profile_roundtrip_and_private_status_inspection(self):
+        from test_cc2_readonly import readonly_files, BOOT, STATUS
+        files = readonly_files()
+        item = json.loads(identity()); item['boot_id'] = BOOT
+        files = {'identity.json': json.dumps(item).encode(), **files}
+        with self.native(files, 'read-only') as (master, _process, _source):
+            received = pi.receive(master, 5, 'read-only')
+        self.assertEqual(received, files)
+        state = pi.private_directory(self.root/'state')
+        report = pi.archive(state, received)
+        self.assertEqual(report['status_observation'], STATUS)
+        self.assertEqual(report['readonly_profile'], 'snapshot')
+
+    def test_v2_range_profile_roundtrip_and_integrity_inspection(self):
+        from test_cc2_file_ranges import range_files, BOOT
+        item = json.loads(identity()); item['boot_id'] = BOOT
+        files = {'identity.json': json.dumps(item).encode(), **range_files(bytes(range(256))*4096)}
+        with self.native(files, 'file-range') as (master, _process, _source):
+            received = pi.receive(master, 10, 'file-range')
+        self.assertEqual(received, files)
+        report = pi.archive(pi.private_directory(self.root/'state'), received)
+        self.assertEqual(report['file_range']['bytes'], 1024*1024)
+        self.assertFalse(report['file_range']['job_binding_verified'])
+
+    def test_v2_profile_mismatch_fails_without_accepting_capture(self):
+        from test_cc2_readonly import readonly_files, BOOT
+        item = json.loads(identity()); item['boot_id'] = BOOT
+        files = {'identity.json': json.dumps(item).encode(), **readonly_files()}
+        with self.native(files, 'read-only') as (master, process, _source):
+            with self.assertRaises(pi.CaptureError): pi.receive(master, .2, 'capture')
+            self.assertEqual(process.wait(timeout=3), 1)
 
     def test_native_binary_bytes_and_largest_file_round_trip(self):
         files = capture()
@@ -277,7 +309,7 @@ class CompanionTests(unittest.TestCase):
 
     def test_native_version_and_invalid_cli(self):
         result = subprocess.run(self.command + ["--version"], capture_output=True)
-        self.assertEqual(result.stdout, b"cc2-usb-export-v1\n")
+        self.assertEqual(result.stdout, b"cc2-usb-export-v2\n")
         self.assertEqual(subprocess.run(self.command + ["--shell"], capture_output=True).returncode, 2)
 
     def test_exporter_transfer_pins_profile_source_and_prepares_without_execution(self):

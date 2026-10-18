@@ -1,6 +1,6 @@
 /* Read-only CC2 USB export v1. No shell, socket, pathname or command API.
- * The owner supplies a finalized private bundle. Only four fixed filenames
- * can be read. Wire CRC32 detects corruption; it is not authentication.
+ * The owner selects one fixed-file capture/read-only/range profile and supplies
+ * a private bundle. Wire CRC32 detects corruption; it is not authentication.
  */
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
@@ -18,11 +18,18 @@
 #include <time.h>
 #include <unistd.h>
 
-#define VERSION "cc2-usb-export-v1"
+#define VERSION "cc2-usb-export-v2"
 #define DEADLINE_MS 120000
 static volatile sig_atomic_t stopped;
-static const char *names[] = {"identity.json", "request.bin", "summary.json", "console.rx"};
-static const size_t limits[] = {2048, 128, 8192, 4U * 1024U * 1024U};
+static const char *const capture_names[] = {"identity.json", "request.bin", "summary.json", "console.rx"};
+static const char *const range_names[] = {"identity.json", "range.json", "range.bin"};
+static const size_t capture_limits[] = {2048, 128, 8192, 4U * 1024U * 1024U};
+static const size_t readonly_limits[] = {2048, 512, 8192, 4U * 1024U * 1024U};
+static const size_t range_limits[] = {2048, 8192, 1024U * 1024U};
+static const char *const *names = capture_names;
+static const size_t *limits = capture_limits;
+static int file_count = 4, optional_capture = 1;
+static const char *protocol = "CC2USB1 ";
 static void stop(int sig) { (void)sig; stopped = 1; }
 static int64_t clock_ms(void) {
     struct timespec t;
@@ -111,17 +118,17 @@ static int open_bundle(const char *path, int files[4]) {
     int i, optional = 0;
     if (directory < 0) return -1;
     if (fstat(directory, &st) || st.st_uid != geteuid() || (st.st_mode & 0777) != 0700) goto fail;
-    for (i = 0; i < 4; i++) {
+    for (i = 0; i < file_count; i++) {
         files[i] = openat(directory, names[i], O_RDONLY | O_NOFOLLOW | O_NONBLOCK | O_CLOEXEC);
         if (files[i] < 0) {
-            if (i && errno == ENOENT) continue;
+            if (optional_capture && i && errno == ENOENT) continue;
             goto fail;
         }
         if (fstat(files[i], &st) || !S_ISREG(st.st_mode) || st.st_uid != geteuid() ||
             (st.st_mode & 0777) != 0600 || st.st_size < 0 || (uint64_t)st.st_size > limits[i]) goto fail;
         if (i) optional++;
     }
-    if (optional != 0 && optional != 3) goto fail;
+    if (optional_capture ? optional != 0 && optional != 3 : optional != file_count - 1) goto fail;
     close(directory);
     return 0;
 fail:
@@ -132,16 +139,23 @@ int main(int argc, char **argv) {
     int device = -1, files[4] = {-1, -1, -1, -1}, result = 1, saved = 0, i;
     struct termios original, raw;
     struct stat st;
-    const char *path = NULL, *bundle = NULL;
+    const char *path = NULL, *bundle = NULL, *profile = NULL;
     struct sigaction action;
     if (argc == 2 && !strcmp(argv[1], "--version")) { puts(VERSION); return 0; }
     for (i = 1; i < argc; i += 2) {
         if (i + 1 == argc) goto usage;
         if (!strcmp(argv[i], "--device") && !path) path = argv[i + 1];
         else if (!strcmp(argv[i], "--bundle") && !bundle) bundle = argv[i + 1];
+        else if (!strcmp(argv[i], "--profile") && !profile) profile = argv[i + 1];
         else goto usage;
     }
     if (!path || !bundle) goto usage;
+    if (profile && strcmp(profile, "capture")) {
+        protocol = "CC2USB2 "; optional_capture = 0;
+        if (!strcmp(profile, "read-only")) limits = readonly_limits;
+        else if (!strcmp(profile, "file-range")) { names = range_names; limits = range_limits; file_count = 3; }
+        else goto usage;
+    }
     memset(&action, 0, sizeof(action)); action.sa_handler = stop;
     sigemptyset(&action.sa_mask);
     sigaction(SIGINT, &action, NULL); sigaction(SIGTERM, &action, NULL);
@@ -178,14 +192,14 @@ int main(int argc, char **argv) {
             if (count != 1) goto done;
             if (request[used++] == '\n') break;
         }
-        if (used != 41 || memcmp(request, "CC2USB1 ", 8) || request[40] != '\n') goto done;
+        if (used != 41 || memcmp(request, protocol, 8) || request[40] != '\n') goto done;
         for (i = 8; i < 40; i++) if (!((request[i] >= '0' && request[i] <= '9') ||
                                                      (request[i] >= 'a' && request[i] <= 'f'))) goto done;
         request[40] = 0;
         deadline = clock_ms() + DEADLINE_MS;
         n = snprintf(response, sizeof(response), "%s BEGIN\n", request);
         if (n <= 0 || send_bytes(device, response, (size_t)n, deadline)) goto done;
-        for (i = 0; i < 4; i++) if (files[i] >= 0 && export_file(device, files[i], i, deadline)) goto done;
+        for (i = 0; i < file_count; i++) if (files[i] >= 0 && export_file(device, files[i], i, deadline)) goto done;
         n = snprintf(response, sizeof(response), "%s DONE\n", request);
         if (n <= 0 || send_bytes(device, response, (size_t)n, deadline)) goto done;
         /* A peer cannot request an unbounded tight loop of exports. */
@@ -201,6 +215,6 @@ done:
     if (result) fputs("cc2-usb-export: unavailable or incomplete; no printer action performed\n", stderr);
     return result;
 usage:
-    fputs("Usage: cc2-usb-export --device /dev/ttyACM0 --bundle PRIVATE_DIRECTORY\n", stderr);
+    fputs("Usage: cc2-usb-export --device /dev/ttyACM0 --bundle PRIVATE_DIRECTORY [--profile capture|read-only|file-range]\n", stderr);
     return 2;
 }

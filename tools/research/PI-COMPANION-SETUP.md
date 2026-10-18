@@ -1,5 +1,7 @@
 # CC2 Pi companion starter
 
+Read-only expansion: [READONLY-STATUS-AND-FILES.md](READONLY-STATUS-AND-FILES.md) adds owner-qualified fixed status captures, bounded G-code ranges and explicit USB v2 profiles. The default setup below still launches identity-only export; it does not automatically run the new readers or enable live telemetry.
+
 This is an installable **first transport setup**, built from the verified stock 02.01.01.07 investigation. It is not yet physically qualified on a CC2. The Pi can boot as a CDC-ACM USB device, receive private firmware facts and completed native-console captures, retain them across reconnects, and show status over your existing SSH connection. The optional printer service starts the small read-only exporter after a separately recorded qualification.
 
 **Initial owner-shell access is still required. Plugging in USB does not unlock a shell.** The package does not automatically drive UART, apply tweaks, modify the stock image, switch LAN/WAN modes, recover G-code/media, or repair the camera. Those need subsequent device qualification. Neither the Pi installer nor the exporter contacts the printer over its network.
@@ -70,7 +72,7 @@ Do this with the printer idle, normal WAN monitoring available, and an independe
 
 1. On that shell, run the existing read-only owner worksheet from the repository and record actual firmware hash, UID, mounts and USB enumeration. Confirm which new `/dev/ttyACM*` is the Pi by comparing unplugged/attached sysfs device information. Do not assume ttyACM0 is always the paired Pi.
 2. Stage `uart-transfer/stage-usb-export.sh` and `stage-printer-prepare.sh` as paced text through the established terminal. Require **both actual** `CC2_STAGE_VERIFIED` output lines and the hashes in `uart-transfer/transfer.json`. Echoed command text is not successful verification. The target directories are new, private `/tmp/cc2-owner-*` directories. A qualified USB storage copy is another option; USB storage insertion does not autorun these files.
-3. Read the exact `target` and `prepare_script` paths in `transfer.json`. First run `TARGET --version`, substituting the target path, and require `cc2-usb-export-v1`.
+3. Read the exact `target` and `prepare_script` paths in `transfer.json`. First run `TARGET --version`, substituting the target path, and require `cc2-usb-export-v2` for this updated package (the original package reported v1).
 4. Run the following, substituting **PREPARE_SCRIPT**, **TARGET**, and the observed **DEVICE**:
 
 ```sh

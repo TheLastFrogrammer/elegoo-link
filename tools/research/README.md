@@ -1,5 +1,7 @@
 # Offline CC2 capture inspector
 
+The [read-only status and file tools](READONLY-STATUS-AND-FILES.md) now add a boot-scoped, fixed native status recorder, strict snapshot/delta inspection, a bounded native G-code range recorder, verified range assembly and separate USB v2 profiles. Initial owner access and hardware qualification remain required; no recurring reader or Android integration is enabled automatically.
+
 For the new Pi transport setup, see [PI-COMPANION-SETUP.md](PI-COMPANION-SETUP.md): a Pi installer, supervised private USB receiver, static read-only printer exporter and optional fingerprint-gated procd hook. Initial owner access and physical qualification remain required. This starter exports fixed facts/captures; automated UART recovery, maintenance writes and G-code/media access are subsequent work.
 
 For a stock owner shell without Python, use the [native first-contact recorder](NATIVE-FIRST-PROBE.md) and optional [checksummed paced-text transfer](SERIAL-TRANSFER.md). Both are preparation tools; physical access and actual printer acceptance remain pending.

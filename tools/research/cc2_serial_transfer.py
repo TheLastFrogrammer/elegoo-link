@@ -59,23 +59,26 @@ def validate_binary(binary, manifest, profile="probe"):
             raise CaptureError("dynamic_probe_refused")
     digest = hashlib.sha256(binary).hexdigest()
     profiles = {
-        "probe": ("cc2_native_probe.c", "cc2-native-first-probe-build-v1", "cc2-native-probe-armv7"),
-        "usb-export": ("cc2_usb_export.c", "cc2-usb-export-build-v1", "cc2-usb-export-armv7"),
+        "probe": (("cc2_native_probe.c",), "cc2-native-first-probe-build-v1", "cc2-native-probe-armv7"),
+        "usb-export": (("cc2_usb_export.c",), "cc2-usb-export-build-v1", "cc2-usb-export-armv7"),
+        "native-status": (("cc2_native_status.c", "cc2_native_probe.c"), "cc2-native-status-build-v1", "cc2-native-status-armv7"),
+        "native-file": (("cc2_native_file.c",), "cc2-native-file-build-v1", "cc2-native-file-armv7"),
     }
     if profile not in profiles:
         raise CaptureError("invalid_binary_profile")
-    source_name, format_name, binary_name = profiles[profile]
-    source_hash = hashlib.sha256(read_regular(Path(__file__).with_name(source_name), 128 * 1024)).hexdigest()
+    source_names, format_name, binary_name = profiles[profile]
     if manifest.get("format") != format_name or manifest.get("binary") != binary_name or manifest.get("sha256") != digest or type(manifest.get("bytes")) is not int or manifest["bytes"] != len(binary):
         raise CaptureError("probe_manifest_mismatch")
     source = manifest.get("source_sha256")
-    if not isinstance(source, dict) or source.get(source_name) != source_hash:
-        raise CaptureError("probe_source_mismatch")
+    for source_name in source_names:
+        source_hash = hashlib.sha256(read_regular(Path(__file__).with_name(source_name), 128 * 1024)).hexdigest()
+        if not isinstance(source, dict) or source.get(source_name) != source_hash:
+            raise CaptureError("probe_source_mismatch")
     return digest
 
 
 def upload_script(binary, identity, digest, filename="probe"):
-    if filename not in ("probe", "usb-export", "printer-prepare.sh"):
+    if filename not in ("probe", "usb-export", "printer-prepare.sh", "qualification", "native-status", "native-file"):
         raise CaptureError("invalid_stage_filename")
     stage = "/tmp/cc2-owner-" + identity
     lines = [
@@ -90,7 +93,7 @@ def upload_script(binary, identity, digest, filename="probe"):
     lines += [
         "exec 3>&-", f'cc2_sum=$(/usr/bin/sha256sum "$cc2_stage/{filename}")',
         f'[ "${{cc2_sum%% *}}" = "{digest}" ] || {{ /usr/bin/printf "%s\\n" CC2_STAGE_CHECKSUM_MISMATCH; exit 1; }}',
-        f'/bin/chmod 700 "$cc2_stage/{filename}"',
+        f'/bin/chmod {"600" if filename == "qualification" else "700"} "$cc2_stage/{filename}"',
         f"/usr/bin/printf '%s\\n' 'CC2_STAGE_VERIFIED {identity} {digest}'", ")", "",
     ]
     result = "\n".join(lines).encode("ascii")

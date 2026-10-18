@@ -1,5 +1,7 @@
 # CC2 stock firmware and file-access research
 
+Read-only implementation follow-up: [READONLY-STATUS-AND-FILES.md](../../../tools/research/READONLY-STATUS-AND-FILES.md) provides fixed boot-qualified native object/snapshot/subscription captures, strict offline status/delta inspection, a native one-MiB G-code range recorder, stable-source range assembly with full SHA-256, and separate USB v2 export profiles. These are operator-driven tools; source finalization, actual printer/Pi behavior, job binding and Android integration remain unqualified. The original identity-only startup behavior is preserved.
+
 Latest source-to-feature pass: [COMPANION-FEATURE-PLACEMENTS.md](COMPANION-FEATURE-PLACEMENTS.md) maps proposed file recovery, live status, projects, thumbnails, media, diagnostics, configuration history and startup to specific stock functions/interfaces. It independently checks 36 functions across both verified executables against 11 pinned source files and seven image files, and identifies source/binary drift in the camera monitor and send routine. Includes reproducible [evidence](access/evidence/COMPANION-PLACEMENTS.json) and an offline mapping tool. These are integration sites, not newly enabled device capabilities.
 
 Goal: obtain exact G-code, console output and media while preserving official printer firmware and its update path. Full LAN/WAN command coexistence is a separate goal. No device installation or firmware modification was performed by this investigation.

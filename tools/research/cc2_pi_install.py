@@ -23,7 +23,8 @@ BLOCK = "\n# BEGIN CC2 COMPANION V1\n[all]\ndtoverlay=dwc2,dr_mode=peripheral\n#
 UNITS = ("cc2-companion-gadget.service", "cc2-companion.service")
 ASSETS = (*UNITS, "gadget-start.sh", "printer-prepare.sh", "printer-start.sh", "link-companion.init")
 COPY = ("cc2_pi_companion.py", "cc2_pi_install.py", "cc2_console_capture.py",
-        "cc2_native_capture_inspect.py", "cc2_serial_transfer.py", "cc2_usb_export.c", "cc2_native_probe.c")
+        "cc2_native_capture_inspect.py", "cc2_serial_transfer.py", "cc2_usb_export.c", "cc2_native_probe.c",
+        "cc2_readonly.py", "cc2_file_ranges.py", "cc2_native_status.c", "cc2_native_file.c")
 
 
 def source_files():

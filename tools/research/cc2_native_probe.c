@@ -25,9 +25,21 @@
 #define MAX_RX (4U * 1024U * 1024U)
 #define MAX_FRAME (256U * 1024U)
 #define MAX_MESSAGES 512U
+#ifndef FORMAT
 #define FORMAT "cc2-native-first-probe-v1"
+#endif
+#ifndef CC2_REQUEST_DATA
 static const unsigned char request[] =
     "{\"id\":1,\"method\":\"list_endpoints\",\"params\":{}}\003";
+#define CC2_REQUEST_SIZE (sizeof(request) - 1)
+#define CC2_REQUEST_METHOD "list_endpoints"
+#else
+#define request CC2_REQUEST_DATA
+#define CC2_REQUEST_SIZE strlen((const char *)request)
+#endif
+#ifndef CC2_SUMMARY_FIELDS
+#define CC2_SUMMARY_FIELDS ""
+#endif
 static volatile sig_atomic_t stopped;
 
 struct capture {
@@ -106,7 +118,7 @@ static int create_output(struct capture *c, const char *path) {
     c->request_file = private_file(c->directory, "request.bin");
     c->summary_file = private_file(c->directory, "summary.json");
     if (c->receive_file < 0 || c->request_file < 0 || c->summary_file < 0) goto fail;
-    if (write_all(c->request_file, request, sizeof(request) - 1, NULL)) goto fail;
+    if (write_all(c->request_file, request, CC2_REQUEST_SIZE, NULL)) goto fail;
     return 0;
 fail:
     close_output(c);
@@ -155,14 +167,14 @@ static void capture_connected(struct capture *c, int fd, int timeout_ms, int win
     int64_t start = now_ms(), deadline;
     if (start < 0) { c->error = "clock_failed"; return; }
     deadline = start + timeout_ms;
-    while (c->sent < sizeof(request) - 1) {
+    while (c->sent < CC2_REQUEST_SIZE) {
         int ready = wait_fd(fd, POLLOUT, deadline);
         ssize_t n;
         if (ready <= 0) {
             c->error = stopped ? "interrupted" : ready == 0 ? "send_timeout" : "socket_io_failed";
             return;
         }
-        n = CC2_SEND(fd, request + c->sent, sizeof(request) - 1 - c->sent, MSG_NOSIGNAL);
+        n = CC2_SEND(fd, request + c->sent, CC2_REQUEST_SIZE - c->sent, MSG_NOSIGNAL);
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)) continue;
         if (n <= 0) { c->error = "socket_io_failed"; return; }
         c->sent += (size_t)n;
@@ -205,14 +217,15 @@ static int finish_output(struct capture *c, int window_ms) {
     n = snprintf(summary, sizeof(summary),
         "{\"format\":\"%s\",\"capture_status\":\"%s\","
         "\"transport\":\"local_unix_socket\",\"transport_status\":\"%s\","
-        "\"request_method\":\"list_endpoints\",\"request_id\":1,\"requested_window_ms\":%d,"
+        "\"request_method\":\"%s\",\"request_id\":1,\"requested_window_ms\":%d,"
         "\"transmitted_bytes\":%zu,\"received_bytes\":%zu,\"saved_bytes\":%zu,"
         "\"framed_messages\":%zu,\"pending_frame_bytes\":%zu,"
         "\"response_verified\":false,\"firmware_identity_verified\":false,"
-        "\"printer_file_identity_verified\":false,\"error\":%s%s%s}\n",
+        "\"printer_file_identity_verified\":false,%s\"error\":%s%s%s}\n",
         FORMAT, c->error ? "incomplete" : "unverified",
-        c->window_finished ? "window_finished" : "stopped", window_ms,
+        c->window_finished ? "window_finished" : "stopped", CC2_REQUEST_METHOD, window_ms,
         c->sent, c->received, c->saved, c->messages, c->pending,
+        CC2_SUMMARY_FIELDS,
         c->error ? "\"" : "", c->error ? c->error : "null", c->error ? "\"" : "");
     status = c->error ? 1 : 0;
     if (n < 0 || (size_t)n >= sizeof(summary) ||

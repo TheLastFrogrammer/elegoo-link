@@ -26,10 +26,16 @@ import zlib
 
 from cc2_console_capture import CaptureError, strict_object
 from cc2_native_capture_inspect import inspect_capture, read_regular
+from cc2_readonly import inspect_readonly
+from cc2_file_ranges import inspect_range
 from cc2_serial_transfer import private_files, upload_script, validate_binary, TAG
 
 EXPECTED_SHA = "8039081f9c4b01e720d838d4ab6e4515a8979b9a71a33bd4164321c282e06074"
 FILES = {"identity.json": 2048, "request.bin": 128, "summary.json": 8192, "console.rx": 4 * 1024 * 1024}
+PROFILES = {"capture": (b"CC2USB1 ", FILES),
+            "read-only": (b"CC2USB2 ", {**FILES, "request.bin": 512}),
+            "file-range": (b"CC2USB2 ", {"identity.json": 2048, "range.json": 8192, "range.bin": 1024 * 1024})}
+ARCHIVE_FILE_LIMITS = {**FILES, "request.bin": 512, "range.json": 8192, "range.bin": 1024 * 1024}
 MAX_LINE = 530
 MAX_ARCHIVES = 16
 MAX_STORED = 64 * 1024 * 1024
@@ -76,18 +82,19 @@ def send_request(fd, data, deadline):
         data = data[size:]
 
 
-def receive(fd, timeout=120):
+def receive(fd, timeout=120, profile="capture"):
     nonce = secrets.token_hex(16).encode("ascii")
-    marker = b"CC2USB1 " + nonce
+    prefix, selected_files = PROFILES[profile]
+    marker = prefix + nonce
     deadline = time.monotonic() + timeout
     send_request(fd, marker + b"\n", deadline)
     lines = Lines(fd, deadline)
     if lines.line() != marker + b" BEGIN":
         raise CaptureError("usb_handshake_mismatch")
     files = {}
-    for name, limit in FILES.items():
+    for name, limit in selected_files.items():
         line = lines.line()
-        if line == marker + b" DONE" and name == "request.bin":
+        if line == marker + b" DONE" and name == "request.bin" and profile == "capture":
             return files
         match = re.fullmatch(rb"FILE ([a-z.]+) (0|[1-9][0-9]{0,6})", line)
         if not match or match[1] != name.encode() or int(match[2]) > limit:
@@ -183,16 +190,18 @@ def archive(root, files):
         digest.update(name.encode() + b"\0" + len(raw).to_bytes(8, "big") + raw)
     identity = digest.hexdigest()
     target = root / ("bundle-" + identity)
+    ranged = "range.bin" in files
+    max_archives, max_stored = (256, 272 * 1024 * 1024) if ranged else (MAX_ARCHIVES, MAX_STORED)
     if target.exists():
         info = target.lstat()
         if not stat.S_ISDIR(info.st_mode) or info.st_uid != os.geteuid() or info.st_mode & 0o777 != 0o700:
             raise CaptureError("archive_path_conflict")
         for name, raw in files.items():
-            if read_regular(target / name, FILES[name]) != raw:
+            if read_regular(target / name, ARCHIVE_FILE_LIMITS[name]) != raw:
                 raise CaptureError("archive_content_conflict")
     else:
         entries = list(root.iterdir())
-        if len(entries) > 64:
+        if len(entries) > max_archives + 8:
             raise CaptureError("archive_quota_full")
         bundles = [p for p in entries if p.name.startswith("bundle-")]
         stored = 0
@@ -204,19 +213,33 @@ def archive(root, files):
                 if not stat.S_ISREG(info.st_mode):
                     raise CaptureError("archive_path_conflict")
                 stored += info.st_size
-        if len(bundles) >= MAX_ARCHIVES or stored + sum(map(len, files.values())) > MAX_STORED:
+        if len(bundles) >= max_archives or stored + sum(map(len, files.values())) > max_stored:
             raise CaptureError("archive_quota_full")
         private_files(target, files)
     report["bundle"] = target.name
     report["files"] = {name: {"bytes": len(raw), "sha256": hashlib.sha256(raw).hexdigest()} for name, raw in files.items()}
     if "console.rx" in files:
-        inspected = inspect_capture(target)
+        metadata = strict_object(files["summary.json"])
+        if metadata.get("format") == "cc2-native-readonly-capture-v1":
+            inspected = inspect_readonly(target)
+            if inspected["boot_id"] != report["reported_identity"]["boot_id"]:
+                raise CaptureError("capture_identity_boot_mismatch")
+            report["readonly_profile"] = inspected["profile"]
+            report["status_observation"] = inspected.get("status")
+            report["status_events"] = inspected["status_events"]
+        else:
+            inspected = inspect_capture(target)
         report["console_response_verified"] = inspected["response_verified"]
         report["console_capture_status"] = inspected["capture_status"]
+    if ranged:
+        inspected = inspect_range(target)
+        if inspected["source_observation"]["boot_id"] != report["reported_identity"]["boot_id"]:
+            raise CaptureError("capture_identity_boot_mismatch")
+        report["file_range"] = {k: inspected[k] for k in ("capture_status", "source_id", "offset", "bytes", "sha256", "next_offset", "job_binding_verified")}
     return report
 
 
-def collect(device, state):
+def collect(device, state, profile="capture"):
     root = private_directory(state)
     # One receiver per state directory, held across open/transfer/archive/status.
     lock = os.open(root / ".lock", os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
@@ -226,7 +249,7 @@ def collect(device, state):
             raise CaptureError("private_lock_required")
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         with serial_device(device) as fd:
-            files = receive(fd)
+            files = receive(fd, profile=profile)
         report = archive(root, files)
         atomic_status(root, report)
         return report
@@ -264,6 +287,7 @@ def main(argv=None):
         sub = commands.add_parser(name)
         sub.add_argument("--device", default="/dev/ttyGS0")
         sub.add_argument("--state", type=Path, default=Path("/var/lib/cc2-companion"))
+        sub.add_argument("--profile", choices=PROFILES, default="capture")
         if name == "serve":
             sub.add_argument("--interval", type=int, choices=range(30, 3601), default=60, metavar="30..3600")
     sub = commands.add_parser("status")
@@ -280,7 +304,7 @@ def main(argv=None):
             print("Temporary transfer prepared; binary execution remains manual.")
             return 0
         if args.command == "status":
-            print(json.dumps(strict_object(read_regular(args.state / "status.json", 16384)), separators=(",", ":")))
+            print(json.dumps(strict_object(read_regular(args.state / "status.json", 65536)), separators=(",", ":")))
             return 0
         running = True
         def stop(_sig, _frame):
@@ -290,7 +314,7 @@ def main(argv=None):
         signal.signal(signal.SIGTERM, stop)
         while running:
             try:
-                report = collect(args.device, args.state)
+                report = collect(args.device, args.state, args.profile)
                 # No raw capture, boot ID or filenames in the service journal.
                 print(json.dumps({"transport_status": report["transport_status"],
                                   "matches_research_fingerprint": report["matches_research_fingerprint"]}), flush=True)
