@@ -107,7 +107,12 @@ def export_script(identity):
     lines = [
         "# Explicitly exports private console capture bytes as hex to this terminal.",
         "# Keep the terminal log private. Encoding is not encryption.",
-        "(", "set -eu", f"cc2_capture='{stage}/capture'",
+        "(", "set -eu",
+        # Without pipefail a missing or failing hexdump would print an empty file and still "succeed" on the printer
+        # (the decoder would refuse it, but only later). Use pipefail where this shell has it, and check the tools first.
+        "if (set -o pipefail) 2>/dev/null; then set -o pipefail; fi",
+        "[ -x /usr/bin/hexdump ] && [ -x /bin/sed ] && [ -x /usr/bin/sha256sum ] && [ -x /usr/bin/wc ]",
+        f"cc2_capture='{stage}/capture'",
         '[ -d "$cc2_capture" ] && [ ! -L "$cc2_capture" ]',
     ]
     # Preflight all entries before emitting any bundle marker.
@@ -150,6 +155,8 @@ def prepare(binary_path, manifest_path, output, tag="1"):
     }
     instructions = (
         "Temporary UART transfer, after owner-shell qualification\n\n"
+        "0. Read-only check first: /bin/sed -n 's/^[^ ]* \\/tmp \\([^ ]*\\) .*/\\1/p' /proc/mounts   must print tmpfs\n"
+        "   (staging is meant to vanish at reboot). Quieten kernel messages on this console only if you accept that change.\n"
         "1. Save a private terminal log. Send stage-probe.sh as paced text to the Linux owner shell.\n"
         "   Keep normal echo/settings; do not use stty/raw mode. Longest generated line is below 768 bytes.\n"
         "   A terminal without paced text transfer can use a separately qualified USB copy instead.\n"
@@ -160,7 +167,10 @@ def prepare(binary_path, manifest_path, output, tag="1"):
         "   Require cc2-native-first-probe-v1, then run once manually:\n   " + run + "\n"
         "4. After the probe exits, opt in to private export by sending export-capture.sh.\n"
         "   Save the complete raw text log; all three files and a DONE marker are required.\n"
-        "5. On the phone/computer: python cc2_serial_transfer.py decode --log PRIVATE_LOG --output NEW_PRIVATE_DIRECTORY\n\n"
+        "5. On the phone/computer: python cc2_serial_transfer.py decode --log PRIVATE_LOG --output NEW_PRIVATE_DIRECTORY\n"
+        "6. When finished, remove the stage (it is gone at reboot anyway on tmpfs): /bin/rm -r " + stage + "\n"
+        "   Kernel messages share this console: one printed in the middle of the export breaks that line and the decoder\n"
+        "   refuses the whole log; export again (it reads the same files).\n\n"
         "The protocol detects damaged/missing/reordered/duplicated data through exact size/hash checks.\n"
         "It is not encryption, printer identity attestation, or proof that WAN coexistence works.\n"
         "No printer-side base64, Python, SSH, network listener or startup installation is needed.\n"
@@ -192,7 +202,9 @@ def recover(log_path, output):
             identity = candidate
             continue
         if identity is None:
-            raise CaptureError("serial_bundle_missing")
+            # Before the bundle header only the terminal's echo of the typed script can carry this prefix (for example a
+            # wrapped or redrawn line); it is never payload, which needs the header, ordered files and their hashes.
+            continue
         match = BEGIN.fullmatch(line)
         if match:
             name, count, digest = match.groups()
@@ -224,6 +236,8 @@ def recover(log_path, output):
             done = True
             continue
         raise CaptureError("invalid_serial_record")
+    if identity is None:
+        raise CaptureError("serial_bundle_missing")
     if not done:
         raise CaptureError("serial_bundle_incomplete")
     private_files(output, files)

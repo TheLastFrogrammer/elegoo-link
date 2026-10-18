@@ -141,6 +141,18 @@ class SerialTransferTests(unittest.TestCase):
             self.assertEqual((output / name).read_bytes(), data)
             self.assertEqual((output / name).stat().st_mode & 0o777, 0o600)
 
+    def test_echoed_fragments_before_the_bundle_are_not_payload(self):
+        # A terminal can redraw a typed line so a fragment starts with the marker; before the bundle header that is echo.
+        log, files = self.exported()
+        echo = b"CC2HEX1 BEGIN summary.json %s %s\\n' \"$cc2_bytes\" \"$cc2_sum\"\r\nCC2HEX1 DATA /'\r\n"
+        report, output = self.decode(echo + log)
+        self.assertTrue(report["serial_transfer"]["size_and_hash_checks_passed"])
+        for name, data in files.items():
+            self.assertEqual((output / name).read_bytes(), data)
+        # Without any bundle the log is still refused as missing one.
+        with self.assertRaisesRegex(transfer.CaptureError, "serial_bundle_missing"):
+            self.decode(echo)
+
     def test_zero_byte_stream_transfers_but_does_not_verify_a_response(self):
         log, _ = self.exported(raw=b"")
         report, _ = self.decode(log)

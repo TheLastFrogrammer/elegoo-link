@@ -28,6 +28,16 @@ python cc2_serial_transfer.py decode --log /path/to/private-uart.log --output /p
 
 The decoder requires exactly one ordered, complete bundle and checks each file's size/hash before creating output. Prompts, CRLF and ordinary echoed shell commands are tolerated; damaged, duplicate, reordered, missing or oversized payload is refused. It then runs the existing strict offline inventory inspector. A faithful serial transfer can still contain an incomplete or invalid console response; that result remains incomplete. The input log is never changed, and existing output is never replaced.
 
+### Before and after a transfer
+
+- Check that `/tmp` is in memory first (read-only): `/bin/sed -n 's/^[^ ]* \/tmp \([^ ]*\) .*/\1/p' /proc/mounts` must print `tmpfs`. Staging is meant to vanish at reboot; on a flash-backed `/tmp` it would stay.
+- Remove the stage when done: `/bin/rm -r /tmp/cc2-owner-<id>` (the exact line is in `INSTRUCTIONS.txt`).
+- The UART is also the kernel console (`console=ttyS2`). A kernel message printed in the middle of an export breaks that hex line and the decoder refuses the whole log; export again.
+- The export checks for `hexdump`, `sed`, `sha256sum` and `wc` before printing anything and uses `pipefail` where the shell has it, so a failing `hexdump` stops the export on the printer instead of printing an empty file.
+- The decoder ignores marker-like fragments before the bundle header (terminal echo of the typed script); payload still needs the header, ordered files and their sizes and hashes.
+
+Verified off-printer under BusyBox 1.36 `ash`, `printf`, `sha256sum` and `hexdump` (the printer has 1.27.2): a 256 KiB upload with every byte value arrives byte-exact with the expected hash and mode 0700, and the export round trip recovers all three files, also with CRLF line endings. This is still not the printer's own BusyBox or its interactive line editor.
+
 ## Prepare another tag or a separately verified build
 
 Keep the C source and all three host Python scripts together with the build manifest. Run:
