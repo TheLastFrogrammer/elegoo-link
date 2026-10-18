@@ -119,6 +119,12 @@ class ReadonlyTests(unittest.TestCase):
         with self.assertRaises(readonly.CaptureError):
             readonly.inspect_readonly(output)
 
+    def test_null_response_followed_by_valid_response_is_still_ambiguous(self):
+        raw = frame({"id": 1, "result": None}) + frame({"id": 1, "result": {"objects": list(readonly.FIELDS)}})
+        readonly.private_files(self.root/'capture',readonly_files('objects',raw))
+        with self.assertRaisesRegex(readonly.CaptureError,'ambiguous'):
+            readonly.inspect_readonly(self.root/'capture')
+
     def test_partial_eof_is_not_verified(self):
         result, output = self.stream("snapshot", b'{"id":1,', close_early=True)
         self.assertEqual(result.returncode, 1)

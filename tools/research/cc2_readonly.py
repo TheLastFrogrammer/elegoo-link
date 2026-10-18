@@ -129,6 +129,7 @@ def inspect_readonly(directory):
         native["received_bytes"] != len(raw) or native["pending_frame_bytes"]):
         raise CaptureError("invalid_capture_metadata")
     framer, messages, response, notifications = Framer(), 0, None, []
+    seen_response = False
     for start in range(0, len(raw), 4096):
         for frame in framer.feed(raw[start:start + 4096]):
             messages += 1
@@ -137,8 +138,9 @@ def inspect_readonly(directory):
             value = strict_object(frame)
             is_response = "result" in value or "error" in value
             if is_response and type(value.get("id")) is int and value["id"] == 1:
-                if response is not None or "error" in value:
+                if seen_response or "error" in value:
                     raise CaptureError("ambiguous_or_error_response")
+                seen_response = True
                 if "method" in value and value["method"] != METHODS[profile]:
                     raise CaptureError("response_method_mismatch")
                 response = value["result"]
