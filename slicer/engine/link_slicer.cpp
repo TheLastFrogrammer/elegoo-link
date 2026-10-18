@@ -512,7 +512,12 @@ FileModel read_model(const std::string& path)
     LoadStrategy strategy = LoadStrategy::LoadModel | LoadStrategy::AddDefaultInstances;
     if (is_3mf(path)) strategy = strategy | LoadStrategy::LoadConfig;
     try {
-        file.model = Model::read_from_file(path, &file.project, &substitutions, strategy, &plate_data);
+        // STEP is not one of read_from_file's formats: the desktop slicer reads it with read_from_step and meshes it with
+        // its default tolerances (0.003 mm linear, 0.5 angular), compounds kept whole.
+        if (boost::algorithm::iends_with(path, ".step") || boost::algorithm::iends_with(path, ".stp"))
+            file.model = Model::read_from_step(path, strategy, nullptr, nullptr, nullptr, 0.003, 0.5, false);
+        else
+            file.model = Model::read_from_file(path, &file.project, &substitutions, strategy, &plate_data);
     } catch (...) {
         release_PlateData_list(plate_data);
         throw;
