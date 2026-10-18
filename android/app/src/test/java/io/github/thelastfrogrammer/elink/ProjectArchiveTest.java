@@ -59,7 +59,7 @@ public class ProjectArchiveTest {
         Projects.Book other = new Projects.Book(); assertTrue(ProjectArchive.adopt(other, got).isEmpty());
         Projects.Project q = other.projects.get(0);
         assertEquals("Lamp", q.title); assertEquals("Scene-card lamp", q.description); assertNotEquals(p[0].id, q.id);
-        assertEquals(3, q.parts.size()); assertEquals(4, q.parts.get(0).quantity); assertEquals("Rev C fits", q.parts.get(0).notes); assertEquals(2, q.parts.get(2).have);
+        assertEquals(3, q.parts.size()); assertEquals(4, q.parts.get(0).quantity); assertEquals("Rev C fits", q.parts.get(0).notes); assertEquals("purchases at hand stay on the phone that has them", 0, q.parts.get(2).have);
         Projects.Asset model = other.asset(q.assetsOn(q.parts.get(0).id).get(0));
         assertEquals("clip-rev-c.stl", model.name);
         assertEquals("solid clip", new String(Files.readAllBytes(Projects.managedFile(there, model).toPath()), StandardCharsets.UTF_8));

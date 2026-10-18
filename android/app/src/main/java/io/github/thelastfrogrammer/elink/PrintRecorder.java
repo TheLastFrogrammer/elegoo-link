@@ -23,6 +23,8 @@ public final class PrintRecorder {
     public static final class Recording {
         public final File csv, meta;
         public String id = "", file = "", printer = "", outcome = "printing", source = "";
+        /** Which printer (a one-way digest of its serial, "" when unknown): two printers can run files of the same name. */
+        public String printerId = "";
         public long start, end, lastSample;
         /** Time the print has been recorded, from a monotonic clock (ms); 0 in recordings made before it existed. */
         public long elapsed;
@@ -44,7 +46,7 @@ public final class PrintRecorder {
         public String pictureWords() { return pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") : pictureMinutes == 0 ? "No pictures" : pictureMinutes == 1 ? "Every minute" : "Every " + pictureMinutes + " minutes"; }
         Recording(File csv, File meta) { this.csv = csv; this.meta = meta; }
         JSONObject toJson() throws Exception {
-            return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("outcome", outcome).put("source", source)
+            return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("printer_id", printerId).put("outcome", outcome).put("source", source)
                 .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
                 .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
                 .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
@@ -54,7 +56,7 @@ public final class PrintRecorder {
             String base = meta.getName().replaceFirst("\\.json$", "");
             Recording recording = new Recording(new File(meta.getParentFile(), base + ".csv"), meta);
             JSONObject json = new JSONObject(new String(java.nio.file.Files.readAllBytes(meta.toPath()), StandardCharsets.UTF_8));
-            recording.id = json.optString("id"); recording.file = json.optString("file"); recording.printer = json.optString("printer");
+            recording.id = json.optString("id"); recording.file = json.optString("file"); recording.printer = json.optString("printer"); recording.printerId = json.optString("printer_id");
             recording.outcome = json.optString("outcome", "unknown"); recording.source = json.optString("source");
             recording.start = json.optLong("start"); recording.end = json.optLong("end"); recording.lastSample = json.optLong("last_sample"); recording.elapsed = json.optLong("elapsed");
             recording.samples = json.optInt("samples"); recording.layers = json.optInt("layers");
@@ -72,7 +74,7 @@ public final class PrintRecorder {
     private final File directory;
     private Recording current;
     /** The print last closed as complete or stopped, until the printer goes idle. */
-    private String endedKey = "", endedFile = "";
+    private String endedKey = "", endedFile = "", endedPrinter = "";
     private int lastLayer = -1;
     private long sampledMono = Long.MIN_VALUE / 2, picturedMono = Long.MIN_VALUE / 2;
     private JSONObject canvas;
@@ -169,13 +171,19 @@ public final class PrintRecorder {
      * labels (sample times, start, end); throttling and elapsed time use `mono`, a clock that never steps (SystemClock.elapsedRealtime),
      * so a clock change cannot stop the recording or stretch a print.
      */
-    public synchronized boolean update(long now, long mono, JSONObject status, String source, String printer) {
+    public synchronized boolean update(long now, long mono, JSONObject status, String source, String printer) { return update(now, mono, status, source, printer, ""); }
+    /** As above, for the printer with this serial (kept only as a digest): a print is resumed only on the printer that ran it. */
+    public synchronized boolean update(long now, long mono, JSONObject status, String source, String printer, String serial) {
+        String printerId = digest(serial);
         JSONObject machine = status.optJSONObject("machine_status"), print = status.optJSONObject("print_status");
         if (machine == null) return false;
         int state = machine.optInt("status", -1), sub = machine.optInt("sub_status", -1);
         String file = print == null ? "" : print.optString("filename", "");
         String key = print == null ? "" : print.optString("uuid", ""); if (key.isEmpty()) key = file;
         boolean last = sub == 2077 || sub == 2504;
+        // Another printer now: the print being recorded stays open (it may be resumed when its printer is back).
+        if (current != null && !samePrinter(printerId, current.printerId)) { save(current); current = null; lastLayer = -1; }
+        if (!samePrinter(printerId, endedPrinter)) { endedKey = ""; endedFile = ""; }
         if (state != 2 || key.isEmpty()) {
             if (current != null && state == 1) finish(now, mono, "ended");
             if (state == 1) { endedKey = ""; endedFile = ""; }
@@ -189,8 +197,8 @@ public final class PrintRecorder {
         } else if (current != null) finish(now, mono, "interrupted");
         if (current == null && last) return false;   // a print seen only at its end is not recorded
         if (current == null) {
-            current = resumable(key, file, now);
-            if (current == null) current = begin(now, key, file, printer, source);
+            current = resumable(key, file, printerId, now);
+            if (current == null) { current = begin(now, key, file, printer, source); current.printerId = printerId; save(current); }
             // Elapsed time counts on from what was recorded before (a resumed print), measured with the monotonic clock from here.
             current.monoStart = mono - current.elapsed;
             if (current.elapsed == 0 && current.lastSample > current.start) current.monoStart = mono - (current.lastSample - current.start);
@@ -251,9 +259,18 @@ public final class PrintRecorder {
         return !file.isEmpty() && file.equals(otherFile) && (key.equals(file) || otherKey.equals(otherFile));
     }
 
-    private Recording resumable(String key, String file, long now) {
+    /** The same printer, or one side unknown (recordings from before printers were told apart). */
+    static boolean samePrinter(String a, String b) { return a.isEmpty() || b.isEmpty() || a.equals(b); }
+    static String digest(String serial) {
+        if (serial == null || serial.isEmpty()) return "";
+        try { byte[] d = java.security.MessageDigest.getInstance("SHA-256").digest(("printer:" + serial.trim().toUpperCase(java.util.Locale.ROOT)).getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(); for (int i = 0; i < 8; i++) hex.append(String.format("%02x", d[i] & 0xff)); return hex.toString(); }
+        catch (java.security.NoSuchAlgorithmException impossible) { return ""; }
+    }
+
+    private Recording resumable(String key, String file, String printerId, long now) {
         for (Recording recording : list())
-            if (samePrint(key, file, recording.id, recording.file) && "printing".equals(recording.outcome) && now - recording.lastSample < RESUME_WINDOW_MS) return recording;
+            if (samePrint(key, file, recording.id, recording.file) && samePrinter(printerId, recording.printerId) && "printing".equals(recording.outcome) && now - recording.lastSample < RESUME_WINDOW_MS) return recording;
         return null;
     }
 
@@ -333,7 +350,7 @@ public final class PrintRecorder {
         current.outcome = outcome; current.end = current.lastSample + since;
         if (current.end == 0) current.end = now;
         if (!"interrupted".equals(outcome)) try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), current.meta.getName().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
-        if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; }
+        if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; endedPrinter = current.printerId; }
         save(current); current = null; lastLayer = -1; learnedRead = false;
     }
 
@@ -388,9 +405,15 @@ public final class PrintRecorder {
         catch (Exception ignored) { }
     }
 
+    /** Keeps the newest KEEP recordings, and any older one a project links to (when the projects cannot be read, all of them). */
     private void prune() {
-        List<Recording> all = list();
-        for (int i = KEEP; i < all.size(); i++) { deletePictures(all.get(i)); all.get(i).csv.delete(); all.get(i).meta.delete(); }
+        List<Recording> all = list(); if (all.size() <= KEEP) return;
+        java.util.Set<String> linked = Projects.referencedRecordings(new File(directory.getParentFile(), "projects"));
+        if (linked == null) return;
+        for (int i = KEEP; i < all.size(); i++) {
+            if (linked.contains(all.get(i).meta.getName())) continue;
+            deletePictures(all.get(i)); all.get(i).csv.delete(); all.get(i).meta.delete();
+        }
     }
 
     private static String number(JSONObject object, String key) {

@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -61,11 +62,15 @@ final class Backup {
     static boolean skipKey(String key) { return key.startsWith("cipher:") || key.startsWith("iv:") || key.startsWith("remember:"); }
 
     static final class Summary {
-        String app = ""; long created; int prefs, files, recordings; long recordingBytes; boolean secrets;
+        String app = ""; long created; int prefs, files, recordings, projectFiles, missingProjectFiles; long recordingBytes, projectBytes; boolean secrets;
+        /** Each project file in the backup: {path, sha256, size}. */
+        JSONArray projectManifest = new JSONArray();
         String describe() {
             List<String> parts = new ArrayList<>();
             parts.add(prefs + (prefs == 1 ? " settings file" : " settings files"));
-            if (files > 0) parts.add(files + (files == 1 ? " data file" : " data files") + " (automations, spools)");
+            if (files > 0) parts.add(files + (files == 1 ? " data file" : " data files") + " (automations, spools, projects)");
+            if (projectFiles > 0) parts.add(projectFiles + (projectFiles == 1 ? " project file" : " project files") + " (" + Math.max(1, projectBytes / (1024 * 1024)) + " MB)");
+            if (missingProjectFiles > 0) parts.add(missingProjectFiles + (missingProjectFiles == 1 ? " project file is" : " project files are") + " not on this phone: add them to their projects again");
             if (recordings > 0) parts.add(recordings + " recording files (" + Math.max(1, recordingBytes / (1024 * 1024)) + " MB)");
             parts.add(secrets ? "passwords and addresses, protected by the backup password" : "no passwords or addresses (enter them again after restoring)");
             return String.join("; ", parts);
@@ -75,10 +80,26 @@ final class Backup {
     static File prefsDir(Context context) { return new File(context.getApplicationInfo().dataDir, "shared_prefs"); }
     static File recordingsDir(Context context) { return new File(context.getFilesDir(), "recordings"); }
     static long recordingsSize(Context context) { return size(recordingsDir(context)); }
+    static File projectsDir(Context context) { return new File(context.getFilesDir(), "projects"); }
+    /** The files kept in the app for projects (managed copies the projects list), with their size. */
+    static List<File> projectFiles(Context context) {
+        File dir = projectsDir(context); List<File> out = new ArrayList<>();
+        for (Projects.Asset a : Projects.load(dir).assets) { File f = Projects.managedFile(dir, a); if (f != null && f.isFile()) out.add(f); }
+        return out;
+    }
+    static long projectFilesSize(Context context) { long n = 0; for (File f : projectFiles(context)) n += f.length(); return n; }
+    /** Managed project files the projects list that are not on this phone. */
+    static int missingProjectFiles(Context context) {
+        File dir = projectsDir(context); int n = 0;
+        for (Projects.Asset a : Projects.load(dir).assets) { File f = Projects.managedFile(dir, a); if (f != null && !f.isFile()) n++; }
+        return n;
+    }
     private static long size(File f) { if (f.isFile()) return f.length(); long n = 0; File[] all = f.listFiles(); if (all != null) for (File c : all) n += size(c); return n; }
 
     /** Writes a backup. `password` null or empty: no secrets. */
-    static Summary export(Context context, OutputStream target, boolean withRecordings, char[] password) throws Exception {
+    static Summary export(Context context, OutputStream target, boolean withRecordings, char[] password) throws Exception { return export(context, target, withRecordings, true, password); }
+    /** `withProjectFiles`: the files kept for projects too (models, G-code, pictures), each with its hash. */
+    static Summary export(Context context, OutputStream target, boolean withRecordings, boolean withProjectFiles, char[] password) throws Exception {
         Summary summary = new Summary();
         try (ZipOutputStream zip = new ZipOutputStream(target)) {
             File[] prefsFiles = prefsDir(context).listFiles((d, n) -> n.endsWith(".xml"));
@@ -108,6 +129,18 @@ final class Backup {
                     zip.closeEntry(); summary.recordings++; summary.recordingBytes += f.length();
                 }
             }
+            if (withProjectFiles) {
+                File assets = Projects.assetsDir(projectsDir(context));
+                for (File f : projectFiles(context)) {
+                    String rel = assets.toURI().relativize(f.toURI()).getPath();
+                    zip.putNextEntry(new ZipEntry("project-files/" + rel));
+                    java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                    try (InputStream in = new java.security.DigestInputStream(new FileInputStream(f), digest)) { copy(in, zip, MAX_ENTRY); }
+                    zip.closeEntry();
+                    summary.projectManifest.put(new JSONObject().put("path", rel).put("sha256", hex(digest.digest())).put("size", f.length()));
+                    summary.projectFiles++; summary.projectBytes += f.length();
+                }
+            }
             if (password != null && password.length > 0) {
                 CredentialStore store = new CredentialStore(context);
                 JSONObject secrets = new JSONObject();
@@ -118,7 +151,8 @@ final class Backup {
             summary.created = System.currentTimeMillis();
             try { summary.app = context.getPackageManager().getPackageInfo(context.getPackageName(), 0).versionName; } catch (Exception unknown) { }
             JSONObject manifest = new JSONObject().put("format", FORMAT).put("version", VERSION).put("app", summary.app).put("created", summary.created)
-                .put("prefs", summary.prefs).put("files", summary.files).put("recordings", summary.recordings).put("recording_bytes", summary.recordingBytes).put("secrets", summary.secrets);
+                .put("prefs", summary.prefs).put("files", summary.files).put("recordings", summary.recordings).put("recording_bytes", summary.recordingBytes).put("secrets", summary.secrets)
+                .put("project_files", summary.projectManifest).put("project_bytes", summary.projectBytes);
             put(zip, "manifest.json", manifest.toString(1).getBytes(StandardCharsets.UTF_8));
         }
         return summary;
@@ -137,6 +171,8 @@ final class Backup {
             Summary s = new Summary();
             s.app = m.optString("app"); s.created = m.optLong("created"); s.prefs = m.optInt("prefs"); s.files = m.optInt("files");
             s.recordings = m.optInt("recordings"); s.recordingBytes = m.optLong("recording_bytes"); s.secrets = zip.getEntry(SECRETS) != null;
+            JSONArray projectFiles = m.optJSONArray("project_files"); if (projectFiles != null) s.projectManifest = projectFiles;
+            s.projectFiles = s.projectManifest.length(); s.projectBytes = m.optLong("project_bytes");
             return s;
         }
     }
@@ -158,6 +194,10 @@ final class Backup {
             Map<String, JSONObject> prefs = new java.util.TreeMap<>();
             Map<String, byte[]> files = new java.util.LinkedHashMap<>();
             List<String[]> recordings = new ArrayList<>();   // {staged path, path under recordings/}
+            Map<String, String> projectHashes = new HashMap<>();   // path under projects/assets -> its hash in the manifest
+            for (int i = 0; i < summary.projectManifest.length(); i++) { JSONObject f = summary.projectManifest.optJSONObject(i); if (f != null) projectHashes.put(f.optString("path"), f.optString("sha256")); }
+            List<String[]> projectFiles = new ArrayList<>();   // {staged path, path under projects/assets/}
+            File assets = Projects.assetsDir(projectsDir(context));
             Set<String> seen = new HashSet<>();
             File root = recordingsDir(context);
             long total = 0;
@@ -194,13 +234,25 @@ final class Backup {
                     staging.mkdirs();
                     try (InputStream in = zip.getInputStream(entry); OutputStream out = new FileOutputStream(staged)) { copy(in, out, MAX_ENTRY); }
                     recordings.add(new String[] {staged.getPath(), rel});
+                } else if (name.startsWith("project-files/")) {
+                    String rel = name.substring(14);
+                    String expected = projectHashes.get(rel);
+                    if (expected == null || !Projects.safeRelative(rel)) throw new IOException("The backup holds a project file its list does not name: " + name);
+                    File staged = new File(staging, "p" + projectFiles.size());
+                    staging.mkdirs();
+                    java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                    try (InputStream in = new java.security.DigestInputStream(zip.getInputStream(entry), digest); OutputStream out = new FileOutputStream(staged)) { copy(in, out, MAX_ENTRY); }
+                    if (!hex(digest.digest()).equals(expected)) throw new IOException("The backup's project file " + rel + " is damaged.");
+                    projectFiles.add(new String[] {staged.getPath(), rel}); projectHashes.remove(rel);
                 }
             }
+            if (!projectHashes.isEmpty()) throw new IOException("The backup is missing " + projectHashes.size() + " of its project files.");
 
             // 2. Replace, keeping what was there so a failure part way puts it back.
             Map<String, JSONObject> before = new java.util.LinkedHashMap<>();
             Map<String, byte[]> beforeFiles = new java.util.LinkedHashMap<>();
             List<File> added = new ArrayList<>();
+            List<File[]> replaced = new ArrayList<>();   // {live file, its earlier bytes kept aside}
             try {
                 for (Map.Entry<String, JSONObject> e : prefs.entrySet()) {
                     SharedPreferences live = context.getSharedPreferences(e.getKey(), Context.MODE_PRIVATE);
@@ -220,6 +272,19 @@ final class Backup {
                     if (!staged.renameTo(target)) { try (InputStream in = new FileInputStream(staged); OutputStream out = new FileOutputStream(target)) { copy(in, out, MAX_ENTRY); } }
                     added.add(target);
                 }
+                // Project files go in place as whole files; one already here with other bytes is kept aside until the end.
+                for (String[] f : projectFiles) {
+                    File target = new File(assets, f[1]), staged = new File(f[0]);
+                    if (target.isFile()) {
+                        if (sameBytes(target, staged)) continue;
+                        File aside = new File(staging, "keep" + replaced.size());
+                        if (!target.renameTo(aside)) throw new IOException("could not replace " + f[1]);
+                        replaced.add(new File[] {target, aside});
+                    }
+                    target.getParentFile().mkdirs();
+                    if (!staged.renameTo(target)) { try (InputStream in = new FileInputStream(staged); OutputStream out = new FileOutputStream(target)) { copy(in, out, MAX_ENTRY); } }
+                    added.add(target);
+                }
             } catch (Exception failed) {
                 for (Map.Entry<String, JSONObject> e : before.entrySet())
                     try { restorePrefs(context.getSharedPreferences(e.getKey(), Context.MODE_PRIVATE), e.getValue(), e.getKey().equals("printer-profile")); } catch (Exception ignored) { }
@@ -228,6 +293,7 @@ final class Backup {
                     try { if (e.getValue() == null) target.delete(); else writeAtomic(target, e.getValue()); } catch (Exception ignored) { }
                 }
                 for (File f : added) f.delete();
+                for (File[] r : replaced) r[1].renameTo(r[0]);
                 throw new IOException("The restore could not finish, so the earlier settings were put back: " + (failed.getMessage() == null ? failed.getClass().getSimpleName() : failed.getMessage()), failed);
             }
             if (secrets != null) {
@@ -235,12 +301,20 @@ final class Backup {
                 for (Iterator<String> it = secrets.keys(); it.hasNext(); ) { String key = it.next(); try { store.saveSecret(key, secrets.getString(key)); } catch (Exception skipped) { } }
             }
             summary.secrets = secrets != null;
+            summary.missingProjectFiles = missingProjectFiles(context);
         } finally { deleteTree(staging); }
         return summary;
     }
     private static byte[] unseal(ZipFile zip, ZipEntry entry, long max, char[] password) throws Exception {
         try (InputStream in = zip.getInputStream(entry)) { return open(readAll(in, max), password); }
         catch (javax.crypto.AEADBadTagException wrong) { throw new IOException("The backup password is not right."); }
+    }
+    private static String hex(byte[] bytes) { StringBuilder out = new StringBuilder(); for (byte b : bytes) out.append(String.format(java.util.Locale.ROOT, "%02x", b & 0xff)); return out.toString(); }
+    private static boolean sameBytes(File a, File b) throws IOException {
+        if (a.length() != b.length()) return false;
+        try (InputStream x = new java.io.BufferedInputStream(new FileInputStream(a)); InputStream y = new java.io.BufferedInputStream(new FileInputStream(b))) {
+            int c; while ((c = x.read()) != -1) if (c != y.read()) return false; return true;
+        }
     }
     private static void deleteTree(File f) { File[] all = f.listFiles(); if (all != null) for (File c : all) deleteTree(c); f.delete(); }
 

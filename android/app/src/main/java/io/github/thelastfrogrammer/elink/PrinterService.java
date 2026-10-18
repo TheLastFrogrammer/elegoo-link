@@ -114,7 +114,7 @@ public final class PrinterService extends Service {
         if (recorder == null || !settings.getBoolean("recordPrints", true)) return;
         recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5)); recorder.setDefaultPictureLayers(settings.getInt("pictureLayers", 0));
         long mono = SystemClock.elapsedRealtime();
-        recorder.update(System.currentTimeMillis(), mono, value, source, name);
+        recorder.update(System.currentTimeMillis(), mono, value, source, name, "local".equals(source) ? filePrinterId() : cloudSerial);
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();

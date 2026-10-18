@@ -1509,11 +1509,14 @@ public final class MainActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ backup and restore
-    private char[] backupPassword; private boolean backupRecordings;
+    private char[] backupPassword; private boolean backupRecordings, backupProjectFiles = true;
     private void backupDialog() {
         LinearLayout body = dialogBody();
         long size = Backup.recordingsSize(this);
         CheckBox recordings = checkbox(body, "Include the print recordings and their pictures (" + Math.max(1, size / (1024 * 1024)) + " MB)", false);
+        int projectCount = Backup.projectFiles(this).size(); long projectSize = Backup.projectFilesSize(this);
+        CheckBox projectFiles = checkbox(body, "Include the files kept for projects (" + projectCount + (projectCount == 1 ? " file, " : " files, ") + Math.max(1, projectSize / (1024 * 1024)) + " MB)", projectCount > 0);
+        projectFiles.setEnabled(projectCount > 0);
         CheckBox secrets = checkbox(body, "Include passwords, access codes and camera addresses, protected by a backup password", false);
         EditText first = input(body, "Backup password", true), again = input(body, "The same password again", true);
         Runnable showFields = () -> { int v = secrets.isChecked() ? View.VISIBLE : View.GONE; first.setVisibility(v); again.setVisibility(v); };
@@ -1527,22 +1530,22 @@ public final class MainActivity extends Activity {
                 if (!a.equals(b)) { message("The two passwords are not the same."); return; }
                 backupPassword = a.toCharArray();
             } else backupPassword = null;
-            backupRecordings = recordings.isChecked(); dialog.dismiss();
+            backupRecordings = recordings.isChecked(); backupProjectFiles = projectFiles.isChecked(); dialog.dismiss();
             String name = "link-workshop-backup-" + new java.text.SimpleDateFormat("yyyyMMdd-HHmm", Locale.ROOT).format(new Date()) + ".zip";
             try { startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("application/zip").putExtra(Intent.EXTRA_TITLE, name), BACKUP_SAVE); }
             catch (Exception none) { message("This phone has no file picker."); }
         }));
         dialog.show();
     }
-    private void writeBackup(android.net.Uri target, boolean recordings, char[] password) {
+    private void writeBackup(android.net.Uri target, boolean recordings, boolean projectFiles, char[] password) {
         message("Writing the backup…");
         checks.execute(() -> {
             String text;
             try (OutputStream out = getContentResolver().openOutputStream(target, "wt")) {
                 if (out == null) throw new IOException("no file");
-                Backup.Summary s = Backup.export(this, new java.io.BufferedOutputStream(out), recordings, password);
+                Backup.Summary s = Backup.export(this, new java.io.BufferedOutputStream(out), recordings, projectFiles, password);
                 text = "Backup saved: " + s.describe() + ".";
-                Diagnostics.note(Diagnostics.MESSAGES, "backup written: " + s.prefs + " settings files, " + s.files + " data files, " + s.recordings + " recording files" + (s.secrets ? ", secrets protected" : ""));
+                Diagnostics.note(Diagnostics.MESSAGES, "backup written: " + s.prefs + " settings files, " + s.files + " data files, " + s.recordings + " recording files, " + s.projectFiles + " project files" + (s.secrets ? ", secrets protected" : ""));
             } catch (Exception failed) { text = "The backup could not be written: " + StatusPresentation.clean(String.valueOf(failed.getMessage())); }
             finally { if (password != null) java.util.Arrays.fill(password, ' '); }
             String said = text; main.post(() -> message(said));
@@ -2930,7 +2933,7 @@ public final class MainActivity extends Activity {
     @Override protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == BACKUP_SAVE) { char[] password = backupPassword; backupPassword = null; boolean recordings = backupRecordings;
-            if (result == RESULT_OK && data != null && data.getData() != null) writeBackup(data.getData(), recordings, password); else if (password != null) java.util.Arrays.fill(password, ' ');
+            if (result == RESULT_OK && data != null && data.getData() != null) writeBackup(data.getData(), recordings, backupProjectFiles, password); else if (password != null) java.util.Arrays.fill(password, ' ');
             return; }
         if (request == BACKUP_OPEN && result == RESULT_OK && data != null && data.getData() != null) { readBackup(data.getData()); return; }
         if (request == SAVE_TIMELAPSE && result == RESULT_OK && data != null && data.getData() != null && printer != null && printer.timelapseFile != null) {

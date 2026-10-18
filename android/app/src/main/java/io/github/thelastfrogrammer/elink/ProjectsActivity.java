@@ -501,11 +501,27 @@ public final class ProjectsActivity extends Activity {
             Projects.Part target = part != null ? part : book.addPart(p, name.getText().toString(), kindId, counted ? count : 1, now());
             String typed = name.getText().toString().trim(); if (!typed.isEmpty()) target.name = Automation.cap(typed, 120);
             target.kind = kindId; target.quantity = counted ? count : 1; target.have = kindId.equals(Projects.PURCHASED) ? at : 0; target.done = kindId.equals(Projects.TASK) && done.isChecked();
-            target.group = Automation.cap(group.getText().toString().trim(), 40); target.revision = Automation.cap(revision.getText().toString().trim(), 20);
+            target.group = Automation.cap(group.getText().toString().trim(), 40);
+            String newRevision = Automation.cap(revision.getText().toString().trim(), 20);
+            boolean ask = part != null && kindId.equals(Projects.PRINTED) && !newRevision.equals(part.revision) && p.piecesSoFar(part) > 0;
+            if (!ask) { if (part != null) p.changeRevision(target, newRevision, true); else target.revision = newRevision; }
             target.design = kindId.equals(Projects.PRINTED) ? Projects.DESIGN[Math.max(0, designSpinner.getSelectedItemPosition())][0] : "";
             target.notes = Automation.cap(notes.getText().toString().trim(), 4000); p.updated = now();
-            save(); dialog.dismiss(); render();
+            save(); dialog.dismiss();
+            if (ask) askRevision(p, target, newRevision); else render();
         });
+    }
+    /** A printed part's revision changes while pieces exist: the person says whether those pieces still count. */
+    private void askRevision(Projects.Project p, Projects.Part part, String revision) {
+        int pieces = p.piecesSoFar(part);
+        String old = part.revision.isEmpty() ? "the unlabelled design" : "revision " + part.revision, next = revision.isEmpty() ? "no revision label" : "revision " + revision;
+        new AlertDialog.Builder(this).setTitle("Do the earlier pieces still count?")
+            .setMessage(pieces + " " + part.name.toLowerCase(Locale.getDefault()) + (pieces == 1 ? " piece was" : " pieces were") + " made from " + old + ". Do they count for " + next + "?\n\n"
+                + "If not, they stay in the print history under " + old + ", pieces entered as made elsewhere are cleared, and the assembly is marked as not checked.")
+            .setPositiveButton("They still count", (d, w) -> { p.changeRevision(part, revision, true); p.updated = now(); save(); render(); })
+            .setNegativeButton("Print new ones", (d, w) -> { p.changeRevision(part, revision, false); p.updated = now(); save(); render(); })
+            .setNeutralButton("Keep " + (part.revision.isEmpty() ? "it unlabelled" : "revision " + part.revision), (d, w) -> render())
+            .setCancelable(false).show();
     }
     private static int number(EditText field) { try { return Integer.parseInt(field.getText().toString().trim()); } catch (NumberFormatException e) { return -1; } }
 
@@ -570,7 +586,8 @@ public final class ProjectsActivity extends Activity {
             List<String> made = new ArrayList<>(); int waiting = 0, good = 0, total = 0;
             for (Map.Entry<String, int[]> e : a.pieces.entrySet()) {
                 Projects.Part part = p.part(e.getKey()); if (part == null) continue;
-                made.add(part.name + ": " + e.getValue()[1] + " accepted, " + e.getValue()[2] + " rejected of " + e.getValue()[0] + (part.revision.isEmpty() ? "" : " (rev " + part.revision + ")"));
+                made.add(part.name + ": " + e.getValue()[1] + " accepted, " + e.getValue()[2] + " rejected of " + e.getValue()[0] + (a.revisions.getOrDefault(part.id, part.revision).isEmpty() ? "" : " (rev " + a.revisions.getOrDefault(part.id, part.revision) + ")")
+                    + (p.counts(a, part) ? "" : !a.revisions.getOrDefault(part.id, part.revision).equals(part.revision) ? " · an earlier revision, not counted" : " · this print is linked twice; counted once"));
                 waiting += a.waiting(part.id); good += e.getValue()[1]; total += e.getValue()[0];
             }
             String verdict = total == 0 ? "No parts counted yet" : waiting > 0 ? waiting + " awaiting inspection" : good == total ? "All accepted" : good == 0 ? "None accepted" : "Partly accepted";
@@ -622,6 +639,7 @@ public final class ProjectsActivity extends Activity {
     private void editAttempt(Projects.Project p, Projects.Attempt existing, String recording, String title) {
         List<Projects.Part> printed = new ArrayList<>(); for (Projects.Part part : p.parts) if (part.kind.equals(Projects.PRINTED)) printed.add(part);
         if (printed.isEmpty()) { toast("Plan a printed part first."); return; }
+        if (existing == null && p.hasRecording(recording)) { toast("That print is already in this project: edit it under Prints."); return; }
         LinearLayout body = form();
         EditText name = field(body, "Name", existing == null ? title : existing.title, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         ui.label(body, "Pieces this print made, per part (0 for none):", 13, ui.ink, true);
@@ -635,11 +653,12 @@ public final class ProjectsActivity extends Activity {
         AlertDialog.Builder b = new AlertDialog.Builder(this).setTitle(existing == null ? "Add a print" : "Edit print").setView(scroll(body)).setNegativeButton("Cancel", null)
             .setPositiveButton(existing == null ? "Add" : "Save", (d, w) -> {
                 Projects.Attempt a = existing != null ? existing : new Projects.Attempt();
+                if (existing == null && p.hasRecording(recording)) return;
                 if (existing == null) { a.recording = recording; a.when = now(); p.attempts.add(a); }
                 a.title = Automation.cap(name.getText().toString().trim(), 200); a.note = Automation.cap(note.getText().toString().trim(), 2000);
                 for (Projects.Part part : printed) {
                     int[] old = a.pieces.get(part.id); int n = Math.max(0, number(made.get(part.id)));
-                    a.set(part.id, n, old == null ? 0 : old[1], old == null ? 0 : old[2]);
+                    a.set(part.id, n, old == null ? 0 : old[1], old == null ? 0 : old[2]); a.stamp(part);
                 }
                 p.updated = now(); save(); screen = PRINTS; render();
             });
@@ -1007,6 +1026,7 @@ public final class ProjectsActivity extends Activity {
         CheckBox cover = check(body, "Include the cover page", exportCover);
         if (linked > 0) ui.label(body, linked + (linked == 1 ? " linked file stays" : " linked files stay") + " out: they are on this phone only. The project lists them so they can be added again.", 12, ui.muted, false);
         ui.label(body, "Web links go in as they are: leave them out if one holds a private key.", 12, ui.muted, false);
+        ui.label(body, "The project file shares the plan: parts, quantities, revisions and files. Your progress stays on this phone: prints and their notes, accepted pieces, purchases at hand, tasks done and the assembly check.", 12, ui.muted, false);
         Runnable take = () -> { exportOptions.keptFiles = files.isChecked(); exportOptions.webLinks = links.isChecked(); exportOptions.notes = notes.isChecked(); exportCover = cover.isChecked(); };
         AlertDialog[] dialog = new AlertDialog[1];
         ui.button(body, "Share the project file…", () -> { take.run(); dialog[0].dismiss(); shareArchive(p); }, true);

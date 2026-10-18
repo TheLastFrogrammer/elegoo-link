@@ -58,11 +58,26 @@ final class ProjectArchive {
         }
     }
 
+    /**
+     * What a shared project says, field by field: the plan only. Its title, purpose, parts (kind, quantity, group, revision,
+     * how far the design is), which file belongs to which part, and the cover's choices. Progress stays on this phone: prints and
+     * their notes and recordings, pieces accepted or made elsewhere, purchased parts at hand, tasks done and the assembly check
+     * (the person receiving the plan has made none of it). With notes off, no note travels: not the project's, not a part's.
+     */
+    static JSONObject plan(Projects.Project project, boolean notes) throws JSONException {
+        JSONArray parts = new JSONArray();
+        for (Projects.Part part : project.parts)
+            parts.put(new JSONObject().put("id", part.id).put("name", part.name).put("kind", part.kind).put("notes", notes ? part.notes : "").put("quantity", part.quantity)
+                .put("group", part.group).put("revision", part.revision).put("design", part.design));
+        JSONArray links = new JSONArray(); for (Projects.Attachment a : project.attachments) links.put(new JSONObject().put("asset", a.assetId).put("part", a.partId));
+        return new JSONObject().put("id", project.id).put("title", project.title).put("description", notes ? project.description : "")
+            .put("created", project.created).put("updated", project.updated).put("parts", parts).put("attachments", links)
+            .put("cover", CoverPage.Options.fromJson(project.cover).toJson());
+    }
+
     static Report export(File projectsDir, Projects.Book book, Projects.Project project, Options options, OutputStream target, String app, long now) throws IOException, JSONException {
         Report report = new Report(); report.parts = project.parts.size();
-        JSONObject p = project.toJson();
-        p.remove("archived");
-        if (!options.notes) { p.put("description", ""); JSONArray parts = p.getJSONArray("parts"); for (int i = 0; i < parts.length(); i++) parts.getJSONObject(i).put("notes", ""); }
+        JSONObject p = plan(project, options.notes);
         JSONArray files = new JSONArray(), manifestFiles = new JSONArray(), links = new JSONArray();
         List<Projects.Asset> include = new ArrayList<>();
         for (String id : project.allAssets()) {
@@ -97,7 +112,7 @@ final class ProjectArchive {
                 zip.closeEntry(); report.included++;
             }
             if (options.coverPng != null) put(zip, "cover.png", options.coverPng);
-            put(zip, "README.txt", outline(book, project, options.notes).getBytes(StandardCharsets.UTF_8));
+            put(zip, "README.txt", outline(book, project, options.notes, false).getBytes(StandardCharsets.UTF_8));
             JSONObject manifest = new JSONObject().put("format", FORMAT).put("version", VERSION).put("app", app).put("created", now)
                 .put("title", project.title).put("files", manifestFiles).put("cover", options.coverPng != null);
             put(zip, "manifest.json", manifest.toString(1).getBytes(StandardCharsets.UTF_8));
@@ -105,8 +120,9 @@ final class ProjectArchive {
         return report;
     }
 
-    /** The project in plain words: title, purpose, parts with quantities and notes, files and links. */
-    static String outline(Projects.Book book, Projects.Project project, boolean notes) {
+    static String outline(Projects.Book book, Projects.Project project, boolean notes) { return outline(book, project, notes, true); }
+    /** The project in plain words: title, purpose, parts with quantities and notes, files and links; `progress`: purchases at hand and tasks done. */
+    static String outline(Projects.Book book, Projects.Project project, boolean notes, boolean progress) {
         StringBuilder out = new StringBuilder(project.title).append('\n');
         if (notes && !project.description.isEmpty()) out.append('\n').append(project.description).append('\n');
         out.append("\nParts\n");
@@ -115,8 +131,8 @@ final class ProjectArchive {
             out.append("  - ").append(part.name);
             if (part.counted()) out.append(" × ").append(part.quantity);
             out.append(" (").append(Projects.label(Projects.KINDS, part.kind).toLowerCase(java.util.Locale.ROOT));
-            if (part.kind.equals(Projects.PURCHASED)) out.append(", ").append(part.have).append(" at hand");
-            if (part.kind.equals(Projects.TASK)) out.append(part.done ? ", done" : ", to do");
+            if (progress && part.kind.equals(Projects.PURCHASED)) out.append(", ").append(part.have).append(" at hand");
+            if (progress && part.kind.equals(Projects.TASK)) out.append(part.done ? ", done" : ", to do");
             out.append(")\n");
             if (notes && !part.notes.isEmpty()) out.append("      ").append(part.notes.replace("\n", "\n      ")).append('\n');
             for (String id : project.assetsOn(part.id)) { Projects.Asset a = book.asset(id); if (a != null) out.append("      file: ").append(a.name).append(a.storage.equals(Projects.WEB) ? " <" + a.location + ">" : "").append('\n'); }
@@ -188,7 +204,7 @@ final class ProjectArchive {
             catch (JSONException ignored) { p.cover = new JSONObject(); }
             Map<String, String> partIds = new HashMap<>();
             for (Projects.Part old : source.parts) {
-                Projects.Part part = new Projects.Part(); part.name = old.name; part.kind = old.kind; part.notes = old.notes; part.quantity = old.quantity; part.have = old.have; part.done = old.done;
+                Projects.Part part = new Projects.Part(); part.name = old.name; part.kind = old.kind; part.notes = old.notes; part.quantity = old.quantity;
                 // The plan travels (group, revision, how far the design is); counts of pieces made stay with the phone that made them.
                 part.group = old.group; part.revision = old.revision; part.design = old.design;
                 partIds.put(old.id, part.id); p.parts.add(part);

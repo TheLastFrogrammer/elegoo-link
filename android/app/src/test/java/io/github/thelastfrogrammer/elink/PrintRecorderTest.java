@@ -236,4 +236,18 @@ public class PrintRecorderTest {
         assertFalse(PrintRecorder.samePrint("uuid-1", "clip.gcode", "uuid-2", "clip.gcode"));
         assertTrue(PrintRecorder.samePrint("clip.gcode", "clip.gcode", "uuid-2", "clip.gcode"));
     }
+
+    /** Two printers running files of the same name are two prints; a print resumes only on its own printer. */
+    @Test public void printersAreToldApart() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        recorder.update(0, 0, status(2075, "part.gcode", 1, 1), "local", "Bench", "SERIAL-A");
+        recorder.update(20_000, 20_000, status(2075, "part.gcode", 5, 10), "cloud", "Garage", "SERIAL-B");
+        recorder.update(40_000, 40_000, status(2075, "part.gcode", 6, 12), "local", "Bench", "serial-a");   // the same printer, back
+        List<PrintRecorder.Recording> all = recorder.list();
+        assertEquals(2, all.size());
+        assertNotEquals(all.get(0).printerId, all.get(1).printerId);
+        assertFalse("only a digest is kept", all.get(0).printerId.contains("SERIAL") || all.get(1).printerId.contains("SERIAL"));
+        PrintRecorder.Recording bench = all.get(0).printer.equals("Bench") ? all.get(0) : all.get(1);
+        assertEquals("resumed on its own printer", 2, bench.samples);
+    }
 }

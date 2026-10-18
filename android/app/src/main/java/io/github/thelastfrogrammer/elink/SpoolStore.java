@@ -83,7 +83,7 @@ final class SpoolStore {
         for (Spool s : spools) {
             if (s.slot.isEmpty() || !reported.containsKey(s.slot)) continue;
             String[] there = reported.get(s.slot);
-            if (there[0].isEmpty() || !s.type.equalsIgnoreCase(there[0]) || !Objects.equals(s.colour, there[1])) { s.slot = ""; s.updated = now; changed = true; }
+            if (there[0].isEmpty() || !s.type.equalsIgnoreCase(there[0]) || !Objects.equals(s.colour, there[1])) { swapped(s.slot, ""); s.slot = ""; s.updated = now; changed = true; }
         }
         if (changed) save();
         return changed;
@@ -94,13 +94,13 @@ final class SpoolStore {
         String key = slot(tray);
         for (Spool s : spools) if (key.equals(s.slot)) s.slot = "";
         Spool s = new Spool(); s.id = UUID.randomUUID().toString(); s.type = tray.type; s.name = tray.name; s.colour = tray.colour; s.slot = key;
-        s.size = clamp(size, 1, 10_000); s.left = clamp(left, 0, s.size); s.updated = now; spools.add(s); save(); return copy(s);
+        s.size = clamp(size, 1, 10_000); s.left = clamp(left, 0, s.size); s.updated = now; spools.add(s); swapped(key, s.id); save(); return copy(s);
     }
     /** Puts a shelf spool back into a tray. */
     synchronized void fromShelf(String id, TrayPlan.Tray tray, long now) {
         String key = slot(tray);
         for (Spool s : spools) if (key.equals(s.slot)) s.slot = "";
-        for (Spool s : spools) if (s.id.equals(id)) { s.slot = key; s.updated = now; }
+        for (Spool s : spools) if (s.id.equals(id)) { s.slot = key; s.updated = now; swapped(key, id); }
         save();
     }
     synchronized void setLeft(String id, double left, long now) { for (Spool s : spools) if (s.id.equals(id)) { s.left = clamp(left, 0, s.size); s.updated = now; } save(); }
@@ -127,7 +127,12 @@ final class SpoolStore {
     synchronized void started(String filename, Map<String, Double> gramsBySlot, long now) {
         try {
             JSONArray uses = new JSONArray();
-            for (Map.Entry<String, Double> use : gramsBySlot.entrySet()) if (use.getValue() != null && use.getValue() > 0) uses.put(new JSONObject().put("slot", use.getKey()).put("grams", use.getValue()));
+            for (Map.Entry<String, Double> use : gramsBySlot.entrySet()) if (use.getValue() != null && use.getValue() > 0) {
+                Spool there = null; for (Spool sp : spools) if (use.getKey().equals(sp.slot)) there = sp;
+                // Which spool fed the tray from which progress: a spool changed mid-print takes only its share.
+                JSONArray spans = new JSONArray().put(new JSONObject().put("spool", there == null ? "" : there.id).put("from", 0));
+                uses.put(new JSONObject().put("slot", use.getKey()).put("grams", use.getValue()).put("spans", spans));
+            }
             pending = uses.length() == 0 ? null : new JSONObject().put("file", filename).put("uses", uses).put("at", now).put("progress", 0).put("seen", false);
             save();
         } catch (Exception ignored) { }
@@ -159,19 +164,48 @@ final class SpoolStore {
         if (!seen && (now - pending.optLong("at") > PENDING_MS || state == 2 && !file.isEmpty() && !ours)) { pending = null; save(); }
         return null;
     }
+    /** A tray of the remembered print now holds another spool ("" when unknown): from the progress so far, its use is that spool's. */
+    private void swapped(String slot, String spoolId) {
+        JSONArray uses = pending == null ? null : pending.optJSONArray("uses");
+        for (int i = 0; uses != null && i < uses.length(); i++) {
+            JSONObject use = uses.optJSONObject(i); JSONArray spans = use == null ? null : use.optJSONArray("spans");
+            if (spans == null || !slot.equals(use.optString("slot"))) continue;
+            JSONObject last = spans.optJSONObject(spans.length() - 1);
+            if (last != null && last.optString("spool").equals(spoolId)) continue;
+            try { spans.put(new JSONObject().put("spool", spoolId).put("from", pending.optInt("progress"))); } catch (Exception ignored) { }
+        }
+    }
     private String settle(double share, long now) {
-        double used = 0; JSONArray uses = pending.optJSONArray("uses");
+        double used = 0, unknown = 0; JSONArray uses = pending.optJSONArray("uses");
+        double end = Math.max(0, Math.min(1, share)) * 100;
         for (int i = 0; uses != null && i < uses.length(); i++) {
             JSONObject use = uses.optJSONObject(i); if (use == null) continue;
-            double grams = use.optDouble("grams", 0) * Math.max(0, Math.min(1, share));
-            for (Spool s : spools) if (s.slot.equals(use.optString("slot"))) {
-                s.left = Math.max(0, s.left - grams); s.updated = now; used += grams;
-                if (grams > 0) usage.add(new Usage(now, pending.optString("file"), s.type, grams));
+            double grams = use.optDouble("grams", 0);
+            JSONArray spans = use.optJSONArray("spans");
+            if (spans == null) {   // remembered before spools were followed through a print: the tray's spool now
+                double g = grams * end / 100;
+                for (Spool s : spools) if (s.slot.equals(use.optString("slot"))) used += debit(s, g, now);
+                continue;
+            }
+            // Each spool takes the share printed while it was in the tray (by progress, the only measure the printer gives).
+            for (int k = 0; k < spans.length(); k++) {
+                JSONObject span = spans.optJSONObject(k); if (span == null) continue;
+                double from = Math.min(end, span.optInt("from")), to = k + 1 < spans.length() ? Math.min(end, spans.optJSONObject(k + 1).optInt("from")) : end;
+                double g = grams * Math.max(0, to - from) / 100; if (g <= 0) continue;
+                Spool owner = null; for (Spool s : spools) if (s.id.equals(span.optString("spool"))) owner = s;
+                if (owner == null) unknown += g; else used += debit(owner, g, now);
             }
         }
         while (usage.size() > USAGE_KEEP) usage.remove(0);
         pending = null; save();
-        return used <= 0 ? null : String.format(Locale.getDefault(), "About %.0f g of filament taken off the spools.", used);
+        String line = used <= 0 ? null : String.format(Locale.getDefault(), "About %.0f g of filament taken off the spools.", used);
+        if (unknown >= 1) line = (line == null ? "" : line + " ") + String.format(Locale.getDefault(), "About %.0f g came from a spool the app does not know; check its weight.", unknown);
+        return line;
+    }
+    private double debit(Spool s, double grams, long now) {
+        s.left = Math.max(0, s.left - grams); s.updated = now;
+        if (grams > 0) usage.add(new Usage(now, pending.optString("file"), s.type, grams));
+        return grams;
     }
     synchronized boolean hasPending() { return pending != null; }
 

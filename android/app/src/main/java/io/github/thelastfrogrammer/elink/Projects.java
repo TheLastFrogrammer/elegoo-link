@@ -77,17 +77,21 @@ final class Projects {
         String group = "", revision = "", design = "";
         /** Printed parts: good pieces made outside the prints recorded here (before the app, another printer), entered by hand. */
         int acceptedElsewhere;
+        /** Earlier revisions whose pieces still count for this one (chosen when the revision changed). */
+        final Set<String> stillCounts = new java.util.LinkedHashSet<>();
 
         boolean counted() { return kind.equals(PRINTED) || kind.equals(PURCHASED); }
         JSONObject toJson() throws JSONException {
             return new JSONObject().put("id", id).put("name", name).put("kind", kind).put("notes", notes).put("quantity", quantity).put("have", have).put("done", done)
-                .put("group", group).put("revision", revision).put("design", design).put("accepted_elsewhere", acceptedElsewhere);
+                .put("group", group).put("revision", revision).put("design", design).put("accepted_elsewhere", acceptedElsewhere)
+                .put("still_counts", new JSONArray(new ArrayList<>(stillCounts)));
         }
         static Part fromJson(JSONObject o) throws JSONException {
             Part p = new Part(); p.id = need(o, "id"); p.name = Automation.cap(o.optString("name"), 120); p.kind = known(KINDS, o.optString("kind"), PRINTED);
             p.notes = Automation.cap(o.optString("notes"), 4000); p.quantity = clamp(o.optInt("quantity", 1)); p.have = Math.max(0, Math.min(MAX_QUANTITY, o.optInt("have")));
             p.done = o.optBoolean("done"); p.group = Automation.cap(o.optString("group").trim(), 40); p.revision = Automation.cap(o.optString("revision").trim(), 20);
             p.design = known(DESIGN, o.optString("design"), ""); p.acceptedElsewhere = Math.max(0, Math.min(MAX_QUANTITY, o.optInt("accepted_elsewhere")));
+            JSONArray still = o.optJSONArray("still_counts"); for (int i = 0; still != null && i < still.length() && i < 50; i++) p.stillCounts.add(Automation.cap(still.optString(i), 20));
             return p;
         }
     }
@@ -104,6 +108,10 @@ final class Projects {
         long when;
         /** partId -> {made, accepted, rejected}. */
         final java.util.Map<String, int[]> pieces = new java.util.LinkedHashMap<>();
+        /** partId -> the part's revision label when the pieces were made (absent for prints from before revisions were kept). */
+        final java.util.Map<String, String> revisions = new java.util.LinkedHashMap<>();
+        /** Notes which revision of the part these pieces are, the first time (later edits keep it). */
+        void stamp(Part part) { if (pieces.containsKey(part.id) && !revisions.containsKey(part.id)) revisions.put(part.id, part.revision); }
         int waiting(String partId) { int[] c = pieces.get(partId); return c == null ? 0 : Math.max(0, c[0] - c[1] - c[2]); }
         /** Sets one part's numbers, kept consistent: accepted and rejected never exceed what was made. */
         void set(String partId, int made, int accepted, int rejected) {
@@ -112,7 +120,9 @@ final class Projects {
         }
         JSONObject toJson() throws JSONException {
             JSONObject counts = new JSONObject(); for (java.util.Map.Entry<String, int[]> e : pieces.entrySet()) counts.put(e.getKey(), new JSONArray().put(e.getValue()[0]).put(e.getValue()[1]).put(e.getValue()[2]));
-            return new JSONObject().put("id", id).put("recording", recording).put("title", title).put("note", note).put("when", when).put("pieces", counts);
+            JSONObject o = new JSONObject().put("id", id).put("recording", recording).put("title", title).put("note", note).put("when", when).put("pieces", counts);
+            if (!revisions.isEmpty()) o.put("revisions", new JSONObject(revisions));
+            return o;
         }
         static Attempt fromJson(JSONObject o, Project project) throws JSONException {
             Attempt a = new Attempt(); a.id = need(o, "id"); a.recording = Automation.cap(o.optString("recording"), 200); a.title = Automation.cap(o.optString("title"), 200);
@@ -122,6 +132,8 @@ final class Projects {
                 String part = it.next(); JSONArray c = counts.optJSONArray(part);
                 if (c != null && project.part(part) != null) a.set(part, c.optInt(0), c.optInt(1), c.optInt(2));
             }
+            JSONObject revs = o.optJSONObject("revisions");
+            if (revs != null) for (java.util.Iterator<String> it = revs.keys(); it.hasNext(); ) { String part = it.next(); if (a.pieces.containsKey(part)) a.revisions.put(part, Automation.cap(revs.optString(part), 20)); }
             return a;
         }
     }
@@ -140,14 +152,47 @@ final class Projects {
         final List<Part> parts = new ArrayList<>();
         final List<Attachment> attachments = new ArrayList<>();
         final List<Attempt> attempts = new ArrayList<>();
+        /** Whether a recorded print is already linked here (a recording counts once per project). */
+        boolean hasRecording(String recording) { if (recording == null || recording.isEmpty()) return false; for (Attempt a : attempts) if (a.recording.equals(recording)) return true; return false; }
         /** "Assembled and checked": the person's own word, separate from every part being available. */
         boolean assembled;
 
         Attempt attempt(String id) { for (Attempt a : attempts) if (a.id.equals(id)) return a; return null; }
         /** Good pieces of a printed part: judged good in its prints, plus those entered by hand. */
-        int accepted(Part part) { int n = part.acceptedElsewhere; for (Attempt a : attempts) { int[] c = a.pieces.get(part.id); if (c != null) n += c[1]; } return n; }
-        int waiting(Part part) { int n = 0; for (Attempt a : attempts) n += a.waiting(part.id); return n; }
-        int rejected(Part part) { int n = 0; for (Attempt a : attempts) { int[] c = a.pieces.get(part.id); if (c != null) n += c[2]; } return n; }
+        /**
+         * Whether an attempt's pieces count for the part now: made for its current revision or one chosen to still count (pieces
+         * from before revisions were kept count), and only the first link to a recording (linking the same print again does not
+         * make its pieces twice).
+         */
+        boolean counts(Attempt a, Part part) {
+            if (!a.pieces.containsKey(part.id)) return false;
+            String rev = a.revisions.get(part.id);
+            if (rev != null && !rev.equals(part.revision) && !part.stillCounts.contains(rev)) return false;
+            if (!a.recording.isEmpty()) for (Attempt b : attempts) { if (b == a) break; if (b.recording.equals(a.recording) && b.pieces.containsKey(part.id)) return false; }
+            return true;
+        }
+        int accepted(Part part) { int n = part.acceptedElsewhere; for (Attempt a : attempts) if (counts(a, part)) n += a.pieces.get(part.id)[1]; return n; }
+        int waiting(Part part) { int n = 0; for (Attempt a : attempts) if (counts(a, part)) n += a.waiting(part.id); return n; }
+        int rejected(Part part) { int n = 0; for (Attempt a : attempts) if (counts(a, part)) n += a.pieces.get(part.id)[2]; return n; }
+        /** Pieces made for the part's earlier revisions that no longer count (good and waiting ones). */
+        int earlierRevisionPieces(Part part) {
+            int n = 0; for (Attempt a : attempts) { int[] c = a.pieces.get(part.id); if (c != null && !counts(a, part) && a.revisions.containsKey(part.id)) n += c[1] + a.waiting(part.id); } return n;
+        }
+        /**
+         * A new revision for a printed part. The pieces made so far are first marked with the old revision; `oldStillCount` says
+         * whether they count for the new one. When they do not, good pieces from elsewhere are cleared too and the assembly
+         * has to be checked again.
+         */
+        void changeRevision(Part part, String revision, boolean oldStillCount) {
+            String old = part.revision; if (old.equals(revision)) return;
+            for (Attempt a : attempts) if (a.pieces.containsKey(part.id) && !a.revisions.containsKey(part.id)) a.revisions.put(part.id, old);
+            if (oldStillCount) part.stillCounts.add(old);
+            else { part.stillCounts.clear(); part.acceptedElsewhere = 0; assembled = false; }
+            part.stillCounts.remove(revision);
+            part.revision = revision;
+        }
+        /** Pieces of the part that a revision change would ask about. */
+        int piecesSoFar(Part part) { return accepted(part) + waiting(part); }
         /** Printed pieces: good ones (each part counted up to what it needs) and how many are needed in all. */
         int[] printedProgress() {
             int good = 0, needed = 0;
@@ -192,7 +237,7 @@ final class Projects {
                 p.attachments.add(new Attachment(need(a, "asset"), part));
             }
             p.assembled = o.optBoolean("assembled");
-            JSONArray attempts = o.optJSONArray("attempts"); for (int i = 0; attempts != null && i < attempts.length() && i < 500; i++) p.attempts.add(Attempt.fromJson(attempts.getJSONObject(i), p));
+            JSONArray attempts = o.optJSONArray("attempts"); for (int i = 0; attempts != null && i < attempts.length() ; i++) p.attempts.add(Attempt.fromJson(attempts.getJSONObject(i), p));
             return p;
         }
     }
@@ -312,6 +357,25 @@ final class Projects {
             catch (Exception unreadable) { Diagnostics.note(Diagnostics.FILES, "projects: " + f.getName() + " could not be read (" + unreadable.getClass().getSimpleName() + ")"); }
         }
         return new Book();
+    }
+    /**
+     * The recordings the projects link to (their paths inside the recordings folder), from the projects file and its previous
+     * copy, so the recorder keeps them. Null when a projects file exists but cannot be read: then nothing may be pruned.
+     */
+    static java.util.Set<String> referencedRecordings(File dir) {
+        java.util.Set<String> out = new java.util.HashSet<>(); boolean any = false, read = false;
+        for (File f : new File[] {file(dir), new File(dir, "projects.json.bak")}) {
+            if (!f.isFile()) continue; any = true;
+            try {
+                JSONArray list = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), StandardCharsets.UTF_8)).optJSONArray("projects");
+                for (int i = 0; list != null && i < list.length(); i++) {
+                    JSONArray attempts = list.getJSONObject(i).optJSONArray("attempts");
+                    for (int j = 0; attempts != null && j < attempts.length(); j++) { String r = attempts.getJSONObject(j).optString("recording"); if (!r.isEmpty()) out.add(r); }
+                }
+                read = true;
+            } catch (Exception unreadable) { }
+        }
+        return any && !read ? null : out;
     }
     /** Writes the projects whole: to a temporary file, then in place, keeping the previous copy as projects.json.bak. */
     static synchronized void save(File dir, Book book) throws IOException {
