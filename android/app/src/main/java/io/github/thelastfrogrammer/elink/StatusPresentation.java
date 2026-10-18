@@ -147,6 +147,24 @@ public final class StatusPresentation {
         else return "";
         return can + (age.isEmpty() ? "" : " · status " + age);
     }
+    /** The CANVAS unit in one line: "4 trays · tray 2 in use: PLA Matte · refill on", or "" when not reported. */
+    static String canvasLine(JSONObject canvas) {
+        if (canvas == null) return "";
+        org.json.JSONArray units = canvas.optJSONArray("canvas_list"); if (units == null) return "";
+        int trays = 0; String active = "";
+        for (int u = 0; u < units.length(); u++) {
+            JSONObject unit = units.optJSONObject(u); org.json.JSONArray list = unit == null ? null : unit.optJSONArray("tray_list");
+            for (int i = 0; list != null && i < list.length(); i++) {
+                JSONObject tray = list.optJSONObject(i); if (tray == null) continue; trays++;
+                if (unit.optInt("canvas_id") == canvas.optInt("active_canvas_id", -1) && tray.optInt("tray_id") == canvas.optInt("active_tray_id", -1)) {
+                    String name = clean(tray.optString("filament_name")).trim(), type = clean(tray.optString("filament_type")).trim();
+                    active = "tray " + (tray.optInt("tray_id") + 1) + " in use" + (name.isEmpty() && type.isEmpty() ? "" : ": " + (name.isEmpty() ? type : name));
+                }
+            }
+        }
+        if (trays == 0) return "";
+        return joinParts(trays + (trays == 1 ? " tray" : " trays"), active, canvas.has("auto_refill") ? (canvas.optBoolean("auto_refill") ? "refill on" : "refill off") : "");
+    }
     /** The non-empty parts joined with " · ", so an empty part leaves no dangling separator. */
     static String joinParts(String... parts) {
         StringBuilder text = new StringBuilder();

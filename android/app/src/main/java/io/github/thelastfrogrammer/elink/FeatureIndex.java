@@ -60,10 +60,10 @@ final class FeatureIndex {
         new Feature("recent", "Recent slices", "recent sliced previous last gcode", FILES, "Recent slices", Prepare.NONE, true),
         new Feature("upload", "Send a G-code file from the phone", "upload send gcode phone choose file", FILES, "Choose G-code", Prepare.NONE, true),
         // History
-        new Feature("history", "Print history and Print again", "history past prints reprint print again details", HISTORY, "Print history", Prepare.NONE, false),
-        new Feature("timelapse", "Timelapse videos", "timelapse video recording movie", HISTORY, "Print history", Prepare.NONE, false),
+        new Feature("history", "Print history and Print again", "history past prints reprint print again details", HISTORY, "The printer's history", Prepare.NONE, false),
+        new Feature("timelapse", "Timelapse videos", "timelapse video recording movie", HISTORY, "The printer's history", Prepare.NONE, false),
         new Feature("recordings", "Print recordings and charts", "recordings charts graphs log temperature progress csv pictures snapshots", HISTORY, "All print recordings…", Prepare.NONE, true),
-        new Feature("stats", "Printing statistics", "statistics stats hours success rate how much filament used total summary", HISTORY, "Your printing", Prepare.NONE, false),
+        new Feature("stats", "Printing statistics", "statistics stats hours success rate how much filament used total summary", HISTORY, "Statistics", Prepare.NONE, false),
         new Feature("price", "Filament price and print cost", "cost price money spend filament per kg euro dollar", HISTORY, "Filament price", Prepare.NONE, true),
         new Feature("storage", "Printer storage space", "storage space disk capacity free full", FILES, "Refresh storage", Prepare.NONE, false),
         // Settings
@@ -76,7 +76,7 @@ final class FeatureIndex {
         new Feature("alerts", "Notifications", "notifications alerts done finished fault first layer picture watch stuck stall failure temperature", SETTINGS, "Completion and new fault notifications", Prepare.NONE, false),
         new Feature("automations", "Automation workshop", "automation automations rules triggers webhook webhooks tasker ifttt ntfy discord light off after print last print of the day templates share", SETTINGS, "Automation workshop", Prepare.NONE, true),
         new Feature("addedcameras", "Add a camera", "camera cameras webcam add extra second aftermarket ip camera esp32 mjpeg snapshot go2rtc timelapse angle", PRINT, "Add a camera…", Prepare.NONE, false),
-        new Feature("projects", "Projects", "projects project plan parts planned part bill of materials bom assembly files organize group link folder lid clips purchased tasks", FILES, "Open projects…", Prepare.NONE, true),
+        new Feature("projects", "Projects", "projects project plan parts planned part bill of materials bom assembly files organize group link folder lid clips purchased tasks", FILES, "Projects", Prepare.NONE, false),
         new Feature("backup", "Back up and restore", "backup back up restore export import new phone transfer settings save move", SETTINGS, "Back up settings…", Prepare.NONE, true),
         new Feature("guardian", "Print guardian (beta)", "guardian failure detection spaghetti blob detached knocked camera ai watch print", SETTINGS, "Print guardian (beta)", Prepare.NONE, false),
         new Feature("probe", "Probe the printer", "probe diagnostics ports methods debug", SETTINGS, "Probe printer", Prepare.NONE, true),

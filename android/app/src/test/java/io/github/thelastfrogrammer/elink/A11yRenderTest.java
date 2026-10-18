@@ -60,6 +60,14 @@ public class A11yRenderTest {
         audit(root, name, scale);
     }
 
+    /** How tall the main screen's scrolling content is, in phone screens (a 1080 x 2340 screen, less the header-to-tab-bar space). */
+    private static void noteHeight(MainActivity activity, String name, float scale) throws Exception {
+        View content = (View) field(activity, "content");
+        content.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        String line = String.format(java.util.Locale.ROOT, "%-55s %s %6d px  %.1f screens%n", name, tag(scale), content.getMeasuredHeight(), content.getMeasuredHeight() / 2100.0);
+        java.nio.file.Files.write(new File(out(), "page-heights.txt").toPath(), line.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+            java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+    }
     private static boolean shown(View view) {
         for (View v = view; ; ) {
             if (v.getVisibility() != View.VISIBLE) return false;
@@ -216,6 +224,7 @@ public class A11yRenderTest {
             for (int i = 0; i < names.length; i++) {
                 page.invoke(activity, i); render.invoke(activity);
                 shot(activity.getWindow().getDecorView(), 4200, "main-" + names[i], scale);
+                noteHeight(activity, "main-" + names[i], scale);
             }
             // The dashboard hero: finish time beside the percentage, Elapsed / Remaining / Layer tiles, Light beside Pause and Stop,
             // and the camera picture with its badge and overlay buttons.
@@ -266,6 +275,7 @@ public class A11yRenderTest {
                 page.invoke(activity, tab.getInt(section)); open.invoke(activity, section); render.invoke(activity);
                 String slug = ((String) title.get(section)).toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z]+", "-");
                 shot(activity.getWindow().getDecorView(), 6500, "main-" + names[tab.getInt(section)] + "-" + slug, scale);
+                noteHeight(activity, "main-" + names[tab.getInt(section)] + "-" + slug, scale);
             }
             activity.finish();
         }

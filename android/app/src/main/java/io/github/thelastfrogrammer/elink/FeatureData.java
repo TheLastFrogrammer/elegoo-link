@@ -222,6 +222,12 @@ public final class FeatureData {
         if (seconds > 0) parts.add(String.format(java.util.Locale.ROOT, "%d:%02d", seconds / 60, seconds % 60));
         return parts.isEmpty() ? "" : " (" + String.join(", ", parts) + ")";
     }
+    /** "3.1 of 7.6 GB used", for a one-line summary. */
+    public static String diskShort(JSONObject data) {
+        long used = data.optLong("used_bytes", -1), total = data.optLong("total_bytes", -1);
+        if (used < 0 || total <= 0) return "";
+        return String.format(java.util.Locale.ROOT, "%.1f of %.1f GB used", used / 1e9, total / 1e9);
+    }
     public static String disk(JSONObject data) { return "Internal storage: " + size(data.optLong("used_bytes", -1)) + " used / " + size(data.optLong("total_bytes", -1)); }
     public static String cameraUrl(String host, String supplied) throws Exception {
         new PrinterHttp(host, "");
