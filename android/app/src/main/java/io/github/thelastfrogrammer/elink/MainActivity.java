@@ -1475,6 +1475,14 @@ public final class MainActivity extends Activity {
         if (foreign != null) text.append(spaghetti != null ? "; " : "").append("objects left on the bed ").append(foreign.optInt("status") != 0 ? "on" : "off");
         return text.append(". Change them on the printer's screen.").toString();
     }
+    /** The phone's copy of a file on this printer: the only one kept under that name for it (or for no printer); null when there are several or none. */
+    private java.io.File printerCopy(String name) {
+        GcodeLibrary library = new GcodeLibrary(new java.io.File(getFilesDir(), "gcode-library"));
+        String serial = printer == null ? "" : printer.filePrinterId();
+        if (serial.isEmpty()) return library.find(name);
+        try { java.util.List<GcodeLibrary.Artifact> copies = library.candidates(serial, name); return copies.size() == 1 ? copies.get(0).file : null; }
+        catch (java.io.IOException unreadable) { return null; }
+    }
     private SpoolStore spools() { return SpoolStore.at(new File(getFilesDir(), "spools.json")); }
     /** Emergency stop: asks first, and is sent once per confirmation like every other printer command. */
     private void emergencyButton(LinearLayout parent) {
@@ -1639,7 +1647,7 @@ public final class MainActivity extends Activity {
         Button setup = rowButton(row(body), "Print setup…", () -> { dialog.dismiss(); startDialog(file, storage); }, true); setup.setEnabled(usable);
         if (!usable) label(body, printer == null || !printer.liveFresh() ? "Printing and deleting need a fresh printer status." : !Cc2Codec.idle(printer.liveStatus()) ? "The printer is busy. Printing and deleting are available when it is idle." : "The file list is out of date. Refresh files to print or delete.", 13, MUTED, false);
         // The toolpath of this file: straight away from the phone's copy, else after downloading it (locally, or through the cloud when Elegoo keeps a copy).
-        java.io.File phoneCopy = new GcodeLibrary(new java.io.File(getFilesDir(), "gcode-library")).find(name);
+        java.io.File phoneCopy = printerCopy(name);
         Button preview = button(body, phoneCopy != null ? "Preview toolpath" : "Preview toolpath (downloads it first)", () -> {
             dialog.dismiss();
             if (phoneCopy != null) startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, phoneCopy.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, name));

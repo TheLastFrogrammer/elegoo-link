@@ -32,26 +32,58 @@ final class GuardianRun {
 
     /** Checks one kept picture. `layer`/`total`: the printer's layer report; `head`: nozzle x, y, z (NaN when not reported); `trayRgb`: active tray colour or -1. */
     /** `cameraId`: the camera the picture came from (PrintRecorder.PRINTER_CAMERA or "added:" and its id), fixed when it was kept. */
-    void check(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, Alarm alarm, Runnable changed) {
+    /** `job`: the print as the service observes it (printer, file name, continuity token), or null when there is none. */
+    void check(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm, Runnable changed) {
         worker.execute(() -> {
-            try { run(recording, jpeg, layer, total, head, trayRgb, cameraId, alarm); }
+            try { run(recording, jpeg, layer, total, head, trayRgb, cameraId, job, alarm); }
             catch (Throwable failed) { verdict = "Could not check this picture."; Diagnostics.note(Diagnostics.GUARDIAN, "check failed: " + failed.getClass().getSimpleName()); }
             changed.run();
         });
     }
 
-    private void run(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, Alarm alarm) throws Exception {
+    /**
+     * Which phone copy of the print's G-code to compare with: the copy the person chose for this print in Live toolpath, or
+     * else the only copy kept for this printer under the print's name (assumed, and said so). Several different copies with
+     * that name, or none, and nothing is checked: a name alone never picks between versions.
+     */
+    static final class Source {
+        final File file; final GcodeLibrary.Artifact artifact; final boolean chosen; final String problem;
+        Source(File file, GcodeLibrary.Artifact artifact, boolean chosen, String problem) { this.file = file; this.artifact = artifact; this.chosen = chosen; this.problem = problem; }
+        String key() { return artifact != null ? artifact.sha256 : file == null ? "" : file.getPath() + ":" + file.lastModified(); }
+    }
+    static Source source(GcodeLibrary library, GcodeJobTracker.Job job, String recordedName) {
+        String none = "No copy of this print's G-code on the phone, so there is nothing to compare with. Prints sent or sliced from this app have one.";
+        if (job == null) {
+            File unscoped = library.find(recordedName);
+            return unscoped == null ? new Source(null, null, false, none) : new Source(unscoped, null, false, null);
+        }
+        GcodeLibrary.Artifact chosen = library.selected(job.printer, job.token);
+        if (chosen != null) return new Source(chosen.file, chosen, true, null);
+        if (library.selectionEvicted(job.printer, job.token)) return new Source(null, null, false, "The copy you chose for this print is no longer on the phone. Choose it again in Live toolpath.");
+        java.util.List<GcodeLibrary.Artifact> copies;
+        try { copies = library.candidates(job.printer, job.filename); } catch (java.io.IOException unreadable) { copies = java.util.Collections.emptyList(); }
+        if (copies.size() == 1) return new Source(copies.get(0).file, copies.get(0), false, null);
+        if (copies.size() > 1) return new Source(null, null, false, copies.size() + " different copies named " + GcodeLibrary.baseName(job.filename)
+            + " are on the phone. Choose the one this print uses in Live toolpath, and the guardian checks against it.");
+        return new Source(null, null, false, none);
+    }
+
+    private void run(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm) throws Exception {
         if (!recording.id.equals(printId)) { printId = recording.id; watch = new PrintGuardian.Watch(); overlay = null; alarmed = false; checks = 0; verdict = ""; watchedCamera = cameraId; printedColours.clear(); }
         // Coverage learned from one camera means nothing for another: a different camera starts the comparison again.
         if (!cameraId.equals(watchedCamera)) { watchedCamera = cameraId; watch = new PrintGuardian.Watch(); alarmed = false; }
-        File file = new GcodeLibrary(new File(context.getFilesDir(), "gcode-library")).find(recording.file);
-        if (file == null) {
-            if (!verdict.startsWith("No copy")) Diagnostics.note(Diagnostics.GUARDIAN, "no phone copy of this print's G-code; not checking");
-            verdict = "No copy of this print's G-code on the phone, so there is nothing to compare with. Prints sent or sliced from this app have one.";
-            return;
+        GcodeLibrary library = new GcodeLibrary(new File(context.getFilesDir(), "gcode-library"));
+        Source source = source(library, job, recording.file);
+        if (source.problem != null) {
+            if (!source.problem.equals(verdict)) Diagnostics.note(Diagnostics.GUARDIAN, "not checking: " + source.problem);
+            verdict = source.problem; return;
         }
-        String key = file.getPath() + ":" + file.lastModified();
+        File file = source.file;
+        String key = source.key();
         if (!key.equals(pathFor)) {
+            // A different copy than before: what was learned against the old one does not carry over.
+            if (!pathFor.isEmpty()) { watch = new PrintGuardian.Watch(); alarmed = false; }
+            if (source.artifact != null && !library.verify(source.artifact)) { verdict = "The phone copy of this print's G-code changed or is damaged, so it is not checked."; path = null; pathFor = ""; return; }
             path = null; pathFor = "";
             // The toolpath takes about three times the file's size in memory while the print runs: skip files that would crowd the app.
             Runtime runtime = Runtime.getRuntime();
@@ -104,7 +136,8 @@ final class GuardianRun {
         if (result.undecided) { verdict = "The filament looks too much like the bed in this picture, so it is not checked."; overlay = null; return; }
         boolean raise = watch.add(result, at + 1);
         checks++; alarmed = watch.alarmed;
-        verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")");
+        verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")")
+            + (source.chosen ? "" : ". Compared with the only phone copy of " + GcodeLibrary.baseName(recording.file) + " (assumed; choose it in Live toolpath to confirm)");
         overlay = overlay(rgb, result);
         if (checks == 1 || checks % 10 == 0 || raise)
             Diagnostics.note(Diagnostics.GUARDIAN, "check " + checks + " at layer " + layer + ": print area " + Math.round(result.coverage * 100) + " % filament, bed " + Math.round(result.outside * 1000) / 10.0

@@ -1841,7 +1841,7 @@ public final class PrinterService extends Service {
         int total = print == null ? 0 : print.optInt("total_layer", 0);
         double[] head = move == null ? new double[] {Double.NaN, Double.NaN, Double.NaN}
             : new double[] {move.optDouble("x", Double.NaN), move.optDouble("y", Double.NaN), move.optDouble("z", Double.NaN)};
-        guardian.check(recording, jpeg, layer, total, head, trayRgb, cameraId, this::guardianAlarm, this::changed);
+        guardian.check(recording, jpeg, layer, total, head, trayRgb, cameraId, fileJob(), this::guardianAlarm, this::changed);
     }
     private void guardianAlarm(String reason, android.graphics.Bitmap overlay) {
         // The alarm is an event for automations (webhooks, Home Assistant) whether or not the phone may show notifications;
