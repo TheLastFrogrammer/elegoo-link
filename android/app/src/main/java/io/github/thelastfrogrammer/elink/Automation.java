@@ -24,7 +24,7 @@ import java.util.UUID;
 final class Automation {
     static final String ANY = "any", STARTED = "print_started", FIRST_LAYER = "first_layer", LAYER = "layer_reached", PAUSED = "paused", RESUMED = "resumed",
         FINISHED = "print_finished", STOPPED = "print_stopped", FAULT = "fault", GUARDIAN = "guardian_alarm", WATCH = "print_watch", LOST = "contact_lost",
-        VALUE = "value_crossed", CHANGE = "value_changed";
+        VALUE = "value_crossed", CHANGE = "value_changed", LEVELLED = "bed_levelled", MAINTENANCE = "maintenance_finished";
     /** Event ids and what the workshop calls them, in the order offered. */
     static final Map<String, String> EVENTS = new LinkedHashMap<>();
     static {
@@ -32,6 +32,7 @@ final class Automation {
         EVENTS.put(PAUSED, "A print pauses"); EVENTS.put(RESUMED, "A print resumes"); EVENTS.put(FINISHED, "A print finishes");
         EVENTS.put(STOPPED, "A print is stopped"); EVENTS.put(FAULT, "The printer reports a new fault"); EVENTS.put(GUARDIAN, "The print guardian sees a problem");
         EVENTS.put(WATCH, "The print watch sees a stall or heater drift"); EVENTS.put(LOST, "Contact with the printer is lost during a print");
+        EVENTS.put(LEVELLED, "Bed levelling finishes"); EVENTS.put(MAINTENANCE, "A maintenance task finishes (levelling, homing, vibration test, heater tuning, self-check, filament)");
         EVENTS.put(VALUE, "A value crosses a limit"); EVENTS.put(CHANGE, "A value changes"); EVENTS.put(ANY, "Any print milestone");
     }
     static final String NOTIFY = "notify", LIGHT = "light", WEBHOOK = "webhook", HA_EVENT = "ha_event", BROADCAST = "broadcast";
@@ -216,7 +217,8 @@ final class Automation {
     static boolean matches(Rule rule, Event event, int minuteOfDay, ThisPrint print, Map<String, String> values) {
         if (!rule.enabled) return false;
         if (!rule.event.equals(ANY) && !rule.event.equals(event.type)) return false;
-        if (rule.event.equals(ANY) && (event.type.equals(LAYER) || event.type.equals(VALUE) || event.type.equals(CHANGE))) return false;   // "any" means the milestones
+        if (rule.event.equals(ANY) && (event.type.equals(LAYER) || event.type.equals(VALUE) || event.type.equals(CHANGE)
+            || event.type.equals(MAINTENANCE) || event.type.equals(LEVELLED))) return false;   // "any" means the print's milestones
         if ((event.type.equals(VALUE) || event.type.equals(CHANGE)) && !rule.id.equals(event.ruleId)) return false;
         if (!rule.ifField.isEmpty()) {
             double v = AutomationValues.number(values, rule.ifField);
@@ -415,6 +417,10 @@ final class Automation {
         Action haHook = action(WEBHOOK); haHook.url = "http://homeassistant.local:8123/api/webhook/your-webhook-id";
         out.add(template("Home Assistant webhook when a print stops or faults", ANY, 0, haHook));
         out.add(template("Tasker or Automate: every milestone", ANY, 0, action(BROADCAST)));
+        Action levelled = action(NOTIFY); levelled.title = "{detail}"; levelled.text = "{printer} is ready for the next step.";
+        out.add(template("Tell me when bed levelling finishes", LEVELLED, 0, levelled));
+        Action upkeep = action(NOTIFY); upkeep.title = "{detail}"; upkeep.text = "{printer}";
+        out.add(template("Tell me when any maintenance task finishes", MAINTENANCE, 0, upkeep));
         Action first = action(NOTIFY); first.title = "First layer done"; first.text = "Have a look at {file}'s first layer."; first.picture = true;
         out.add(template("Remind me to check the first layer (with a picture)", FIRST_LAYER, 0, first));
         Action shot = action(WEBHOOK); shot.url = "https://discord.com/api/webhooks/your-id/your-token"; shot.picture = true; shot.chart = true;
@@ -444,6 +450,8 @@ final class Automation {
     static final class Detector {
         private String job = "", file = ""; private boolean watched, paused, ended; private int lastLayer = -1;
         private Set<String> faults = new HashSet<>();
+        /** The maintenance task seen running (its machine state, -1 for none) and whether its end was already reported. */
+        private int task = -1; private boolean taskEnded;
         List<Event> update(JSONObject status, String printer) {
             List<Event> out = new ArrayList<>();
             JSONObject machine = status == null ? null : status.optJSONObject("machine_status"), print = status == null ? null : status.optJSONObject("print_status");
@@ -452,6 +460,7 @@ final class Automation {
             Set<String> added = new HashSet<>(now); added.removeAll(faults); faults = now;
             if (machine == null) return out;
             int state = machine.optInt("status", -1), sub = machine.optInt("sub_status", -1);
+            maintenance(state, sub, status, printer, out);
             String name = print == null ? "" : print.optString("filename", ""), key = print == null ? "" : print.optString("uuid", ""); if (key.isEmpty()) key = name;
             int layer = print == null ? -1 : print.optInt("current_layer", -1);
             if (state == 2 && !key.isEmpty()) {
@@ -480,6 +489,47 @@ final class Automation {
             } else if (state == 1) { job = ""; watched = false; paused = false; lastLayer = -1; }
             if (!added.isEmpty()) { Event fault = event(FAULT, status, printer); fault.detail = "fault " + codes; out.add(fault); }
             return out;
+        }
+        /**
+         * A maintenance task (levelling, PID, vibration test, self-check, homing, filament) finishes: its own "done" or "failed"
+         * step, or the printer leaving that state, whichever comes first. Only a task seen running is reported, once; one already
+         * done when the app first sees it is not.
+         */
+        private void maintenance(int state, int sub, JSONObject status, String printer, List<Event> out) {
+            boolean isTask = taskName(state) != null;
+            if (task >= 0 && state != task) {   // the printer moved on
+                if (!taskEnded) finish(task, null, status, printer, out);
+                task = -1;
+            }
+            if (!isTask) return;
+            Boolean result = taskResult(state, sub);
+            if (task < 0) { task = state; taskEnded = result != null; return; }
+            if (!taskEnded && result != null) { taskEnded = true; finish(state, result, status, printer, out); }
+        }
+        private static void finish(int state, Boolean ok, JSONObject status, String printer, List<Event> out) {
+            String text = taskName(state) + (ok == null ? " finished" : ok ? " done" : " failed");
+            Event any = event(MAINTENANCE, status, printer); any.detail = text; out.add(any);
+            if (state == 5) { Event bed = event(LEVELLED, status, printer); bed.detail = text; out.add(bed); }
+        }
+        /** The task a machine state is, or null when it is not one (printing, idle, file transfer, video, updates). */
+        static String taskName(int state) {
+            switch (state) {
+                case 3: case 4: return "Filament change"; case 5: return "Bed levelling"; case 6: return "Heater tuning (PID)";
+                case 7: return "Vibration test"; case 8: return "Self-check"; case 10: return "Homing"; case 13: return "Extruder operation";
+                default: return null;
+            }
+        }
+        /** The task's own end step: true done, false failed, null still running (as the printer's app names them). */
+        static Boolean taskResult(int state, int sub) {
+            switch (state) {
+                case 3: case 4: return sub == 1136 || sub == 1145 ? Boolean.TRUE : null;
+                case 5: return sub == 2902 ? Boolean.TRUE : null;
+                case 6: return sub == 1505 ? Boolean.TRUE : sub == 1506 ? Boolean.FALSE : null;
+                case 7: return sub == 5935 ? Boolean.TRUE : sub == 5936 ? Boolean.FALSE : null;
+                case 10: return sub == 2802 ? Boolean.TRUE : sub == 2803 ? Boolean.FALSE : null;
+                case 13: return sub == 1063 || sub == 1064 ? Boolean.TRUE : null;
+                default: return null;   // a self-check's steps report done one by one; it finishes when the printer leaves it
+            }
         }
         /** An event from elsewhere (guardian, watch, lost contact) for the print being watched. */
         Event outside(String type, String detail, JSONObject status, String printer) { Event e = event(type, status, printer); e.detail = detail; if (e.key.isEmpty()) { e.key = job; e.file = file; } return e; }

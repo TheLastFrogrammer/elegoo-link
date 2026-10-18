@@ -33,6 +33,35 @@ public class AutomationTest {
         assertTrue("once", d.update(status(2, 2077, "cube.gcode", 100, 100), "P").isEmpty());
     }
 
+    /** Bed levelling (and other upkeep) finishing: reported once, by the printer's own done step or by it moving on. */
+    @Test public void maintenanceTasksReportWhenTheyFinish() throws Exception {
+        Automation.Detector d = new Automation.Detector();
+        assertTrue(d.update(status(1, 0, "", 0, 0), "P").isEmpty());
+        assertTrue("levelling starts: nothing yet", d.update(status(5, 2901, "", 0, 0), "P").isEmpty());
+        List<Automation.Event> done = d.update(status(5, 2902, "", 0, 0), "P");
+        assertEquals(List.of(Automation.MAINTENANCE, Automation.LEVELLED), types(done));
+        assertEquals("Bed levelling done", done.get(1).detail);
+        assertTrue("once", d.update(status(5, 2902, "", 0, 0), "P").isEmpty());
+        assertTrue("back to idle: already reported", d.update(status(1, 0, "", 0, 0), "P").isEmpty());
+        // Ended without a done step (straight back to idle): still reported, as finished.
+        d.update(status(5, 2901, "", 0, 0), "P");
+        List<Automation.Event> ended = d.update(status(1, 0, "", 0, 0), "P");
+        assertEquals("Bed levelling finished", ended.get(1).detail);
+        // A failed vibration test.
+        d.update(status(7, 5934, "", 0, 0), "P");
+        List<Automation.Event> failed = d.update(status(7, 5936, "", 0, 0), "P");
+        assertEquals(List.of(Automation.MAINTENANCE), types(failed)); assertEquals("Vibration test failed", failed.get(0).detail);
+        // Already done when first seen (the app opened afterwards): not reported.
+        Automation.Detector late = new Automation.Detector();
+        assertTrue(late.update(status(5, 2902, "", 0, 0), "P").isEmpty());
+        assertTrue(late.update(status(1, 0, "", 0, 0), "P").isEmpty());
+        // "Any print milestone" rules do not fire for upkeep; a levelling rule does.
+        Automation.Rule any = new Automation.Rule(); any.event = Automation.ANY;
+        Automation.Rule bed = new Automation.Rule(); bed.event = Automation.LEVELLED;
+        assertFalse(Automation.matches(any, done.get(1), 600, null));
+        assertTrue(Automation.matches(bed, done.get(1), 600, null));
+    }
+
     @Test public void aPrintFoundHalfwayIsNotReportedAsStarted() throws Exception {
         Automation.Detector d = new Automation.Detector();
         assertTrue(d.update(status(2, 2075, "big.gcode", 50, 40), "P").isEmpty());
