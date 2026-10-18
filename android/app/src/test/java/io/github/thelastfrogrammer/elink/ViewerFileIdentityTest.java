@@ -50,12 +50,14 @@ public class ViewerFileIdentityTest {
         report("CC2-A", 2, 10, 100); waitForWorker();
     }
     @After public void close() { if (screen != null) screen.pause().stop().destroy(); if (serviceController != null) serviceController.destroy(); }
+    private String lastPrinter; private JSONObject lastValue;
     private void report(String printer, int state, int progress, long seconds) throws Exception {
         JSONObject value = new JSONObject().put("machine_status", new JSONObject().put("status", state).put("progress", progress))
             .put("print_status", new JSONObject().put("filename", "part.gcode").put("uuid", "same-file-uuid").put("print_duration", seconds).put("current_layer", 1));
         set(service, "cloudSignedIn", true); set(service, "cloudOnline", 1); set(service, "cloudOnlineSignal", true);
         set(service, "cloudSerial", printer); set(service, "cloudStatus", value); set(service, "cloudCheckedAt", System.currentTimeMillis());
         tracker.update(printer, "test-route", value, SystemClock.elapsedRealtime()); activity.changed();
+        lastPrinter = printer; lastValue = value;
     }
     private void waitForWorker() throws Exception {
         for (int i = 0; i < 3; i++) {
@@ -64,9 +66,10 @@ public class ViewerFileIdentityTest {
         }
     }
     private void selectCurrent() throws Exception {
-        // A fresh report first, as a live printer sends every few seconds: on a slow, busy test machine the setup's report
-        // can be older than the tracker's 45 s gap by now.
-        report("CC2-A", 2, 10, 100);
+        // The last report's freshness renewed (status time and the job tracker's clock), as a live printer repeating it every
+        // few seconds would: on a slow, busy test machine the setup's report can be older than the tracker's 45 s gap.
+        // The screen is not told, so no extra load starts.
+        set(service, "cloudCheckedAt", System.currentTimeMillis()); tracker.update(lastPrinter, "test-route", lastValue, SystemClock.elapsedRealtime());
         GcodeJobTracker.Job job = service.fileJob(); library.selectForJob(artifact, job.printer, job.token); activity.changed(); waitForWorker();
     }
     @Test public void aSameNameRetainedCopyIsOfferedButNeverLoadedAutomatically() throws Exception {
