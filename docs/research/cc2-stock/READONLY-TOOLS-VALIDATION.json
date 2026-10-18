@@ -1,0 +1,147 @@
+{
+  "format": "cc2-readonly-tools-validation-v1",
+  "checked_at": "2026-10-18",
+  "source_commit": "9cc8df73aa408996b8656aa1a725b8d0119c59c0",
+  "source_tree": "b278bbd0d9b515a3fc79ddb76e2f17fbb1d02efa",
+  "workflow_run": {
+    "id": 39086179757,
+    "url": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39086179757",
+    "conclusion": "success"
+  },
+  "host_jobs": [
+    {
+      "id": 117553126158,
+      "python": "3.10",
+      "tests": 136,
+      "skipped": 0,
+      "conclusion": "success"
+    },
+    {
+      "id": 117553126629,
+      "python": "3.12",
+      "tests": 136,
+      "skipped": 0,
+      "conclusion": "success"
+    }
+  ],
+  "arm_job": {
+    "id": 117553257915,
+    "probe_tests": 22,
+    "usb_companion_tests": 29,
+    "readonly_status_tests": 15,
+    "file_range_tests": 12,
+    "skipped": 0,
+    "conclusion": "success",
+    "actual_native_status_unix_profiles": [
+      "objects",
+      "snapshot",
+      "subscribe"
+    ],
+    "mutation_during_settling_checked": true,
+    "v2_readonly_and_range_pty_roundtrips": true
+  },
+  "physical_printer_qualified": false,
+  "pi_hardware_installation_qualified": false,
+  "owner_access_provided": false,
+  "printer_modified": false,
+  "stock_firmware_executed": false,
+  "active_print_coexistence_qualified": false,
+  "android_integration_provided": false,
+  "finalization_verified": false,
+  "job_binding_verified": false,
+  "limitations": [
+    "Requires separately established owner Linux shell; USB does not bootstrap shell access.",
+    "Baseline executable identity is owner-reported. The native status reader validates a boot/profile marker, not a signed credential or independent executable attestation.",
+    "The original endpoint capture lacks a boot field; its same-boot provenance remains an owner observation.",
+    "Status captures send one fixed read request and end within a bounded receive window; repeated completed exports are stored observations, not live telemetry.",
+    "File root/name are explicit owner-local configuration; no remote path selection or remote command API was added.",
+    "File settling and metadata checks are not immutable finalization proof. First use must be idle and owner-known finalized; active-print I/O/WAN/camera coexistence remains unqualified.",
+    "Complete ranges and full SHA-256 establish archive byte integrity, not association with the active printer job.",
+    "Physical USB/power, UART levels, installed firmware response schema, target Pi services, reboot/replug/update behavior and resource use remain unqualified.",
+    "USB is physical, unencrypted and unauthenticated. No maintenance writes, recurring reader, media collection or automatic source watcher is enabled.",
+    "Official updates may remove root-overlay hooks. No update-proof persistence is claimed.",
+    "Cooperative time/size limits do not wall-time-bound kernel/filesystem stalls. Export/release ranges sequentially rather than accumulating a large G-code file in printer /tmp."
+  ],
+  "artifact": {
+    "id": 12120324572,
+    "name": "cc2-companion-starter",
+    "size_in_bytes": 254535,
+    "sha256": "eeb62c4e8f1dada6b34f172913237e229e78fec8914ccb3868c22ee4335d0377",
+    "expires_at": "2026-11-17T01:23:40Z",
+    "download_page": "https://github.com/TheLastFrogrammer/elegoo-link/actions/runs/39086179757#artifacts"
+  },
+  "artifact_verification": {
+    "artifact_sha256": "eeb62c4e8f1dada6b34f172913237e229e78fec8914ccb3868c22ee4335d0377",
+    "checksums_verified": 40,
+    "source_files_exact": [
+      "PI-COMPANION-SETUP.md",
+      "READONLY-STATUS-AND-FILES.md",
+      "cc2_console_capture.py",
+      "cc2_file_ranges.py",
+      "cc2_native_capture_inspect.py",
+      "cc2_native_file.c",
+      "cc2_native_probe.c",
+      "cc2_native_status.c",
+      "cc2_pi_companion.py",
+      "cc2_pi_install.py",
+      "cc2_readonly.py",
+      "cc2_serial_transfer.py",
+      "cc2_usb_export.c",
+      "companion/cc2-companion-gadget.service",
+      "companion/cc2-companion.service",
+      "companion/gadget-start.sh",
+      "companion/link-companion.init",
+      "companion/printer-prepare.sh",
+      "companion/printer-start.sh"
+    ],
+    "regenerated_staging_exact": [
+      "uart-file/stage-reader.sh",
+      "uart-file/transfer.json",
+      "uart-probe/INSTRUCTIONS.txt",
+      "uart-probe/export-capture.sh",
+      "uart-probe/stage-probe.sh",
+      "uart-probe/transfer.json",
+      "uart-status/stage-reader.sh",
+      "uart-status/transfer.json",
+      "uart-transfer/stage-printer-prepare.sh",
+      "uart-transfer/stage-usb-export.sh",
+      "uart-transfer/transfer.json"
+    ],
+    "static_arm_elf_profiles_verified": true,
+    "installer_plan_only": true,
+    "binaries": {
+      "cc2-native-probe-armv7": {
+        "bytes": 25852,
+        "sha256": "8849e414daca5a39c70d82ab0e893702aa7b7005b18d16b4029f182b76ae162a",
+        "source_sha256": {
+          "cc2_native_probe.c": "e80f6bd36554c440e2a0a36c6e693276dee1ce982bc54d03b7252bd59c8ac19a",
+          "cc2_native_capture_inspect.py": "31e5518e8e8cdef6d025b97370345b8f27fde1b2b984a7c92ae7956daf4cf559",
+          "cc2_console_capture.py": "649f0a7ed0c1941c1e311d48622b883622c88610fbe988cec3cd00bbae1dcbaa",
+          "cc2_serial_transfer.py": "cfed7b9a3c7b9de37b1ca564e4fe30fe8dd02a5d6e3f155094c344fa76b086ed"
+        }
+      },
+      "cc2-usb-export-armv7": {
+        "bytes": 25876,
+        "sha256": "4fd2298da763e32040e712a17c5c885aa0d77d9104e584190f418a37dfd3fbf1",
+        "source_sha256": {
+          "cc2_usb_export.c": "9601d0b34ec4a6fc6a98581207529ed8ef3e31f7812d21d83ddee888f1b1f107"
+        }
+      },
+      "cc2-native-status-armv7": {
+        "bytes": 29948,
+        "sha256": "cfddaf5633cc084d8d12bed9b81ab809f22673a3d41de6f1ac795473956b217c",
+        "source_sha256": {
+          "cc2_native_status.c": "1c1bcd91d765f4e1242662b59763c6dcaafd9514a57bb3d459314e565413cdd7",
+          "cc2_native_probe.c": "e80f6bd36554c440e2a0a36c6e693276dee1ce982bc54d03b7252bd59c8ac19a"
+        }
+      },
+      "cc2-native-file-armv7": {
+        "bytes": 25860,
+        "sha256": "f7448a6088a68ba7ede3599cfe3ffe33a7e80919268f7c82fa0150c2a04e4c35",
+        "source_sha256": {
+          "cc2_native_file.c": "3bc7e0d18c74d6f45fdc3e5a3d518640ee473c70fb524027665dab77cb05f963"
+        }
+      }
+    }
+  }
+}
