@@ -128,6 +128,25 @@ public final class StatusPresentation {
         String text = String.format(java.util.Locale.ROOT, "%.1f°C", value.optDouble("temperature", 0));
         return value.has("target") ? text + String.format(java.util.Locale.ROOT, " / %.0f°C", value.optDouble("target", 0)) : text;
     }
+    /** How old something is, in words: "just now", "40 s ago", "3 min ago", "2 h ago"; "" when never (at <= 0). */
+    static String age(long at, long now) {
+        if (at <= 0) return "";
+        long s = Math.max(0, (now - at) / 1000);
+        return s < 5 ? "just now" : s < 90 ? s + " s ago" : s < 90 * 60 ? (s + 30) / 60 + " min ago" : s < 48 * 3600 ? (s + 1800) / 3600 + " h ago" : (s + 43200) / 86400 + " days ago";
+    }
+    /**
+     * One line on what this connection can do and how old its status is, so cloud watching is not taken for full control:
+     * "Wi-Fi: status, controls, uploads, camera · status just now".
+     */
+    static String reach(boolean local, boolean pinProbe, boolean cloud, boolean cloudOnline, boolean cloudAgreed, long statusAt, long now) {
+        String age = age(statusAt, now);
+        String can;
+        if (local) can = pinProbe ? "Wi-Fi probe: status only, read-only" : "Wi-Fi: status, controls, uploads, camera";
+        else if (cloud && !cloudOnline) can = "Cloud: printer offline";
+        else if (cloud) can = cloudAgreed ? "Cloud: status, controls, uploads, cloud video" : "Cloud: status only until you agree to cloud control";
+        else return "";
+        return can + (age.isEmpty() ? "" : " · status " + age);
+    }
     /** The non-empty parts joined with " · ", so an empty part leaves no dangling separator. */
     static String joinParts(String... parts) {
         StringBuilder text = new StringBuilder();

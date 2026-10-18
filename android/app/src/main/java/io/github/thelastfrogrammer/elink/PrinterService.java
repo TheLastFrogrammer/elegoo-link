@@ -220,6 +220,8 @@ public final class PrinterService extends Service {
     public String cloudName = "", cloudModel = "", cloudSerial = "", cloudMessage = "";
     public int cloudOnline = -1;
     public long cloudCheckedAt;
+    /** When the local connection last delivered a status (wall clock), 0 before the first. */
+    public volatile long statusAt;
     /** When the printer itself last reported (epoch ms): the cloud snapshot's newest field time, or the arrival of a live push. 0 = unknown. */
     public long cloudReportedAt;
     /** The online endpoint or a live online push said "online" at the last check. */
@@ -312,7 +314,7 @@ public final class PrinterService extends Service {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
             public void connection(String text, boolean registered) { deliver(() -> { connection = registered ? "Connected" + (remote ? " through VPN" : " locally") + (pinProbe ? " · read-only PIN probe" : "") + " · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
-            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); showAlert(watched(watch, value)); record(value, "local", attributes.optString("hostname", host)); }); }
+            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; statusAt = System.currentTimeMillis(); JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); showAlert(watched(watch, value)); record(value, "local", attributes.optString("hostname", host)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }

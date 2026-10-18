@@ -40,6 +40,17 @@ public class ProjectsScreenTest {
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) { Button b = button(((ViewGroup) view).getChildAt(i), text); if (b != null) return b; }
         return null;
     }
+    /** The tappable view holding a text (the text itself or the nearest clickable parent). */
+    private static View tappable(View root, String text) {
+        View found = text(root, text); assertNotNull(text, found);
+        for (View v = found; v != null; v = v.getParent() instanceof View ? (View) v.getParent() : null) if (v.isClickable()) return v;
+        throw new AssertionError(text + " is not tappable");
+    }
+    private static View text(View view, String text) {
+        if (view instanceof TextView && !(view instanceof Button) && ((TextView) view).getText().toString().equals(text)) return view;
+        if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) { View v = text(((ViewGroup) view).getChildAt(i), text); if (v != null) return v; }
+        return null;
+    }
     @SuppressWarnings("unchecked") private static <T extends View> T find(View view, Class<T> type) {
         if (type.isInstance(view)) return (T) view;
         if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) { T t = find(((ViewGroup) view).getChildAt(i), type); if (t != null) return t; }
@@ -82,7 +93,8 @@ public class ProjectsScreenTest {
         assertTrue(home.toString(), home.contains("Shadow-story lamp"));
         assertTrue(home.toString(), home.contains("In progress · 3 / 8 printed parts accepted\n5 parts · 8 pieces to print (1 without a file yet) · 1 of 1 bought · 4 files"));
         shot(screen, "projects-home.png");
-        button(screen.getWindow().getDecorView(), "Open").performClick(); settle();
+        assertNull("the card opens the project; no separate Open button", button(screen.getWindow().getDecorView(), "Open"));
+        tappable(screen.getWindow().getDecorView(), "Shadow-story lamp").performClick(); settle();
         List<String> overview = texts(screen.getWindow().getDecorView());
         assertTrue(overview.toString(), overview.contains("Review 1 printed retaining clip"));
         assertTrue(overview.toString(), overview.contains("5 still needed · 1 awaiting inspection · assembly not checked"));

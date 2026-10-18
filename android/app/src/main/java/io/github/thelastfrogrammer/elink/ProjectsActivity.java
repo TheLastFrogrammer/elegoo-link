@@ -127,8 +127,10 @@ public final class ProjectsActivity extends Activity {
             ui.label(card, status(p) + (done[1] > 0 ? " · " + done[0] + " / " + done[1] + " printed parts accepted" : "") + "\n" + summary(p), 13, ui.muted, false);
             if (!p.description.isEmpty()) { TextView d = ui.label(card, p.description, 13, ui.ink, false); d.setMaxLines(2); d.setEllipsize(android.text.TextUtils.TruncateAt.END); }
             String id = p.id;
+            // The whole card opens the project (no separate Open button).
             card.setOnClickListener(v -> { projectId = id; screen = OVERVIEW; render(); });
-            ui.button(card, "Open", () -> { projectId = id; screen = OVERVIEW; render(); }, false).setContentDescription("Open " + p.title);
+            card.setContentDescription(p.title + ". " + status(p) + ". Open"); card.setMinimumHeight(ui.dp(48));
+            card.setBackground(withRipple(card.getBackground()));
         }
         if (shown == 0) ui.label(content, archived ? "No archived projects." : "No projects yet. Start one with New project, then add the parts it needs.", 14, ui.muted, false);
         if (!archived) {
@@ -221,10 +223,20 @@ public final class ProjectsActivity extends Activity {
         LinearLayout shareRow = ui.row(share);
         ui.rowButton(shareRow, "Share or export…", () -> exportDialog(p), false);
         ui.rowButton(shareRow, "Cover page…", () -> { screen = COVER; render(); }, false);
-        LinearLayout more = ui.row(content);
-        ui.rowButton(more, "Rename or describe…", () -> editProject(p), false);
-        ui.rowButton(more, p.archived ? "Bring back" : "Archive", () -> { p.archived = !p.archived; p.updated = now(); save(); render(); }, false);
-        ui.button(content, "Delete this project…", () -> deleteProject(p), false);
+        ui.button(content, "Project options…", () -> projectOptions(p), false);
+    }
+    /** Renaming, archiving and deleting, together and away from the everyday buttons. */
+    private void projectOptions(Projects.Project p) {
+        String[] names = {"Rename or describe…", p.archived ? "Bring back from the archive" : "Archive (put away)", "Delete this project…"};
+        new AlertDialog.Builder(this).setTitle(p.title).setItems(names, (d, which) -> {
+            if (which == 0) editProject(p);
+            else if (which == 1) { p.archived = !p.archived; p.updated = now(); save(); if (p.archived) screen = HOME; render(); toast(p.archived ? "Archived. Find it under Archived projects." : "Back with your projects."); }
+            else deleteProject(p);
+        }).setNegativeButton("Close", null).show();
+    }
+    /** A ripple over a card's own background, so a tappable card shows the touch. */
+    private android.graphics.drawable.Drawable withRipple(android.graphics.drawable.Drawable background) {
+        return new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33808080), background, background);
     }
 
     private void editProject(Projects.Project p) {
@@ -552,12 +564,23 @@ public final class ProjectsActivity extends Activity {
         }
         LinearLayout row = ui.row(content); int at = p.parts.indexOf(part);
         ui.rowButton(row, "Edit…", () -> editPart(p, part), false);
-        Button up = ui.rowButton(row, "Move up", () -> { book.movePart(p, part.id, -1); save(); render(); }, false); up.setEnabled(at > 0);
-        Button down = ui.rowButton(row, "Move down", () -> { book.movePart(p, part.id, 1); save(); render(); }, false); down.setEnabled(at < p.parts.size() - 1);
+        Button order = ui.rowButton(row, "Reorder…", () -> reorderPart(p, part), false); order.setEnabled(p.parts.size() > 1);
         ui.button(content, "Remove part…", () -> new AlertDialog.Builder(this).setTitle("Remove “" + part.name + "”?")
             .setMessage("The part comes off the plan. Its files stay with the project, and are not deleted; prints keep their other parts.").setNegativeButton("Keep", null)
             .setPositiveButton("Remove", (d, w) -> { book.removePart(p, part.id); p.updated = now(); save(); screen = PARTS; render(); }).show(), false);
         files(p, part);
+    }
+    /** Where the part sits in the outline: one step up or down, or to the top or bottom (an accessible list, no dragging). */
+    private void reorderPart(Projects.Project p, Projects.Part part) {
+        int at = p.parts.indexOf(part), last = p.parts.size() - 1;
+        List<String> names = new ArrayList<>(); List<Integer> moves = new ArrayList<>();
+        if (at > 0) { names.add("Move up"); moves.add(-1); names.add("Move to the top"); moves.add(-at); }
+        if (at < last) { names.add("Move down"); moves.add(1); names.add("Move to the bottom"); moves.add(last - at); }
+        new AlertDialog.Builder(this).setTitle("Reorder “" + part.name + "” (" + (at + 1) + " of " + (last + 1) + ")").setItems(names.toArray(new String[0]), (d, which) -> {
+            int steps = moves.get(which), dir = Integer.signum(steps);
+            for (int i = 0; i < Math.abs(steps); i++) book.movePart(p, part.id, dir);
+            p.updated = now(); save(); render();
+        }).setNegativeButton("Close", null).show();
     }
     private void elsewhere(Projects.Project p, Projects.Part part) {
         LinearLayout body = form();

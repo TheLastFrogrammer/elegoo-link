@@ -68,6 +68,17 @@ final class GuardianRun {
         return new Source(null, null, false, none);
     }
 
+    /**
+     * The Print tab's File source line: whether the phone holds the exact G-code of the running print (chosen in Live toolpath),
+     * a copy that only matches by name, or none. A matching name is never called the exact file.
+     */
+    static String fileSourceLine(Source source) {
+        if (source.chosen && source.artifact != null) return "File source: the exact copy you chose · " + source.artifact.sha256.substring(0, Math.min(8, source.artifact.sha256.length()));
+        if (source.file != null) return "File source: a copy with the same name on this phone (not confirmed). Tap to choose it in Live toolpath.";
+        if (source.problem != null && source.problem.startsWith("No copy")) return "File source: no copy of this print's G-code on this phone. Prints sent or sliced from this app keep one.";
+        return "File source: " + (source.problem == null ? "unknown" : source.problem);
+    }
+
     private void run(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm) throws Exception {
         if (!recording.id.equals(printId)) { printId = recording.id; watch = new PrintGuardian.Watch(); overlay = null; alarmed = false; checks = 0; verdict = ""; watchedCamera = cameraId; printedColours.clear(); }
         // Coverage learned from one camera means nothing for another: a different camera starts the comparison again.
