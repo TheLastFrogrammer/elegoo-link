@@ -138,7 +138,9 @@ public final class MainActivity extends Activity {
     private CloudVideo cloudVideo; private FrameLayout monitorFrame; private boolean pendingCloudSnapshot;
     /** Cloud picture visit: a short, unseen join of the printer's video channel that keeps one print picture when one is due. */
     /** Cloud picture visits (made in onCreate, once the settings are loaded). */
-    private PictureVisits pictureVisits;
+    /** The service's cloud picture visits (none before it is bound). */
+    private boolean visitRunning() { return printer != null && printer.pictureVisits != null && printer.pictureVisits.running(); }
+    private void endVisit() { if (printer != null && printer.pictureVisits != null) printer.pictureVisits.end(); }
     private Button cameraCheckButton, cameraAskButton; private TextView cameraCheckText; private boolean cameraChecking;
     private ImageView monitorImage, jobThumb;
     private TextView monitorCameraInfo, percentText;
@@ -178,7 +180,6 @@ public final class MainActivity extends Activity {
     };
     @Override public void onCreate(Bundle saved) {
         settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
-        pictureVisits = new PictureVisits(this, () -> printer, settings, () -> cloudVideo != null);
         int appearance = settings.getInt("theme", 0);
         dark = appearance == 2 || appearance == 0 && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES;
         if (dark) { INK = 0xffe6eef1; MUTED = 0xff9fb3bb; TEAL = 0xff5fd4c4; BACKGROUND = 0xff0e1417; SURFACE = 0xff182227; BUTTON = 0xff21343a;
@@ -634,9 +635,22 @@ public final class MainActivity extends Activity {
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         Button pictures = button(preferences, "", () -> pictureDialog(true));
         pictureDefault = pictures; showPictureDefault();
-        CheckBox visits = checkbox(preferences, "Take print pictures through the cloud while the app is open", settings.getBoolean(PictureVisits.PREF, true));
-        visits.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean(PictureVisits.PREF, enabled).apply(); if (!enabled) pictureVisits.end(); });
-        label(preferences, "Through the cloud, each picture opens the printer's video for a few seconds: a little mobile data each time.", 12, MUTED, false);
+        CheckBox visits = checkbox(preferences, "Take print pictures through the cloud", settings.getBoolean(PictureVisits.PREF, true));
+        visits.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean(PictureVisits.PREF, enabled).apply(); if (!enabled) endVisit(); });
+        closedPictures = checkbox(preferences, "…also while the app is closed", settings.getBoolean(PrinterService.CLOSED_PICTURES, false) && android.provider.Settings.canDrawOverlays(this));
+        closedPictures.setOnCheckedChangeListener((view, enabled) -> {
+            if (!enabled) { settings.edit().putBoolean(PrinterService.CLOSED_PICTURES, false).apply(); return; }
+            if (android.provider.Settings.canDrawOverlays(this)) { settings.edit().putBoolean(PrinterService.CLOSED_PICTURES, true).apply(); return; }
+            view.setChecked(false);
+            new AlertDialog.Builder(this).setTitle("Pictures with the app closed")
+                .setMessage("Each picture through the cloud plays the printer's video for a few seconds, and Android lets that happen only in a window. With the app closed, the app opens a 2 dp window in the corner of the screen for those seconds, which needs Android's “Display over other apps” for this app.\n\n"
+                    + "It works while the phone's screen is on; with the screen off Android stops the video, so pictures wait until it is on again. The recording itself also needs watching through the cloud in the background (Settings › Printer connection).")
+                .setNegativeButton("Not now", null)
+                .setPositiveButton("Allow…", (d, w) -> { settings.edit().putBoolean(PrinterService.CLOSED_PICTURES, true).apply();
+                    try { startActivity(new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, android.net.Uri.parse("package:" + getPackageName()))); } catch (Exception none) { message("Allow “Display over other apps” for this app in Android's settings."); } })
+                .show();
+        });
+        label(preferences, "Through the cloud, each picture opens the printer's video for a few seconds: a little mobile data each time. Any screen of this app can take them; with the app closed, only when allowed above.", 12, MUTED, false);
         LinearLayout notices = card("Notifications and watching");
         if (android.os.Build.VERSION.SDK_INT >= 36) {
             CheckBox live = checkbox(notices, "Live progress in the status bar while printing", settings.getBoolean("liveProgress", true));
@@ -657,7 +671,7 @@ public final class MainActivity extends Activity {
             .setMessage("Alerts need notification permission and the app watching the printer; they stop when you disconnect or Android stops the app. Tapping one only opens the app.\n\n"
                 + "The guardian compares camera pictures with the print's toolpath. It needs the print's G-code on this phone and the print pictures, and works best with the camera lined up in Live toolpath. It never pauses or stops a print.\n\n"
                 + "While a print runs, Print options on the Print tab set its own picture interval and a one-off layer alert.\n\n"
-                + "In cloud mode, while the app is open, a due picture opens the printer's video for a few seconds. An open camera view takes pictures too.")
+                + "In cloud mode, while the app is open, a due picture opens the printer's video for a few seconds, on any screen of the app (with the app closed only when allowed). An open camera view takes pictures too.")
             .setPositiveButton("Close", null).show());
         currentSection = storageSection.body;
         LinearLayout storage = card(null);
@@ -1566,7 +1580,7 @@ public final class MainActivity extends Activity {
         if (printer != null && printer.usingCloud() && !printer.cloudBackground() && !cloudBackground.isChecked()) {
             names.add("Keep recording when the app is closed…");
             actions.add(() -> new AlertDialog.Builder(this).setTitle("Keep recording when the app is closed?")
-                .setMessage("The app keeps watching through the Elegoo cloud in the background, with a notification, so this print's recording carries on. It checks about every 30 seconds while a print runs; the phone stays awake for it until the print ends. Camera pictures through the cloud still need the app open. Turn it off again in Settings › Printer connection.")
+                .setMessage("The app keeps watching through the Elegoo cloud in the background, with a notification, so this print's recording carries on. It checks about every 30 seconds while a print runs; the phone stays awake for it until the print ends. Camera pictures through the cloud need the app open, unless Settings › Recording & alerts allows them with it closed. Turn it off again in Settings › Printer connection.")
                 .setNegativeButton("Not now", null).setPositiveButton("Keep recording", (d, w) -> cloudBackground.setChecked(true)).show());
         }
         JSONObject machineNow = snapshot.optJSONObject("machine_status");
@@ -2202,7 +2216,7 @@ public final class MainActivity extends Activity {
             String serialNumber = printer.cloudSerial, printerName = printer.cloudName;
             cloudGate(true, () -> {
                 // The Print tab's video leaves the channel first (one join per account), then the full screen joins.
-                boolean leaving = cloudVideo != null || pictureVisits.running(); stopCamera(); pictureVisits.end();
+                boolean leaving = cloudVideo != null || visitRunning(); stopCamera(); endVisit();
                 Runnable open = () -> startActivity(new Intent(this, CloudCameraActivity.class).putExtra(CloudCameraActivity.EXTRA_SERIAL, serialNumber).putExtra(CloudCameraActivity.EXTRA_NAME, printerName));
                 if (leaving) main.postDelayed(open, 1_500); else open.run();
             });
@@ -2356,7 +2370,8 @@ public final class MainActivity extends Activity {
             : cloud ? (cloudVideo != null && cloudVideo.playing() ? "the Print tab's cloud video" : "none: in cloud mode only an open cloud video gives pictures") : "none: not connected"));
         boolean signedIn = printer.cloudSignedIn, chosen = !printer.cloudSerial.isEmpty();
         if (CloudVideo.emptyStreak() > 0) out.add("Cloud video: the printer did not join its channel " + CloudVideo.emptyStreak() + " time(s) in a row" + (CloudVideo.emptyStreak() >= 2 ? "; restart the printer" : ""));
-        out.add("Cloud picture visits: " + (settings.getBoolean(PictureVisits.PREF, true) ? "on" : "off") + (pictureVisits.running() ? ", one running now" : ""));
+        out.add("Cloud picture visits: " + (settings.getBoolean(PictureVisits.PREF, true) ? "on" : "off") + (visitRunning() ? ", one running now" : "") + "; with the app closed: "
+            + (!settings.getBoolean(PrinterService.CLOSED_PICTURES, false) ? "off" : android.provider.Settings.canDrawOverlays(this) ? "on" : "chosen, but “Display over other apps” is not allowed"));
         out.add("Elegoo cloud: " + (signedIn ? "signed in" : "not signed in") + ", printer " + (chosen ? "chosen" : "not chosen") + ", "
             + (printer.cloudOnline == 1 ? "online" : printer.cloudOnline == 0 ? "offline" : "online state unknown") + ", cloud agreement " + (settings.getBoolean("cloudControlUnderstood", false) ? "accepted" : "not accepted yet"));
         boolean streamOpen = cameraPlayer != null;
@@ -2409,6 +2424,7 @@ public final class MainActivity extends Activity {
     /** Settings › Home Assistant: the user's broker, the printer's status published read only with discovery. */
     private Section haSection; private LinearLayout recentPrints; private TextView recentEmpty;
     private TextView haStatus, projectsLine, reach, fileSource;
+    private CheckBox closedPictures;
     private TextView snapshotChip, fullChip; private LiveToolpathPreview toolpathPreview;
     /** The Print tab's preview shows the live toolpath instead of the camera (Print options). */
     private boolean toolpathPreviewOn() { return "toolpath".equals(settings.getString("printPreview", "camera")); }
@@ -2495,7 +2511,7 @@ public final class MainActivity extends Activity {
     private void startCloudVideo() {
         if (printer == null || printer.cloudSerial.isEmpty() || cloudVideo != null) return;
         // A picture visit holds the channel (one join per account): end it, then start once it has left.
-        if (pictureVisits.running()) { pictureVisits.end(); main.postDelayed(this::startCloudVideo, 1_500); return; }
+        if (visitRunning()) { endVisit(); main.postDelayed(this::startCloudVideo, 1_500); return; }
         // The cloud camera screen may still hold the channel (one join per account); start once it has let go.
         if (CloudCameraActivity.holdsChannel()) { main.postDelayed(() -> { if (active && page == PRINT && cloudVideo == null) startCloudVideo(); }, 3_000); return; }
         if (!CloudVideo.supported()) { monitorCameraInfo.setText("The camera needs a newer Android System WebView. Update it from the Play Store."); monitorCameraInfo.setVisibility(View.VISIBLE); return; }
@@ -3251,13 +3267,14 @@ public final class MainActivity extends Activity {
         // Background cloud watching runs as a started foreground service; start it while the app is visible.
         if (settings.getBoolean("cloudBackground", false) && cloudBackground != null && cloudBackground.isEnabled()) try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { }
         if (printer != null) { printer.observe(this::render); printer.cloudVisible(true); } main.post(clock);
-        pictureVisits.resume();
+        // Back from Android's "Display over other apps" page: the choice holds only when it was allowed.
+        if (closedPictures != null) closedPictures.setChecked(settings.getBoolean(PrinterService.CLOSED_PICTURES, false) && android.provider.Settings.canDrawOverlays(this));
         if (Showcase.stage == Showcase.END) main.postDelayed(this::showcaseEnd, 400);
     }
     @Override protected void onStop() {
         if (printer != null && printer.usingCloud() && !printer.cloudBackground() && printer.recorder != null && printer.recorder.current() != null)
             Diagnostics.note(Diagnostics.STATUS, "the print's recording pauses while the app is closed: watching through the cloud in the background is off (Print options or Settings turn it on)");
-        active = false; stopCamera(); if (toolpathPreview != null) toolpathPreview.release(); pictureVisits.pause(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
+        active = false; stopCamera(); if (toolpathPreview != null) toolpathPreview.release(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
     @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); if (ShowcaseService.listener == showcaseListener && !isChangingConfigurations()) ShowcaseService.listener = null; if (scanning != null) scanning.close(); stopCamera(); if (toolpathPreview != null) toolpathPreview.shutdown(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }

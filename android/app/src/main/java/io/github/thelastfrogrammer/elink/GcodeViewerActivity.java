@@ -80,6 +80,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private double alignZ;
     private CameraFrames cameraFrames;
     private boolean cameraStarted, cameraCloud;
+    /** This screen plays the cloud video in its scene: picture visits wait (they keep its pictures from that video instead). */
+    static volatile boolean cloudShown;
     /** The added camera playing in the view, or null (the printer's own camera or none). */
     private ExtraCameras.Camera addedCamera;
     private int frameNumber;
@@ -561,7 +563,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("cloudControlUnderstood", false)) {
                 cameraMessage("The cloud camera needs cloud control turned on. Print > Camera explains how. The camera model is shown without a picture."); return;
             }
-            cameraStarted = true; cameraCloud = true;
+            cameraStarted = true; cameraCloud = true; cloudShown = true;
+            if (printer.pictureVisits != null) printer.pictureVisits.end();   // one join per account: a picture visit leaves first
             String serial = printer.cloudSerial;
             cameraMessage("Getting camera access from Elegoo…");
             worker.execute(() -> {
@@ -590,6 +593,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void stopCamera() {
         CameraFrames frames = cameraFrames; cameraFrames = null; if (frames != null) frames.close();
         if (cameraStarted && cameraCloud && web != null) web.evaluateJavascript("viewer.cameraStop()", null);
+        if (cameraCloud) cloudShown = false;
         cameraStarted = false; addedCamera = null;
     }
     private void cameraMessage(String text) {

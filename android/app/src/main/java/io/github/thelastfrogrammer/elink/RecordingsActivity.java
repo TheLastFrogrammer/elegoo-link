@@ -115,7 +115,7 @@ public final class RecordingsActivity extends Activity {
         if (r.pictureLayers == 0 && r.pictureMinutes > 0 && r.duration() > 0) {
             long expected = r.duration() / (r.pictureMinutes * 60_000L);
             if (expected >= 2 && r.pictures < expected * 0.6)
-                parts.add("Pictures: " + r.pictures + " of about " + expected + " (every " + r.pictureMinutes + " min). Through the cloud, pictures come only while the app is open; a camera on this network or an added camera keeps taking them in the background.");
+                parts.add("Pictures: " + r.pictures + " of about " + expected + " (every " + r.pictureMinutes + " min). Through the cloud, pictures come while the app is open, or with it closed when Settings › Recording & alerts allows it and the screen is on; a camera on this network or an added camera keeps taking them in the background.");
         }
         return String.join("\n", parts);
     }

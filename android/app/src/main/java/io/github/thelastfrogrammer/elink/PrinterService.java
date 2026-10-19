@@ -119,7 +119,7 @@ public final class PrinterService extends Service {
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();
-            if (!ready() && !localCamera() && ExtraCameras.forPictures(this) == null && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due, but in cloud mode pictures come only while a cloud video is open (Print tab, cloud camera or Live toolpath)"); }
+            if (!ready() && !localCamera() && ExtraCameras.forPictures(this) == null && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due; in cloud mode it comes from a short visit to the cloud video (any app screen, or with the app closed when allowed)"); }
             grab(null);
         }
     }
@@ -257,7 +257,72 @@ public final class PrinterService extends Service {
         automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);
+        getApplication().registerActivityLifecycleCallbacks(screens);
+        pictureVisits = new PictureVisits(() -> this, getSharedPreferences("workshop-settings", MODE_PRIVATE),
+            () -> CloudVideo.watched() || GcodeViewerActivity.cloudShown, visitHost);
+        pictureVisits.resume();
     }
+
+    // ------------------------------------------------------------------ cloud picture visits, wherever the app is
+    /**
+     * In cloud mode the print's pictures come from short visits to the printer's cloud video, which needs a window to decode in.
+     * They run here, so any screen of the app hosts them, not only the main one; with the app closed, only when the person
+     * allowed it (CLOSED_PICTURES and Android's "Display over other apps") and the phone's screen is on.
+     */
+    PictureVisits pictureVisits;
+    static final String CLOSED_PICTURES = "cloudPicturesClosed";
+    /** The app screen on show (started, not yet stopped), and the one holding the running visit's window. */
+    private android.app.Activity shownScreen, hostScreen; private android.widget.FrameLayout overlayBox;
+    private final android.app.Application.ActivityLifecycleCallbacks screens = new android.app.Application.ActivityLifecycleCallbacks() {
+        public void onActivityStarted(android.app.Activity a) { shownScreen = a; if (pictureVisits != null && !pictureVisits.running()) pictureVisits.resume(); }
+        public void onActivityStopped(android.app.Activity a) {
+            if (a == shownScreen) shownScreen = null;
+            if (a == hostScreen && pictureVisits != null) pictureVisits.end();   // its window is going: the visit leaves with it
+        }
+        public void onActivityCreated(android.app.Activity a, android.os.Bundle b) { }
+        public void onActivityResumed(android.app.Activity a) { shownScreen = a; }
+        public void onActivityPaused(android.app.Activity a) { }
+        public void onActivitySaveInstanceState(android.app.Activity a, android.os.Bundle b) { }
+        public void onActivityDestroyed(android.app.Activity a) { if (a == shownScreen) shownScreen = null; if (a == hostScreen) hostScreen = null; }
+    };
+    boolean closedPicturesAllowed() {
+        return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean(CLOSED_PICTURES, false) && android.provider.Settings.canDrawOverlays(this);
+    }
+    private final PictureVisits.Host visitHost = new PictureVisits.Host() {
+        public android.view.ViewGroup attach() {
+            int size = Math.max(1, Math.round(2 * getResources().getDisplayMetrics().density));
+            android.app.Activity screen = shownScreen;
+            if (screen != null && !screen.isFinishing() && !screen.isDestroyed()) {
+                // A 2 dp spot in the corner of the screen on show: the video must be in a window to decode, but nobody needs to see it.
+                android.widget.FrameLayout box = new android.widget.FrameLayout(screen); box.setImportantForAccessibility(android.view.View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
+                android.view.View content = screen.findViewById(android.R.id.content);
+                if (!(content instanceof android.widget.FrameLayout)) return null;
+                ((android.widget.FrameLayout) content).addView(box, new android.widget.FrameLayout.LayoutParams(size, size, android.view.Gravity.BOTTOM | android.view.Gravity.START));
+                hostScreen = screen; return box;
+            }
+            if (!closedPicturesAllowed() || !getSystemService(android.os.PowerManager.class).isInteractive()) return null;
+            // The app is closed: the same 2 dp spot in a window of its own over other apps, not touchable, removed after the visit.
+            android.view.WindowManager windows = getSystemService(android.view.WindowManager.class);
+            android.view.WindowManager.LayoutParams at = new android.view.WindowManager.LayoutParams(size, size, android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, android.graphics.PixelFormat.TRANSLUCENT);
+            at.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.START;
+            android.widget.FrameLayout box = new android.widget.FrameLayout(PrinterService.this);
+            try { windows.addView(box, at); } catch (RuntimeException refused) { Diagnostics.note(Diagnostics.CAMERA, "cloud picture visit with the app closed: Android refused the small window (" + refused.getClass().getSimpleName() + ")"); return null; }
+            hostScreen = null; overlayBox = box; return box;
+        }
+        public void detach(android.view.ViewGroup box) {
+            if (box == overlayBox) { overlayBox = null; try { getSystemService(android.view.WindowManager.class).removeView(box); } catch (RuntimeException gone) { } return; }
+            if (box.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) box.getParent()).removeView(box);
+            if (hostScreen != null && box.getContext() == hostScreen) hostScreen = null;
+        }
+        public String why() {
+            if (shownScreen != null) return "";
+            if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean(CLOSED_PICTURES, false)) return "the app is closed (Settings › Recording & alerts can keep taking pictures with it closed)";
+            if (!android.provider.Settings.canDrawOverlays(PrinterService.this)) return "the app is closed and Android's “Display over other apps” is not allowed for it";
+            if (!getSystemService(android.os.PowerManager.class).isInteractive()) return "the app is closed and the phone's screen is off";
+            return "";
+        }
+    };
     @Override public IBinder onBind(Intent intent) { return binder; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         if (intent != null && DISCONNECT.equals(intent.getAction())) { disconnect(); return START_NOT_STICKY; }
@@ -1959,6 +2024,8 @@ public final class PrinterService extends Service {
         }
     };
     @Override public void onDestroy() {
+        if (pictureVisits != null) pictureVisits.pause();
+        getApplication().unregisterActivityLifecycleCallbacks(screens);
         if (guardian != null) guardian.shutdown();
         if (automations != null) automations.shutdown();
         { String node = haNode; haWorker.execute(() -> ha.stop(node)); haWorker.shutdown(); }   // Home Assistant shows the printer offline

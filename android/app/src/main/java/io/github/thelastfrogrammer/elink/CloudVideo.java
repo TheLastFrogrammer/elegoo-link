@@ -1,6 +1,6 @@
 package io.github.thelastfrogrammer.elink;
 
-import android.app.Activity;
+import android.content.Context;
 import android.graphics.Color;
 import android.os.Handler;
 import android.os.Looper;
@@ -35,7 +35,7 @@ final class CloudVideo {
     }
 
     private static final String ORIGIN = "https://appassets.androidplatform.net";
-    private final Activity activity; private final String serial; private final Listener listener; private final Supplier<PrinterService> printer;
+    private final Context activity; private final String serial; private final Listener listener; private final Supplier<PrinterService> printer;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private WebView web;
@@ -51,6 +51,9 @@ final class CloudVideo {
      */
     private static volatile int emptyStreak; private static volatile long emptyAt;
     static int emptyStreak() { return emptyStreak; }
+    /** Watched cloud videos (not picture visits) started and not yet stopped, on any screen: a visit waits while one holds the channel. */
+    private static int watching; private boolean counted;
+    static boolean watched() { return watching > 0; }
     static long emptyAt() { return emptyAt; }
     private long since() { return android.os.SystemClock.elapsedRealtime() - startedAt; }
     private void log(String text) { if (text.equals(lastLogged)) return; lastLogged = text; Diagnostics.note(Diagnostics.CAMERA, label + ": " + Diagnostics.scrub(text)); }
@@ -60,7 +63,7 @@ final class CloudVideo {
         main.postDelayed(this, 5_000);   // often enough not to miss a due picture while the printer sends (about 26 s at a time)
     } };
 
-    CloudVideo(Activity activity, String serial, Supplier<PrinterService> printer, Listener listener) { this.activity = activity; this.serial = serial; this.printer = printer; this.listener = listener; }
+    CloudVideo(Context activity, String serial, Supplier<PrinterService> printer, Listener listener) { this.activity = activity; this.serial = serial; this.printer = printer; this.listener = listener; }
 
     /** A short visit: once the video plays, keep one picture for the running print, then call `done` (the host stops it). */
     CloudVideo oneShot(String name, Runnable done) { label = name; oneShot = true; afterPicture = done; return this; }
@@ -88,6 +91,7 @@ final class CloudVideo {
     }
 
     void start() {
+        if (!oneShot && !counted) { counted = true; watching++; }
         startedAt = android.os.SystemClock.elapsedRealtime();
         log("started; asking for camera access");
         view().loadUrl(ORIGIN + "/assets/camera/index.html");
@@ -121,6 +125,7 @@ final class CloudVideo {
     void stop() {
         if (!stopped && startedAt > 0) log("stopped after " + since() / 1000 + " s" + (playing ? "" : ", video never started"));
         stopped = true; playing = false; main.removeCallbacksAndMessages(null); worker.shutdownNow();
+        if (counted) { counted = false; watching--; }
         if (web != null) {
             web.evaluateJavascript("end()", null);
             WebView old = web; web = null;
