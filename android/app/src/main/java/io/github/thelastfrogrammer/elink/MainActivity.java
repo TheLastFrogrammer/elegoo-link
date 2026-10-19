@@ -556,7 +556,10 @@ public final class MainActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE); startActivityForResult(intent, PICK_FILE);
         }, false);
         button(files, "Find models online…", () -> startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "find"), SLICE));
-        recentSlices = button(files, "Recent slices…", this::chooseRecentSlice);
+        recentSlices = button(files, "All recent slices…", this::chooseRecentSlice);
+        // The newest slices as picture cards (each file's own preview), one tap from choosing them.
+        recentGrid = new LinearLayout(this); recentGrid.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams gridAt = new LinearLayout.LayoutParams(-1, -2); gridAt.topMargin = dp(4); currentSection.addView(recentGrid, gridAt);
         // The chosen file: preview, actions and the offline report, shown once there is one.
         fileDetails = new LinearLayout(this); fileDetails.setOrientation(LinearLayout.VERTICAL); files.addView(fileDetails);
         filePreview = new ImageView(this); filePreview.setContentDescription("Slicer preview of the selected G-code file"); filePreview.setScaleType(ImageView.ScaleType.FIT_CENTER);
@@ -842,6 +845,42 @@ public final class MainActivity extends Activity {
         dialog.show(); refresh[0].run();
     }
     /** Slices made on this phone are kept (SliceStore): choose one to upload or save, e.g. after a failed upload or a killed app. */
+    private LinearLayout recentGrid; private String recentShown = "";
+    /** Previews of slices, read once per file (path and time) off the main thread. */
+    private final java.util.Map<String, android.graphics.Bitmap> slicePictures = new java.util.HashMap<>();
+    /** Up to four newest slices as cards: preview, name and age; a tap chooses the file, as Recent slices does. */
+    private void refreshRecentGrid() {
+        if (recentGrid == null) return;
+        List<File> recent = SliceStore.list(this);
+        StringBuilder key = new StringBuilder(); for (int i = 0; i < Math.min(4, recent.size()); i++) key.append(recent.get(i).getPath()).append(recent.get(i).lastModified()).append(';');
+        if (key.toString().equals(recentShown)) return;
+        recentShown = key.toString(); recentGrid.removeAllViews();
+        if (recent.isEmpty()) return;
+        A11y.heading(label(recentGrid, "Recent slices", 17, INK, true)).setPadding(dp(4), dp(12), 0, 0);
+        for (int i = 0; i < Math.min(4, recent.size()); i++) {
+            File file = recent.get(i);
+            LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+            GradientDrawable shape = new GradientDrawable(); shape.setColor(SURFACE); shape.setCornerRadius(dp(20));
+            card.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null)); card.setClipToOutline(true);
+            ImageView picture = new ImageView(this); picture.setScaleType(ImageView.ScaleType.FIT_CENTER); picture.setBackgroundColor(TILE); picture.setPadding(dp(8), dp(8), dp(8), dp(8));
+            picture.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO); card.addView(picture, new LinearLayout.LayoutParams(-1, dp(110)));
+            String pictureKey = file.getPath() + file.lastModified();
+            android.graphics.Bitmap known = slicePictures.get(pictureKey);
+            if (known != null) picture.setImageBitmap(known);
+            else checks.execute(() -> {
+                EmbeddedThumbnail thumbnail = EmbeddedThumbnail.fromFile(file);
+                android.graphics.Bitmap bitmap = thumbnail == null ? null : ThumbnailDecoder.decode(thumbnail);
+                if (bitmap != null) main.post(() -> { slicePictures.put(pictureKey, bitmap); picture.setImageBitmap(bitmap); });
+            });
+            LinearLayout words = new LinearLayout(this); words.setOrientation(LinearLayout.VERTICAL); words.setPadding(dp(12), dp(6), dp(12), dp(10)); card.addView(words);
+            TextView name = label(words, file.getName().replaceFirst("(?i)\\.gcode$", ""), 14, INK, true); name.setMaxLines(2); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            label(words, android.text.format.DateUtils.getRelativeTimeSpanString(file.lastModified()) + " · " + Math.max(1, file.length() / 1024) + " KB", 12, MUTED, false);
+            card.setClickable(true); card.setFocusable(true); card.setContentDescription(name.getText() + ", sliced " + android.text.format.DateUtils.getRelativeTimeSpanString(file.lastModified()));
+            A11y.clickLabel(card, "Choose this file");
+            card.setOnClickListener(v -> { if (printer != null && !printer.fileBusy()) printer.selectSliced(file, file.getName()); mainScroll.smoothScrollTo(0, 0); });
+            WorkshopUi.addToGrid(recentGrid, card, dp(12));
+        }
+    }
     private void chooseRecentSlice() {
         List<File> recent = SliceStore.list(this);
         if (printer == null || recent.isEmpty()) { message("No recent slices yet."); return; }
@@ -1178,6 +1217,7 @@ public final class MainActivity extends Activity {
     private void openSection(Section section) {
         if (section == null) return;
         int tab = section.tab; opened[tab] = section;
+        if (section == phoneSection) refreshRecentGrid();
         fronts[tab].setVisibility(View.GONE); backBars[tab].setVisibility(View.VISIBLE); backBars[tab].setText(section.title); A11y.heading(backBars[tab]);
         for (Section other : sections) if (other.tab == tab) other.body.setVisibility(other == section ? View.VISIBLE : View.GONE);
         if (tab == page) { mainScroll.scrollTo(0, 0); main.post(() -> backBars[tab].sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED)); }
@@ -1834,7 +1874,9 @@ public final class MainActivity extends Activity {
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, items) {
             @Override public View getView(int position, View convert, android.view.ViewGroup group) { TextView text = (TextView) super.getView(position, convert, group); text.setSingleLine(false); text.setMaxLines(Integer.MAX_VALUE); return text; }
             @Override public View getDropDownView(int position, View convert, android.view.ViewGroup group) { TextView text = (TextView) super.getDropDownView(position, convert, group); text.setSingleLine(false); text.setMaxLines(Integer.MAX_VALUE); return text; }
-        }; adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); view.setAdapter(adapter); view.setBackgroundTintList(tint(TEAL)); view.setMinimumHeight(dp(52)); parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); A11y.nameFromCaption(view, parent); return view;
+        }; adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); view.setAdapter(adapter); view.setBackgroundTintList(tint(TEAL)); view.setMinimumHeight(dp(52)); parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); A11y.nameFromCaption(view, parent);
+        WorkshopUi.chipsFor(view, TEAL, BUTTON, INK, dark);   // a few short options: chips in a row
+        return view;
     }
     private LinearLayout dialogBody() { LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8)); return body; }
     private void fileActions(JSONObject file, String storage) {
@@ -2059,7 +2101,14 @@ public final class MainActivity extends Activity {
             Runnable start = () -> {
                 if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
                     + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
-                if (printer != null) printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
+                if (printer != null) {
+                    String before = printer.feedback;
+                    printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
+                    // Refused before sending (the checks in start() say why); otherwise the steps page follows the printer's status.
+                    String after = printer.feedback == null ? "" : printer.feedback;
+                    boolean refused = !after.equals(before) && (after.startsWith("Refresh status, files and trays") || after.startsWith("A file is being sent"));
+                    new PrintStartSteps(this, () -> printer, name, printer.ready() ? "On your network" : "Through the Elegoo cloud", refused, INK, MUTED, TEAL, BACKGROUND, SURFACE, dark).show();
+                }
                 // Remember the grams per tray, so they come off the spools when the print ends (only with chosen trays: the printer's own mapping is not known).
                 Map<String, Double> uses = new HashMap<>();
                 for (int t = 0; t < count && mapping.length() > 0; t++) { int at = maps[t].getSelectedItemPosition(); if (at > 0 && toolGrams[t] > 0) uses.merge(SpoolStore.slot(trays.get(at - 1)), toolGrams[t], Double::sum); }
@@ -2182,12 +2231,13 @@ public final class MainActivity extends Activity {
     }
     private void fanDialog() {
         LinearLayout body = dialogBody(); Spinner kind = spinner(body, new String[] {"Part cooling", "Auxiliary", "Chamber"}); A11y.name(kind, "Fan");
-        TextView value = label(body, "Fan: 0%", 15, INK, false); SeekBar amount = new SeekBar(this); amount.setMax(100); body.addView(amount); A11y.labelFor(value, amount);
-        amount.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { public void onProgressChanged(SeekBar bar, int progress, boolean user) { value.setText("Fan: " + progress + "%"); } public void onStartTrackingTouch(SeekBar bar) { } public void onStopTrackingTouch(SeekBar bar) { } });
+        TextView[] shown = new TextView[1]; SeekBar amount = WorkshopUi.slider(body, "Fan speed", shown, TEAL, TRACK, INK, MUTED); amount.setMax(100);
+        TextView value = shown[0]; value.setText("0 %");
+        amount.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() { public void onProgressChanged(SeekBar bar, int progress, boolean user) { value.setText(progress + " %"); } public void onStartTrackingTouch(SeekBar bar) { } public void onStopTrackingTouch(SeekBar bar) { } });
         // The slider starts at the chosen fan's current speed (as reported), so Set fan without moving it changes nothing.
         String[] keys = {"fan", "aux_fan", "box_fan"};
         kind.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { amount.setProgress(Math.max(0, fanPercent(keys[position]))); value.setText("Fan: " + amount.getProgress() + "%"); }
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { amount.setProgress(Math.max(0, fanPercent(keys[position]))); value.setText(amount.getProgress() + " %"); }
             public void onNothingSelected(AdapterView<?> parent) { } });
         amount.setProgress(Math.max(0, fanPercent(keys[0])));
         new AlertDialog.Builder(this).setTitle("Fan setting").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Set fan", (dialog, which) -> { if (printer != null) printer.fan(new String[] {"fan", "aux_fan", "box_fan"}[kind.getSelectedItemPosition()], amount.getProgress()); }).show();

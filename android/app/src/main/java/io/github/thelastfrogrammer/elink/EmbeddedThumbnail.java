@@ -17,6 +17,15 @@ public final class EmbeddedThumbnail {
     private EmbeddedThumbnail(byte[] bytes, int width, int height, String format) { this.bytes = bytes; this.width = width; this.height = height; this.format = format; }
     public byte[] data() { return bytes.clone(); }
     public int size() { return bytes.length; }
+    /** The best preview in a G-code file's header (slicers write it before the moves); null when there is none in the first 2 MB. */
+    public static EmbeddedThumbnail fromFile(java.io.File file) {
+        Parser parser = new Parser(); long read = 0;
+        try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(file), java.nio.charset.StandardCharsets.UTF_8))) {
+            for (String line; (line = in.readLine()) != null && read < 2_000_000; ) { read += line.length() + 1; parser.accept(line.trim()); }
+        } catch (IOException unreadable) { return null; }
+        parser.finish();
+        return parser.best();
+    }
     public static boolean validDimensions(int width, int height) { return width > 0 && height > 0 && width <= MAX_DIMENSION && height <= MAX_DIMENSION && (long) width * height <= MAX_PIXELS; }
     public static final class Parser {
         private String kind;

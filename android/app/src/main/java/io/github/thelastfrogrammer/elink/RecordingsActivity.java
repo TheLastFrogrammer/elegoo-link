@@ -260,20 +260,15 @@ public final class RecordingsActivity extends Activity {
             label(text.toString(), 13, ink, false);
         }
         android.widget.EditText search = new android.widget.EditText(this); search.setHint("Search: name, notes, #tag, failed, warping…"); search.setSingleLine(true);
-        search.setTextColor(ink); search.setHintTextColor(muted); search.setMinHeight(dp(48)); search.setText(listQuery); content.addView(search, new LinearLayout.LayoutParams(-1, -2));
+        search.setTextColor(ink); search.setHintTextColor(muted); search.setText(listQuery); WorkshopUi.searchField(search, surface, muted);
+        LinearLayout.LayoutParams searchAt = new LinearLayout.LayoutParams(-1, -2); searchAt.topMargin = dp(8); content.addView(search, searchAt);
         LinearLayout results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); content.addView(results);
         Runnable fill = () -> {
             results.removeAllViews(); int shownCount = 0;
             for (PrintRecorder.Recording recording : recordings) {
                 if (!PrintJournal.matches(recording.file, recording.journal, listQuery)) continue;
                 shownCount++;
-                LinearLayout card = card(results);
-                TextView name = label(card, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")), 16, ink, true);
-                name.setSingleLine(true); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
-                label(card, rowSummary(recording, Locale.getDefault(), TimeZone.getDefault()), 13, muted, false);
-                String journal = recording.journal.summary();
-                if (!journal.isEmpty()) label(card, journal, 13, ink, false);
-                card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(EXTRA_META, recording.meta.getAbsolutePath())));
+                WorkshopUi.addToGrid(results, recordingCard(recording), dp(12));
             }
             if (shownCount == 0) label(results, "No recording matches “" + listQuery.trim() + "”.", 14, muted, false);
         };
@@ -284,6 +279,38 @@ public final class RecordingsActivity extends Activity {
         fill.run();
     }
     private String listQuery = "";
+    /** Pictures for the list's cards, decoded off the main thread. */
+    private static final java.util.concurrent.ExecutorService PICTURES = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** A recording as a card: its last camera picture on top (or its result, without pictures), the name, when and how long, and the journal. */
+    private View recordingCard(PrintRecorder.Recording recording) {
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20));
+        card.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
+        card.setClipToOutline(true);
+        android.widget.FrameLayout top = new android.widget.FrameLayout(this); top.setBackgroundColor(dark ? 0xff21343a : 0xffe2efed);
+        card.addView(top, new LinearLayout.LayoutParams(-1, dp(112)));
+        ImageView picture = new ImageView(this); picture.setScaleType(ImageView.ScaleType.CENTER_CROP); picture.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        top.addView(picture, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        TextView badge = new TextView(this); badge.setText(outcome(recording.outcome)); badge.setTextSize(12); badge.setTextColor(Color.WHITE); badge.setPadding(dp(8), dp(3), dp(8), dp(3));
+        GradientDrawable pill = new GradientDrawable(); pill.setCornerRadius(dp(12)); pill.setColor(0x99000000); badge.setBackground(pill);
+        android.widget.FrameLayout.LayoutParams badgeAt = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.TOP | android.view.Gravity.START); badgeAt.setMargins(dp(8), dp(8), dp(8), dp(8));
+        top.addView(badge, badgeAt);
+        List<File> files = PrintRecorder.pictures(recording);
+        if (!files.isEmpty()) {
+            File last = files.get(files.size() - 1); int width = dp(200);
+            PICTURES.execute(() -> { android.graphics.Bitmap bitmap = decode(last, width); if (bitmap != null) runOnUiThread(() -> picture.setImageBitmap(bitmap)); });
+        }
+        LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); text.setPadding(dp(14), dp(8), dp(14), dp(12)); card.addView(text);
+        TextView name = label(text, StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")).replace('_', ' '), 15, ink, true);
+        name.setMaxLines(2); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        label(text, when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + " · " + duration(recording.duration()), 12, muted, false);
+        String journal = journalSummary(recording.journal);
+        if (recording.journal.rated() || !recording.journal.notes.isEmpty()) { TextView j = label(text, journal, 12, ink, false); j.setMaxLines(2); j.setEllipsize(android.text.TextUtils.TruncateAt.END); }
+        card.setClickable(true); card.setFocusable(true);
+        card.setContentDescription(name.getText() + ". " + rowSummary(recording, Locale.getDefault(), TimeZone.getDefault()) + (recording.journal.rated() ? ". " + journal : ""));
+        card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(EXTRA_META, recording.meta.getAbsolutePath())));
+        return card;
+    }
 
     private void showRecording(File meta) {
         content.removeAllViews();

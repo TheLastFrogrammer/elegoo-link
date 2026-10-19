@@ -57,7 +57,7 @@ final class FeatureIndex {
         new Feature("slice", "Slice a model", "slice slicer stl 3mf obj step model prepare", FILES, "Slice a model", Prepare.NONE, true),
         new Feature("find-models", "Find models online", "find download thingiverse printables makerworld cults myminifactory search models online browse browser firefox ad blocker ublock adblock", FILES, "Find models online", Prepare.NONE, true),
         new Feature("calibration", "Calibration prints", "calibration pressure advance pa flow temperature tower retraction input shaping test print", FILES, "Slice a model", Prepare.NONE, true),
-        new Feature("recent", "Recent slices", "recent sliced previous last gcode", FILES, "Recent slices", Prepare.NONE, true),
+        new Feature("recent", "Recent slices", "recent sliced previous last gcode", FILES, "All recent slices", Prepare.NONE, true),
         new Feature("upload", "Send a G-code file from the phone", "upload send gcode phone choose file", FILES, "Choose G-code", Prepare.NONE, true),
         // History
         new Feature("history", "Print history and Print again", "history past prints reprint print again details", HISTORY, "The printer's history", Prepare.NONE, false),

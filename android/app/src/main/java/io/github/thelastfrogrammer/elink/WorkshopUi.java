@@ -9,6 +9,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.*;
 import java.util.List;
 
@@ -89,6 +90,91 @@ final class WorkshopUi {
         // Layer insets, not an InsetDrawable: those would count as the thumb's padding and change how far it travels.
         android.graphics.drawable.LayerDrawable layers = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {box, dot});
         layers.setLayerInset(1, across, down, across, down); return layers;
+    }
+    /** A rounded search field with a magnifier at its start, as search boxes look elsewhere on the phone. */
+    static void searchField(EditText field, int fill, int outline) {
+        float d = field.getResources().getDisplayMetrics().density;
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(28 * d); shape.setColor(fill); shape.setStroke(Math.round(d), outline);
+        field.setBackground(shape); field.setPadding(Math.round(16 * d), 0, Math.round(16 * d), 0); field.setMinHeight(Math.round(56 * d));
+        android.graphics.drawable.Drawable lens = field.getContext().getDrawable(R.drawable.ic_search);
+        if (lens == null) return;
+        lens = lens.mutate(); lens.setTint(outline); int size = Math.round(24 * d); lens.setBounds(0, 0, size, size);
+        field.setCompoundDrawablesRelative(lens, null, null, null); field.setCompoundDrawablePadding(Math.round(12 * d));
+    }
+    /** Cards two to a row in `grid`: the next row starts when the last one has two; an odd last card keeps half the width. */
+    static void addToGrid(LinearLayout grid, View card, int gap) {
+        LinearLayout row = grid.getChildCount() == 0 ? null : (LinearLayout) grid.getChildAt(grid.getChildCount() - 1);
+        if (row == null || row.getChildCount() >= 2) {
+            row = new LinearLayout(grid.getContext()); row.setOrientation(LinearLayout.HORIZONTAL); row.setWeightSum(2); row.setBaselineAligned(false);
+            LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-1, -2); at.topMargin = gap; grid.addView(row, at);
+        }
+        LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1); if (row.getChildCount() > 0) cell.leftMargin = gap;
+        row.addView(card, cell);
+    }
+    /**
+     * A short choice (two to four short options) shown as a row of chips instead of a drop-down. The spinner stays as the
+     * value (invisible, no size, still laid out so its own listeners fire as before); a chip only selects in it. Returns
+     * false and leaves the spinner as it is when the options are too many or too long for one row.
+     */
+    static boolean chipsFor(Spinner spinner, int accent, int chipOff, int ink, boolean dark) {
+        android.widget.SpinnerAdapter adapter = spinner.getAdapter(); ViewGroup parent = (ViewGroup) spinner.getParent();
+        if (adapter == null || parent == null || adapter.getCount() < 2 || adapter.getCount() > 4) return false;
+        int letters = 0; String[] names = new String[adapter.getCount()];
+        for (int i = 0; i < names.length; i++) { names[i] = String.valueOf(adapter.getItem(i)); letters += names[i].length(); }
+        if (letters > (names.length == 2 ? 44 : 36)) return false;
+        float d = spinner.getResources().getDisplayMetrics().density;
+        LinearLayout row = new LinearLayout(spinner.getContext()); row.setOrientation(LinearLayout.HORIZONTAL);
+        Button[] chips = new Button[names.length];
+        CharSequence label = spinner.getContentDescription();
+        for (int i = 0; i < names.length; i++) {
+            Button chip = new A11y.DimButton(spinner.getContext()); chip.setText(names[i]); chip.setAllCaps(false); chip.setTextSize(14); chip.setMinHeight(Math.round(44 * d)); chip.setMinimumHeight(Math.round(44 * d));
+            chip.setPadding(Math.round(8 * d), 0, Math.round(8 * d), 0); chip.setStateListAnimator(null);
+            int index = i; chip.setOnClickListener(v -> spinner.setSelection(index));
+            LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(0, -2, names[i].length() + 6); at.topMargin = Math.round(6 * d); if (i > 0) at.leftMargin = Math.round(8 * d);
+            row.addView(chip, at); chips[i] = chip;
+        }
+        Runnable paint = () -> {
+            int chosen = spinner.getSelectedItemPosition();
+            for (int i = 0; i < chips.length; i++) {
+                boolean on = i == chosen;
+                GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(22 * d);
+                if (on) shape.setColor(accent); else { shape.setColor(Color.TRANSPARENT); shape.setStroke(Math.round(d), dark ? 0xff5a6d76 : 0xff9fb3bb); }
+                chips[i].setBackground(shape); chips[i].setTextColor(on ? (dark ? 0xff00201c : Color.WHITE) : ink);
+                chips[i].setContentDescription((label == null ? "" : label + ": ") + names[i]); A11y.state(chips[i], on ? "Selected" : "Not selected");
+            }
+        };
+        // Anything may change the selection (a saved value restored, a dialog): the chips follow it before each frame.
+        int[] last = {-2};
+        row.getViewTreeObserver().addOnPreDrawListener(() -> { if (spinner.getSelectedItemPosition() != last[0]) { last[0] = spinner.getSelectedItemPosition(); paint.run(); } return true; });
+        paint.run(); last[0] = spinner.getSelectedItemPosition();
+        int at = parent.indexOfChild(spinner); parent.addView(row, at, new LinearLayout.LayoutParams(-1, -2));
+        spinner.setVisibility(View.INVISIBLE); ViewGroup.LayoutParams none = spinner.getLayoutParams(); none.width = 0; none.height = 0; spinner.setLayoutParams(none);
+        spinner.setMinimumHeight(0); spinner.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        return true;
+    }
+    /** A slider with its caption on the left and its value on the right above it (value[0] receives the value's view), drawn with a thick rounded track. */
+    static SeekBar slider(LinearLayout parent, String caption, TextView[] value, int accent, int track, int ink, int muted) {
+        android.content.Context context = parent.getContext(); float d = context.getResources().getDisplayMetrics().density;
+        LinearLayout head = new LinearLayout(context); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView name = new TextView(context); name.setText(caption); name.setTextSize(15); name.setTextColor(muted); head.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView shown = new TextView(context); shown.setTextSize(16); shown.setTextColor(ink); shown.setTypeface(Typeface.DEFAULT, Typeface.BOLD); head.addView(shown);
+        LinearLayout.LayoutParams headAt = new LinearLayout.LayoutParams(-1, -2); headAt.topMargin = Math.round(12 * d); parent.addView(head, headAt);
+        SeekBar bar = new SeekBar(context); bar.setMinimumHeight(Math.round(48 * d)); bar.setPadding(Math.round(14 * d), 0, Math.round(14 * d), 0);
+        styleSlider(bar, accent, track);
+        parent.addView(bar, new LinearLayout.LayoutParams(-1, Math.round(48 * d)));
+        A11y.labelFor(name, bar); value[0] = shown; return bar;
+    }
+    /** A slider's thick rounded track (accent up to the value) and round knob. */
+    static void styleSlider(SeekBar bar, int accent, int track) {
+        float d = bar.getResources().getDisplayMetrics().density;
+        GradientDrawable back = new GradientDrawable(); back.setColor(track); back.setCornerRadius(4 * d); back.setSize(-1, Math.round(8 * d));
+        GradientDrawable fill = new GradientDrawable(); fill.setColor(accent); fill.setCornerRadius(4 * d); fill.setSize(-1, Math.round(8 * d));
+        android.graphics.drawable.LayerDrawable lines = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {back,
+            new android.graphics.drawable.ClipDrawable(fill, android.view.Gravity.START, android.graphics.drawable.ClipDrawable.HORIZONTAL)});
+        lines.setId(0, android.R.id.background); lines.setId(1, android.R.id.progress);
+        bar.setProgressDrawable(lines);
+        GradientDrawable knob = new GradientDrawable(); knob.setShape(GradientDrawable.OVAL); knob.setColor(accent); knob.setSize(Math.round(24 * d), Math.round(24 * d));
+        bar.setThumb(knob); bar.setSplitTrack(false);
     }
     static void switchColours(CompoundButton view, int accent, boolean dark) { switchColours(view, accent, dark ? 0xff2a3a40 : 0xffdbe6e6, dark); }
     /** A back control as a title bar: an arrow before the words (the place it goes back to, or the page's own title). */

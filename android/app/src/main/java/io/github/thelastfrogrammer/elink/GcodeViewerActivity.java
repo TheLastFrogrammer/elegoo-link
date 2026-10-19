@@ -735,7 +735,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             TextView name = new TextView(this); name.setTextSize(12); name.setTextColor(ink);
             row.addView(name, new LinearLayout.LayoutParams(dp(112), -2));
-            SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+            SeekBar bar = new SeekBar(this); WorkshopUi.styleSlider(bar, teal, dark ? 0xff2a3a40 : 0xffdbe6e6);
             bar.setMax((int) Math.round((ALIGN_RANGE[i][1] - ALIGN_RANGE[i][0]) / ALIGN_STEP[i]));
             row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1));
             A11y.labelFor(name, bar);
@@ -901,7 +901,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink);
         row.addView(label, new LinearLayout.LayoutParams(dp(112), -2));
-        SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+        SeekBar bar = new SeekBar(this); WorkshopUi.styleSlider(bar, teal, dark ? 0xff2a3a40 : 0xffdbe6e6);
         bar.setMax(max - min); bar.setProgress(viewerPrefs().getInt(key, fallback) - min);
         row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1));
         A11y.labelFor(label, bar);
@@ -1569,7 +1569,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
             TextView label = new TextView(this); label.setTextSize(12); label.setTextColor(ink); body.addView(label);   // above: − slider + below
             SeekBar bar = new SeekBar(this); bar.setMax(100); bar.setProgress(viewerPrefs().getInt(ck("liveDelay"), 0));
-            bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+            WorkshopUi.styleSlider(bar, teal, dark ? 0xff2a3a40 : 0xffdbe6e6);
             row.addView(bar, new LinearLayout.LayoutParams(0, dp(48), 1)); A11y.labelFor(label, bar);
             Runnable showValue = () -> { String v = String.format(Locale.getDefault(), "%.1f s", bar.getProgress() / 10.0); label.setText("Delay to match the camera: " + v); A11y.state(bar, v); };
             showValue.run();
@@ -2031,7 +2031,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         view.setPadding(0, dp(3), 0, dp(3)); parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); return view;
     }
     private SeekBar seekBar(LinearLayout parent) {
-        SeekBar bar = new SeekBar(this); bar.setProgressTintList(ColorStateList.valueOf(teal)); bar.setThumbTintList(ColorStateList.valueOf(teal));
+        SeekBar bar = new SeekBar(this); WorkshopUi.styleSlider(bar, teal, dark ? 0xff2a3a40 : 0xffdbe6e6);
         parent.addView(bar, new LinearLayout.LayoutParams(-1, dp(48))); return bar;
     }
     private Button rowButton(LinearLayout row, String text, Runnable action) {

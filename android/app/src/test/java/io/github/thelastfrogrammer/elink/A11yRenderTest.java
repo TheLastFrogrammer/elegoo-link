@@ -313,6 +313,11 @@ public class A11yRenderTest {
             android.app.Dialog page = org.robolectric.shadows.ShadowDialog.getLatestDialog();
             shot(page.getWindow().getDecorView(), 2340, "print-review", scale);
             page.dismiss();
+            // The page that follows the start: waiting for the printer (no service here), then a refused start.
+            new PrintStartSteps(activity, () -> null, "Calibration cube.gcode", "On your network", false, 0xff17252c, 0xff5a6d76, 0xff00796b, 0xfff2f5f6, 0xffffffff, false).show();
+            android.app.Dialog steps = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+            shot(steps.getWindow().getDecorView(), 2340, "print-steps", scale);
+            steps.dismiss();
             invoke(activity, "temperatureDialog");
             dialogShot("dialog-temperature", scale, 3000);
             org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog().dismiss();
