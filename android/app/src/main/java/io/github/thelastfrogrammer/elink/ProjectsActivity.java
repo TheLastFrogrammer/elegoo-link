@@ -181,7 +181,7 @@ public final class ProjectsActivity extends Activity {
 
     /** The project's header: where it stands (a small overline), its name and purpose, then its views. */
     private void projectScreen(Projects.Project p) {
-        back("‹ All projects", () -> { screen = HOME; render(); });
+        back("All projects", () -> { screen = HOME; render(); });
         overline(content, "PROJECT / " + (p.archived ? "ARCHIVED" : p.assembled ? "ASSEMBLED" : "ACTIVE"));
         A11y.heading(ui.label(content, p.title, 24, ui.ink, true));
         if (!p.description.isEmpty()) { TextView d = ui.label(content, p.description, 13, ui.muted, false); d.setMaxLines(3); d.setEllipsize(android.text.TextUtils.TruncateAt.END); }
@@ -230,7 +230,7 @@ public final class ProjectsActivity extends Activity {
         Button b = ui.button(content, text, action, false);
         b.setBackground(null); b.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START); b.setPadding(ui.dp(4), 0, ui.dp(12), 0);
         LinearLayout.LayoutParams layout = (LinearLayout.LayoutParams) b.getLayoutParams(); layout.width = LinearLayout.LayoutParams.WRAP_CONTENT; b.setLayoutParams(layout);
-        b.setContentDescription("Back to " + text.replace("‹ ", ""));
+        b.setContentDescription("Back to " + text); b.setTextColor(ui.ink); WorkshopUi.backArrow(b, ui.ink);
         return b;
     }
     /** Renaming, archiving and deleting, together and away from the everyday buttons. */
@@ -285,7 +285,7 @@ public final class ProjectsActivity extends Activity {
         open.add(p.assembled ? "assembled and checked" : "assembly not checked");
         ui.label(card, String.join(" · ", open), 13, ui.muted, false);
         if (p.allAvailable() || p.assembled) {
-            CheckBox assembled = check(card, "Assembled and checked (your call: printing alone does not say it fits)", p.assembled);
+            Switch assembled = check(card, "Assembled and checked (your call: printing alone does not say it fits)", p.assembled);
             assembled.setOnCheckedChangeListener((v, on) -> { p.assembled = on; p.updated = now(); save(); render(); });
         }
     }
@@ -508,7 +508,7 @@ public final class ProjectsActivity extends Activity {
         for (int i = 0; i < Projects.DESIGN.length; i++) { designs.add(Projects.DESIGN[i][1]); if (part != null && Projects.DESIGN[i][0].equals(part.design)) design = i; }
         Spinner designSpinner = ui.spinner(body, designs, design);
         EditText have = field(body, "How many you have (purchased parts)", String.valueOf(part == null ? 0 : part.have), InputType.TYPE_CLASS_NUMBER);
-        CheckBox done = new CheckBox(this); done.setText("Done (tasks)"); done.setTextColor(ui.ink); done.setMinHeight(ui.dp(48)); done.setChecked(part != null && part.done); body.addView(done);
+        Switch done = new Switch(this); done.setText("Done (tasks)"); done.setTextColor(ui.ink); done.setMinHeight(ui.dp(48)); done.setChecked(part != null && part.done); body.addView(done); WorkshopUi.switchColours(done, ui.teal, ui.dark);
         EditText notes = field(body, "Notes: sizes to check, what blocks it…", part == null ? "" : part.notes, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
         ui.label(body, "Planning only: the number needed does not count anything as printed. Printed pieces count once you accept them after a print.", 12, ui.muted, false);
         AlertDialog dialog = new AlertDialog.Builder(this).setTitle(part == null ? "Planned part" : "Edit part").setView(scroll(body)).setNegativeButton("Cancel", null).setPositiveButton(part == null ? "Add" : "Save", null).show();
@@ -546,7 +546,7 @@ public final class ProjectsActivity extends Activity {
     private static int number(EditText field) { try { return Integer.parseInt(field.getText().toString().trim()); } catch (NumberFormatException e) { return -1; } }
 
     private void partScreen(Projects.Project p, Projects.Part part) {
-        back("‹ " + p.title, () -> { screen = PARTS; render(); });
+        back(p.title, () -> { screen = PARTS; render(); });
         overline(content, (part.group.isEmpty() ? "" : part.group.toUpperCase(Locale.getDefault()) + " / ") + Projects.label(Projects.KINDS, part.kind).toUpperCase(Locale.getDefault()));
         A11y.heading(ui.label(content, part.name + (part.counted() ? " × " + part.quantity : ""), 22, ui.ink, true));
         ui.label(content, partLine(book, p, part) + (part.design.isEmpty() || part.design.equals("revise") ? "" : " · " + Projects.label(Projects.DESIGN, part.design)), 13, ui.muted, false);
@@ -568,7 +568,7 @@ public final class ProjectsActivity extends Activity {
             ui.rowButton(row, "− 1", () -> { part.have = Math.max(0, part.have - 1); p.updated = now(); save(); render(); }, false).setContentDescription("One fewer at hand");
             ui.rowButton(row, "+ 1", () -> { part.have = Math.min(Projects.MAX_QUANTITY, part.have + 1); p.updated = now(); save(); render(); }, false).setContentDescription("One more at hand");
         } else if (part.kind.equals(Projects.TASK)) {
-            CheckBox done = check(content, "Done", part.done); done.setOnCheckedChangeListener((v, on) -> { part.done = on; p.updated = now(); save(); render(); });
+            Switch done = check(content, "Done", part.done); done.setOnCheckedChangeListener((v, on) -> { part.done = on; p.updated = now(); save(); render(); });
         }
         LinearLayout row = ui.row(content); int at = p.parts.indexOf(part);
         ui.rowButton(row, "Edit…", () -> editPart(p, part), false);
@@ -972,7 +972,7 @@ public final class ProjectsActivity extends Activity {
     }
 
     private void unassigned() {
-        back("‹ All projects", () -> { screen = HOME; render(); });
+        back("All projects", () -> { screen = HOME; render(); });
         A11y.heading(ui.label(content, "Files in no project", 22, ui.ink, true));
         ui.label(content, "Files that were taken off every project. Add one to a project, or delete it.", 13, ui.muted, false);
         List<Projects.Asset> loose = book.unassigned();
@@ -1051,10 +1051,10 @@ public final class ProjectsActivity extends Activity {
         for (String id : p.allAssets()) { Projects.Asset a = book.asset(id); if (a == null) continue;
             if (a.storage.equals(Projects.MANAGED)) { kept += Math.max(0, a.size); keptCount++; } else if (a.storage.equals(Projects.EXTERNAL)) linked++; else web++; }
         ui.label(body, "One file (" + ProjectArchive.EXTENSION + ") with the parts, notes and files, which Link Workshop on another phone imports as a new project.", 13, ui.muted, false);
-        CheckBox files = check(body, "Include the files kept in the app (" + keptCount + ", " + size(kept) + ")", exportOptions.keptFiles); files.setEnabled(keptCount > 0);
-        CheckBox links = check(body, "Include web links (" + web + ")", exportOptions.webLinks); links.setEnabled(web > 0);
-        CheckBox notes = check(body, "Include notes and the description", exportOptions.notes);
-        CheckBox cover = check(body, "Include the cover page", exportCover);
+        Switch files = check(body, "Include the files kept in the app (" + keptCount + ", " + size(kept) + ")", exportOptions.keptFiles); files.setEnabled(keptCount > 0);
+        Switch links = check(body, "Include web links (" + web + ")", exportOptions.webLinks); links.setEnabled(web > 0);
+        Switch notes = check(body, "Include notes and the description", exportOptions.notes);
+        Switch cover = check(body, "Include the cover page", exportCover);
         if (linked > 0) ui.label(body, linked + (linked == 1 ? " linked file stays" : " linked files stay") + " out: they are on this phone only. The project lists them so they can be added again.", 12, ui.muted, false);
         ui.label(body, "Web links go in as they are: leave them out if one holds a private key.", 12, ui.muted, false);
         ui.label(body, "The project file shares the plan: parts, quantities, revisions and files. Your progress stays on this phone: prints and their notes, accepted pieces, purchases at hand, tasks done and the assembly check.", 12, ui.muted, false);
@@ -1069,8 +1069,8 @@ public final class ProjectsActivity extends Activity {
                 .putExtra(Intent.EXTRA_TEXT, ProjectArchive.outline(book, p, exportOptions.notes)), "Share " + p.title)); }, false);
         dialog[0] = new AlertDialog.Builder(this).setTitle("Share " + p.title).setView(scroll(body)).setNegativeButton("Close", null).show();
     }
-    private CheckBox check(LinearLayout parent, String text, boolean on) {
-        CheckBox box = new CheckBox(this); box.setText(text); box.setTextColor(ui.ink); box.setMinHeight(ui.dp(48)); box.setChecked(on); parent.addView(box); return box;
+    private Switch check(LinearLayout parent, String text, boolean on) {
+        Switch box = new Switch(this); box.setText(text); box.setTextColor(ui.ink); box.setMinHeight(ui.dp(48)); box.setChecked(on); parent.addView(box); WorkshopUi.switchColours(box, ui.teal, ui.dark); return box;
     }
     static String fileName(String title) { String t = title.replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_").trim(); return t.isEmpty() ? "project" : Automation.cap(t, 80); }
     private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return ""; } }
@@ -1144,7 +1144,7 @@ public final class ProjectsActivity extends Activity {
 
     private ImageView coverPreview; private TextView coverStatus; private int coverDrawn;
     private void coverScreen(Projects.Project p) {
-        back("‹ " + p.title, () -> { screen = OVERVIEW; render(); });
+        back(p.title, () -> { screen = OVERVIEW; render(); });
         A11y.heading(ui.label(content, "Cover page", 22, ui.ink, true));
         CoverPage.Options o = CoverPage.Options.fromJson(p.cover);
         coverPreview = new ImageView(this); coverPreview.setAdjustViewBounds(true); coverPreview.setBackgroundColor(ui.surface);
@@ -1164,7 +1164,7 @@ public final class ProjectsActivity extends Activity {
         HorizontalScrollView swatchScroll = new HorizontalScrollView(this); swatchScroll.addView(swatches); look.addView(swatchScroll);
         for (String[] accent : CoverPage.ACCENTS) {
             Button b = new Button(this); b.setText(accent[1]); b.setAllCaps(false); b.setTextColor(android.graphics.Color.WHITE); b.setMinHeight(ui.dp(48));
-            android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setCornerRadius(ui.dp(12)); shape.setColor(android.graphics.Color.parseColor(accent[0]));
+            android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setCornerRadius(ui.dp(24)); shape.setColor(android.graphics.Color.parseColor(accent[0]));
             if (accent[0].equals(o.accent)) shape.setStroke(ui.dp(4), ui.ink);
             b.setBackground(shape); b.setContentDescription(accent[1] + (accent[0].equals(o.accent) ? ", chosen" : ""));
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(-2, -2); lp.rightMargin = ui.dp(8); swatches.addView(b, lp);
@@ -1178,7 +1178,7 @@ public final class ProjectsActivity extends Activity {
         List<String> pictureNames = new ArrayList<>(Collections.singletonList(images.isEmpty() ? "None (add an image to the project's files)" : "None")); int pic = 0;
         for (int i = 0; i < images.size(); i++) { pictureNames.add(images.get(i).name); if (images.get(i).id.equals(o.picture)) pic = i + 1; }
         Spinner pictureSpinner = ui.spinner(look, pictureNames, pic);
-        CheckBox large = check(look, "Large title", o.largeTitle);
+        Switch large = check(look, "Large title", o.largeTitle);
 
         LinearLayout words = ui.card(content, "Words");
         EditText subtitle = field(words, "Subtitle (empty: the project's description)", o.subtitle, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
@@ -1189,7 +1189,7 @@ public final class ProjectsActivity extends Activity {
 
         LinearLayout show = ui.card(content, "What it shows");
         for (String[] section : CoverPage.SECTIONS) {
-            CheckBox box = check(show, section[1], o.sections.contains(section[0]));
+            Switch box = check(show, section[1], o.sections.contains(section[0]));
             box.setOnCheckedChangeListener((v, on) -> { if (on) o.sections.add(section[0]); else o.sections.remove(section[0]); keepCover(p, o); drawCover(p, o); });
         }
         AdapterView.OnItemSelectedListener changed = new AdapterView.OnItemSelectedListener() {

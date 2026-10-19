@@ -239,11 +239,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadii(new float[] {dp(20), dp(20), dp(20), dp(20), 0, 0, 0, 0}); panel.setBackground(shape);
         root.addView(panel, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        Button back = new Button(this); back.setText("‹ Back"); back.setAllCaps(false); back.setTextSize(14); back.setTextColor(teal); back.setBackground(null);
-        back.setMinHeight(dp(48)); back.setMinimumHeight(dp(48)); back.setMinWidth(dp(64)); back.setMinimumWidth(dp(64)); back.setPadding(0, 0, dp(8), 0);
+        android.widget.ImageButton back = new android.widget.ImageButton(this); back.setImageResource(R.drawable.ic_arrow_back); back.setColorFilter(ink); back.setBackground(null);
         back.setContentDescription("Back"); back.setOnClickListener(v -> finish());
-        header.addView(back);
-        title = new TextView(this); title.setText(followMode ? "Live toolpath" : "Toolpath"); title.setTextSize(16); title.setTextColor(ink); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        title = new TextView(this); title.setText(followMode ? "Live toolpath" : "Toolpath"); title.setTextSize(18); title.setTextColor(ink); title.setTypeface(Typeface.DEFAULT, Typeface.BOLD); title.setPadding(dp(8), 0, 0, 0);
         title.setMaxLines(2); title.setEllipsize(android.text.TextUtils.TruncateAt.END); A11y.heading(title);
         LinearLayout titles = new LinearLayout(this); titles.setOrientation(LinearLayout.VERTICAL); titles.addView(title);
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
@@ -781,7 +780,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         Button header = new Button(this); header.setAllCaps(false); header.setTextSize(14); header.setTextColor(ink);
         header.setTypeface(Typeface.DEFAULT, Typeface.BOLD); header.setGravity(android.view.Gravity.CENTER_VERTICAL | android.view.Gravity.START);
         header.setMinHeight(dp(48)); header.setMinimumHeight(dp(48)); header.setPadding(dp(12), dp(4), dp(12), dp(4));
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(24));
         header.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         A11y.heading(header);
         Runnable show = () -> {
@@ -946,7 +945,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
     /** The selected edge: a fill in its colour (faint), and bold text. */
     private void styleEdge(Button b, int colour, boolean on) {
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(on ? (colour & 0x00ffffff) | 0x3d000000 : buttonColor); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(on ? (colour & 0x00ffffff) | 0x3d000000 : buttonColor); shape.setCornerRadius(dp(24));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         b.setTypeface(Typeface.DEFAULT, on ? Typeface.BOLD : Typeface.NORMAL);
         b.setTextColor(on ? ink : muted);
@@ -954,7 +953,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     /** The main action of a row: a filled teal button, dark text in the dark theme for contrast. */
     private Button primaryButton(LinearLayout row, String text, Runnable action) {
         Button b = rowButton(row, text, action);
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(teal); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(teal); shape.setCornerRadius(dp(24));
         b.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x66000000 : 0x55ffffff), shape, null));
         b.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, dark ? 0xff0e1417 : Color.WHITE}));
         b.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -1577,7 +1576,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             // − and + step a tenth of a second, for fine tuning against the picture.
             for (int step : new int[] {-1, 1}) {
                 Button nudge = new Button(this); nudge.setText(step < 0 ? "−" : "+"); nudge.setTextSize(18); nudge.setTextColor(teal); nudge.setMinWidth(dp(48)); nudge.setMinimumWidth(dp(48));
-                GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12)); nudge.setBackground(shape);
+                GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(24)); nudge.setBackground(shape);
                 nudge.setContentDescription(step < 0 ? "Less delay, a tenth of a second" : "More delay, a tenth of a second");
                 nudge.setOnClickListener(v -> { int value = Math.max(0, Math.min(100, bar.getProgress() + step)); bar.setProgress(value); viewerPrefs().edit().putInt(ck("liveDelay"), value).apply(); showValue.run(); });
                 LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(dp(56), -2); nudge.setMinHeight(dp(48)); nudge.setMinimumHeight(dp(48)); nudge.setPadding(0, 0, 0, 0);
@@ -2039,7 +2038,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48));
         button.setPadding(dp(6), dp(4), dp(6), dp(4)); button.setTextSize(13);
         button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, teal}));
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(buttonColor); shape.setCornerRadius(dp(24));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         button.setOnClickListener(view -> action.run());
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(6); if (row.getChildCount() > 0) layout.leftMargin = dp(8);

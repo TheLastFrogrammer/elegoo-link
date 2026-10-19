@@ -61,6 +61,45 @@ final class WorkshopUi {
         return shade + base;
     }
 
+    /**
+     * An on/off switch in the app's colours, drawn large: a 52×32 dp pill filled with the accent and a big light knob when on,
+     * an outlined pill with a small grey knob when off.
+     */
+    static void switchColours(CompoundButton view, int accent, int track, boolean dark) {
+        int[][] states = {new int[] {-android.R.attr.state_enabled}, new int[] {android.R.attr.state_checked}, new int[] {}};
+        if (!(view instanceof Switch)) { view.setButtonTintList(new ColorStateList(new int[][] {states[0], states[2]}, new int[] {track, accent})); return; }
+        Switch toggle = (Switch) view; float d = view.getResources().getDisplayMetrics().density;
+        int outline = dark ? 0xff8fa3ab : 0xff74868e, knobOn = dark ? 0xff00201c : Color.WHITE;
+        android.graphics.drawable.StateListDrawable tracks = new android.graphics.drawable.StateListDrawable();
+        tracks.addState(states[0], pill(track, track, d)); tracks.addState(states[1], pill(accent, accent, d)); tracks.addState(states[2], pill(track, outline, d));
+        android.graphics.drawable.StateListDrawable knobs = new android.graphics.drawable.StateListDrawable();
+        knobs.addState(states[0], knob(outline, 16, d)); knobs.addState(states[1], knob(knobOn, 22, d)); knobs.addState(states[2], knob(outline, 16, d));
+        toggle.setTrackDrawable(tracks); toggle.setThumbDrawable(knobs); toggle.setThumbTintList(null); toggle.setTrackTintList(null);
+        toggle.setSwitchMinWidth(Math.round(52 * d)); toggle.setThumbTextPadding(0);
+    }
+    private static android.graphics.drawable.Drawable pill(int fill, int stroke, float d) {
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(fill); shape.setStroke(Math.round(2 * d), stroke); shape.setCornerRadius(16 * d);
+        shape.setSize(Math.round(52 * d), Math.round(32 * d)); return shape;
+    }
+    /** A round knob in a 26×32 dp box (the switch is two boxes wide, the track's 52 dp): 24 dp across when on, 16 dp when off. */
+    private static android.graphics.drawable.Drawable knob(int colour, int size, float d) {
+        GradientDrawable dot = new GradientDrawable(); dot.setShape(GradientDrawable.OVAL); dot.setColor(colour);
+        int across = Math.round((26 - size) / 2f * d), down = Math.round((32 - size) / 2f * d);
+        GradientDrawable box = new GradientDrawable(); box.setColor(Color.TRANSPARENT); box.setSize(Math.round(26 * d), Math.round(32 * d));
+        // Layer insets, not an InsetDrawable: those would count as the thumb's padding and change how far it travels.
+        android.graphics.drawable.LayerDrawable layers = new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[] {box, dot});
+        layers.setLayerInset(1, across, down, across, down); return layers;
+    }
+    static void switchColours(CompoundButton view, int accent, boolean dark) { switchColours(view, accent, dark ? 0xff2a3a40 : 0xffdbe6e6, dark); }
+    /** A back control as a title bar: an arrow before the words (the place it goes back to, or the page's own title). */
+    static void backArrow(TextView view, int color) {
+        android.graphics.drawable.Drawable arrow = view.getContext().getDrawable(R.drawable.ic_arrow_back);
+        if (arrow == null) return;
+        arrow = arrow.mutate(); arrow.setTint(color);
+        int size = Math.round(24 * view.getResources().getDisplayMetrics().density); arrow.setBounds(0, 0, size, size);
+        view.setCompoundDrawablesRelative(arrow, null, null, null); view.setCompoundDrawablePadding(Math.round(16 * view.getResources().getDisplayMetrics().density));
+    }
+
     int dp(int value) { return Math.round(value * activity.getResources().getDisplayMetrics().density); }
 
     LinearLayout card(LinearLayout parent, String title) {
@@ -93,7 +132,7 @@ final class WorkshopUi {
     Button styled(String text, Runnable action, boolean primary) {
         Button view = new A11y.DimButton(activity); view.setText(text); view.setAllCaps(false); view.setMinHeight(dp(48)); view.setPadding(dp(10), dp(8), dp(10), dp(8));
         ColorStateList textColor = new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, primary ? (dark ? 0xff00201c : Color.WHITE) : teal});
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(24));
         shape.setColor(primary ? new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {button, teal}) : ColorStateList.valueOf(button));
         view.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         view.setTextColor(textColor); view.setOnClickListener(v -> action.run()); return view;

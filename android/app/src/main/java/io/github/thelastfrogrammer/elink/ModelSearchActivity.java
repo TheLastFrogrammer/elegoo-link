@@ -68,15 +68,22 @@ public final class ModelSearchActivity extends Activity {
         setContentView(scroll);
 
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(Gravity.CENTER_VERTICAL); content.addView(header);
-        Button back = new Button(this); back.setText("‹ Back"); back.setAllCaps(false); back.setTextColor(teal); back.setBackground(null); back.setMinHeight(dp(48)); back.setOnClickListener(v -> finish());
-        header.addView(back);
-        TextView title = label(header, "Find models", 20, ink, true); A11y.heading(title);
+        ImageButton back = new ImageButton(this); back.setImageResource(R.drawable.ic_arrow_back); back.setColorFilter(ink); back.setBackground(null);
+        back.setContentDescription("Back"); back.setOnClickListener(v -> finish());
+        header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(56)));
+        TextView title = label(header, "Find models", 24, ink, true); A11y.heading(title); title.setPadding(dp(12), 0, 0, 0);
         ((LinearLayout.LayoutParams) title.getLayoutParams()).weight = 1; title.getLayoutParams().width = 0;
 
         query = new EditText(this); query.setHint("Search for models, e.g. cable clip"); query.setSingleLine(true); query.setTextColor(ink); query.setHintTextColor(muted);
         query.setInputType(InputType.TYPE_CLASS_TEXT); query.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         query.setOnEditorActionListener((v, action, event) -> { if (action == EditorInfo.IME_ACTION_SEARCH) { search(1); return true; } return false; });
-        content.addView(query, new LinearLayout.LayoutParams(-1, dp(56)));
+        // A rounded search field with its icon, as search boxes look elsewhere on the phone.
+        GradientDrawable field = new GradientDrawable(); field.setCornerRadius(dp(28)); field.setColor(surface); field.setStroke(dp(1), muted);
+        query.setBackground(field); query.setPadding(dp(16), 0, dp(16), 0);
+        android.graphics.drawable.Drawable lens = getDrawable(R.drawable.ic_search);
+        if (lens != null) { lens = lens.mutate(); lens.setTint(muted); lens.setBounds(0, 0, dp(24), dp(24)); query.setCompoundDrawablesRelative(lens, null, null, null); query.setCompoundDrawablePadding(dp(12)); }
+        LinearLayout.LayoutParams fieldAt = new LinearLayout.LayoutParams(-1, dp(56)); fieldAt.topMargin = dp(8); fieldAt.bottomMargin = dp(4);
+        content.addView(query, fieldAt);
         LinearLayout searchRow = row(content);
         rowButton(searchRow, "Search", () -> search(1), true);
         rowButton(searchRow, "Site keys…", this::keysDialog, false);
@@ -131,7 +138,7 @@ public final class ModelSearchActivity extends Activity {
             List<ModelSites.Model> merged = mixSources(found);
             main.post(() -> {
                 if (mine != generation || isDestroyed()) return;
-                for (ModelSites.Model model : merged) results.addView(card(model));
+                for (ModelSites.Model model : merged) addCard(card(model));
                 status.setText((merged.isEmpty() ? "Nothing found" + (nextPage > 1 ? " on this page. Try the first page or a different word." : ". Try a different word, or browse the sites above.") : merged.size() + " found" + (nextPage > 1 ? " on page " + nextPage : "") + ".")
                     + (problems.isEmpty() ? "" : " " + String.join(" ", problems)));
                 more.setVisibility(merged.isEmpty() ? View.GONE : View.VISIBLE);
@@ -163,21 +170,41 @@ public final class ModelSearchActivity extends Activity {
     }
 
     // ------------------------------------------------------------------ results
+    /** Results two to a row, as picture cards; an odd last one keeps its half width. */
+    private void addCard(View card) {
+        LinearLayout row = results.getChildCount() == 0 ? null : (LinearLayout) results.getChildAt(results.getChildCount() - 1);
+        if (row == null || row.getChildCount() >= 2) {
+            row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setWeightSum(2); row.setBaselineAligned(false);
+            LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-1, -2); at.topMargin = dp(12); results.addView(row, at);
+        }
+        LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1); if (row.getChildCount() > 0) cell.leftMargin = dp(12);
+        row.addView(card, cell);
+    }
+    /** A model as a card: its picture on top, then the name, who made it and where it is; tapping it opens its files or its page. */
     private View card(ModelSites.Model model) {
-        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.HORIZONTAL); card.setPadding(dp(12), dp(12), dp(12), dp(12));
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(16)); card.setBackground(shape);
-        LinearLayout.LayoutParams outer = new LinearLayout.LayoutParams(-1, -2); outer.topMargin = dp(10); card.setLayoutParams(outer);
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20));
+        card.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
+        card.setClipToOutline(true);   // the picture follows the card's rounded top
         ImageView picture = new ImageView(this); picture.setScaleType(ImageView.ScaleType.CENTER_CROP); picture.setBackgroundColor(buttonColor);
         picture.setContentDescription(null); picture.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        card.addView(picture, new LinearLayout.LayoutParams(dp(88), dp(88)));
+        card.addView(picture, new LinearLayout.LayoutParams(-1, dp(132)));
         if (!model.thumbnail.isEmpty()) loadThumbnail(model.thumbnail, picture);
-        LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); text.setPadding(dp(12), 0, 0, 0);
-        card.addView(text, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView name = label(text, model.name, 15, ink, true); name.setMaxLines(3);
-        label(text, (model.creator.isEmpty() ? "" : "by " + model.creator + " · ") + model.source + (model.license.isEmpty() ? "" : " · " + model.license), 12, muted, false);
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); text.addView(actions);
-        if (ModelSites.THINGIVERSE.equals(model.source)) rowButton(actions, "Files…", () -> filesDialog(model), true);
-        if (!model.page.isEmpty()) rowButton(actions, ModelSites.MYMINIFACTORY.equals(model.source) ? "Open to download" : "Open page", () -> openBrowser(model.page), false);
+        LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); text.setPadding(dp(14), dp(10), dp(14), dp(14));
+        card.addView(text, new LinearLayout.LayoutParams(-1, -2));
+        TextView name = label(text, model.name, 15, ink, true); name.setMaxLines(2); name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        if (!model.creator.isEmpty()) { TextView by = label(text, model.creator, 13, muted, false); by.setMaxLines(1); by.setEllipsize(android.text.TextUtils.TruncateAt.END); }
+        label(text, model.source + (model.license.isEmpty() ? "" : " · " + model.license), 12, muted, false).setMaxLines(2);
+        boolean files = ModelSites.THINGIVERSE.equals(model.source);
+        Runnable open = files ? () -> filesDialog(model) : model.page.isEmpty() ? null : () -> openBrowser(model.page);
+        if (open != null) {
+            card.setClickable(true); card.setFocusable(true); card.setOnClickListener(v -> open.run());
+            A11y.clickLabel(card, files ? "Choose files to slice" : ModelSites.MYMINIFACTORY.equals(model.source) ? "Open the page to download" : "Open the page");
+            // The page stays one long press away when a tap lists the files.
+            if (files && !model.page.isEmpty()) { card.setOnLongClickListener(v -> { openBrowser(model.page); return true; });
+                androidx.core.view.ViewCompat.replaceAccessibilityAction(card, androidx.core.view.accessibility.AccessibilityNodeInfoCompat.AccessibilityActionCompat.ACTION_LONG_CLICK, "Open the page", null); }
+        }
+        card.setContentDescription(model.name + (model.creator.isEmpty() ? "" : ", by " + model.creator) + ", " + model.source);
         return card;
     }
 
@@ -299,7 +326,7 @@ public final class ModelSearchActivity extends Activity {
             : "Sites open in this app's browser (no ad blocker); files you download come straight to the slicer. With Firefox installed they can open there instead, with an ad blocker such as uBlock Origin.");
     }
     private void style(Button button, boolean selected) {
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(selected ? teal : buttonColor); shape.setCornerRadius(dp(12)); button.setBackground(shape);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(selected ? teal : buttonColor); shape.setCornerRadius(dp(24)); button.setBackground(shape);
         button.setTextColor(selected ? (dark ? 0xff0e1417 : Color.WHITE) : teal); button.setSelected(selected);
         button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
         button.setContentDescription("Open the sites " + button.getText().toString().toLowerCase(Locale.ROOT) + (selected ? ", selected" : ""));
@@ -367,7 +394,7 @@ public final class ModelSearchActivity extends Activity {
         Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setTextSize(13);
         button.setMinHeight(dp(48)); button.setMinimumHeight(dp(48)); button.setPadding(dp(8), dp(4), dp(8), dp(4));
         button.setTextColor(primary ? (dark ? 0xff0e1417 : Color.WHITE) : teal);
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(primary ? teal : buttonColor); shape.setCornerRadius(dp(12)); button.setBackground(shape);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(primary ? teal : buttonColor); shape.setCornerRadius(dp(24)); button.setBackground(shape);
         if (primary) button.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         button.setOnClickListener(v -> action.run());
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1); params.setMargins(row.getChildCount() == 0 ? 0 : dp(8), dp(6), 0, 0);

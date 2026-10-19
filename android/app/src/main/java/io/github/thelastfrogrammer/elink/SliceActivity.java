@@ -1263,7 +1263,7 @@ public final class SliceActivity extends Activity {
         }
         org.json.JSONObject settingsOf = file.optJSONObject("project");
         if (settingsOf != null) {
-            CheckBox use = new CheckBox(this); use.setText("Use the project's print settings"); use.setTextColor(ink); use.setButtonTintList(ColorStateList.valueOf(teal));
+            Switch use = new Switch(this); use.setText("Use the project's print settings"); use.setTextColor(ink); WorkshopUi.switchColours(use, teal, dark);
             use.setChecked(projectSettings); use.setOnCheckedChangeListener((v, checked) -> projectSettings = checked); projectBox.addView(use);
             String printer = settingsOf.optString("printer");
             label(projectBox, "Saved with " + settingsOf.optString("process") + (settingsOf.has("layer_height") ? String.format(Locale.getDefault(), " (%.2f mm layers)", settingsOf.optDouble("layer_height")) : "")
@@ -1310,9 +1310,9 @@ public final class SliceActivity extends Activity {
     private void arrangeDialog() {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(24), dp(8), dp(24), 0);
         label(body, "Used when the app arranges models for you: when you slice without your own layout, and by Arrange all.", 13, muted, false);
-        CheckBox rotate = new CheckBox(this); rotate.setText("Turn models to fit more on the bed"); rotate.setTextColor(ink); rotate.setButtonTintList(ColorStateList.valueOf(teal)); rotate.setMinHeight(dp(48));
+        Switch rotate = new Switch(this); rotate.setText("Turn models to fit more on the bed"); rotate.setTextColor(ink); rotate.setMinHeight(dp(48)); WorkshopUi.switchColours(rotate, teal, dark);
         rotate.setChecked(settings.getBoolean("arrangeRotate", false)); body.addView(rotate);
-        CheckBox shrink = new CheckBox(this); shrink.setText("Shrink all models together until they fit"); shrink.setTextColor(ink); shrink.setButtonTintList(ColorStateList.valueOf(teal)); shrink.setMinHeight(dp(48));
+        Switch shrink = new Switch(this); shrink.setText("Shrink all models together until they fit"); shrink.setTextColor(ink); shrink.setMinHeight(dp(48)); WorkshopUi.switchColours(shrink, teal, dark);
         shrink.setChecked(settings.getBoolean("arrangeShrink", false)); body.addView(shrink);
         label(body, "No smaller than", 13, muted, false);
         Spinner least = spinner(body); List<String> percents = new ArrayList<>(); for (int p : MIN_PERCENT) percents.add(p + " % of their size");
@@ -1832,7 +1832,7 @@ public final class SliceActivity extends Activity {
     /** Filled teal (primary) or the soft secondary look, in place: the button keeps its text, listener and place. */
     private void restyle(Button button, boolean primary) {
         ColorStateList disabledAware = new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {muted, primary ? (dark ? 0xff00201c : Color.WHITE) : teal});
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(24));
         shape.setColor(primary ? new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {buttonColor, teal}) : ColorStateList.valueOf(buttonColor));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         button.setTextColor(disabledAware);

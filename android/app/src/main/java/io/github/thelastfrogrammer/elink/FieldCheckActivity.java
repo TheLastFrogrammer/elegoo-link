@@ -98,7 +98,7 @@ public final class FieldCheckActivity extends Activity {
 
     /** The chosen result is filled; "Problem" in the error colour so it stands out in the list. */
     private void style(Button button, boolean chosen, boolean bad) {
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(ui.dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(ui.dp(24));
         int fill = bad ? ui.error : ui.teal;
         shape.setColor(chosen ? fill : ui.button);
         button.setBackground(shape); button.setTextColor(chosen ? (ui.dark ? 0xff00201c : 0xffffffff) : bad ? ui.error : ui.teal);

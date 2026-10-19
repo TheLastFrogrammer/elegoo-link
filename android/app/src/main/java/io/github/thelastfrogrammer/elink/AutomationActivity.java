@@ -113,7 +113,7 @@ public final class AutomationActivity extends Activity {
     /** One rule as a row: name and what it does, its switch at the end; the row opens its choices. */
     private void ruleRow(LinearLayout list, Automation.Rule rule, boolean divider) {
         LinearLayout row = listRow(list, rule.name.isEmpty() ? "Unnamed rule" : rule.name, rule.summary(), divider, () -> ruleMenu(rule));
-        Switch on = new Switch(this); on.setChecked(rule.enabled); on.setContentDescription("Rule " + rule.name + " on"); on.setMinHeight(dp(48));
+        Switch on = new Switch(this); WorkshopUi.switchColours(on, accent, dark); on.setChecked(rule.enabled); on.setContentDescription("Rule " + rule.name + " on"); on.setMinHeight(dp(48));
         on.setOnCheckedChangeListener((v, checked) -> {
             if (checked && rule.changesPrinter()) {
                 new AlertDialog.Builder(this).setTitle("Let this rule change the printer?")
@@ -212,7 +212,7 @@ public final class AutomationActivity extends Activity {
         text(form, "Only if", 13, muted, true);
         EditText from = field(form, "From time, e.g. 22:00 (blank: any)", rule.fromMinute >= 0 ? Automation.clock(rule.fromMinute) : "", InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME);
         EditText to = field(form, "Until time, e.g. 07:00 (blank: any)", rule.toMinute >= 0 ? Automation.clock(rule.toMinute) : "", InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME);
-        CheckBox last = new CheckBox(this); last.setText("Only for a print marked as the last of the day (Print tab, Automations…)"); last.setTextColor(ink); last.setChecked(rule.lastPrintOnly); last.setMinHeight(dp(48)); form.addView(last);
+        Switch last = new Switch(this); last.setText("Only for a print marked as the last of the day (Print tab, Automations…)"); last.setTextColor(ink); last.setChecked(rule.lastPrintOnly); last.setMinHeight(dp(48)); form.addView(last); WorkshopUi.switchColours(last, accent, dark);
         EditText delay = field(form, "Wait minutes before acting (0–240)", rule.delayMinutes > 0 ? String.valueOf(rule.delayMinutes) : "", InputType.TYPE_CLASS_NUMBER);
         String[] condition = {rule.ifField};
         Button conditionButton = new Button(this); conditionButton.setAllCaps(false); conditionButton.setMinHeight(dp(48)); form.addView(conditionButton, new LinearLayout.LayoutParams(-1, -2));
@@ -315,17 +315,17 @@ public final class AutomationActivity extends Activity {
             default:
                 text(form, "Sends the Android broadcast " + AutomationRun.BROADCAST_ACTION + " with each fill-in as a text extra (event, file, layer, …). In Tasker: Event → System → Intent Received, action as written here. Any app on the phone can receive it.", 13, ink, false);
         }
-        CheckBox picture = null, chart = null, raw = null; EditText messageHeader = null;
+        Switch picture = null, chart = null, raw = null; EditText messageHeader = null;
         if (!a.kind.equals(Automation.LIGHT) && !a.kind.equals(Automation.BROADCAST)) {
-            if (!a.kind.equals(Automation.HA_EVENT)) { picture = new CheckBox(this); picture.setText("Attach the latest camera picture"); picture.setChecked(a.picture); picture.setTextColor(ink); picture.setMinHeight(dp(48)); form.addView(picture); }
-            chart = new CheckBox(this); chart.setText(a.kind.equals(Automation.HA_EVENT) ? "Also send a chart of the print to the “Print chart” camera" : "Attach a chart of this print (temperatures and progress)");
+            if (!a.kind.equals(Automation.HA_EVENT)) { picture = new Switch(this); picture.setText("Attach the latest camera picture"); picture.setChecked(a.picture); picture.setTextColor(ink); picture.setMinHeight(dp(48)); form.addView(picture); } WorkshopUi.switchColours(picture, accent, dark);
+            chart = new Switch(this); chart.setText(a.kind.equals(Automation.HA_EVENT) ? "Also send a chart of the print to the “Print chart” camera" : "Attach a chart of this print (temperatures and progress)"); WorkshopUi.switchColours(chart, accent, dark);
             chart.setChecked(a.chart); chart.setTextColor(ink); chart.setMinHeight(dp(48)); form.addView(chart);
         }
         if (a.kind.equals(Automation.WEBHOOK)) {
-            raw = new CheckBox(this); raw.setText("Send one picture as the whole body, the text in a header (ntfy and similar)"); raw.setChecked(a.rawImage); raw.setTextColor(ink); raw.setMinHeight(dp(48)); form.addView(raw);
+            raw = new Switch(this); raw.setText("Send one picture as the whole body, the text in a header (ntfy and similar)"); raw.setChecked(a.rawImage); raw.setTextColor(ink); raw.setMinHeight(dp(48)); form.addView(raw); WorkshopUi.switchColours(raw, accent, dark);
             messageHeader = field(form, "Header for the text (ntfy: Message)", a.messageHeader, InputType.TYPE_CLASS_TEXT);
         }
-        CheckBox fPicture = picture, fChart = chart, fRaw = raw; EditText fMessage = messageHeader;
+        Switch fPicture = picture, fChart = chart, fRaw = raw; EditText fMessage = messageHeader;
         EditText fTitle = title, fBody = body, fUrl = url, fHeader = header, fSecret = secret; RadioButton fOn = lightOn;
         new AlertDialog.Builder(this).setTitle(Automation.ACTIONS.get(a.kind)).setView(scroll).setPositiveButton("Done", (d, w) -> {
             if (fTitle != null) a.title = Automation.cap(fTitle.getText().toString(), 200);
@@ -484,7 +484,7 @@ public final class AutomationActivity extends Activity {
     private LinearLayout row(LinearLayout parent) { LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); parent.addView(row, new LinearLayout.LayoutParams(-1, -2)); return row; }
     private void action(LinearLayout row, String label, Runnable run) {
         Button button = new A11y.DimButton(this); button.setText(label); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setTextColor(accent);
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(chipOff); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(chipOff); shape.setCornerRadius(dp(24));
         button.setBackground(new android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         button.setOnClickListener(v -> run.run());
         LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(0, -2, 1); at.topMargin = dp(8); if (row.getChildCount() > 0) at.leftMargin = dp(8); row.addView(button, at);

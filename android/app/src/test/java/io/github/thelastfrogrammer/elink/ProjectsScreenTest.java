@@ -125,7 +125,7 @@ public class ProjectsScreenTest {
         button(screen.getWindow().getDecorView(), "Blue").performClick(); settle(); settle();
         assertEquals("#1565C0", screen.bookForTest().project(lamp.id).cover.getString("accent"));
         shot(screen, "project-cover.png");
-        button(screen.getWindow().getDecorView(), "‹ Shadow-story lamp").performClick(); settle();
+        button(screen.getWindow().getDecorView(), "Shadow-story lamp").performClick(); settle();
         button(screen.getWindow().getDecorView(), "Share or export…").performClick(); settle();
         android.app.AlertDialog share = org.robolectric.shadows.ShadowAlertDialog.getLatestAlertDialog();
         assertNotNull(button(share.getWindow().getDecorView(), "Share the project file…"));

@@ -294,7 +294,7 @@ public final class RecordingsActivity extends Activity {
         // Opened from the Print tab during a print: the other recordings are one tap away.
         LinearLayout back = new LinearLayout(this); back.setOrientation(LinearLayout.HORIZONTAL); content.addView(back);
         // A back link, as on the main screen's sections, rather than a full-width button.
-        TextView allLink = new TextView(this); allLink.setText("‹ All recordings"); allLink.setTextSize(15); allLink.setTextColor(dark ? 0xff5fd4c4 : 0xff00796b);
+        TextView allLink = new TextView(this); allLink.setText("All recordings"); allLink.setTextSize(15); allLink.setTextColor(ink); WorkshopUi.backArrow(allLink, ink);
         allLink.setGravity(android.view.Gravity.CENTER_VERTICAL); allLink.setMinHeight(dp(48)); allLink.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class)));
         allLink.setContentDescription("All recordings"); back.addView(allLink, new LinearLayout.LayoutParams(-2, -2));
         heading(StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")));
@@ -751,7 +751,7 @@ public final class RecordingsActivity extends Activity {
     private void action(LinearLayout row, String text, Runnable run) {
         Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setOnClickListener(v -> run.run());
         int accent = dark ? 0xff5fd4c4 : 0xff00796b; button.setTextColor(accent); button.setPadding(dp(10), dp(8), dp(10), dp(8));
-        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setColor(dark ? 0xff21343a : 0xffe2efed); shape.setCornerRadius(dp(12));
+        android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setColor(dark ? 0xff21343a : 0xffe2efed); shape.setCornerRadius(dp(24));
         button.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(8); if (row.getChildCount() > 0) layout.leftMargin = dp(8); row.addView(button, layout);
     }

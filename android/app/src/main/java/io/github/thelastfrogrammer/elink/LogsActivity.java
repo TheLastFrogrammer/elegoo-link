@@ -147,7 +147,7 @@ public final class LogsActivity extends Activity {
     }
     private void action(LinearLayout row, String label, Runnable run) {
         Button button = new A11y.DimButton(this); button.setText(label); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setTextColor(accent);
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(chipOff); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(chipOff); shape.setCornerRadius(dp(24));
         button.setBackground(new android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         button.setOnClickListener(v -> run.run());
         LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(0, -2, 1); at.topMargin = dp(8); if (row.getChildCount() > 0) at.leftMargin = dp(8); row.addView(button, at);

@@ -163,7 +163,7 @@ public final class SliceSettingsActivity extends Activity {
             public void afterTextChanged(Editable s) { }
         });
         searchHint = ui.label(top, "", 12, ui.muted, false);
-        changedOnly = new Switch(this); changedOnly.setText("Show changed only"); changedOnly.setTextColor(ui.ink); changedOnly.setTextSize(14);
+        changedOnly = new Switch(this); WorkshopUi.switchColours(changedOnly, ui.teal, ui.dark); changedOnly.setText("Show changed only"); changedOnly.setTextColor(ui.ink); changedOnly.setTextSize(14);
         changedOnly.setPadding(0, ui.dp(6), 0, ui.dp(6)); changedOnly.setMinHeight(ui.dp(48));
         top.addView(changedOnly, new LinearLayout.LayoutParams(-1, -2));
         changedOnly.setOnCheckedChangeListener((v, checked) -> filter());
@@ -355,7 +355,7 @@ public final class SliceSettingsActivity extends Activity {
         };
         switch (type) {
             case "bool": {
-                Switch toggle = new Switch(this); toggle.setChecked("1".equals(value)); toggle.setText(""); toggle.setMinHeight(ui.dp(48)); toggle.setMinWidth(ui.dp(48)); toggle.setContentDescription(heading);
+                Switch toggle = new Switch(this); WorkshopUi.switchColours(toggle, ui.teal, ui.dark); toggle.setChecked("1".equals(value)); toggle.setText(""); toggle.setMinHeight(ui.dp(48)); toggle.setMinWidth(ui.dp(48)); toggle.setContentDescription(heading);
                 LinearLayout.LayoutParams toggleLayout = new LinearLayout.LayoutParams(-2, -2); toggleLayout.leftMargin = ui.dp(8);
                 header.addView(toggle, 1, toggleLayout); // on the title line, before the ? badge
                 toggle.setOnCheckedChangeListener((v, checked) -> { set(key, checked ? "1" : "0", preset); showNote.run(); });

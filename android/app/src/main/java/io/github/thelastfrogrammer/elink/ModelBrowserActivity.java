@@ -81,7 +81,7 @@ public final class ModelBrowserActivity extends Activity {
         // Top: Done, where the page is (its host, so a look-alike sign-in page shows), More…; then the sites as tabs.
         LinearLayout top = new LinearLayout(this); top.setOrientation(LinearLayout.HORIZONTAL); top.setGravity(Gravity.CENTER_VERTICAL); top.setBackgroundColor(surface);
         root.addView(top, new LinearLayout.LayoutParams(-1, -2));
-        Button close = flat(top, "‹ Done", this::finishWithModels); close.setContentDescription("Close the browser");
+        Button close = flat(top, "Done", this::finishWithModels); WorkshopUi.backArrow(close, ink); close.setContentDescription("Close the browser");
         where = new TextView(this); where.setTextSize(13); where.setTextColor(muted); where.setMaxLines(2);   // the whole host, wrapped rather than cut, so its real ending shows
         where.setGravity(Gravity.CENTER); top.addView(where, new LinearLayout.LayoutParams(0, -2, 1)); A11y.polite(where);
         flat(top, "More…", this::moreMenu).setContentDescription("More browser options");

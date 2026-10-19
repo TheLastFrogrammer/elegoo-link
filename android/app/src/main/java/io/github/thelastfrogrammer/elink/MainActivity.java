@@ -79,7 +79,7 @@ public final class MainActivity extends Activity {
     }
     private void styleSegment(Button button, boolean selected) {
         if (button == null) return;
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12)); shape.setColor(selected ? TEAL : BUTTON);
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(24)); shape.setColor(selected ? TEAL : BUTTON);
         button.setBackground(shape); button.setTextColor(selected ? (dark ? 0xff00201c : Color.WHITE) : TEAL);
         button.setTypeface(Typeface.DEFAULT, selected ? Typeface.BOLD : Typeface.NORMAL);
         A11y.tab(button, selected);
@@ -95,7 +95,7 @@ public final class MainActivity extends Activity {
     private TextView pinProbeHelp, cloudStatus, cloudLiveLabel, lanHint;
     private Button cloudSignOut, cloudPrinters, probeButton;
     private TextView probeResult;
-    private CheckBox cloudBackground;
+    private CompoundButton cloudBackground;
     private Button loadFilament, unloadFilament, trayFilament, homeAll, jog, autoLevel, vibration, selfCheck;
     private ImageView fileThumbnail;
     private Button graphs;
@@ -127,7 +127,7 @@ public final class MainActivity extends Activity {
     private String cameraReported = "";
     private boolean scanningNow;
     private EditText host, access, serial;
-    private CheckBox remember;
+    private CompoundButton remember;
     private TextView connection, state, job, feedback, selected, faults, trays, identity, diagnostics;
     private Button connect, pause, stop, refresh, upload, pick, refill, check, forget, recentSlices;
     /** The Print tab while printing: the live camera on top (local stream, only while this tab is on screen), then the job with its thumbnail. */
@@ -286,7 +286,7 @@ public final class MainActivity extends Activity {
         host.setText(credentials.host().isEmpty() ? getPreferences(MODE_PRIVATE).getString("host", "") : credentials.host());
         access = input(connectionCard, "Access code (LAN Only)", true); access.setTypeface(Typeface.DEFAULT); access.setSaveEnabled(false); access.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
         lanHint = label(connectionCard, "Find the IP in printer Settings → Network. The access code appears after you turn on LAN Only.", 13, MUTED, false);
-        remember = new CheckBox(this); remember.setMinHeight(dp(48)); remember.setText("Remember access code securely on this phone"); remember.setChecked(credentials.remembers()); connectionCard.addView(remember);
+        remember = checkbox(connectionCard, "Remember access code securely on this phone", credentials.remembers());
         remember.setTextColor(INK); remember.setButtonTintList(tint(TEAL));
         LinearLayout connectRow = row(connectionCard);
         connect = rowButton(connectRow, "Connect", this::toggleConnection, true);
@@ -631,27 +631,27 @@ public final class MainActivity extends Activity {
         button(card(null), "Appearance: " + (settings.getInt("theme", 0) == 0 ? "Follow system" : dark ? "Dark" : "Light") + "…", this::appearanceDialog);
         currentSection = preferencesSection.body;
         LinearLayout preferences = card("Recordings and pictures");
-        CheckBox record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
+        CompoundButton record = checkbox(preferences, "Make print recordings", settings.getBoolean("recordPrints", true));
         record.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("recordPrints", enabled).apply());
         Button pictures = button(preferences, "", () -> pictureDialog(true));
         pictureDefault = pictures; showPictureDefault();
-        CheckBox visits = checkbox(preferences, "Take print pictures through the cloud", settings.getBoolean(PictureVisits.PREF, true));
+        CompoundButton visits = checkbox(preferences, "Take print pictures through the cloud", settings.getBoolean(PictureVisits.PREF, true));
         visits.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean(PictureVisits.PREF, enabled).apply(); if (!enabled) endVisit(); });
         label(preferences, "Through the cloud, each picture opens the printer's video for a few seconds: a little mobile data each time. They keep coming with the app closed while it watches through the cloud in the background (Settings › Printer connection).", 12, MUTED, false);
         LinearLayout notices = card("Notifications and watching");
         if (android.os.Build.VERSION.SDK_INT >= 36) {
-            CheckBox live = checkbox(notices, "Live progress in the status bar while printing", settings.getBoolean("liveProgress", true));
+            CompoundButton live = checkbox(notices, "Live progress in the status bar while printing", settings.getBoolean("liveProgress", true));
             live.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("liveProgress", enabled).apply());
         }
-        CheckBox alerts = checkbox(notices, "Completion and new fault notifications", settings.getBoolean("alerts", true));
+        CompoundButton alerts = checkbox(notices, "Completion and new fault notifications", settings.getBoolean("alerts", true));
         alerts.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alerts", enabled).apply());
-        CheckBox firstLayer = checkbox(notices, "Also when the first layer is done", settings.getBoolean("alertFirstLayer", false));
+        CompoundButton firstLayer = checkbox(notices, "Also when the first layer is done", settings.getBoolean("alertFirstLayer", false));
         firstLayer.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertFirstLayer", enabled).apply());
-        CheckBox watchBox = checkbox(notices, "Print watch: a print seems stuck or a heater drifts", settings.getBoolean("printWatch", true));
+        CompoundButton watchBox = checkbox(notices, "Print watch: a print seems stuck or a heater drifts", settings.getBoolean("printWatch", true));
         watchBox.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("printWatch", enabled).apply());
-        CheckBox guardianBox = checkbox(notices, "Print guardian (beta): pictures don't match the toolpath", settings.getBoolean("guardian", true));
+        CompoundButton guardianBox = checkbox(notices, "Print guardian (beta): pictures don't match the toolpath", settings.getBoolean("guardian", true));
         guardianBox.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean("guardian", enabled).apply(); Diagnostics.note(Diagnostics.GUARDIAN, enabled ? "turned on" : "turned off"); });
-        CheckBox alertPictures = checkbox(notices, "Add camera pictures to notifications", settings.getBoolean("alertPictures", true));
+        CompoundButton alertPictures = checkbox(notices, "Add camera pictures to notifications", settings.getBoolean("alertPictures", true));
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(notices, "Only notifications: nothing here pauses or stops a print.", 12, MUTED, false);
         listRow(notices, "How these work", "Permissions, the guardian's needs, layer alerts", true, () -> new AlertDialog.Builder(this).setTitle("Notifications and watching")
@@ -1146,8 +1146,10 @@ public final class MainActivity extends Activity {
     /** A tab: the back bar (shown in a section), then the front page; sections are added after it. */
     private void buildHub(int tab) {
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL); content.addView(page); pages[tab] = page;
-        Button back = new Button(this); back.setText("‹ " + FeatureIndex.TABS[tab]); back.setAllCaps(false); back.setTextSize(15); back.setTextColor(TEAL); back.setBackground(null);
-        back.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); back.setMinHeight(dp(48)); back.setMinimumHeight(dp(48)); back.setPadding(dp(4), 0, dp(12), 0);
+        // In a section: an arrow and the section's title, as one bar (set when it opens); it goes back to the tab's front page.
+        Button back = new Button(this); back.setText(FeatureIndex.TABS[tab]); back.setAllCaps(false); back.setTextSize(22); back.setTextColor(INK); back.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        back.setBackground(null); WorkshopUi.backArrow(back, INK); back.setStateListAnimator(null);
+        back.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); back.setMinHeight(dp(56)); back.setMinimumHeight(dp(56)); back.setPadding(dp(4), 0, dp(12), 0);
         back.setContentDescription("Back to " + FeatureIndex.TABS[tab]); back.setOnClickListener(v -> closeSection(tab)); back.setVisibility(View.GONE);
         LinearLayout.LayoutParams backLayout = new LinearLayout.LayoutParams(-2, -2); backLayout.topMargin = dp(8); page.addView(back, backLayout); backBars[tab] = back;
         LinearLayout front = new LinearLayout(this); front.setOrientation(LinearLayout.VERTICAL); page.addView(front); fronts[tab] = front;
@@ -1159,6 +1161,7 @@ public final class MainActivity extends Activity {
     private Section section(int tab, String title, String detail) {
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setVisibility(View.GONE); pages[tab].addView(body);
         TextView heading = label(body, title, 22, INK, true); A11y.heading(heading); heading.setPadding(dp(4), 0, 0, 0);
+        heading.setVisibility(View.GONE);   // the back bar carries the title
         Section section = new Section(tab, title, body); sections.add(section);
         if (sectionRows[tab] == null) {
             LinearLayout list = new LinearLayout(this); list.setOrientation(LinearLayout.VERTICAL); list.setPadding(dp(16), dp(4), dp(16), dp(4));
@@ -1175,9 +1178,9 @@ public final class MainActivity extends Activity {
     private void openSection(Section section) {
         if (section == null) return;
         int tab = section.tab; opened[tab] = section;
-        fronts[tab].setVisibility(View.GONE); backBars[tab].setVisibility(View.VISIBLE);
+        fronts[tab].setVisibility(View.GONE); backBars[tab].setVisibility(View.VISIBLE); backBars[tab].setText(section.title); A11y.heading(backBars[tab]);
         for (Section other : sections) if (other.tab == tab) other.body.setVisibility(other == section ? View.VISIBLE : View.GONE);
-        if (tab == page) { mainScroll.scrollTo(0, 0); main.post(() -> section.body.getChildAt(0).sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED)); }
+        if (tab == page) { mainScroll.scrollTo(0, 0); main.post(() -> backBars[tab].sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED)); }
         watchBack(); render();
     }
     private void closeSection(int tab) {
@@ -1711,11 +1714,11 @@ public final class MainActivity extends Activity {
     private void backupDialog() {
         LinearLayout body = dialogBody();
         long size = Backup.recordingsSize(this);
-        CheckBox recordings = checkbox(body, "Include the print recordings and their pictures (" + Math.max(1, size / (1024 * 1024)) + " MB)", false);
+        CompoundButton recordings = checkbox(body, "Include the print recordings and their pictures (" + Math.max(1, size / (1024 * 1024)) + " MB)", false);
         int projectCount = Backup.projectFiles(this).size(); long projectSize = Backup.projectFilesSize(this);
-        CheckBox projectFiles = checkbox(body, "Include the files kept for projects (" + projectCount + (projectCount == 1 ? " file, " : " files, ") + Math.max(1, projectSize / (1024 * 1024)) + " MB)", projectCount > 0);
+        CompoundButton projectFiles = checkbox(body, "Include the files kept for projects (" + projectCount + (projectCount == 1 ? " file, " : " files, ") + Math.max(1, projectSize / (1024 * 1024)) + " MB)", projectCount > 0);
         projectFiles.setEnabled(projectCount > 0);
-        CheckBox secrets = checkbox(body, "Include passwords, access codes and camera addresses, protected by a backup password", false);
+        CompoundButton secrets = checkbox(body, "Include passwords, access codes and camera addresses, protected by a backup password", false);
         EditText first = input(body, "Backup password", true), again = input(body, "The same password again", true);
         Runnable showFields = () -> { int v = secrets.isChecked() ? View.VISIBLE : View.GONE; first.setVisibility(v); again.setVisibility(v); };
         secrets.setOnCheckedChangeListener((view, on) -> showFields.run()); showFields.run();
@@ -1872,7 +1875,7 @@ public final class MainActivity extends Activity {
         LinearLayout body = dialogBody(); label(body, StatusPresentation.clean(name), 16, INK, true);
         label(body, "Check the build plate, material and sliced printer profile before starting.", 13, MUTED, false);
         subheading(body, "Checks");
-        CheckBox leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record a timelapse on the printer", false);
+        CompoundButton leveling = checkbox(body, "Run printer / bed check", true), force = checkbox(body, "Force bed leveling", false), timelapse = checkbox(body, "Record a timelapse on the printer", false);
         force.setOnCheckedChangeListener((view, checked) -> { if (checked) leveling.setChecked(true); });
         leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
         subheading(body, "Build plate");
@@ -2074,7 +2077,7 @@ public final class MainActivity extends Activity {
     private void printReview(JSONObject file, String storage, List<String[]> settingsShown, List<ReviewRow> rows, int count, int wrong, Runnable start, Runnable back) {
         android.app.Dialog page = new android.app.Dialog(this, dark ? android.R.style.Theme_Material_NoActionBar : android.R.style.Theme_Material_Light_NoActionBar);
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(BACKGROUND); root.setFitsSystemWindows(true);
-        Button change = new Button(this); change.setText("‹ Change settings"); change.setAllCaps(false); change.setTextSize(15); change.setTextColor(TEAL); change.setBackground(null);
+        Button change = new Button(this); change.setText("Change settings"); change.setAllCaps(false); change.setTextSize(16); change.setTextColor(INK); change.setBackground(null); WorkshopUi.backArrow(change, INK);
         change.setGravity(Gravity.CENTER_VERTICAL | Gravity.START); change.setMinHeight(dp(48)); change.setMinimumHeight(dp(48)); change.setPadding(dp(16), 0, dp(16), 0);
         root.addView(change, new LinearLayout.LayoutParams(-2, -2));
         ScrollView scroll = new ScrollView(this); LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(16), 0, dp(16), dp(16)); scroll.addView(body);
@@ -2426,13 +2429,13 @@ public final class MainActivity extends Activity {
         currentSection = haSection.body;
         LinearLayout card = card("Home Assistant");
         label(card, "Progress, temperatures, state and the latest picture to your MQTT broker; the sensors appear in Home Assistant by themselves. Read only: Home Assistant cannot control the printer through this.", 13, MUTED, false);
-        CheckBox on = checkbox(card, "Send to Home Assistant", settings.getBoolean("haEnabled", false));
+        CompoundButton on = checkbox(card, "Send to Home Assistant", settings.getBoolean("haEnabled", false));
         // The broker's details only while it is on (or being set up), so the page stays short.
         LinearLayout form = new LinearLayout(this); form.setOrientation(LinearLayout.VERTICAL); card.addView(form);
         LinearLayout outerCard = card; card = form;
         EditText host = input(card, "Broker address (for example homeassistant.local or 192.168.1.10)", false); host.setText(settings.getString("haHost", ""));
         EditText port = input(card, "Port", false); port.setInputType(InputType.TYPE_CLASS_NUMBER); port.setText(String.valueOf(settings.getInt("haPort", 1883)));
-        CheckBox tls = checkbox(card, "Use TLS (usually port 8883)", settings.getBoolean("haTls", false));
+        CompoundButton tls = checkbox(card, "Use TLS (usually port 8883)", settings.getBoolean("haTls", false));
         EditText user = input(card, "User name (optional)", false); user.setText(settings.getString("haUser", ""));
         EditText password = input(card, "Password (kept encrypted on this phone; leave empty to keep the saved one)", true);
         card = outerCard;
@@ -2641,7 +2644,7 @@ public final class MainActivity extends Activity {
     /** Fills a watch button with the accent colour, or returns it to the tonal style. */
     private void emphasise(Button button, boolean on) {
         if (!on) { styleButton(button); return; }
-        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(24));
         shape.setColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {BUTTON, TEAL}));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33ffffff), shape, null));
         button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, dark ? 0xff00201c : Color.WHITE}));
@@ -3265,7 +3268,7 @@ public final class MainActivity extends Activity {
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
     // ------------------------------------------------------------------ local and cloud together
 
-    private CheckBox followBox, localCameraBox;
+    private CompoundButton followBox, localCameraBox;
     private TextView followLabel, cameraTryLabel, folderLabel, listenLabel, otherAppLabel;
     private Button cameraTry, folderButton, folderStop, listenButton;
     /** The Printer tab's card for using this Wi-Fi alongside the cloud. Everything here only reads from the printer. */
@@ -3543,8 +3546,8 @@ public final class MainActivity extends Activity {
         subheading(body, "Picture");
         Spinner turn = spinner(body, new String[] {"As it comes", "Turned 90° right", "Turned upside down", "Turned 90° left"});
         turn.setSelection(camera.rotation / 90);
-        CheckBox mirror = checkbox(body, "Mirror (left to right)", camera.mirror);
-        CheckBox pictures = checkbox(body, "Takes the print pictures instead of the printer's camera", camera.pictures);
+        CompoundButton mirror = checkbox(body, "Mirror (left to right)", camera.mirror);
+        CompoundButton pictures = checkbox(body, "Takes the print pictures instead of the printer's camera", camera.pictures);
         label(body, "Print pictures go into recordings, timelapses, notifications, Home Assistant and automations. The print guardian checks them once this camera is lined up in 3D (Line up in 3D…).", 12, MUTED, false);
         TextView result = A11y.polite(label(body, "", 13, INK, false));
         ImageView preview = new ImageView(this); preview.setAdjustViewBounds(true); preview.setVisibility(View.GONE); body.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
@@ -3674,7 +3677,7 @@ public final class MainActivity extends Activity {
         Button button = new A11y.DimButton(this); button.setText(text); styleButton(button);
         if (primary) {
             // Disabled primary buttons fall back to the tonal colors so they do not look tappable.
-            GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(12));
+            GradientDrawable shape = new GradientDrawable(); shape.setCornerRadius(dp(24));
             shape.setColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {BUTTON, TEAL}));
             button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33ffffff), shape, null));
             button.setTextColor(new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, dark ? 0xff00201c : Color.WHITE}));
@@ -3786,11 +3789,16 @@ public final class MainActivity extends Activity {
     private ColorStateList tint(int color) { return new ColorStateList(new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}}, new int[] {MUTED, color}); }
     private void styleButton(Button button) {
         button.setAllCaps(false); button.setTextColor(tint(TEAL)); button.setMinHeight(dp(48));
-        GradientDrawable shape = new GradientDrawable(); shape.setColor(BUTTON); shape.setCornerRadius(dp(12));
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(BUTTON); shape.setCornerRadius(dp(24));
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2); layout.topMargin = dp(6); button.setLayoutParams(layout); button.setPadding(dp(10), dp(8), dp(10), dp(8));
     }
-    private CheckBox checkbox(LinearLayout parent, String text, boolean checked) { CheckBox view = new CheckBox(this); view.setMinHeight(dp(48)); view.setText(text); view.setTextColor(INK); view.setButtonTintList(tint(TEAL)); view.setChecked(checked); parent.addView(view); return view; }
+    /** A setting that is on or off: its words, with a switch at the end of the row. */
+    private CompoundButton checkbox(LinearLayout parent, String text, boolean checked) {
+        android.widget.Switch view = new android.widget.Switch(this); view.setMinHeight(dp(52)); view.setText(text); view.setTextColor(INK); view.setTextSize(15);
+        view.setSwitchPadding(dp(16)); view.setPadding(0, dp(4), 0, dp(4)); WorkshopUi.switchColours(view, TEAL, TRACK, dark); view.setChecked(checked);
+        parent.addView(view, new LinearLayout.LayoutParams(-1, -2)); return view;
+    }
     private static String colourWords(String hex) { String name = WorkshopUi.colourName(hex); return name == null ? "colour not reported" : name; }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }
