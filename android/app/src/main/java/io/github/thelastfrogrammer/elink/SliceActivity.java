@@ -119,11 +119,12 @@ public final class SliceActivity extends Activity {
 
     /** One filament slot: preset, optional CANVAS tray and colour. Slot k is G-code tool k - 1. */
     private final class Slot {
-        LinearLayout row; TextView title, swatch; Spinner preset, tray; Button settings;
+        LinearLayout row, details; TextView title, detail, swatch; Spinner preset, tray; Button settings;
         String colour, wanted; TrayPlan.Tray source; List<TrayPlan.Tray> trayChoices = new ArrayList<>();
         final Map<String, String> edits = new LinkedHashMap<>(); // this slot's filament settings changes
     }
     private EditText infill;
+    private LinearLayout modelRows, printerDetails; private TextView printerSummary; private Button moreModels;
     private Button chooseModels, removeModels, findModels, slice, cancel, useInFiles, saveCopy, restoreLast;
     private boolean choosePrimary = true;     // filled only while nothing is loaded: Slice is the main action after that
     private ProgressBar progress;
@@ -406,49 +407,67 @@ public final class SliceActivity extends Activity {
             Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT); intent.setType("*/*"); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); startActivityForResult(intent, PICK_MODELS);
         }, true);
-        removeModels = button(modelCard, "Remove models…", this::removeModelsDialog, false); removeModels.setVisibility(View.GONE);
-        findModels = button(modelCard, "Find models online…", () -> startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS), false);
+        // The models as rows (tap one for its filament or to remove it), then two short rows of actions; the rarer ones
+        // (arranging, model settings, calibration prints, removing several) sit in More…. Their buttons stay as hidden
+        // holders, so their state and wording keep working, and the More menu lists the ones that apply.
+        modelRows = new LinearLayout(this); modelRows.setOrientation(LinearLayout.VERTICAL); modelCard.addView(modelRows);
         restoreLast = button(modelCard, "Restore your last models and settings", this::restoreLastSelection, false); restoreLast.setVisibility(View.GONE);
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
-        editPlate = button(modelCard, "Edit layout…", this::openPlate, false);
-        autoLayout = button(modelCard, "Arrange automatically", () -> { placements = null; supportBoxes = null; showLayout(); }, false);
+        calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
+        LinearLayout modelActions = buttonRow(); modelCard.addView(modelActions);
+        ((LinearLayout) chooseModels.getParent()).removeView(chooseModels); modelActions.addView(chooseModels, new LinearLayout.LayoutParams(0, -2, 1));
+        editPlate = rowButton(modelActions, "Edit layout…", this::openPlate, false);
+        LinearLayout moreActions = buttonRow(); modelCard.addView(moreActions);
+        findModels = rowButton(moreActions, "Find online…", () -> startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS), false);
+        findModels.setContentDescription("Find models online");
+        moreModels = rowButton(moreActions, "More…", this::modelMenu, false);
+        moreModels.setContentDescription("More: arrange, model settings, calibration prints, remove models");
+        LinearLayout holders = new LinearLayout(this); holders.setOrientation(LinearLayout.VERTICAL); holders.setVisibility(View.GONE); modelCard.addView(holders);
+        removeModels = button(holders, "Remove models…", this::removeModelsDialog, false); removeModels.setVisibility(View.GONE);
+        autoLayout = button(holders, "Arrange automatically", () -> { placements = null; supportBoxes = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
-        arrangeOptions = button(modelCard, "", this::arrangeDialog, false); showArrangeOptions();
-        // Rarely needed: per-model settings and calibration prints. Opens by itself while either is in use.
+        arrangeOptions = button(holders, "", this::arrangeDialog, false); showArrangeOptions();
         LinearLayout modelExtrasBox = new LinearLayout(this);
         objectButton = button(modelExtrasBox, "Model settings…", this::chooseObjectSettings, false);
-        calibrationLabel = label(modelExtrasBox, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
         calibrate = button(modelExtrasBox, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
-        modelExtrasBody = modelExtrasBox; modelExtras = section(modelCard, "Model settings and calibration", modelExtrasBox);
+        modelExtrasBody = modelExtrasBox; modelExtras = section(holders, "Model settings and calibration", modelExtrasBox);
 
         LinearLayout filamentCard = card("2 · Printer and filaments");
-        label(filamentCard, "Printer", 12, muted, false); printerSpinner = spinner(filamentCard);
-        label(filamentCard, "Print profile", 12, muted, false); processSpinner = spinner(filamentCard);
+        // The printer and print profile in one line; tap it to change either.
+        printerDetails = new LinearLayout(this); printerDetails.setOrientation(LinearLayout.VERTICAL);
+        printerSummary = summaryRow(filamentCard, "Printer and print profile", () -> toggle(printerDetails, printerSummary));
+        filamentCard.addView(printerDetails); printerDetails.setVisibility(View.GONE);
+        label(printerDetails, "Printer", 12, muted, false); printerSpinner = spinner(printerDetails);
+        label(printerDetails, "Print profile", 12, muted, false); processSpinner = spinner(printerDetails);
         printerSpinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { loadCompatible(selected(printerSpinner)); }
             @Override public void onNothingSelected(AdapterView<?> parent) { }
         });
         TextView filamentsHeading = label(filamentCard, "Filaments", 14, ink, true); ((LinearLayout.LayoutParams) filamentsHeading.getLayoutParams()).topMargin = dp(14);
-        label(filamentCard, "Filament 1 is T0, Filament 2 is T1, and so on.", 13, muted, false);
-        fillTrays = button(filamentCard, "Fill from CANVAS trays", this::fillFromTrays, false);
+        label(filamentCard, "Filament 1 is T0, 2 is T1, and so on. Tap one to change it.", 13, muted, false);
         traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
         slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
         LinearLayout slotButtons = buttonRow(); filamentCard.addView(slotButtons);
-        addSlot = rowButton(slotButtons, "Add filament", () -> { addSlot(null); showModels(); updateButtons(); }, false);
-        removeSlot = rowButton(slotButtons, "Remove last filament", () -> { removeLastSlot(); showModels(); updateButtons(); }, false);
+        fillTrays = rowButton(slotButtons, "From trays", this::fillFromTrays, false); fillTrays.setContentDescription("Fill the filaments from the CANVAS trays");
+        addSlot = rowButton(slotButtons, "Add", () -> { addSlot(null); showModels(); updateButtons(); }, false); addSlot.setContentDescription("Add a filament");
+        removeSlot = rowButton(slotButtons, "Remove", () -> { removeLastSlot(); showModels(); updateButtons(); }, false); removeSlot.setContentDescription("Remove the last filament");
         modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(modelAssign);
         addSlot(null);
 
         LinearLayout settingsCard = card("3 · Print settings");
-        label(settingsCard, "Leave a setting on “Preset” to use the print profile's value.", 13, muted, false);
-        TextView infillLabel = label(settingsCard, "Infill density (%)", 12, muted, false);
+        label(settingsCard, "“Preset” keeps the print profile's value.", 13, muted, false);
+        // Infill and brim side by side (two columns, one under the other with large text), supports on its own: its choices are long.
+        boolean narrow = getResources().getConfiguration().fontScale >= 1.3f;
+        LinearLayout quick = new LinearLayout(this); quick.setOrientation(narrow ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL); settingsCard.addView(quick, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout infillColumn = column(quick, narrow, 0), brimColumn = column(quick, narrow, dp(12));
+        TextView infillLabel = label(infillColumn, "Infill density (%)", 12, muted, false);
         infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
-        infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setMinHeight(dp(52)); settingsCard.addView(infill, new LinearLayout.LayoutParams(-1, -2));
+        infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setMinHeight(dp(52)); infillColumn.addView(infill, new LinearLayout.LayoutParams(-1, -2));
+        label(brimColumn, "Brim", 12, muted, false);
+        brimSpinner = spinner(brimColumn); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
         label(settingsCard, "Supports", 12, muted, false);
         supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList(SUPPORT_CHOICES), "Preset");
-        label(settingsCard, "Brim", 12, muted, false);
-        brimSpinner = spinner(settingsCard); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
         settingsSummary = label(settingsCard, "", 13, muted, false);
         // Overrides from All settings: opens by itself when there are any, so the changes are never hidden.
         LinearLayout settingsBox = new LinearLayout(this);
@@ -1100,7 +1119,13 @@ public final class SliceActivity extends Activity {
         String[] names = new String[models.size()]; boolean[] chosen = new boolean[models.size()];
         for (int i = 0; i < names.length; i++) names[i] = models.get(i).getName() + " · " + size(models.get(i).length());
         new AlertDialog.Builder(this).setTitle("Remove which models?").setMultiChoiceItems(names, chosen, (d, which, on) -> chosen[which] = on)
-            .setNegativeButton("Cancel", null).setPositiveButton("Remove", (d, w) -> {
+            .setNegativeButton("Cancel", null).setPositiveButton("Remove", (d, w) -> removeModels(chosen)).show();
+    }
+    /** Takes the chosen models off the plate; the rest are read again (the layout and per-model settings start over). */
+    private void removeModels(boolean[] chosen) {
+        if (models.isEmpty() || busy || chosen.length != models.size()) return;
+        {
+            {
                 List<File> keep = new ArrayList<>(); List<Integer> keepSlots = new ArrayList<>();
                 for (int i = 0; i < chosen.length; i++) if (!chosen[i]) { keep.add(models.get(i)); if (i < modelSlots.size()) keepSlots.add(modelSlots.get(i)); }
                 if (keep.size() == models.size()) return;
@@ -1123,7 +1148,8 @@ public final class SliceActivity extends Activity {
                         showModels(); showProject(); showLayout(); status.setText("Removed. " + models.size() + " model file" + (models.size() == 1 ? "" : "s") + " left."); status.setTextColor(ink); updateButtons();
                     });
                 });
-            }).show();
+            }
+        }
     }
     /**
      * Pick and preview folders this screen made or took over. Only these are cleaned up by it: another Slice screen (opened
@@ -1149,32 +1175,50 @@ public final class SliceActivity extends Activity {
         }
     }
     private void showModels() {
-        modelAssign.removeAllViews();
+        modelAssign.removeAllViews(); modelRows.removeAllViews(); modelsLabel.setVisibility(View.VISIBLE);
         while (modelSlots.size() > models.size()) modelSlots.remove(modelSlots.size() - 1);
         // New models: 3MF files keep their own assignment; others take the next slot in turn.
         while (modelSlots.size() < models.size()) { int i = modelSlots.size(); modelSlots.add(is3mf(models.get(i)) ? 0 : i % Math.max(1, slots.size()) + 1); }
         if (models.isEmpty()) { modelsLabel.setText("STL, 3MF, OBJ, STEP or Draco files, or a ZIP of them. All models share one layout."); modelsLabel.setTextColor(muted); return; }
-        StringBuilder names = new StringBuilder();
-        for (File file : models) names.append(names.length() > 0 ? "\n" : "").append(file.getName()).append(" (").append(size(file.length())).append(")");
-        modelsLabel.setText(names.toString()); modelsLabel.setTextColor(ink);
-        if (slots.size() < 2) return;
-        TextView heading = label(modelAssign, "Filament for each model", 14, ink, true);
-        label(modelAssign, "STL, OBJ and STEP files use one filament each. A 3MF keeps its own colours and parts.", 13, muted, false);
-        ((LinearLayout.LayoutParams) heading.getLayoutParams()).topMargin = dp(14);
+        modelsLabel.setVisibility(View.GONE);
         for (int i = 0; i < models.size(); i++) {
             File model = models.get(i); int index = i;
-            List<String> choices = new ArrayList<>(), colours = new ArrayList<>();
-            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Filament 1" + slotSummary(1)); colours.add(is3mf(model) ? null : slots.get(0).colour);
-            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) { choices.add("Filament " + k + slotSummary(k)); colours.add(slots.get(k - 1).colour); }
-            label(modelAssign, model.getName(), 13, ink, false);
-            Spinner spinner = spinner(modelAssign);
-            int slot = Math.min(modelSlots.get(i), slots.size());
-            fillColoured(spinner, choices, colours, choices.get(is3mf(model) ? slot : Math.max(slot, 1) - 1));
-            spinner.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-                @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { modelSlots.set(index, is3mf(model) ? position : position + 1); }
-                @Override public void onNothingSelected(AdapterView<?> p) { }
-            });
+            String detail = size(model.length());
+            if (slots.size() >= 2) {
+                int slot = Math.min(modelSlots.get(i), slots.size());
+                detail += " · " + (is3mf(model) && slot == 0 ? "its own colours and parts" : "Filament " + Math.max(slot, 1) + slotSummary(Math.max(slot, 1)));
+            }
+            modelRow(model.getName(), detail, () -> modelDialog(index));
         }
+    }
+    /** One model's row: its name, size and filament, tappable. */
+    private void modelRow(String name, String detail, Runnable action) {
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.VERTICAL); row.setMinimumHeight(dp(56)); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(6), 0, dp(6));
+        TextView title = new TextView(this); title.setText(name); title.setTextColor(ink); title.setTextSize(15); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        TextView line = new TextView(this); line.setText(detail); line.setTextColor(muted); line.setTextSize(12);
+        row.addView(title); row.addView(line);
+        row.setOnClickListener(v -> action.run()); A11y.button(row); row.setContentDescription(name + ", " + detail + ". Change");
+        if (modelRows.getChildCount() > 0) { View hairline = new View(this); hairline.setBackgroundColor(dark ? 0xff2a3a40 : 0xffdbe6e6); modelRows.addView(hairline, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
+        modelRows.addView(row, new LinearLayout.LayoutParams(-1, -2));
+    }
+    /** A model's choices: which filament it prints with (with two or more), or remove it from the plate. */
+    private void modelDialog(int index) {
+        if (busy || index >= models.size()) return;
+        File model = models.get(index);
+        AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle(model.getName()).setNegativeButton("Close", null)
+            .setNeutralButton("Remove this model", (d, w) -> { boolean[] chosen = new boolean[models.size()]; chosen[index] = true; removeModels(chosen); });
+        if (slots.size() >= 2) {
+            List<String> choices = new ArrayList<>();
+            choices.add(is3mf(model) ? "As in the 3MF (painting and parts)" : "Filament 1" + slotSummary(1));
+            for (int k = is3mf(model) ? 1 : 2; k <= slots.size(); k++) choices.add("Filament " + k + slotSummary(k));
+            int slot = Math.min(modelSlots.get(index), slots.size());
+            int checked = is3mf(model) ? slot : Math.max(slot, 1) - 1;
+            builder.setSingleChoiceItems(choices.toArray(new String[0]), checked, (d, position) -> {
+                modelSlots.set(index, is3mf(model) ? position : position + 1); d.dismiss(); showModels();
+            });
+        } else builder.setMessage(size(model.length()) + ". With two or more filaments, choose here which one this model prints with.");
+        builder.show();
     }
 
     /** The first model file that is a 3MF project (plates or settings), or null. */
@@ -1472,20 +1516,27 @@ public final class SliceActivity extends Activity {
         Slot slot = new Slot(); int number = slots.size() + 1;
         slot.row = new LinearLayout(this); slot.row.setOrientation(LinearLayout.VERTICAL); slot.row.setPadding(0, dp(6), 0, dp(6));
         LinearLayout header = new LinearLayout(this); header.setOrientation(LinearLayout.HORIZONTAL); header.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout names = new LinearLayout(this); names.setOrientation(LinearLayout.VERTICAL); names.setMinimumHeight(dp(48)); names.setGravity(android.view.Gravity.CENTER_VERTICAL);
         slot.title = new TextView(this); slot.title.setText("Filament " + number + " · T" + (number - 1)); slot.title.setTextColor(ink); slot.title.setTextSize(14); slot.title.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        header.addView(slot.title, new LinearLayout.LayoutParams(0, -2, 1));
+        names.addView(slot.title);
+        slot.detail = new TextView(this); slot.detail.setTextColor(muted); slot.detail.setTextSize(12); names.addView(slot.detail);
+        header.addView(names, new LinearLayout.LayoutParams(0, -2, 1));
+        // Its profile and tray open under it on a tap; closed, the line under the name says what they are.
+        names.setOnClickListener(v -> toggle(slot.details, null)); A11y.button(names);
+        names.setContentDescription(slot.title.getText() + ", change its filament profile or tray");
         slot.swatch = new TextView(this);
         slot.swatch.setOnClickListener(view -> chooseColour(slot)); slot.swatch.setContentDescription("Filament " + number + " colour"); A11y.button(slot.swatch);
         header.addView(slot.swatch, new LinearLayout.LayoutParams(dp(48), dp(48)));
         slot.settings = styled("Settings…", () -> openFilamentSettings(slots.indexOf(slot)), false);
         LinearLayout.LayoutParams settingsLayout = new LinearLayout.LayoutParams(-2, -2); settingsLayout.leftMargin = dp(8); header.addView(slot.settings, settingsLayout);
         slot.row.addView(header);
-        slot.preset = spinner(slot.row); A11y.name(slot.preset, () -> slot.title.getText() + " filament profile");
+        slot.details = new LinearLayout(this); slot.details.setOrientation(LinearLayout.VERTICAL); slot.row.addView(slot.details); slot.details.setVisibility(View.GONE);
+        slot.preset = spinner(slot.details); A11y.name(slot.preset, () -> slot.title.getText() + " filament profile");
         slot.preset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { if (slots.size() > 1 && !models.isEmpty()) showModels(); updateButtons(); }
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
-        slot.tray = spinner(slot.row); A11y.name(slot.tray, () -> slot.title.getText() + " tray"); ((LinearLayout.LayoutParams) slot.tray.getLayoutParams()).topMargin = dp(4);
+        slot.tray = spinner(slot.details); A11y.name(slot.tray, () -> slot.title.getText() + " tray"); ((LinearLayout.LayoutParams) slot.tray.getLayoutParams()).topMargin = dp(4);
         slot.tray.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) {
                 TrayPlan.Tray chosen = position > 0 && position <= slot.trayChoices.size() ? slot.trayChoices.get(position - 1) : null;
@@ -1648,6 +1699,49 @@ public final class SliceActivity extends Activity {
         allSettings.setEnabled(!busy && presetsReady);
         addSlot.setEnabled(!busy && slots.size() < TrayPlan.MAX_TOOLS); removeSlot.setEnabled(!busy && slots.size() > 1); fillTrays.setEnabled(!busy);
         for (int i = 0; i < modelAssign.getChildCount(); i++) modelAssign.getChildAt(i).setEnabled(!busy);
+        moreModels.setEnabled(!busy); findModels.setVisibility(View.VISIBLE);
+        for (int i = 0; i < modelRows.getChildCount(); i++) modelRows.getChildAt(i).setEnabled(!busy);
+        // One line per closed group: what is chosen now.
+        String printerNow = selected(printerSpinner), processNow = selected(processSpinner);
+        String summary = printerNow == null ? "Loading presets…" : printerNow.replaceFirst("^Elegoo ", "") + (processNow == null ? "" : " · " + processNow.replaceFirst(" @.*$", ""));
+        if (!summary.contentEquals(printerSummary.getText())) printerSummary.setText(summary);
+        for (Slot slot : slots) {
+            String preset = selected(slot.preset), tray = slot.tray.getSelectedItemPosition() > 0 ? selected(slot.tray) : null;
+            String line = (preset == null ? "No filament profile" : preset.replaceFirst(" @.*$", "")) + (tray == null ? "" : " · " + tray);
+            if (!line.contentEquals(slot.detail.getText())) slot.detail.setText(line);
+            ((View) slot.title.getParent()).setEnabled(!busy);
+        }
+    }
+    /** One column of a two-column row (or a full-width block when `stacked`). */
+    private LinearLayout column(LinearLayout row, boolean stacked, int gap) {
+        LinearLayout c = new LinearLayout(this); c.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams layout = stacked ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
+        if (!stacked) layout.leftMargin = gap; row.addView(c, layout); return c;
+    }
+    /** Opens or closes a group under its summary line. */
+    private void toggle(View body, TextView summary) {
+        boolean open = body.getVisibility() != View.VISIBLE;
+        body.setVisibility(open ? View.VISIBLE : View.GONE);
+        if (summary != null) A11y.expandable(summary, open);
+    }
+    /** A tappable one-line summary with a small caption above it and a chevron. */
+    private TextView summaryRow(LinearLayout parent, String caption, Runnable action) {
+        label(parent, caption, 12, muted, false);
+        TextView line = new TextView(this); line.setTextColor(ink); line.setTextSize(15); line.setMinHeight(dp(48)); line.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        line.setCompoundDrawablePadding(dp(8)); line.setText("Loading presets…"); line.setOnClickListener(v -> action.run()); A11y.button(line);
+        TextView chevron = new TextView(this); chevron.setText("▾"); chevron.setTextColor(muted); chevron.setTextSize(16);
+        LinearLayout row = new LinearLayout(this); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        row.addView(line, new LinearLayout.LayoutParams(0, -2, 1)); row.addView(chevron); row.setOnClickListener(v -> action.run());
+        parent.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        return line;
+    }
+    /** The rarer model actions that apply now, as one menu (each opens what its button opened). */
+    private void modelMenu() {
+        List<String> names = new ArrayList<>(); List<Button> actions = new ArrayList<>();
+        for (Button b : new Button[] {autoLayout, arrangeOptions, objectButton, calibrate, removeModels})
+            if (b.getVisibility() == View.VISIBLE && b.isEnabled() && b.getText().length() > 0) { names.add(b.getText().toString()); actions.add(b); }
+        if (names.isEmpty()) return;
+        new AlertDialog.Builder(this).setTitle("Models").setItems(names.toArray(new String[0]), (d, which) -> actions.get(which).performClick()).setNegativeButton("Close", null).show();
     }
 
     private String displayName(Uri uri) {
