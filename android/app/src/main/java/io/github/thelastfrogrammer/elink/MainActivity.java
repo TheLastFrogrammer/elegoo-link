@@ -352,8 +352,10 @@ public final class MainActivity extends Activity {
         monitorBadge = overlayChip(monitorFrame, "● Live", Gravity.TOP | Gravity.START, null); monitorBadge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         LinearLayout overlayButtons = new LinearLayout(this); overlayButtons.setOrientation(LinearLayout.HORIZONTAL);
         monitorFrame.addView(overlayButtons, new FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM | Gravity.END));
-        overlayChip(overlayButtons, "Snapshot", 0, this::saveSnapshot).setContentDescription("Save a snapshot of the camera to the phone");
-        overlayChip(overlayButtons, "Full screen", 0, this::cameraFullScreen).setContentDescription("Show the camera full screen");
+        snapshotChip = overlayChip(overlayButtons, "Snapshot", 0, this::saveSnapshot); snapshotChip.setContentDescription("Save a snapshot of the camera to the phone");
+        fullChip = overlayChip(overlayButtons, "Full screen", 0, () -> { if (toolpathPreviewOn()) openLiveToolpath(); else cameraFullScreen(); }); fullChip.setContentDescription("Show the camera full screen");
+        // Chosen in Print options: the running print's toolpath, drawn up to the nozzle, in place of the camera.
+        toolpathPreview = new LiveToolpathPreview(this, monitorFrame, 1, dark ? 0xff0e1417 : 0xfff2f5f6, dark, this::openLiveToolpath, () -> main.post(this::render));
         monitorCameraInfo = label(monitorBody, "", 12, MUTED, false);
         LinearLayout cameraButtons = row(monitorBody);
         monitorCameraStart = rowButton(cameraButtons, "Watch camera", this::monitorCameraTap, false);
@@ -1567,6 +1569,11 @@ public final class MainActivity extends Activity {
                 .setMessage("The app keeps watching through the Elegoo cloud in the background, with a notification, so this print's recording carries on. It checks about every 30 seconds while a print runs; the phone stays awake for it until the print ends. Camera pictures through the cloud still need the app open. Turn it off again in Settings › Printer connection.")
                 .setNegativeButton("Not now", null).setPositiveButton("Keep recording", (d, w) -> cloudBackground.setChecked(true)).show());
         }
+        JSONObject machineNow = snapshot.optJSONObject("machine_status");
+        if (machineNow != null && machineNow.optInt("status", -1) == 2) {
+            boolean toolpath = toolpathPreviewOn();
+            names.add(toolpath ? "Preview: show the camera" : "Preview: show the live toolpath"); actions.add(() -> choosePreview(!toolpath));
+        }
         names.add("Camera tools…"); actions.add(() -> openSection(cameraSection));
         new AlertDialog.Builder(this).setTitle("Print options").setItems(names.toArray(new String[0]), (d, which) -> actions.get(which).run()).setNegativeButton("Close", null).show();
     }
@@ -2402,6 +2409,16 @@ public final class MainActivity extends Activity {
     /** Settings › Home Assistant: the user's broker, the printer's status published read only with discovery. */
     private Section haSection; private LinearLayout recentPrints; private TextView recentEmpty;
     private TextView haStatus, projectsLine, reach, fileSource;
+    private TextView snapshotChip, fullChip; private LiveToolpathPreview toolpathPreview;
+    /** The Print tab's preview shows the live toolpath instead of the camera (Print options). */
+    private boolean toolpathPreviewOn() { return "toolpath".equals(settings.getString("printPreview", "camera")); }
+    private void openLiveToolpath() { startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)); }
+    private void choosePreview(boolean toolpath) {
+        settings.edit().putString("printPreview", toolpath ? "toolpath" : "camera").putBoolean("printCameraHidden", false).apply();
+        if (toolpath && (cameraPlayer != null || cloudVideo != null || extraFeed != null) && opened[PRINT] != cameraSection) stopCamera();
+        if (!toolpath) { toolpathPreview.release(); monitorCameraTried = false; }
+        render();
+    }
     private Button monitorHide; private LinearLayout printNav; private NavRow navToolpath, navSlice, navOptions, navRecording, navAgain, navCanvas, navRefresh; private long fileSourceAt; private String fileSourceFor = ""; private String feedbackTarget = "";
     private void buildHomeAssistant() {
         currentSection = haSection.body;
@@ -2844,10 +2861,11 @@ public final class MainActivity extends Activity {
         // Camera on top while printing. It starts by itself only after the user started it here once, and only while this tab is on screen.
         boolean cloudCameraOk = !ready && printer != null && printer.cloudSignedIn && !printer.cloudSerial.isEmpty() && printer.cloudOnline == 1;
         ExtraCameras.Camera addedSource = monitorExtra();
-        boolean showCamera = inJobNow && (ready || cloudCameraOk || addedSource != null);
-        ((View) monitorSourceButton.getParent()).setVisibility(extraCount > 0 ? View.VISIBLE : View.GONE);
+        boolean toolpathShown = inJobNow && printer != null && toolpathPreviewOn();
+        boolean showCamera = !toolpathShown && inJobNow && (ready || cloudCameraOk || addedSource != null);
+        ((View) monitorSourceButton.getParent()).setVisibility(extraCount > 0 && !toolpathShown ? View.VISIBLE : View.GONE);
         monitorSourceButton.setText("Camera: " + (addedSource == null ? "the printer's" : addedSource.name) + " ▾");
-        monitorCamera.setVisibility(showCamera ? View.VISIBLE : View.GONE);
+        monitorCamera.setVisibility(showCamera || toolpathShown ? View.VISIBLE : View.GONE);
         boolean cameraSectionOpen = opened[PRINT] == cameraSection;   // its own Start camera keeps the stream when nothing prints
         if (page == PRINT && (cameraPlayer != null || cloudVideo != null || extraFeed != null) && !showCamera && !cameraSectionOpen) stopCamera();
         boolean ownCamera = ready || printer != null && printer.localCamera();   // the printer's own stream, locally or alongside the cloud
@@ -2858,8 +2876,22 @@ public final class MainActivity extends Activity {
         monitorImage.setVisibility(showCamera && (addedSource != null ? extraFeed != null : ownCamera ? cameraPlayer != null || lastFrame != null : cloudVideo != null) ? View.VISIBLE : View.GONE);
         monitorCameraStart.setText(cameraPlayer != null || cloudVideo != null || extraFeed != null ? "Stop camera" : "Watch camera");
         monitorBadge.setText(extraFeed != null && extraShown != null ? "● Live · " + extraShown.name : cloudVideo != null ? (cloudVideo.playing() ? "● Live · cloud" : "Connecting…") : cameraPlayer != null ? "● Live" : "Last picture");
+        // The toolpath instead of the camera: drawn only while this tab is on screen, freed otherwise.
+        if (toolpathShown && page == PRINT && active && !cameraHidden) {
+            monitorImage.setVisibility(View.GONE); monitorFrame.setVisibility(View.VISIBLE);
+            toolpathPreview.update(printer);
+            monitorBadge.setText(toolpathPreview.drawing() ? "● Live toolpath" : "Toolpath");
+            monitorCameraInfo.setText(toolpathPreview.note()); monitorCameraInfo.setTextColor(MUTED);
+        } else if (toolpathPreview != null) {
+            toolpathPreview.release();
+            if (monitorCameraInfo.getText().toString().equals(toolpathPreview.note())) monitorCameraInfo.setText("");
+        }
+        snapshotChip.setVisibility(toolpathShown ? View.GONE : View.VISIBLE);
+        fullChip.setContentDescription(toolpathShown ? "Open Live toolpath" : "Show the camera full screen");
+        monitorCameraStart.setText(toolpathShown ? "Show the camera" : monitorCameraStart.getText());
+        monitorHide.setText(toolpathShown ? "Hide preview" : "Hide camera"); monitorShow.setText(toolpathShown ? "Show preview" : "Show camera");
         // Two empty channels in a row: the printer's camera service is probably stuck; say so before the next 20 s wait.
-        if (!ready && cloudVideo == null && CloudVideo.emptyStreak() >= 2) {
+        if (!toolpathShown && !ready && cloudVideo == null && CloudVideo.emptyStreak() >= 2) {
             monitorCameraInfo.setText("The printer's camera has not answered " + CloudVideo.emptyStreak() + " times in a row. Its camera service is probably stuck: restart the printer, then tap Watch camera.");
             monitorCameraInfo.setTextColor(ERROR); monitorCameraInfo.setVisibility(View.VISIBLE);
         } else if (CloudVideo.emptyStreak() < 2 && monitorCameraInfo.getText().toString().startsWith("The printer's camera has not answered")) monitorCameraInfo.setText("");
@@ -3225,8 +3257,8 @@ public final class MainActivity extends Activity {
     @Override protected void onStop() {
         if (printer != null && printer.usingCloud() && !printer.cloudBackground() && printer.recorder != null && printer.recorder.current() != null)
             Diagnostics.note(Diagnostics.STATUS, "the print's recording pauses while the app is closed: watching through the cloud in the background is off (Print options or Settings turn it on)");
-        active = false; stopCamera(); pictureVisits.pause(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
-    @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); if (ShowcaseService.listener == showcaseListener && !isChangingConfigurations()) ShowcaseService.listener = null; if (scanning != null) scanning.close(); stopCamera(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
+        active = false; stopCamera(); if (toolpathPreview != null) toolpathPreview.release(); pictureVisits.pause(); main.removeCallbacks(clock); if (printer != null) { printer.observe(null); printer.cloudVisible(false); } super.onStop(); }
+    @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); if (ShowcaseService.listener == showcaseListener && !isChangingConfigurations()) ShowcaseService.listener = null; if (scanning != null) scanning.close(); stopCamera(); if (toolpathPreview != null) toolpathPreview.shutdown(); if (printer != null) printer.observe(null); if (bound) unbindService(binding); checks.shutdownNow(); main.removeCallbacksAndMessages(null); super.onDestroy(); }
     @Override protected void onSaveInstanceState(Bundle out) { super.onSaveInstanceState(out); out.putString("exportHash", pendingExportHash); out.putString("exportUri", pendingExportUri == null ? "" : pendingExportUri.toString()); out.putString("host", host.getText().toString()); out.putString("serial", serial.getText().toString()); out.putString("diagnostics", diagnostics.getText().toString()); out.putString("profileName", profileName.getText().toString()); out.putBoolean("remember", remember.isChecked()); out.putInt("tab", page); }
     private static final class TransientInputs { String host, code; Bitmap snapshot; }
     @Override public Object onRetainNonConfigurationInstance() { TransientInputs state = new TransientInputs(); state.host = host.getText().toString(); state.code = access.getText().toString(); state.snapshot = pendingSnapshot; return state; }
@@ -3574,6 +3606,7 @@ public final class MainActivity extends Activity {
         dialog.show();
     }
     private void monitorCameraTap() {
+        if (toolpathPreviewOn()) { choosePreview(false); return; }
         ExtraCameras.Camera chosen = monitorExtra();
         if (chosen != null) { if (extraFeed != null) stopCamera(); else watchExtra(chosen); render(); return; }
         if (printer != null && (printer.ready() || printer.localCamera())) {

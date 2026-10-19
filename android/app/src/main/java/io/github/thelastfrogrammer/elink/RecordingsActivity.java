@@ -149,8 +149,22 @@ public final class RecordingsActivity extends Activity {
     private android.widget.EditText notesField, tagsField;
     private void journalCard(PrintRecorder.Recording recording) {
         editing = recording.journal; editingMeta = recording.meta;
-        LinearLayout card = card();
-        A11y.heading(label(card, "Journal", 17, ink, true));
+        LinearLayout outer = card();
+        // Folded to one line (stars, result, problems) until tapped; open from the start when the journal was asked for.
+        LinearLayout head = new LinearLayout(this); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(android.view.Gravity.CENTER_VERTICAL); head.setMinimumHeight(dp(48)); outer.addView(head);
+        LinearLayout headWords = new LinearLayout(this); headWords.setOrientation(LinearLayout.VERTICAL); head.addView(headWords, new LinearLayout.LayoutParams(0, -2, 1));
+        A11y.heading(label(headWords, "Journal", 17, ink, true));
+        TextView summary = label(headWords, "", 13, muted, false);
+        TextView chevron = label(head, "", 20, muted, false);
+        LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); outer.addView(card);
+        boolean[] open = {getIntent().getBooleanExtra(EXTRA_JOURNAL, false) || Showcase.running()};
+        Runnable fold = () -> {
+            card.setVisibility(open[0] ? View.VISIBLE : View.GONE); summary.setVisibility(open[0] ? View.GONE : View.VISIBLE); chevron.setText(open[0] ? "▴" : "▾");
+            summary.setText(journalSummary(editing)); A11y.state(head, open[0] ? "Expanded" : "Collapsed");
+        };
+        head.setClickable(true); head.setFocusable(true); head.setOnClickListener(v -> { open[0] = !open[0]; if (!open[0]) saveJournal(); fold.run(); });
+        A11y.clickLabel(head, "Show or hide the journal");
+        fold.run();
         int accent = dark ? 0xff5fd4c4 : 0xff00796b;
         LinearLayout stars = new LinearLayout(this); stars.setOrientation(LinearLayout.HORIZONTAL); card.addView(stars);
         TextView[] star = new TextView[5];
@@ -195,7 +209,17 @@ public final class RecordingsActivity extends Activity {
         for (JSONObject g : editing.guardian)
             label(card, "Print guardian, " + new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date(g.optLong("at"))) + ": "
                 + (g.optBoolean("fine") ? "you said it looked fine" : "you said it was a real problem") + (g.optString("said").isEmpty() ? "" : " (" + StatusPresentation.clean(g.optString("said")) + ")"), 12, muted, false);
-        if (getIntent().getBooleanExtra(EXTRA_JOURNAL, false)) card.post(() -> { android.view.View scroll = (android.view.View) content.getParent(); if (scroll instanceof ScrollView) ((ScrollView) scroll).smoothScrollTo(0, card.getTop() - dp(12)); });
+        if (getIntent().getBooleanExtra(EXTRA_JOURNAL, false)) outer.post(() -> { android.view.View scroll = (android.view.View) content.getParent(); if (scroll instanceof ScrollView) ((ScrollView) scroll).smoothScrollTo(0, outer.getTop() - dp(12)); });
+    }
+    /** The folded journal's line: "★★★★☆ · Success · 2 problems · notes", or a prompt when nothing is noted. */
+    static String journalSummary(PrintJournal j) {
+        List<String> parts = new ArrayList<>();
+        if (j.stars > 0) { StringBuilder stars = new StringBuilder(); for (int i = 0; i < 5; i++) stars.append(i < j.stars ? '★' : '☆'); parts.add(stars.toString()); }
+        if (!j.result.isEmpty()) parts.add(PrintJournal.label(PrintJournal.RESULTS, j.result));
+        if (!j.reasons.isEmpty()) parts.add(j.reasons.size() == 1 ? PrintJournal.label(PrintJournal.REASONS, j.reasons.iterator().next()) : j.reasons.size() + " problems");
+        if (!j.notes.isEmpty()) parts.add("notes");
+        if (!j.tags.isEmpty()) parts.add(String.join(", ", j.tags));
+        return parts.isEmpty() ? "Rate it and note how it came out. Tap to open." : String.join(" · ", parts);
     }
     private void saveJournal() {
         if (editing == null || editingMeta == null) return;
@@ -289,23 +313,53 @@ public final class RecordingsActivity extends Activity {
         if (recording.extrudedMm > 1) extra.add(String.format(Locale.getDefault(), "Filament fed: %.2f m (≈ %.0f g of PLA-like filament)", recording.extrudedMm / 1000, PrintRecorder.grams(recording.extrudedMm, "PLA")));
         double q = PrintRecorder.ratio(recording);
         if (!Double.isNaN(q)) extra.add(String.format(Locale.getDefault(), "The printer estimated %s at 10 %%; it took %s (%+.0f %%).", duration(recording.estimate * 1000), duration(Math.round(recording.estimate * q) * 1000), (q - 1) * 100));
+        String last = lastReading(rows);
+        if (!last.isEmpty()) extra.add(last + ".");
         String coverage = coverage(rows, recording);
         if (!coverage.isEmpty()) extra.add(coverage);
-        if (!extra.isEmpty()) label(String.join("\n", extra), 13, muted, false);
-        String last = lastReading(rows);
-        if (!last.isEmpty()) { LinearLayout card = card(); label(card, "At the end", 15, ink, true); label(card, readingLines(last), 13, muted, false); }
+        if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
         double[] t = column(rows, "elapsed_s");
         pictures(recording);   // the quickest look at how the print went, before the charts
-        chart("Progress", " %", t, Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)), 0, 100);
-        chart("Layer number", "", t, Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)), Double.NaN, Double.NaN);
-        chart("Temperatures", " °C", t, Arrays.asList(
-            new ChartView.Series("Nozzle", blue, column(rows, "nozzle_c"), false), new ChartView.Series("Nozzle target", blue, column(rows, "nozzle_target_c"), true),
-            new ChartView.Series("Bed", orange, column(rows, "bed_c"), false), new ChartView.Series("Bed target", orange, column(rows, "bed_target_c"), true),
-            new ChartView.Series("Chamber", aqua, column(rows, "chamber_c"), false)), Double.NaN, Double.NaN);
-        chart("Fan speed", " %", t, Arrays.asList(
-            new ChartView.Series("Part fan", blue, column(rows, "part_fan_pct"), false), new ChartView.Series("Aux fan", orange, column(rows, "aux_fan_pct"), false),
-            new ChartView.Series("Chamber fan", aqua, column(rows, "chamber_fan_pct"), false)), 0, 100);
-        label("Touch and drag on a chart to read values. Times along the bottom are clock times on this phone. Dashed lines are targets.", 12, muted, false);
+        // One card with the print's four charts, one at a time (the tour shows them all, one after another).
+        boolean all = Showcase.running();
+        LinearLayout charts = all ? content : card();
+        LinearLayout choices = new LinearLayout(this); choices.setOrientation(LinearLayout.HORIZONTAL); if (!all) charts.addView(choices);
+        List<View> shownCharts = new ArrayList<>(); List<Button> chips = new ArrayList<>();
+        String[][] names = {{"Progress", "Progress"}, {"Layer", "Layer number"}, {"Temps", "Temperatures"}, {"Fans", "Fan speed"}};
+        List<List<ChartView.Series>> series = Arrays.asList(
+            Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)),
+            Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)),
+            Arrays.asList(new ChartView.Series("Nozzle", blue, column(rows, "nozzle_c"), false), new ChartView.Series("Nozzle target", blue, column(rows, "nozzle_target_c"), true),
+                new ChartView.Series("Bed", orange, column(rows, "bed_c"), false), new ChartView.Series("Bed target", orange, column(rows, "bed_target_c"), true),
+                new ChartView.Series("Chamber", aqua, column(rows, "chamber_c"), false)),
+            Arrays.asList(new ChartView.Series("Part fan", blue, column(rows, "part_fan_pct"), false), new ChartView.Series("Aux fan", orange, column(rows, "aux_fan_pct"), false),
+                new ChartView.Series("Chamber fan", aqua, column(rows, "chamber_fan_pct"), false)));
+        String[] units = {" %", "", " °C", " %"};
+        double[][] ranges = {{0, 100}, {Double.NaN, Double.NaN}, {Double.NaN, Double.NaN}, {0, 100}};
+        android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        int accent = dark ? 0xff5fd4c4 : 0xff00796b;
+        Runnable[] pick = new Runnable[1];
+        for (int i = 0; i < names.length; i++) {
+            boolean any = false; for (ChartView.Series one : series.get(i)) for (double v : one.values) if (!Double.isNaN(v)) { any = true; break; }
+            if (!any) continue;
+            View chart = chart(all ? card() : charts, names[i][1], units[i], t, series.get(i), ranges[i][0], ranges[i][1]);
+            if (chart == null) continue;
+            shownCharts.add(chart); int index = shownCharts.size() - 1;
+            if (!all) { action(choices, names[i][0], () -> { prefs.edit().putInt("recordingChart", index).apply(); pick[0].run(); }); Button chip = (Button) choices.getChildAt(choices.getChildCount() - 1); chip.setMaxLines(1); chip.setTextSize(14); chip.setPadding(0, dp(8), 0, dp(8)); ((LinearLayout.LayoutParams) chip.getLayoutParams()).weight = names[i][0].length() > 6 ? 1.4f : 1; chips.add(chip); }
+        }
+        pick[0] = () -> {
+            int chosen = Math.min(prefs.getInt("recordingChart", 0), shownCharts.size() - 1);
+            for (int i = 0; i < shownCharts.size(); i++) {
+                boolean on = i == chosen; shownCharts.get(i).setVisibility(on ? View.VISIBLE : View.GONE);
+                chips.get(i).setTextColor(on ? (dark ? 0xff0e1417 : Color.WHITE) : accent);
+                ((android.graphics.drawable.RippleDrawable) chips.get(i).getBackground()).getDrawable(0).setTint(on ? accent : (dark ? 0xff21343a : 0xffe2efed));
+                A11y.state(chips.get(i), on ? "Chosen" : "");
+            }
+        };
+        if (!all && !shownCharts.isEmpty()) {
+            pick[0].run();
+            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets.", 12, muted, false);
+        } else if (!all) content.removeView(charts);
         trays(rows, t);
         material(recording, rows, t);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
@@ -647,16 +701,16 @@ public final class RecordingsActivity extends Activity {
 
     @Override protected void onResume() { super.onResume(); if (getIntent().getStringExtra(EXTRA_META) == null) showList(); }
 
-    private void chart(String title, String unit, double[] t, List<ChartView.Series> series, double min, double max) {
+    private ChartView chart(LinearLayout parent, String title, String unit, double[] t, List<ChartView.Series> series, double min, double max) {
         // Skip series that never reported (for example, fans the firmware does not report).
         List<ChartView.Series> present = new ArrayList<>();
         for (ChartView.Series s : series) for (double v : s.values) if (!Double.isNaN(v)) { present.add(s); break; }
-        if (present.isEmpty()) return;
-        LinearLayout card = card();
+        if (present.isEmpty()) return null;
         ChartView view = new ChartView(this, ink, muted, grid, surface);
         view.set(title, unit, t, present, min, max);
         if (shown != null && shown.start > 0) view.clock(shown.start);
-        card.addView(view, new LinearLayout.LayoutParams(-1, dp(240)));
+        LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-1, dp(240)); at.topMargin = dp(4); parent.addView(view, at);
+        return view;
     }
 
     static double[] column(List<double[]> rows, String name) {

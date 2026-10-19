@@ -71,33 +71,48 @@ public final class AutomationActivity extends Activity {
     private void show() {
         content.removeAllViews();
         A11y.heading(text(content, "Automation workshop", 24, ink, true));
-        text(content, "Rules run while the app watches the printer: when something happens, the app tells you, other apps or Home Assistant, or turns the printer's light on or off. "
-            + "The light is the only thing a rule can change on the printer. It is sent once per event and never repeated; the log says whether the printer reported the change.", 13, muted, false);
+        text(content, "When something happens, a rule tells you, other apps or Home Assistant, or turns the printer's light on or off (sent once, never repeated).", 13, muted, false);
         LinearLayout top = row(content);
-        action(top, "New rule", () -> edit(newRule(), true));
-        action(top, "From a template…", this::chooseTemplate);
-        LinearLayout more = row(content);
-        action(more, "Import…", this::importDialog);
-        action(more, "Share all…", () -> share(rules, "Link Workshop automations"));
-        action(more, "Values…", this::valuesDialog);
-        action(more, "Log", () -> startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.AUTOMATIONS)));
+        action(top, "New rule…", this::newRuleDialog);
+        action(top, "More…", this::moreDialog);
 
         A11y.heading(text(content, "Your rules", 17, ink, true)).setPadding(0, dp(16), 0, dp(4));
-        if (rules.isEmpty()) text(content, "No rules yet. Start from a template, or make a new one.", 13, muted, false);
-        for (Automation.Rule rule : rules) ruleCard(rule);
-
+        if (rules.isEmpty()) text(content, "No rules yet. New rule… starts from a template or from nothing.", 13, muted, false);
+        else {
+            LinearLayout list = card();
+            for (int i = 0; i < rules.size(); i++) ruleRow(list, rules.get(i), i > 0);
+            text(content, "Tap a rule to edit, test or share it.", 12, muted, false);
+        }
         List<Automation.Rule> mine = AutomationRun.myTemplates(this);
-        A11y.heading(text(content, "My templates", 17, ink, true)).setPadding(0, dp(16), 0, dp(4));
-        text(content, mine.isEmpty() ? "Save a rule as a template to reuse or share it, or import one someone shared with you." : "Your own templates and imported ones. Use makes a rule from one; Share hands it on as text.", 13, muted, false);
-        for (Automation.Rule t : mine) templateCard(t, mine);
-        text(content, "Values… lists everything a rule can send or watch, with what the printer reports now. Notifications and webhooks can also attach the latest camera picture and a chart of the print. Webhook header values (tokens) stay on this phone and are never shared.", 12, muted, false).setPadding(0, dp(16), 0, 0);
+        if (!mine.isEmpty()) {
+            A11y.heading(text(content, "My templates", 17, ink, true)).setPadding(0, dp(16), 0, dp(4));
+            LinearLayout list = card();
+            for (int i = 0; i < mine.size(); i++) templateRow(list, mine.get(i), mine, i > 0);
+        }
     }
 
-    private void ruleCard(Automation.Rule rule) {
-        LinearLayout card = card();
-        LinearLayout head = new LinearLayout(this); head.setOrientation(LinearLayout.HORIZONTAL); head.setGravity(android.view.Gravity.CENTER_VERTICAL); card.addView(head);
-        TextView name = new TextView(this); name.setText(rule.name); name.setTextSize(16); name.setTextColor(ink); name.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        head.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
+    private void newRuleDialog() {
+        new AlertDialog.Builder(this).setTitle("New rule")
+            .setItems(new String[] {"From a template…", "Start from nothing"}, (d, which) -> { if (which == 0) chooseTemplate(); else edit(newRule(), true); })
+            .setNegativeButton("Cancel", null).show();
+    }
+    private void moreDialog() {
+        String[] items = {"Import…", "Share all rules…", "Values a rule can use…", "Automation log", "How rules work"};
+        new AlertDialog.Builder(this).setTitle("Automations").setItems(items, (d, which) -> {
+            if (which == 0) importDialog();
+            else if (which == 1) share(rules, "Link Workshop automations");
+            else if (which == 2) valuesDialog();
+            else if (which == 3) startActivity(new Intent(this, LogsActivity.class).putExtra(LogsActivity.EXTRA_AREA, Diagnostics.AUTOMATIONS));
+            else new AlertDialog.Builder(this).setTitle("How rules work").setMessage("Rules run while the app watches the printer. "
+                + "The light is the only thing a rule can change on the printer. It is sent once per event and never repeated; the log says whether the printer reported the change.\n\n"
+                + "Values a rule can use lists everything a rule can send or watch, with what the printer reports now. Notifications and webhooks can also attach the latest camera picture and a chart of the print.\n\n"
+                + "Webhook header values (tokens) stay on this phone and are never shared. Imported rules start turned off.").setPositiveButton("OK", null).show();
+        }).setNegativeButton("Close", null).show();
+    }
+
+    /** One rule as a row: name and what it does, its switch at the end; the row opens its choices. */
+    private void ruleRow(LinearLayout list, Automation.Rule rule, boolean divider) {
+        LinearLayout row = listRow(list, rule.name.isEmpty() ? "Unnamed rule" : rule.name, rule.summary(), divider, () -> ruleMenu(rule));
         Switch on = new Switch(this); on.setChecked(rule.enabled); on.setContentDescription("Rule " + rule.name + " on"); on.setMinHeight(dp(48));
         on.setOnCheckedChangeListener((v, checked) -> {
             if (checked && rule.changesPrinter()) {
@@ -109,34 +124,46 @@ public final class AutomationActivity extends Activity {
             }
             rule.enabled = checked; saveRules(); Diagnostics.note(Diagnostics.AUTOMATIONS, "\"" + rule.name + "\" turned " + (checked ? "on" : "off"));
         });
-        head.addView(on, new LinearLayout.LayoutParams(-2, -2));
-        text(card, rule.summary(), 13, muted, false);
-        LinearLayout buttons = row(card);
-        action(buttons, "Edit", () -> edit(rule, false));
-        action(buttons, "Test", () -> test(rule));
-        action(buttons, "More…", () -> {
-            List<String> choices = new ArrayList<>(java.util.Arrays.asList("Share…", "Save as a template", "Duplicate"));
-            if (!rule.builtIn) choices.add("Delete");
-            new AlertDialog.Builder(this).setTitle(rule.name).setItems(choices.toArray(new String[0]), (d, which) -> {
-                String chosen = choices.get(which);
-                try {
-                    if (chosen.equals("Share…")) share(Collections.singletonList(rule), rule.name);
-                    else if (chosen.equals("Save as a template")) { List<Automation.Rule> mine = AutomationRun.myTemplates(this); mine.add(rule.copy()); AutomationRun.saveTemplates(this, mine); toast("Saved to My templates."); show(); }
-                    else if (chosen.equals("Duplicate")) { Automation.Rule copy = rule.copy(); copy.name = rule.name + " (copy)"; copy.enabled = false; rules.add(copy); saveRules(); show(); }
-                    else new AlertDialog.Builder(this).setTitle("Delete “" + rule.name + "”?").setNegativeButton("Cancel", null)
-                        .setPositiveButton("Delete", (d2, w2) -> { rules.remove(rule); saveRules(); show(); }).show();
-                } catch (Exception failed) { toast("Could not do that: " + failed.getMessage()); }
-            }).show();
-        });
+        LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-2, -2); at.leftMargin = dp(8); row.addView(on, at);
+    }
+    private void ruleMenu(Automation.Rule rule) {
+        List<String> choices = new ArrayList<>(java.util.Arrays.asList("Edit…", "Test", "Share…", "Save as a template", "Duplicate"));
+        if (!rule.builtIn) choices.add("Delete");
+        new AlertDialog.Builder(this).setTitle(rule.name).setItems(choices.toArray(new String[0]), (d, which) -> {
+            String chosen = choices.get(which);
+            try {
+                if (chosen.equals("Edit…")) edit(rule, false);
+                else if (chosen.equals("Test")) test(rule);
+                else if (chosen.equals("Share…")) share(Collections.singletonList(rule), rule.name);
+                else if (chosen.equals("Save as a template")) { List<Automation.Rule> mine = AutomationRun.myTemplates(this); mine.add(rule.copy()); AutomationRun.saveTemplates(this, mine); toast("Saved to My templates."); show(); }
+                else if (chosen.equals("Duplicate")) { Automation.Rule copy = rule.copy(); copy.name = rule.name + " (copy)"; copy.enabled = false; rules.add(copy); saveRules(); show(); }
+                else new AlertDialog.Builder(this).setTitle("Delete “" + rule.name + "”?").setNegativeButton("Cancel", null)
+                    .setPositiveButton("Delete", (d2, w2) -> { rules.remove(rule); saveRules(); show(); }).show();
+            } catch (Exception failed) { toast("Could not do that: " + failed.getMessage()); }
+        }).setNegativeButton("Close", null).show();
     }
 
-    private void templateCard(Automation.Rule t, List<Automation.Rule> mine) {
-        LinearLayout card = card();
-        text(card, t.name, 16, ink, true); text(card, t.summary(), 13, muted, false);
-        LinearLayout buttons = row(card);
-        action(buttons, "Use", () -> use(t));
-        action(buttons, "Share…", () -> share(Collections.singletonList(t), t.name));
-        action(buttons, "Delete", () -> { mine.remove(t); AutomationRun.saveTemplates(this, mine); show(); });
+    private void templateRow(LinearLayout list, Automation.Rule t, List<Automation.Rule> mine, boolean divider) {
+        listRow(list, t.name, t.summary(), divider, () -> new AlertDialog.Builder(this).setTitle(t.name)
+            .setItems(new String[] {"Make a rule from it…", "Share…", "Delete"}, (d, which) -> {
+                if (which == 0) use(t);
+                else if (which == 1) share(Collections.singletonList(t), t.name);
+                else { mine.remove(t); AutomationRun.saveTemplates(this, mine); show(); }
+            }).setNegativeButton("Close", null).show());
+    }
+
+    /** A tappable row in a list card: a bold name over a two-line summary, with room at the end for a switch. */
+    private LinearLayout listRow(LinearLayout list, String name, String detail, boolean divider, Runnable action) {
+        if (divider) { View line = new View(this); line.setBackgroundColor(dark ? 0xff2a3a40 : 0xffe1e8ea); list.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1) / 2))); }
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL); row.setMinimumHeight(dp(56));
+        row.setPadding(0, dp(6), 0, dp(6)); list.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout words = new LinearLayout(this); words.setOrientation(LinearLayout.VERTICAL); row.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        TextView title = text(words, name, 15, ink, true); title.setPadding(0, 0, 0, 0);
+        TextView more = text(words, detail, 13, muted, false); more.setPadding(0, dp(2), 0, 0); more.setMaxLines(2); more.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        words.setClickable(true); words.setFocusable(true); words.setOnClickListener(v -> action.run());
+        android.util.TypedValue ripple = new android.util.TypedValue(); getTheme().resolveAttribute(android.R.attr.selectableItemBackground, ripple, true); words.setBackgroundResource(ripple.resourceId);
+        words.setContentDescription(name + ". " + detail); A11y.clickLabel(words, "Choices for " + name);
+        return row;
     }
 
     private void chooseTemplate() {
