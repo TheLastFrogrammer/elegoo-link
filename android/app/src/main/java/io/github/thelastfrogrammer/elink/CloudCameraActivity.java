@@ -68,7 +68,7 @@ public final class CloudCameraActivity extends Activity {
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        showing = true;
+        showing = true; CloudFrameGrab.leave();   // a background picture grab leaves the channel: one join per account
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         String serial = getIntent().getStringExtra(EXTRA_SERIAL), name = getIntent().getStringExtra(EXTRA_NAME);
         int pad = Math.round(12 * getResources().getDisplayMetrics().density), touch = Math.round(48 * getResources().getDisplayMetrics().density);

@@ -119,7 +119,8 @@ public final class PrinterService extends Service {
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();
-            if (!ready() && !localCamera() && ExtraCameras.forPictures(this) == null && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due; in cloud mode it comes from a short visit to the cloud video (any app screen, or with the app closed when allowed)"); }
+            if (!ready() && !localCamera() && ExtraCameras.forPictures(this) == null && running != null && !running.id.equals(noPictureNoted)) { noPictureNoted = running.id; Diagnostics.note(Diagnostics.CAMERA, "picture due; in cloud mode it comes from the printer's cloud video (in the background, or from an app screen)"); }
+            nativeRecover(); nativePicture();
             grab(null);
         }
     }
@@ -265,14 +266,13 @@ public final class PrinterService extends Service {
 
     // ------------------------------------------------------------------ cloud picture visits, wherever the app is
     /**
-     * In cloud mode the print's pictures come from short visits to the printer's cloud video, which needs a window to decode in.
-     * They run here, so any screen of the app hosts them, not only the main one; with the app closed, only when the person
-     * allowed it (CLOSED_PICTURES and Android's "Display over other apps") and the phone's screen is on.
+     * In cloud mode the print's pictures come from the printer's cloud video. First choice: the native library from here, with no
+     * window, so the app may be closed and the screen off (nativePicture). When that cannot work on this phone, short visits in a
+     * hidden spot of whichever app screen is showing (PictureVisits) take over while the app is open.
      */
     PictureVisits pictureVisits;
-    static final String CLOSED_PICTURES = "cloudPicturesClosed";
     /** The app screen on show (started, not yet stopped), and the one holding the running visit's window. */
-    private android.app.Activity shownScreen, hostScreen; private android.widget.FrameLayout overlayBox;
+    private android.app.Activity shownScreen, hostScreen;
     private final android.app.Application.ActivityLifecycleCallbacks screens = new android.app.Application.ActivityLifecycleCallbacks() {
         public void onActivityStarted(android.app.Activity a) { shownScreen = a; if (pictureVisits != null && !pictureVisits.running()) pictureVisits.resume(); }
         public void onActivityStopped(android.app.Activity a) {
@@ -285,9 +285,61 @@ public final class PrinterService extends Service {
         public void onActivitySaveInstanceState(android.app.Activity a, android.os.Bundle b) { }
         public void onActivityDestroyed(android.app.Activity a) { if (a == shownScreen) shownScreen = null; if (a == hostScreen) hostScreen = null; }
     };
-    boolean closedPicturesAllowed() {
-        return getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean(CLOSED_PICTURES, false) && android.provider.Settings.canDrawOverlays(this);
+
+    /** Native grabs: empty ones in a row (two wait 30 minutes, as the visits do), when the next may start, and the last outcome. */
+    private int nativeEmpty; private long nativeNextAt; private boolean nativeWorked;
+    private final java.util.concurrent.ExecutorService pictureWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /** Whether the native grabs are the way pictures come now (the visits then stay out of the channel). */
+    boolean nativePictures() { return CloudFrameGrab.broken() == null && nativeEmpty < 2; }
+    /** Ends any cloud picture taking now (a camera view is about to join: one join per account). */
+    void leaveCloudPictures() { CloudFrameGrab.leave(); if (pictureVisits != null) pictureVisits.end(); }
+    boolean cloudPictureRunning() { return CloudFrameGrab.busy() || pictureVisits != null && pictureVisits.running(); }
+    /** Cloud mode, a picture due: joins the printer's video with the native library, keeps one frame and leaves. Nothing is sent to the printer. */
+    private void nativePicture() {
+        android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        if (!settings.getBoolean(PictureVisits.PREF, true) || !settings.getBoolean("cloudControlUnderstood", false)) return;
+        if (ready() || !usingCloud() || localCamera() || ExtraCameras.forPictures(this) != null || cloudSerial.isEmpty() || !cloudFresh() || cloudOnline != 1) return;
+        if (CloudVideo.watched() || GcodeViewerActivity.cloudShown || CloudCameraActivity.holdsChannel() || cloudPictureRunning()) return;
+        long now = SystemClock.elapsedRealtime();
+        if (now < nativeNextAt || CloudFrameGrab.broken() != null) return;
+        nativeNextAt = now + 60_000;   // at most one join a minute, whatever happens
+        String serial = cloudSerial;
+        pictureWorker.execute(() -> {
+            CloudApi.AgoraCredential issued = null; String error = null;
+            try {
+                CloudAccountStore store = new CloudAccountStore(this);
+                CloudLogin.Account account = store.load();
+                if (account == null) error = "not signed in";
+                else {
+                    CloudApi api = new CloudApi(store.china(), account, CloudApi.agent(this), CloudApi::https);
+                    issued = api.agoraCredential();
+                    if (api.account() != account) store.save(api.account());
+                    if (issued.rtcToken.isEmpty() || issued.rtcUserId.isEmpty()) error = "no camera access issued";
+                }
+            } catch (Exception failure) { error = failure.getClass().getSimpleName(); }
+            CloudApi.AgoraCredential credential = issued; String refused = error;
+            main.post(() -> {
+                if (destroyed) return;
+                if (refused != null) { Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: camera access not issued (" + Diagnostics.scrub(refused) + ")"); return; }
+                int uid; try { uid = (int) Long.parseLong(credential.rtcUserId.trim()); } catch (NumberFormatException odd) { Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: the camera access has an unexpected user id"); return; }
+                boolean started = CloudFrameGrab.start(this, CloudControl.AGORA_APP_ID, serial, credential.rtcToken, uid, 35_000, (jpeg, what) -> {
+                    long at = SystemClock.elapsedRealtime();
+                    if (jpeg != null) {
+                        boolean kept = keepPicture(jpeg, at, PrintRecorder.PRINTER_CAMERA, "a background cloud picture");
+                        if (!nativeWorked || nativeEmpty > 0) Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: " + what + (kept ? "" : ", not kept"));
+                        nativeWorked = true; nativeEmpty = 0; return;
+                    }
+                    if (what.startsWith("left")) return;
+                    nativeEmpty++;
+                    Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: " + what + (nativeEmpty >= 2 ? "; trying again in 30 minutes, and the app's screens take pictures meanwhile" : ""));
+                    if (nativeEmpty >= 2) nativeNextAt = at + 30 * 60_000L;
+                });
+                if (!started && CloudFrameGrab.broken() != null) Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: the native video library cannot run on this phone (" + CloudFrameGrab.broken() + "); the app's screens take pictures while open");
+            });
+        });
     }
+    /** After 30 minutes a new try is allowed: the empty count goes back so the grabs lead again. */
+    private void nativeRecover() { if (nativeEmpty >= 2 && SystemClock.elapsedRealtime() >= nativeNextAt) nativeEmpty = 0; }
     private final PictureVisits.Host visitHost = new PictureVisits.Host() {
         public android.view.ViewGroup attach() {
             int size = Math.max(1, Math.round(2 * getResources().getDisplayMetrics().density));
@@ -300,28 +352,13 @@ public final class PrinterService extends Service {
                 ((android.widget.FrameLayout) content).addView(box, new android.widget.FrameLayout.LayoutParams(size, size, android.view.Gravity.BOTTOM | android.view.Gravity.START));
                 hostScreen = screen; return box;
             }
-            if (!closedPicturesAllowed() || !getSystemService(android.os.PowerManager.class).isInteractive()) return null;
-            // The app is closed: the same 2 dp spot in a window of its own over other apps, not touchable, removed after the visit.
-            android.view.WindowManager windows = getSystemService(android.view.WindowManager.class);
-            android.view.WindowManager.LayoutParams at = new android.view.WindowManager.LayoutParams(size, size, android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-                android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE, android.graphics.PixelFormat.TRANSLUCENT);
-            at.gravity = android.view.Gravity.BOTTOM | android.view.Gravity.START;
-            android.widget.FrameLayout box = new android.widget.FrameLayout(PrinterService.this);
-            try { windows.addView(box, at); } catch (RuntimeException refused) { Diagnostics.note(Diagnostics.CAMERA, "cloud picture visit with the app closed: Android refused the small window (" + refused.getClass().getSimpleName() + ")"); return null; }
-            hostScreen = null; overlayBox = box; return box;
+            return null;
         }
         public void detach(android.view.ViewGroup box) {
-            if (box == overlayBox) { overlayBox = null; try { getSystemService(android.view.WindowManager.class).removeView(box); } catch (RuntimeException gone) { } return; }
             if (box.getParent() instanceof android.view.ViewGroup) ((android.view.ViewGroup) box.getParent()).removeView(box);
             if (hostScreen != null && box.getContext() == hostScreen) hostScreen = null;
         }
-        public String why() {
-            if (shownScreen != null) return "";
-            if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean(CLOSED_PICTURES, false)) return "the app is closed (Settings › Recording & alerts can keep taking pictures with it closed)";
-            if (!android.provider.Settings.canDrawOverlays(PrinterService.this)) return "the app is closed and Android's “Display over other apps” is not allowed for it";
-            if (!getSystemService(android.os.PowerManager.class).isInteractive()) return "the app is closed and the phone's screen is off";
-            return "";
-        }
+        public String why() { return shownScreen != null ? "" : "the app is closed"; }
     };
     @Override public IBinder onBind(Intent intent) { return binder; }
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -2025,6 +2062,7 @@ public final class PrinterService extends Service {
     };
     @Override public void onDestroy() {
         if (pictureVisits != null) pictureVisits.pause();
+        CloudFrameGrab.leave(); pictureWorker.shutdownNow();
         getApplication().unregisterActivityLifecycleCallbacks(screens);
         if (guardian != null) guardian.shutdown();
         if (automations != null) automations.shutdown();

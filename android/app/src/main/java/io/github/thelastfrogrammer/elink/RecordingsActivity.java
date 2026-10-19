@@ -115,7 +115,7 @@ public final class RecordingsActivity extends Activity {
         if (r.pictureLayers == 0 && r.pictureMinutes > 0 && r.duration() > 0) {
             long expected = r.duration() / (r.pictureMinutes * 60_000L);
             if (expected >= 2 && r.pictures < expected * 0.6)
-                parts.add("Pictures: " + r.pictures + " of about " + expected + " (every " + r.pictureMinutes + " min). Through the cloud, pictures come while the app is open, or with it closed when Settings › Recording & alerts allows it and the screen is on; a camera on this network or an added camera keeps taking them in the background.");
+                parts.add("Pictures: " + r.pictures + " of about " + expected + " (every " + r.pictureMinutes + " min). Through the cloud they also come with the app closed, while it watches the printer through the cloud in the background (Settings › Printer connection); the camera log says why any were missed.");
         }
         return String.join("\n", parts);
     }
@@ -377,7 +377,7 @@ public final class RecordingsActivity extends Activity {
         List<File> files = PrintRecorder.pictures(recording);
         if (files.isEmpty() && recording.pictureMinutes == 0 && recording.pictureLayers == 0) return;
         LinearLayout card = card(); label(card, "Camera pictures", 15, ink, true);
-        if (files.isEmpty()) { label(card, "No pictures yet. " + recording.pictureWords() + ", from the printer's camera on this network, or through the cloud while the app is open.", 13, muted, false); return; }
+        if (files.isEmpty()) { label(card, "No pictures yet. " + recording.pictureWords() + ", from the printer's camera on this network, or through the cloud.", 13, muted, false); return; }
         label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 || recording.pictureLayers > 0 ? " · " + recording.pictureWords().toLowerCase(Locale.ROOT) : "") + ". Tap one to see it larger.", 13, muted, false);
         if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files)); }
         LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);

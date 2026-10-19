@@ -6,8 +6,8 @@ android {
         applicationId 'io.github.thelastfrogrammer.elink'
         minSdk 26
         targetSdk 36
-        versionCode 166
-        versionName '0.74.1'
+        versionCode 167
+        versionName '0.75.0'
         // Agora ships native code for four CPU types; keep only 64-bit ARM (modern phones) to limit APK size.
         ndk { abiFilters 'arm64-v8a' }
     }
@@ -72,8 +72,11 @@ tasks.named('preBuild') { dependsOn 'unpackEngine' }
 dependencies {
     implementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'
     implementation 'androidx.webkit:webkit:1.12.1'
-    // Agora RTM: Elegoo's cloud command channel (same major version as the SDK's bundled 2.2.8 native library).
-    implementation 'io.agora:agora-rtm:2.2.6'
+    // Agora RTM: Elegoo's cloud command channel (same major version as the SDK's bundled 2.2.8 native library). The lite build
+    // shares its support library (aosl) with Agora RTC below instead of bundling its own.
+    implementation 'io.agora:agora-rtm-lite:2.2.6'
+    // Agora RTC, core only: one picture from the printer's cloud video without a window (CloudFrameGrab), app closed or screen off.
+    implementation 'io.agora.rtc:full-rtc-basic:4.6.4'
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.json:json:20240303'
     // Only for opt-in UI screenshots (-Dscreenshots=<dir>); see ScreenshotTest.

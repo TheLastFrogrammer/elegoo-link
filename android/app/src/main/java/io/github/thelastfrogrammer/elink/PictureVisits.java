@@ -11,9 +11,9 @@ import java.util.function.Supplier;
 /**
  * Cloud picture visits: every 30 s, in cloud mode, when the running print's picture is due and no camera view is open, joins
  * the printer's video channel unseen, keeps one picture and leaves (at most 35 s). Nothing is sent to the printer; it joins
- * its channel on its own when a viewer does. After two empty channels in a row it waits 30 minutes. The video needs a window
- * to decode in: whichever screen of this app is showing, or, when the person allowed it, a 2 dp window over other apps while
- * the app is closed (Host). Settings › App preferences turns visits off ("cloudPictureVisits").
+ * its channel on its own when a viewer does. After two empty channels in a row it waits 30 minutes. The fallback for when
+ * the native library (CloudFrameGrab, from the service) cannot take them: this video needs a window to decode in, so it uses
+ * whichever screen of this app is showing (Host). Settings › Recording & alerts turns cloud pictures off ("cloudPictureVisits").
  */
 final class PictureVisits {
     static final String PREF = "cloudPictureVisits";
@@ -61,6 +61,8 @@ final class PictureVisits {
         main.postDelayed(this, 30_000);
         PrinterService p = printer.get();
         if (p == null || visit != null || p.cloudSerial.isEmpty() || !CloudVideo.supported()) return;
+        // The native library takes them from the service, window or not; visits are the fallback when it cannot.
+        if (p.nativePictures()) { waitingFor(""); return; }
         long now = SystemClock.elapsedRealtime();
         boolean pictureDue = p.recorder != null && p.recorder.pictureDue(now);
         boolean enabled = settings.getBoolean(PREF, true), open = videoOpen.getAsBoolean(), local = p.ready() || !p.usingCloud(), fresh = p.cloudFresh(),

@@ -564,7 +564,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 cameraMessage("The cloud camera needs cloud control turned on. Print > Camera explains how. The camera model is shown without a picture."); return;
             }
             cameraStarted = true; cameraCloud = true; cloudShown = true;
-            if (printer.pictureVisits != null) printer.pictureVisits.end();   // one join per account: a picture visit leaves first
+            printer.leaveCloudPictures();   // one join per account: a picture visit or grab leaves first
             String serial = printer.cloudSerial;
             cameraMessage("Getting camera access from Elegoo…");
             worker.execute(() -> {
