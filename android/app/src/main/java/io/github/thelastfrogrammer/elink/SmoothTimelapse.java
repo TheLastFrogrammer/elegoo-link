@@ -15,12 +15,20 @@ import org.json.JSONObject;
 final class SmoothTimelapse {
     static final String PREFS = "smooth-timelapse";
     /** Corners inside the CC2's 256 mm bed with 6 mm to spare: back right, back left, front right, front left (Y grows to the back). */
-    static final String[] CORNERS = {"Back right", "Back left", "Front right", "Front left"};
+    static final String[] CORNERS = {"Back right", "Back left", "Front right", "Front left", "Farthest from the camera"};
+    /** The choice that picks, at slicing, the corner farthest from the camera that takes the pictures. */
+    static final int FARTHEST = 4;
     static final double[][] PARK = {{250, 250}, {6, 250}, {250, 6}, {6, 6}};
     static final int[] WAITS_MS = {2000, 3000, 5000, 8000};
     /** How close the reported head must be to the corner to count as parked (mm). */
     static final double NEAR_MM = 2.0;
 
+    /** The corner (0-3) farthest from a camera at x, y. Pure, for tests. */
+    static int farthestCorner(double cameraX, double cameraY) {
+        int best = 0; double most = -1;
+        for (int i = 0; i < PARK.length; i++) { double d = Math.hypot(PARK[i][0] - cameraX, PARK[i][1] - cameraY); if (d > most) { most = d; best = i; } }
+        return best;
+    }
     /** The layer-change G-code for a corner and wait (the engine's time_lapse_gcode, run right after each layer change). */
     static String gcode(int corner, int waitMs) {
         double[] at = PARK[Math.max(0, Math.min(PARK.length - 1, corner))];

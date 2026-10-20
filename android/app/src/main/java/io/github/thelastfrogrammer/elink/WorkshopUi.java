@@ -126,7 +126,12 @@ final class WorkshopUi {
         for (int i = 0; i < names.length; i++) { names[i] = String.valueOf(adapter.getItem(i)); letters += names[i].length(); }
         if (letters > (names.length == 2 ? 44 : 36)) return false;
         float d = spinner.getResources().getDisplayMetrics().density;
-        LinearLayout row = new LinearLayout(spinner.getContext()); row.setOrientation(LinearLayout.HORIZONTAL);
+        Runnable[] sync = new Runnable[1];
+        // Also caught up while drawing: a pre-draw pass is not run by every renderer (screenshots), and a stale chip must never show.
+        LinearLayout row = new LinearLayout(spinner.getContext()) {
+            @Override protected void dispatchDraw(android.graphics.Canvas canvas) { if (sync[0] != null) sync[0].run(); super.dispatchDraw(canvas); }
+        };
+        row.setOrientation(LinearLayout.HORIZONTAL);
         Button[] chips = new Button[names.length];
         CharSequence label = spinner.getContentDescription();
         for (int i = 0; i < names.length; i++) {
@@ -148,7 +153,8 @@ final class WorkshopUi {
         };
         // Anything may change the selection (a saved value restored, a dialog): the chips follow it before each frame.
         int[] last = {-2};
-        row.getViewTreeObserver().addOnPreDrawListener(() -> { if (spinner.getSelectedItemPosition() != last[0]) { last[0] = spinner.getSelectedItemPosition(); paint.run(); } return true; });
+        sync[0] = () -> { if (spinner.getSelectedItemPosition() != last[0]) { last[0] = spinner.getSelectedItemPosition(); paint.run(); } };
+        row.getViewTreeObserver().addOnPreDrawListener(() -> { sync[0].run(); return true; });
         paint.run(); last[0] = spinner.getSelectedItemPosition();
         int at = parent.indexOfChild(spinner); parent.addView(row, at, new LinearLayout.LayoutParams(-1, -2));
         spinner.setVisibility(View.INVISIBLE); ViewGroup.LayoutParams none = spinner.getLayoutParams(); none.width = 0; none.height = 0; spinner.setLayoutParams(none);

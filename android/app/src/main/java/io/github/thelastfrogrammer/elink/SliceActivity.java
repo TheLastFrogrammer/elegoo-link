@@ -477,8 +477,7 @@ public final class SliceActivity extends Activity {
         LinearLayout smoothBox = new LinearLayout(this); smoothBox.setOrientation(LinearLayout.VERTICAL); settingsCard.addView(smoothBox);
         label(smoothBox, "At each layer change the head lifts 0.6 mm, moves to this corner, waits, and returns to exactly where it was. The print's recording takes the picture while it waits (connected on your network). Adds the wait to every layer. Experimental: watch the first layers of a small print.", 12, muted, false);
         label(smoothBox, "Park at", 12, muted, false);
-        smoothCorner = spinner(smoothBox); fill(smoothCorner, Arrays.asList(SmoothTimelapse.CORNERS), SmoothTimelapse.CORNERS[Math.max(0, Math.min(3, workshop.getInt("smoothCorner", 0)))]);
-        WorkshopUi.chipsFor(smoothCorner, teal, buttonColor, ink, dark);
+        smoothCorner = spinner(smoothBox); fill(smoothCorner, Arrays.asList(SmoothTimelapse.CORNERS), SmoothTimelapse.CORNERS[Math.max(0, Math.min(SmoothTimelapse.FARTHEST, workshop.getInt("smoothCorner", SmoothTimelapse.FARTHEST)))]);
         label(smoothBox, "Wait there", 12, muted, false);
         List<String> waits = new ArrayList<>(); for (int ms : SmoothTimelapse.WAITS_MS) waits.add(ms / 1000 + " s");
         smoothWait = spinner(smoothBox); fill(smoothWait, waits, waits.get(Math.max(0, Math.min(waits.size() - 1, workshop.getInt("smoothWait", 1)))));
@@ -580,6 +579,13 @@ public final class SliceActivity extends Activity {
         });
     }
 
+    /** The park corner (0-3): the one chosen, or the one farthest from the camera that takes the pictures (its position as set). */
+    private int smoothCornerNow() {
+        int choice = Math.max(0, smoothCorner.getSelectedItemPosition());
+        if (choice != SmoothTimelapse.FARTHEST) return choice;
+        double[] camera = GcodeViewerActivity.cameraFor(getSharedPreferences("viewer-hints", MODE_PRIVATE), 0, PictureSettings.camera(this));
+        return SmoothTimelapse.farthestCorner(camera[0], camera[1]);
+    }
     /** The quick settings as config overrides, or null when one is invalid (the status line says why). */
     private Map<String, String> quickOverrides() {
         Map<String, String> overrides = new LinkedHashMap<>();
@@ -598,8 +604,8 @@ public final class SliceActivity extends Activity {
             default: break;
         }
         if (smoothSwitch != null && smoothSwitch.isChecked()) {
-            int corner = Math.max(0, smoothCorner.getSelectedItemPosition()), wait = SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())];
-            getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putInt("smoothCorner", corner).putInt("smoothWait", Math.max(0, smoothWait.getSelectedItemPosition())).apply();
+            int choice = Math.max(0, smoothCorner.getSelectedItemPosition()), corner = smoothCornerNow(), wait = SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())];
+            getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putInt("smoothCorner", choice).putInt("smoothWait", Math.max(0, smoothWait.getSelectedItemPosition())).apply();
             overrides.put("time_lapse_gcode", SmoothTimelapse.gcode(corner, wait));
         }
         switch (brimSpinner.getSelectedItemPosition()) {
@@ -811,7 +817,7 @@ public final class SliceActivity extends Activity {
         plans.apply();
         // The recording looks for the head at this corner to take each layer's picture (or forgets an earlier park for these names).
         boolean smooth = smoothSwitch != null && smoothSwitch.isChecked();
-        SmoothTimelapse.remember(this, names, Math.max(0, smoothCorner.getSelectedItemPosition()), SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())], smooth);
+        SmoothTimelapse.remember(this, names, smoothCornerNow(), SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())], smooth);
         status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " project plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < results.size(); i++) {

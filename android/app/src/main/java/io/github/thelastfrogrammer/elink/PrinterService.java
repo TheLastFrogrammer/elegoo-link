@@ -112,8 +112,9 @@ public final class PrinterService extends Service {
         String used = spools.observe(value, now); if (used != null) feedback = used;
         android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         if (recorder == null || !settings.getBoolean("recordPrints", true)) return;
-        recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5)); recorder.setDefaultPictureLayers(settings.getInt("pictureLayers", 0));
-        recorder.setDefaultPictureFar(settings.getBoolean(pictureFarKey(), false));
+        recorder.setCanvas(canvas); String pictureCamera = PictureSettings.camera(this);   // each camera keeps its own choice
+        recorder.setDefaultPictureMinutes(PictureSettings.minutes(this, pictureCamera)); recorder.setDefaultPictureLayers(PictureSettings.layers(this, pictureCamera));
+        recorder.setDefaultPictureFar(PictureSettings.far(this, pictureCamera));
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name, "local".equals(source) ? filePrinterId() : cloudSerial);
         keepAwakeForRecording(recorder.current() != null);
@@ -340,6 +341,33 @@ public final class PrinterService extends Service {
             });
         });
     }
+    /** What the recorder's layer reach was read for (file and camera position), so it is read once per print and camera spot. */
+    private String reachFor = ""; private boolean reachReading; private long reachTriedAt;
+    /**
+     * The print's G-code on the phone (the copy chosen for it, or the only one), read once off the main thread for the far
+     * points: once per print and camera spot, and while there is no copy, looked for again at most once a minute.
+     */
+    private void loadReach(PrintRecorder.Recording now, double[] camera) {
+        String key = now.id + "|" + Math.round(camera[0]) + "," + Math.round(camera[1]);
+        long at = SystemClock.elapsedRealtime();
+        if (reachReading || key.equals(reachFor) && (recorder.hasReach() || at - reachTriedAt < 60_000)) return;
+        boolean again = key.equals(reachFor); reachFor = key; reachTriedAt = at;
+        GuardianRun.Source source = GuardianRun.source(library, fileJob(), now.file);
+        if (source.file == null) { recorder.setReach(null); if (!again) Diagnostics.note(Diagnostics.CAMERA, "far pictures: no copy of this print's G-code on the phone; learning each layer's far side from the one before"); return; }
+        reachReading = true; File file = source.file;
+        pictureWorker.execute(() -> {
+            LayerReach read = null; String why = null;
+            try { read = LayerReach.read(file, camera[0], camera[1]); } catch (IOException | RuntimeException failed) { why = failed.getClass().getSimpleName(); }
+            LayerReach done = read; String problem = why;
+            main.post(() -> {
+                reachReading = false;
+                PrintRecorder.Recording still = recorder.current();
+                if (still == null || !still.id.equals(now.id)) return;
+                recorder.setReach(done);
+                Diagnostics.note(Diagnostics.CAMERA, done != null ? "far pictures: each layer's far side from the print's G-code (" + done.layers + " layers)" : "far pictures: the print's G-code could not be read (" + problem + "); learning from the layer before");
+            });
+        });
+    }
     /** The picture camera's own choice of far-from-the-camera pictures (each camera keeps its own). */
     String pictureFarKey() { ExtraCameras.Camera added = ExtraCameras.forPictures(this); return GcodeViewerActivity.camKey("pictureFar", added == null ? "" : added.id); }
     /** The recording a smooth timelapse was last set up for (its id), for one log line and the fast status per print. */
@@ -353,28 +381,24 @@ public final class PrinterService extends Service {
         if (now != null && !now.smooth()) { double[] park = SmoothTimelapse.forFile(this, now.file); if (park != null) recorder.setPark(park[0], park[1]); }
         boolean smooth = now != null && now.smooth();
         if (session != null) session.fastStatus(now != null && now.followsHead() && ready());
-        if (now != null && !smooth && now.followsHead()) {
-            // Far from the camera: measured from where the picture camera is (its position, as set in Live toolpath or Recording pictures).
-            ExtraCameras.Camera added = ExtraCameras.forPictures(this); String id = added == null ? "" : added.id;
-            double[] camera = GcodeViewerActivity.cameraFor(getSharedPreferences("viewer-hints", MODE_PRIVATE), 0, id);
-            if (!now.id.equals(smoothFor)) {
-                smoothFor = now.id;
-                Diagnostics.note(Diagnostics.CAMERA, String.format(Locale.ROOT, "pictures with the head far from the camera (at X %.0f Y %.0f)%s", camera[0], camera[1],
-                    ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so few layers will get their picture"));
-            }
-            JSONObject position = Cc2Codec.position(value);
-            if (position != null && position.has("x") && position.has("y") && recorder.headFrom(position.optDouble("x"), position.optDouble("y"), camera[0], camera[1]) && nativeEmpty < 2) nativeNextAt = 0;
-            return;
-        }
-        if (smooth && !now.id.equals(smoothFor)) {
+        if (now == null || !now.followsHead()) return;
+        // Far from the camera: measured from where the picture camera is (its position, as set in Live toolpath or Recording pictures).
+        ExtraCameras.Camera added = ExtraCameras.forPictures(this); String id = added == null ? "" : added.id;
+        double[] camera = GcodeViewerActivity.cameraFor(getSharedPreferences("viewer-hints", MODE_PRIVATE), 0, id);
+        if (!now.id.equals(smoothFor)) {
             smoothFor = now.id;
-            Diagnostics.note(Diagnostics.CAMERA, String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f%s", now.parkX, now.parkY,
-                ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so most parked moments will be missed"));
+            String how = smooth ? String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f, or else with it far from the camera", now.parkX, now.parkY)
+                : String.format(Locale.ROOT, "pictures with the head far from the camera (at X %.0f Y %.0f)", camera[0], camera[1]);
+            Diagnostics.note(Diagnostics.CAMERA, how + (ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so few layers will get their picture"));
         }
-        if (!smooth) return;
+        loadReach(now, camera);
         JSONObject position = Cc2Codec.position(value);
-        if (position != null && position.has("x") && position.has("y") && recorder.headAt(position.optDouble("x"), position.optDouble("y")) && nativeEmpty < 2)
-            nativeNextAt = 0;   // a join now rather than in a minute (two empty joins still wait their 30 minutes)
+        if (position == null || !position.has("x") || !position.has("y")) return;
+        double x = position.optDouble("x"), y = position.optDouble("y");
+        // Parked first (a smooth timelapse); a layer whose parked moment was missed still gets its picture with the head far away.
+        boolean ask = smooth && recorder.headAt(x, y);
+        if (recorder.headFrom(x, y, camera[0], camera[1])) ask = true;
+        if (ask && nativeEmpty < 2) nativeNextAt = 0;   // a join now rather than in a minute (two empty joins still wait their 30 minutes)
     }
     /** After 30 minutes a new try is allowed: the empty count goes back so the grabs lead again. */
     private void nativeRecover() { if (nativeEmpty >= 2 && SystemClock.elapsedRealtime() >= nativeNextAt) nativeEmpty = 0; }

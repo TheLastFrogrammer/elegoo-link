@@ -77,4 +77,50 @@ public class SmoothTimelapseTest {
         recorder.update(t + 2000, t + 2000, status(3, 100, 100), "local", "Bedroom");
         assertTrue(recorder.headFrom(150, 151, cx, cy));
     }
+
+    private static final String TWO_LAYERS = String.join("\n",
+        "G90", "M83", "G1 X5 Y5 Z0.2 F3000", "G1 X60 Y5 E2 ; purge line before the first layer comment",
+        ";LAYER_CHANGE", ";Z:0.2", "G1 X100 Y100 F9000", "G1 X140 Y100 E1", "G1 X140 Y140 E1", "G1 X100 Y140 E1",
+        ";LAYER_CHANGE", ";Z:0.4", "G1 Z0.4", "G1 X100 Y100", "G1 X120 Y100 E1", "G1 X120 Y120 E1", "G29.1 X999 Y999", "");
+
+    @Test public void layerReachCountsLayersAsTheToolpathDoes() throws Exception {
+        LayerReach reach = LayerReach.read(new java.io.ByteArrayInputStream(TWO_LAYERS.getBytes("UTF-8")), 0, 0);
+        GcodeToolpath path = GcodeToolpath.read(new java.io.ByteArrayInputStream(TWO_LAYERS.getBytes("UTF-8")));
+        assertEquals(path.layerCount, reach.layers);
+        assertEquals(2, reach.layers);
+        float[] first = reach.forPrinterLayer(1), second = reach.forPrinterLayer(2);
+        assertEquals("the purge line counts with layer 1", Math.hypot(5, 5), first[0], 0.01);
+        assertEquals(Math.hypot(140, 140), first[1], 0.01);
+        assertEquals(Math.hypot(120, 120), second[1], 0.01);
+        assertNull(reach.forPrinterLayer(3)); assertNull(reach.forPrinterLayer(0));
+    }
+
+    @Test public void withTheFileTheFarSideIsKnownFromTheFirstLayer() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(folder.newFolder("farfile"));
+        recorder.setDefaultPictureLayers(1); recorder.setDefaultPictureFar(true);
+        long t = 3_000_000;
+        recorder.update(t, t, status(1, 100, 100), "local", "Bedroom");
+        recorder.setReach(LayerReach.read(new java.io.ByteArrayInputStream(TWO_LAYERS.getBytes("UTF-8")), 0, 0));
+        // Layer 1 reaches 7.1 to 198 mm from a camera at 0,0: the far 20 % starts at about 160 mm.
+        assertFalse(recorder.headFrom(100, 100, 0, 0));
+        assertTrue("no layer before needed: the file says where far is", recorder.headFrom(135, 135, 0, 0));
+        assertTrue(recorder.pictureDue(t));
+    }
+
+    @Test public void bothTogether() throws Exception {
+        // The farthest corner from the CC2's own camera spot (front left, above the bed) is the back right.
+        assertEquals(0, SmoothTimelapse.farthestCorner(-10, -20));
+        assertEquals(3, SmoothTimelapse.farthestCorner(266, 276));
+        PrintRecorder recorder = new PrintRecorder(folder.newFolder("both"));
+        long t = 4_000_000;
+        recorder.update(t, t, status(1, 100, 100), "local", "Bedroom");
+        recorder.setPark(250, 250);
+        recorder.setReach(LayerReach.read(new java.io.ByteArrayInputStream(TWO_LAYERS.getBytes("UTF-8")), 0, 0));
+        // Layer 1's park was missed (no status while parked): later in the layer the head goes far, and that takes the picture.
+        assertFalse(recorder.headAt(60, 60)); assertFalse(recorder.headFrom(60, 60, 0, 0));
+        assertTrue(recorder.headFrom(136, 136, 0, 0)); assertTrue(recorder.pictureDue(t));
+        assertTrue(recorder.savePicture(new byte[200], t));
+        recorder.update(t + 9000, t + 9000, status(2, 250, 250), "local", "Bedroom");
+        assertTrue("next layer: parked, as planned", recorder.headAt(250, 250));
+    }
 }

@@ -146,7 +146,7 @@ public final class PrintRecorder {
     /** The running print's file parks the head at this corner each layer (from its slice): pictures follow the head. */
     public synchronized void setPark(double x, double y) { if (current != null && !current.smooth()) { current.parkX = x; current.parkY = y; save(current); } }
     /** Set while the head is parked for a layer that has no picture yet: the next picture offered is kept. */
-    private boolean parkedArmed;
+    private boolean parkedArmed, farArmed;
     /**
      * Smooth timelapse: the head's reported position. At the park corner on a layer without a picture, a picture becomes due
      * (true: ask the camera now); away from it, nothing is due, so a picture never shows the head over the print.
@@ -165,21 +165,36 @@ public final class PrintRecorder {
      * called off if the head comes back toward the camera before a picture arrives.
      */
     private double farThisLayer, farLastLayer; private int farLayer = -1;
-    static final double FAR_SHARE = 0.85, FAR_GIVE_UP = 0.7;
+    static final double FAR_SHARE = 0.85, FAR_GIVE_UP = 0.7, FILE_BAND = 0.8, FILE_GIVE_UP = 0.6;
+    /** The running print's own reach per layer from its G-code (for the picture camera's position), when the phone has the file. */
+    private LayerReach reach;
+    public synchronized void setReach(LayerReach reach) { this.reach = reach; }
+    public synchronized boolean hasReach() { return reach != null; }
     public synchronized boolean headFrom(double x, double y, double cameraX, double cameraY) {
-        if (current == null || current.smooth() || !current.pictureFar || current.pictureLayers <= 0 || Double.isNaN(x) || Double.isNaN(y)) return false;
-        if (lastLayer != farLayer) { if (farLayer >= 0) farLastLayer = farThisLayer; farThisLayer = 0; farLayer = lastLayer; parkedArmed = false; }
+        // A smooth timelapse uses this as its fallback: a layer whose parked moment was missed gets its picture with the head far away.
+        if (current == null || !(current.smooth() || current.pictureFar && current.pictureLayers > 0) || Double.isNaN(x) || Double.isNaN(y)) return false;
+        if (lastLayer != farLayer) { if (farLayer >= 0) farLastLayer = farThisLayer; farThisLayer = 0; farLayer = lastLayer; farArmed = false; }
         double d = Math.hypot(x - cameraX, y - cameraY);
         farThisLayer = Math.max(farThisLayer, d);
-        boolean layerWanted = lastLayer >= 1 && (picturedLayer < 0 || lastLayer - picturedLayer >= current.pictureLayers);
-        if (!layerWanted || farLastLayer <= 0) return false;
-        if (parkedArmed && d < FAR_GIVE_UP * farLastLayer) { parkedArmed = false; return false; }
-        boolean ask = !parkedArmed && d >= FAR_SHARE * farLastLayer; if (ask) parkedArmed = true;
+        boolean layerWanted = lastLayer >= 1 && (picturedLayer < 0 || lastLayer - picturedLayer >= Math.max(1, current.pictureLayers));
+        if (!layerWanted) return false;
+        // From the file: the far part of this very layer (its farthest 20 %, or the last 1.5 mm of a layer with little depth).
+        // Without it: nearly as far as the head got on the layer before.
+        float[] span = reach == null ? null : reach.forPrinterLayer(lastLayer);
+        double due, giveUp;
+        if (span != null) {
+            double depth = span[1] - span[0];
+            due = depth < 7.5 ? span[1] - 1.5 : span[0] + FILE_BAND * depth;
+            giveUp = depth < 7.5 ? span[1] - 4 : span[0] + FILE_GIVE_UP * depth;
+        } else if (farLastLayer > 0) { due = FAR_SHARE * farLastLayer; giveUp = FAR_GIVE_UP * farLastLayer; }
+        else return false;
+        if (farArmed && d < giveUp) { farArmed = false; return false; }
+        boolean ask = !farArmed && d >= due; if (ask) farArmed = true;
         return ask;
     }
     public synchronized boolean pictureDue(long mono) {
         if (current == null) return false;
-        if (current.followsHead()) return parkedArmed;
+        if (current.followsHead()) return parkedArmed || farArmed;
         if (current.pictureLayers > 0) return lastLayer >= 1 && (picturedLayer < 0 || lastLayer - picturedLayer >= current.pictureLayers);
         return current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L;
     }
@@ -195,7 +210,7 @@ public final class PrintRecorder {
         long elapsed = Math.max(0, mono - current.monoStart) / 1000;
         try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
         catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
-        picturedMono = mono; picturedLayer = lastLayer; parkedArmed = false; current.pictures++; save(current);
+        picturedMono = mono; picturedLayer = lastLayer; parkedArmed = farArmed = false; current.pictures++; save(current);
         if (current.pictures == 1 || current.pictures % 10 == 0) Diagnostics.note(Diagnostics.CAMERA, "picture " + current.pictures + " of this print kept from " + source + " (" + jpeg.length / 1024 + " KB)");
         PictureKept told = pictureKept;
         if (told != null) { String rgb = activeTray()[1]; told.kept(current, jpeg, lastLayer, rgb.isEmpty() ? -1 : Integer.parseInt(rgb), cameraId); }
@@ -329,7 +344,7 @@ public final class PrintRecorder {
         String base = now + "-" + file.replaceAll("[^A-Za-z0-9._-]", "_").replaceFirst("(?i)\\.gcode$", "");
         if (base.length() > 80) base = base.substring(0, 80);
         Recording recording = new Recording(new File(directory, base + ".csv"), new File(directory, base + ".json"));
-        parkedArmed = false; farThisLayer = farLastLayer = 0; farLayer = -1;
+        parkedArmed = farArmed = false; farThisLayer = farLastLayer = 0; farLayer = -1; reach = null;
         recording.pictureFar = defaultPictureFar && defaultPictureLayers > 0;
         recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now; recording.pictureMinutes = defaultPictureMinutes; recording.pictureLayers = defaultPictureLayers;
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(recording.csv), StandardCharsets.UTF_8)) { writer.write(String.join(",", COLUMNS) + "\n"); }

@@ -2605,34 +2605,80 @@ public final class MainActivity extends Activity {
     /** Recording pictures: the default interval (Settings) or the running print's own (Print tab). 0 = none. */
     private Button pictureDefault;
     /** The choices: minutes (by time) then layers (at layer changes, for smooth timelapses). {minutes, layers}. */
-    /** {minutes, layers, far from the camera}. */
-    private static final int[][] PICTURE_CHOICES = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {5, 0, 0}, {10, 0, 0}, {15, 0, 0}, {30, 0, 0}, {60, 0, 0}, {0, 1, 0}, {0, 2, 0}, {0, 5, 0}, {0, 10, 0},
-        {0, 1, 1}, {0, 2, 1}, {0, 5, 1}};
-    private static String pictureText(int minutes) { return pictureText(minutes, 0); }
-    private static String pictureText(int minutes, int layers) { return layers > 0 ? (layers == 1 ? "Every layer" : "Every " + layers + " layers") : minutes == 0 ? "No pictures" : minutes == 1 ? "Every minute" : "Every " + minutes + " minutes"; }
     private void showPictureDefault() {
         if (pictureDefault == null) return;
-        int layers = settings.getInt("pictureLayers", 0); boolean far = layers > 0 && settings.getBoolean(printer != null ? printer.pictureFarKey() : "pictureFar", false);
-        pictureDefault.setText("Recording pictures: " + pictureText(settings.getInt("pictureMinutes", 5), layers).toLowerCase(Locale.ROOT) + (far ? ", head far from the camera" : "") + "…");
+        String id = PictureSettings.camera(this);
+        pictureDefault.setText("Recording pictures: " + PictureSettings.words(PictureSettings.minutes(this, id), PictureSettings.layers(this, id), PictureSettings.far(this, id)).toLowerCase(Locale.ROOT) + "…");
     }
+    /**
+     * Recording pictures, all in one place: which camera takes them, when (off, every N minutes, or every N layers), and for
+     * layers the moment (any, or with the head far from the camera). For new prints (kept per camera) or for the running print.
+     */
     private void pictureDialog(boolean forDefault) {
         PrintRecorder.Recording now = printer == null || printer.recorder == null ? null : printer.recorder.current();
         if (!forDefault && now == null) return;
-        int minutes = forDefault ? settings.getInt("pictureMinutes", 5) : now.pictureMinutes, layers = forDefault ? settings.getInt("pictureLayers", 0) : now.pictureLayers, chosen = 0;
-        String farKey = printer != null ? printer.pictureFarKey() : "pictureFar";
-        boolean far = forDefault ? settings.getBoolean(farKey, false) : now.pictureFar;
-        String[] names = new String[PICTURE_CHOICES.length];
-        for (int i = 0; i < names.length; i++) {
-            int[] c = PICTURE_CHOICES[i]; names[i] = pictureText(c[0], c[1]) + (c[2] == 1 ? ", head far from the camera" : "");
-            if (layers > 0 ? c[1] == layers && (c[2] == 1) == far : c[1] == 0 && c[0] == minutes) chosen = i;
+        LinearLayout body = dialogBody();
+        // The camera: the printer's own, or an added one (the choice applies from the next picture on).
+        List<ExtraCameras.Camera> added = ExtraCameras.list(this);
+        Spinner camera = null;
+        if (!added.isEmpty()) {
+            label(body, "Camera", 13, MUTED, true);
+            String[] names = new String[added.size() + 1]; names[0] = "The printer's"; int chosenCamera = 0;
+            for (int i = 0; i < added.size(); i++) { names[i + 1] = added.get(i).name; if (added.get(i).pictures) chosenCamera = i + 1; }
+            camera = spinner(body, names); camera.setSelection(chosenCamera);
         }
-        new AlertDialog.Builder(this).setTitle(forDefault ? "Pictures for new prints" : "Pictures for this print")
-            .setSingleChoiceItems(names, chosen, (d, which) -> {
-                int[] c = PICTURE_CHOICES[which];
-                if (forDefault) { settings.edit().putInt("pictureMinutes", c[0]).putInt("pictureLayers", c[1]).putBoolean(farKey, c[2] == 1).apply(); showPictureDefault(); }
-                else if (printer != null && printer.recorder != null) { if (c[1] > 0) printer.recorder.setPictureLayers(c[1], c[2] == 1); else printer.recorder.setPictureMinutes(c[0]); }
-                d.dismiss(); render();
-            }).setNeutralButton("Camera position…", (d, w) -> pictureCameraPosition()).setNegativeButton("Cancel", null).show();
+        label(body, "When", 13, MUTED, true);
+        Spinner when = spinner(body, new String[] {"Off", "By time", "By layers"});
+        LinearLayout byTime = new LinearLayout(this); byTime.setOrientation(LinearLayout.VERTICAL); body.addView(byTime);
+        String[] minuteNames = new String[PictureSettings.MINUTES.length]; for (int i = 0; i < minuteNames.length; i++) minuteNames[i] = PictureSettings.words(PictureSettings.MINUTES[i], 0, false);
+        Spinner minutes = spinner(byTime, minuteNames);
+        LinearLayout byLayers = new LinearLayout(this); byLayers.setOrientation(LinearLayout.VERTICAL); body.addView(byLayers);
+        String[] layerNames = new String[PictureSettings.LAYERS.length]; for (int i = 0; i < layerNames.length; i++) layerNames[i] = PictureSettings.words(0, PictureSettings.LAYERS[i], false);
+        Spinner layers = spinner(byLayers, layerNames);
+        label(byLayers, "Moment in the layer", 13, MUTED, true);
+        Spinner moment = spinner(byLayers, new String[] {"Any moment", "Head far from the camera"});
+        TextView about = label(byLayers, "", 12, MUTED, false);
+        label(body, "Prints sliced here with Smooth timelapse take each layer's picture with the head parked, whatever is chosen here.", 12, MUTED, false);
+        Runnable fill = () -> {
+            String id = PictureSettings.camera(this);
+            int m = forDefault ? PictureSettings.minutes(this, id) : now.pictureMinutes, l = forDefault ? PictureSettings.layers(this, id) : now.pictureLayers;
+            boolean f = forDefault ? PictureSettings.far(this, id) : now.pictureFar;
+            when.setSelection(l > 0 ? 2 : m > 0 ? 1 : 0);
+            int mi = 2; for (int i = 0; i < PictureSettings.MINUTES.length; i++) if (PictureSettings.MINUTES[i] == m) mi = i; minutes.setSelection(mi);
+            int li = 0; for (int i = 0; i < PictureSettings.LAYERS.length; i++) if (PictureSettings.LAYERS[i] == l) li = i; layers.setSelection(li);
+            moment.setSelection(f ? 1 : 0);
+        };
+        fill.run();
+        Runnable show = () -> {
+            int w = when.getSelectedItemPosition();
+            byTime.setVisibility(w == 1 ? View.VISIBLE : View.GONE); byLayers.setVisibility(w == 2 ? View.VISIBLE : View.GONE);
+            about.setText(moment.getSelectedItemPosition() == 1
+                ? "The head's distance from the camera is checked every second (on your network). With the print's G-code on this phone each layer's far side comes from the file; otherwise from the layer before. Set where the camera is with Camera position."
+                : "Taken as soon as the layer begins.");
+        };
+        android.widget.AdapterView.OnItemSelectedListener changed = new android.widget.AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(android.widget.AdapterView<?> p, View v, int pos, long id) { show.run(); }
+            public void onNothingSelected(android.widget.AdapterView<?> p) { }
+        };
+        when.setOnItemSelectedListener(changed); moment.setOnItemSelectedListener(changed); show.run();
+        Spinner cameraChoice = camera;
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        new AlertDialog.Builder(this).setTitle(forDefault ? "Recording pictures" : "Pictures for this print").setView(scroll)
+            .setNeutralButton("Camera position…", (d, w) -> pictureCameraPosition())
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Save", (d, w) -> {
+                if (cameraChoice != null) {
+                    int pick = cameraChoice.getSelectedItemPosition();
+                    for (int i = 0; i < added.size(); i++) added.get(i).pictures = i + 1 == pick;
+                    ExtraCameras.save(this, added);
+                }
+                int choice = when.getSelectedItemPosition();
+                int m = choice == 1 ? PictureSettings.MINUTES[minutes.getSelectedItemPosition()] : 0, l = choice == 2 ? PictureSettings.LAYERS[layers.getSelectedItemPosition()] : 0;
+                boolean f = choice == 2 && moment.getSelectedItemPosition() == 1;
+                if (forDefault) PictureSettings.save(this, PictureSettings.camera(this), m, l, f);
+                else if (printer != null && printer.recorder != null) { if (l > 0) printer.recorder.setPictureLayers(l, f); else printer.recorder.setPictureMinutes(m); }
+                showPictureDefault(); render();
+            }).show();
     }
     /**
      * Where the picture camera is, for "head far from the camera": the same setting as Live toolpath's camera position (a
