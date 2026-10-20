@@ -217,7 +217,7 @@ public class SlicerIntegrationTest {
         File block = SelfTest.model(new File(context().getFilesDir(), "selftest"));
         try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
             slicer.slice(Collections.singletonList(block), PRINTER, PROCESS, Collections.singletonList(PLA),
-                Arrays.asList(new String[] {"time_lapse_gcode", SmoothTimelapse.gcode(0, 3000)}, new String[] {"sparse_infill_density", SelfTest.INFILL + "%"}), output, (percent, text) -> true);
+                Arrays.asList(new String[] {"time_lapse_gcode", SmoothTimelapse.gcode(0, 3000) + "\n" + SelfTest.probeGcode()}, new String[] {"sparse_infill_density", SelfTest.INFILL + "%"}), output, (percent, text) -> true);
         }
         String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
         int layers = Integer.parseInt(gcode.replaceFirst("(?s).*; total layers count = (\\d+).*", "$1"));
@@ -232,6 +232,12 @@ public class SlicerIntegrationTest {
         float[] box = reach.boxForPrinterLayer(layers / 2);
         assertEquals(SelfTest.WIDTH, box[2] - box[0], 1.5); assertEquals(SelfTest.DEPTH, box[3] - box[1], 1.5);
         assertTrue(SelfTest.is("/local/" + SelfTest.NAME + ".gcode"));
+        // The position probe: on exactly one layer, both stops, and back where it was.
+        String body = gcode.substring(0, gcode.lastIndexOf("; CONFIG_BLOCK_START") > 0 ? gcode.lastIndexOf("; CONFIG_BLOCK_START") : gcode.length());
+        assertEquals(1, body.split("; Link Workshop self-test: position probe\n", -1).length - 1);
+        // The engine drops a repeated feed rate and adds progress lines (M73) inside custom G-code, so the order is what is checked.
+        assertTrue(body.matches("(?s).*SAVE_GCODE_STATE NAME=link_probe\n.*G1 X30\\.0 Y30\\.0[^\n]*\nM400\nG4 P3000\n.*G1 X220\\.0 Y220\\.0[^\n]*\nM400\nG4 P3000\nRESTORE_GCODE_STATE NAME=link_probe MOVE=1 MOVE_SPEED=250\n.*"));
+        assertFalse("the condition is evaluated, not printed", body.contains("{if"));
     }
 
     @Test public void slicesTwoFilamentsWithTrayColoursAndAssignment() throws Exception {

@@ -611,7 +611,7 @@ public final class SliceActivity extends Activity {
         smoothCorner.setSelection(SmoothTimelapse.FARTHEST); smoothWait.setSelection(1);
         infill.setText(String.valueOf(SelfTest.INFILL)); supportSpinner.setSelection(1);
         importModels(new ArrayList<>(Collections.singletonList(Uri.fromFile(block))));
-        new AlertDialog.Builder(this).setTitle("Self-test print").setMessage(SelfTest.ABOUT + "\n\nSmooth timelapse, the comparison set, 15 % infill and no supports are set for this slice only.")
+        new AlertDialog.Builder(this).setTitle("Self-test print").setMessage(SelfTest.ABOUT + "\n\nSmooth timelapse, the comparison set, the position probe (layer " + (SelfTest.PROBE_LAYER + 1) + "), 15 % infill and no supports are set for this slice only.")
             .setPositiveButton("OK", null).show();
     }
 
@@ -642,7 +642,7 @@ public final class SliceActivity extends Activity {
         if (smoothSwitch != null && smoothSwitch.isChecked()) {
             int choice = Math.max(0, smoothCorner.getSelectedItemPosition()), corner = smoothCornerNow(), wait = SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())];
             if (!selfTest) getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putInt("smoothCorner", choice).putInt("smoothWait", Math.max(0, smoothWait.getSelectedItemPosition())).apply();
-            overrides.put("time_lapse_gcode", SmoothTimelapse.gcode(corner, wait));
+            overrides.put("time_lapse_gcode", SmoothTimelapse.gcode(corner, wait) + (selfTest ? "\n" + SelfTest.probeGcode() : ""));
         }
         switch (brimSpinner.getSelectedItemPosition()) {
             case 1: overrides.put("brim_type", "no_brim"); break;

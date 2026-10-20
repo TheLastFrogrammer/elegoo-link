@@ -198,6 +198,7 @@ public final class PrintRecorder {
         if (lastLayer != farLayer) { if (farLayer >= 0) farLastLayer = farThisLayer; farThisLayer = 0; farLayer = lastLayer; farArmed = false; }
         // The parked head is not printing: it says nothing about how far the layer reaches, and is the other set's moment.
         if (current.smooth() && SmoothTimelapse.parked(x, y, current.parkX, current.parkY)) return false;
+        if (SelfTest.is(current.file) && SelfTest.atProbe(x, y)) return false;   // the self-test's probe stops are neither
         double d = Math.hypot(x - cameraX, y - cameraY);
         farThisLayer = Math.max(farThisLayer, d);
         boolean comparing = current.compare && current.smooth();
@@ -317,6 +318,7 @@ public final class PrintRecorder {
         // Every status counts for the measured checks, also the ones between samples.
         JSONObject at = Cc2Codec.position(status);
         double hx = at != null && at.has("x") ? at.optDouble("x") : Double.NaN, hy = at != null && at.has("y") ? at.optDouble("y") : Double.NaN, hz = at != null && at.has("z") ? at.optDouble("z") : Double.NaN;
+        current.checks.selfTest = SelfTest.is(current.file);
         current.checks.status(mono, layer, hx, hy, hz, "local".equals(source) && current.followsHead(), current.parkX, current.parkY, reach);
         JSONObject nozzle = status.optJSONObject("extruder"), bed = status.optJSONObject("heater_bed"), machineNow = status.optJSONObject("machine_status");
         current.checks.heat(mono, layer, nozzle == null ? Double.NaN : nozzle.optDouble("temperature", Double.NaN), nozzle == null ? -1 : nozzle.optDouble("target", -1),

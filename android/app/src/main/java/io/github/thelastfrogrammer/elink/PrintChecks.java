@@ -27,6 +27,7 @@ final class PrintChecks {
         {"parkReturn", "The head comes back down after parking"},
         {"layers", "Layer numbers match the G-code"},
         {"position", "Reported head position is on the layer"},
+        {"probe", "Head position matches the G-code exactly"},
         {"pictures", "Pictures arrive in time"},
         {"heat", "Heaters hold their temperature"},
         {"filament", "Filament use matches the G-code"},
@@ -57,6 +58,9 @@ final class PrintChecks {
     long firstLayerAt = -1, endedAt = -1, fileSeconds, etaAt = -1, etaRemaining; boolean complete;
     // Filament the file feeds (mm), for comparing with the extruder's count.
     double fileExtruded;
+    // The self-test's position probe: where the head stood still (the same position in readings in a row), {x, y, readings}.
+    boolean selfTest; final List<double[]> stops = new ArrayList<>(); private double stillX = Double.NaN, stillY = Double.NaN;
+    static final int MAX_STOPS = 60;
 
     /**
      * One status: the time (monotonic ms), the printer's layer, the head position (NaN when not reported), whether it came
@@ -72,6 +76,19 @@ final class PrintChecks {
         if (layer >= 1 && firstLayerAt < 0) firstLayerAt = mono;
         if (reach != null) { fileLayers = reach.layers; fileSeconds = reach.estimatedSeconds; fileExtruded = reach.extruded; }
         if (Double.isNaN(x) || Double.isNaN(y) || layer < 1) return;
+        if (selfTest) {
+            boolean same = Math.abs(x - stillX) < 0.05 && Math.abs(y - stillY) < 0.05;
+            if (same) {
+                double[] last = stops.isEmpty() ? null : stops.get(stops.size() - 1);
+                if (last != null && Math.abs(last[0] - x) < 0.05 && Math.abs(last[1] - y) < 0.05) last[2]++;
+                else if (!(smoothPark(x, y, parkX, parkY))) {
+                    // Full: a short stop (two readings) makes room, so the probe's long stops are never crowded out.
+                    if (stops.size() >= MAX_STOPS) for (int i = 0; i < stops.size(); i++) if (stops.get(i)[2] <= 2) { stops.remove(i); break; }
+                    if (stops.size() < MAX_STOPS) stops.add(new double[] {x, y, 2});
+                }
+            }
+            stillX = x; stillY = y;
+        }
         boolean smooth = !Double.isNaN(parkX) && !Double.isNaN(parkY);
         boolean parked = smooth && SmoothTimelapse.parked(x, y, parkX, parkY);
         if (smooth) {
@@ -88,7 +105,7 @@ final class PrintChecks {
             }
             if (!parked) beforeZ = z;
         }
-        if (!parked && reach != null) {
+        if (!parked && reach != null && !(selfTest && SelfTest.atProbe(x, y))) {
             float[] box = reach.boxForPrinterLayer(layer);
             if (box != null) {
                 positions++;
@@ -96,6 +113,8 @@ final class PrintChecks {
             }
         }
     }
+
+    private static boolean smoothPark(double x, double y, double parkX, double parkY) { return !Double.isNaN(parkX) && SmoothTimelapse.parked(x, y, parkX, parkY); }
 
     /** Heater readings while printing (layer 1 on): °C, NaN when not reported. */
     void heat(long mono, int layer, double nozzle, double nozzleSet, double bed, double bedSet) {
@@ -165,6 +184,7 @@ final class PrintChecks {
             words.append(" Kept: ").append(picturesMain).append(comparing ? " parked, " + picturesFar + " far." : ".");
             out.add(new Finding("pictures", title("pictures"), worst <= 3_000 ? Verdict.WORKS : worst <= 8_000 ? Verdict.UNSURE : Verdict.PROBLEM, words.toString().trim()));
         }
+        if (selfTest && maxLayer > SelfTest.PROBE_LAYER + 2) out.add(probe());
         if (heatSamples >= 30) {
             int share = percent(heatOk, heatSamples);
             out.add(new Finding("heat", title("heat"), share >= 95 ? Verdict.WORKS : share >= 80 ? Verdict.UNSURE : Verdict.PROBLEM,
@@ -188,6 +208,42 @@ final class PrintChecks {
         }
         return out;
     }
+
+    /** The position probe's answer: the printer's stops against the two points the G-code sent the head to. */
+    Finding probe() {
+        double[][] seen = new double[SelfTest.PROBES.length][];
+        for (int i = 0; i < seen.length; i++) seen[i] = nearest(SelfTest.PROBES[i][0], SelfTest.PROBES[i][1]);
+        boolean exact = true; for (int i = 0; i < seen.length; i++) exact &= seen[i] != null && distance(seen[i], SelfTest.PROBES[i]) <= SelfTest.PROBE_NEAR;
+        if (exact) return new Finding("probe", title("probe"), Verdict.WORKS, String.format(Locale.ROOT,
+            "The head stopped at X %.1f Y %.1f and X %.1f Y %.1f, where the G-code sent it, and was seen there in %.0f and %.0f readings in a row.",
+            seen[0][0], seen[0][1], seen[1][0], seen[1][1], seen[0][2], seen[1][2]));
+        // Mirrored on the 256 mm bed: each point appears at the other side.
+        String[] mirrors = {"left to right", "front to back", "both ways"}; double[][] flip = {{1, 0}, {0, 1}, {1, 1}};
+        for (int m = 0; m < 3; m++) {
+            boolean all = true;
+            for (double[] p : SelfTest.PROBES) {
+                double[] want = {flip[m][0] == 1 ? 256 - p[0] : p[0], flip[m][1] == 1 ? 256 - p[1] : p[1]};
+                double[] near = nearest(want[0], want[1]); all &= near != null && distance(near, want) <= SelfTest.PROBE_NEAR;
+            }
+            if (all) return new Finding("probe", title("probe"), Verdict.PROBLEM, "The printer reports the head mirrored " + mirrors[m] + ": the probe's stops show at the opposite side of the bed.");
+        }
+        // Shifted: both stops off by the same amount.
+        if (seen[0] != null && seen[1] != null && distance(seen[0], SelfTest.PROBES[0]) < 25 && distance(seen[1], SelfTest.PROBES[1]) < 25) {
+            double dx0 = seen[0][0] - SelfTest.PROBES[0][0], dy0 = seen[0][1] - SelfTest.PROBES[0][1], dx1 = seen[1][0] - SelfTest.PROBES[1][0], dy1 = seen[1][1] - SelfTest.PROBES[1][1];
+            if (Math.abs(dx0 - dx1) <= 1 && Math.abs(dy0 - dy1) <= 1)
+                return new Finding("probe", title("probe"), Verdict.PROBLEM, String.format(Locale.ROOT,
+                    "The printer reports the head shifted by X %+.1f mm, Y %+.1f mm from where the G-code sent it (the same at both stops).", (dx0 + dx1) / 2, (dy0 + dy1) / 2));
+        }
+        return new Finding("probe", title("probe"), Verdict.UNSURE, stops.isEmpty()
+            ? "No stops were seen: statuses may have been too far apart, or the probe layer was missed."
+            : "The probe's stops were not found where expected; " + stops.size() + " other stops were seen. The diagnostics have the readings.");
+    }
+    private double[] nearest(double x, double y) {
+        double[] best = null; double most = Double.MAX_VALUE;
+        for (double[] s : stops) { double d = Math.hypot(s[0] - x, s[1] - y); if (d < most) { most = d; best = s; } }
+        return best;
+    }
+    private static double distance(double[] a, double[] b) { return Math.hypot(a[0] - b[0], a[1] - b[1]); }
 
     /** A recording's answers so far. */
     static List<Finding> of(PrintRecorder.Recording r) {
@@ -222,7 +278,10 @@ final class PrintChecks {
             .put("waits", new org.json.JSONArray(new long[] {waits[0], waitSum[0], waitMax[0], waits[1], waitSum[1], waitMax[1]}))
             .put("heat", new org.json.JSONArray(new double[] {heatSamples, heatOk, worstNozzle, worstBed}))
             .put("time", new org.json.JSONArray(new long[] {firstLayerAt, endedAt, fileSeconds, etaAt, etaRemaining, complete ? 1 : 0}))
-            .put("file_extruded", fileExtruded);
+            .put("file_extruded", fileExtruded).put("self_test", selfTest).put("stops", stopsJson());
+    }
+    private org.json.JSONArray stopsJson() throws org.json.JSONException {
+        org.json.JSONArray all = new org.json.JSONArray(); for (double[] s : stops) all.put(new org.json.JSONArray(s)); return all;
     }
     static PrintChecks fromJson(JSONObject json) {
         PrintChecks c = new PrintChecks();
@@ -236,7 +295,9 @@ final class PrintChecks {
         org.json.JSONArray h = json.optJSONArray("heat"), t = json.optJSONArray("time");
         if (h != null) { c.heatSamples = h.optInt(0); c.heatOk = h.optInt(1); c.worstNozzle = h.optDouble(2, 0); c.worstBed = h.optDouble(3, 0); }
         if (t != null) { c.firstLayerAt = t.optLong(0, -1); c.endedAt = t.optLong(1, -1); c.fileSeconds = t.optLong(2); c.etaAt = t.optLong(3, -1); c.etaRemaining = t.optLong(4); c.complete = t.optInt(5) == 1; }
-        c.fileExtruded = json.optDouble("file_extruded", 0);
+        c.fileExtruded = json.optDouble("file_extruded", 0); c.selfTest = json.optBoolean("self_test");
+        org.json.JSONArray st = json.optJSONArray("stops");
+        for (int i = 0; st != null && i < st.length(); i++) { org.json.JSONArray one = st.optJSONArray(i); if (one != null) c.stops.add(new double[] {one.optDouble(0), one.optDouble(1), one.optDouble(2)}); }
         return c;
     }
 }

@@ -91,4 +91,32 @@ public class PrintChecksTest {
         Map<String, PrintChecks.Finding> found = byId(checks.findings(0, 0, false));
         assertEquals(PrintChecks.Verdict.PROBLEM, found.get("heat").verdict);
     }
+
+    /** The self-test's position probe: exact, shifted, mirrored, or not seen. */
+    private static PrintChecks.Finding probe(double dx, double dy, boolean mirrorX, boolean seen) {
+        PrintChecks checks = new PrintChecks(); checks.selfTest = true; long t = 0;
+        for (int layer = 1; layer <= 8; layer++) {
+            for (int s = 0; s < 5; s++) checks.status(t += 1000, layer, 110 + s * 5, 120 + layer, 0.2 * layer, true, 250, 250, null);
+            if (layer == SelfTest.PROBE_LAYER + 1 && seen)
+                for (double[] p : SelfTest.PROBES) for (int r = 0; r < 3; r++)
+                    checks.status(t += 1000, layer, (mirrorX ? 256 - p[0] : p[0]) + dx, p[1] + dy, 0.2 * layer + 0.6, true, 250, 250, null);
+        }
+        PrintChecks.Finding found = null;
+        for (PrintChecks.Finding f : PrintChecks.fromJson(toJson(checks)).findings(0, 0, false)) if (f.id.equals("probe")) found = f;
+        return found;
+    }
+    private static org.json.JSONObject toJson(PrintChecks c) { try { return c.toJson(); } catch (org.json.JSONException e) { throw new AssertionError(e); } }
+
+    @Test public void theProbeTellsExactShiftedAndMirrored() {
+        PrintChecks.Finding exact = probe(0, 0, false, true);
+        assertEquals(exact.evidence, PrintChecks.Verdict.WORKS, exact.verdict);
+        assertTrue(exact.evidence, exact.evidence.contains("X 30.0 Y 30.0") && exact.evidence.contains("3 and 3 readings"));
+        PrintChecks.Finding shifted = probe(3, -2, false, true);
+        assertEquals(PrintChecks.Verdict.PROBLEM, shifted.verdict); assertTrue(shifted.evidence, shifted.evidence.contains("X +3.0 mm, Y -2.0 mm"));
+        PrintChecks.Finding mirrored = probe(0, 0, true, true);
+        assertEquals(PrintChecks.Verdict.PROBLEM, mirrored.verdict); assertTrue(mirrored.evidence, mirrored.evidence.contains("left to right"));
+        PrintChecks.Finding missed = probe(0, 0, false, false);
+        assertEquals(PrintChecks.Verdict.UNSURE, missed.verdict);
+        assertTrue(SelfTest.atProbe(30.4, 29.8)); assertFalse(SelfTest.atProbe(250, 250));
+    }
 }
