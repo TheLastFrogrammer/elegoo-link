@@ -403,10 +403,24 @@ public final class RecordingsActivity extends Activity {
     private void pictures(PrintRecorder.Recording recording) {
         List<File> files = PrintRecorder.pictures(recording);
         if (files.isEmpty() && recording.pictureMinutes == 0 && recording.pictureLayers == 0) return;
-        LinearLayout card = card(); label(card, "Camera pictures", 15, ink, true);
-        if (files.isEmpty()) { label(card, "No pictures yet. " + recording.pictureWords() + ", from the printer's camera on this network, or through the cloud.", 13, muted, false); return; }
-        label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (recording.pictureMinutes > 0 || recording.pictureLayers > 0 ? " · " + recording.pictureWords().toLowerCase(Locale.ROOT) : "") + ". Tap one to see it larger.", 13, muted, false);
-        if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files)); }
+        boolean comparing = recording.compare && recording.smooth();
+        LinearLayout card = card(); label(card, comparing ? "Camera pictures · head parked" : "Camera pictures", 15, ink, true);
+        if (files.isEmpty()) label(card, "No pictures yet. " + recording.pictureWords() + ", from the printer's camera on this network, or through the cloud.", 13, muted, false);
+        else {
+            label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (comparing ? "" : recording.pictureMinutes > 0 || recording.pictureLayers > 0 ? " · " + recording.pictureWords().toLowerCase(Locale.ROOT) : "") + ". Tap one to see it larger.", 13, muted, false);
+            strip(card, recording, files, "");
+        }
+        if (!comparing) return;
+        // The second set, to compare: the same layers, with the head at the far side of each instead of parked.
+        List<File> far = PrintRecorder.farPictures(recording);
+        LinearLayout farCard = card(); label(farCard, "Camera pictures · head far from the camera", 15, ink, true);
+        label(farCard, far.isEmpty() ? "No pictures in this set yet. They are taken while each layer prints, when the head reaches the side away from the camera."
+            : far.size() + (far.size() == 1 ? " picture" : " pictures") + ", taken while each layer printed. Compare with the parked set above.", 13, muted, false);
+        if (!far.isEmpty()) strip(farCard, recording, far, "-far");
+    }
+    /** A set of pictures in a strip, with its timelapse video button; tap one for the full picture. */
+    private void strip(LinearLayout card, PrintRecorder.Recording recording, List<File> files, String videoSuffix) {
+        if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files, videoSuffix)); }
         LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
         HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.addView(strip); card.addView(scroll);
         for (File file : files) {
@@ -424,7 +438,7 @@ public final class RecordingsActivity extends Activity {
         }
     }
     /** Turns the pictures into a short MP4 on the phone (about ten seconds), then asks where to save it. */
-    private void makeVideo(PrintRecorder.Recording recording, List<File> files) {
+    private void makeVideo(PrintRecorder.Recording recording, List<File> files, String suffix) {
         java.util.concurrent.atomic.AtomicBoolean cancelled = new java.util.concurrent.atomic.AtomicBoolean();
         TextView state = new TextView(this); state.setTextSize(15); state.setTextColor(ink); state.setPadding(dp(24), dp(16), dp(24), 0);
         state.setText("Making the video: 0 of " + files.size() + " pictures"); A11y.polite(state);
@@ -432,7 +446,7 @@ public final class RecordingsActivity extends Activity {
             .setNegativeButton("Cancel", (d, w) -> cancelled.set(true)).show();
         File folder = new File(getCacheDir(), "timelapse"); folder.mkdirs();
         File[] old = folder.listFiles(); if (old != null) for (File f : old) f.delete();
-        File out = new File(folder, recording.csv.getName().replaceFirst("\\.csv$", "") + "-timelapse.mp4");
+        File out = new File(folder, recording.csv.getName().replaceFirst("\\.csv$", "") + suffix + "-timelapse.mp4");
         new Thread(() -> {
             String failure = null;
             try { TimelapseEncoder.encode(files, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video: " + done + " of " + total + " pictures"))); }

@@ -123,4 +123,35 @@ public class SmoothTimelapseTest {
         recorder.update(t + 9000, t + 9000, status(2, 250, 250), "local", "Bedroom");
         assertTrue("next layer: parked, as planned", recorder.headAt(250, 250));
     }
+
+    /** Comparing: each layer keeps a parked picture and a far one, in two sets; a far one waits while a parked one is on its way. */
+    @Test public void compareKeepsBothSetsApart() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(folder.newFolder("compare"));
+        long t = 5_000_000;
+        recorder.update(t, t, status(1, 60, 60), "local", "Bedroom");
+        recorder.setPark(250, 250, true);
+        recorder.setReach(LayerReach.read(new java.io.ByteArrayInputStream(TWO_LAYERS.getBytes("UTF-8")), 0, 0));
+        PrintRecorder.Recording now = recorder.current();
+        assertTrue(now.compare);
+        // Layer 1: the far side first, then the park; each lands in its own set.
+        assertTrue(recorder.headFrom(136, 136, 0, 0));
+        assertTrue(recorder.savePicture(new byte[200], t));
+        assertTrue(recorder.headAt(250, 250));
+        assertFalse("the parked head is not the far side of the layer", recorder.headFrom(250, 250, 0, 0));
+        assertTrue(recorder.savePicture(new byte[200], t + 1000));
+        assertEquals(1, PrintRecorder.pictures(now).size()); assertEquals(1, PrintRecorder.farPictures(now).size());
+        // Layer 2: parked first; the far picture waits for the parked one to arrive.
+        recorder.update(t + 9000, t + 9000, status(2, 250, 250), "local", "Bedroom");
+        assertTrue(recorder.headAt(250, 250));
+        assertFalse(recorder.headFrom(120, 120, 0, 0));
+        assertTrue(recorder.savePicture(new byte[200], t + 9000));
+        assertTrue(recorder.headFrom(120, 120, 0, 0));
+        assertTrue(recorder.savePicture(new byte[200], t + 12000));
+        assertEquals(2, PrintRecorder.pictures(now).size()); assertEquals(2, PrintRecorder.farPictures(now).size());
+        assertEquals(2, now.pictures); assertEquals(2, now.farPictures);
+        PrintRecorder.Recording read = PrintRecorder.Recording.read(now.meta);
+        assertTrue(read.compare); assertEquals(2, read.farPictures);
+        recorder.delete(now);
+        assertFalse(now.pictureFolder().exists());
+    }
 }

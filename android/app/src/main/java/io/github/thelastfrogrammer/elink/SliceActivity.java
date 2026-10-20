@@ -105,7 +105,7 @@ public final class SliceActivity extends Activity {
     private ScrollView scroll;
     private TextView modelsLabel, status, resultText;
     private Spinner printerSpinner, processSpinner, supportSpinner, brimSpinner, smoothCorner, smoothWait;
-    private Switch smoothSwitch;
+    private Switch smoothSwitch, smoothCompare;
     private LinearLayout slotList, modelAssign;
     private Button addSlot, removeSlot, fillTrays;
     private TextView traysNote;
@@ -485,6 +485,12 @@ public final class SliceActivity extends Activity {
         List<String> waits = new ArrayList<>(); for (int ms : SmoothTimelapse.WAITS_MS) waits.add(ms / 1000 + " s");
         smoothWait = spinner(smoothBox); fill(smoothWait, waits, waits.get(Math.max(0, Math.min(waits.size() - 1, workshop.getInt("smoothWait", 1)))));
         WorkshopUi.chipsFor(smoothWait, teal, buttonColor, ink, dark);
+        smoothCompare = new Switch(this); smoothCompare.setText("Also take a set with the head far from the camera, to compare"); smoothCompare.setTextColor(ink); smoothCompare.setTextSize(14);
+        smoothCompare.setMinHeight(dp(52)); smoothCompare.setSwitchPadding(dp(16)); WorkshopUi.switchColours(smoothCompare, teal, dark);
+        smoothCompare.setChecked(workshop.getBoolean("smoothCompare", false));
+        smoothCompare.setOnCheckedChangeListener((v, on) -> workshop.edit().putBoolean("smoothCompare", on).apply());
+        smoothBox.addView(smoothCompare, new LinearLayout.LayoutParams(-1, -2));
+        label(smoothBox, "Each layer then gets two pictures: one parked, and one while it prints with the head at the far side of the layer. The recording keeps them as two sets, each with its own timelapse video.", 12, muted, false);
         smoothSwitch.setOnCheckedChangeListener((v, on) -> { smoothBox.setVisibility(on ? View.VISIBLE : View.GONE); workshop.edit().putBoolean("smoothTimelapse", on).apply(); updateButtons(); });
         smoothSwitch.setChecked(workshop.getBoolean("smoothTimelapse", false)); smoothBox.setVisibility(smoothSwitch.isChecked() ? View.VISIBLE : View.GONE);
         settingsSummary = label(settingsCard, "", 13, muted, false);
@@ -829,7 +835,8 @@ public final class SliceActivity extends Activity {
         plans.apply();
         // The recording looks for the head at this corner to take each layer's picture (or forgets an earlier park for these names).
         boolean smooth = smoothSwitch != null && smoothSwitch.isChecked();
-        SmoothTimelapse.remember(this, names, smoothCornerNow(), SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())], smooth);
+        SmoothTimelapse.remember(this, names, smoothCornerNow(), SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())], smooth,
+            smooth && smoothCompare != null && smoothCompare.isChecked());
         status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " project plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < results.size(); i++) {

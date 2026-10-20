@@ -378,7 +378,7 @@ public final class PrinterService extends Service {
      */
     private void smoothTimelapse(JSONObject value, String source) {
         PrintRecorder.Recording now = recorder.current();
-        if (now != null && !now.smooth()) { double[] park = SmoothTimelapse.forFile(this, now.file); if (park != null) recorder.setPark(park[0], park[1]); }
+        if (now != null && !now.smooth()) { double[] park = SmoothTimelapse.forFile(this, now.file); if (park != null) recorder.setPark(park[0], park[1], park[3] > 0); }
         boolean smooth = now != null && now.smooth();
         if (session != null) session.fastStatus(now != null && now.followsHead() && ready());
         if (now == null || !now.followsHead()) return;
@@ -387,7 +387,8 @@ public final class PrinterService extends Service {
         double[] camera = GcodeViewerActivity.cameraFor(getSharedPreferences("viewer-hints", MODE_PRIVATE), 0, id);
         if (!now.id.equals(smoothFor)) {
             smoothFor = now.id;
-            String how = smooth ? String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f, or else with it far from the camera", now.parkX, now.parkY)
+            String how = smooth && now.compare ? String.format(Locale.ROOT, "smooth timelapse with a second set to compare: parked pictures at X %.0f Y %.0f, and far from the camera (at X %.0f Y %.0f)", now.parkX, now.parkY, camera[0], camera[1])
+                : smooth ? String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f, or else with it far from the camera", now.parkX, now.parkY)
                 : String.format(Locale.ROOT, "pictures with the head far from the camera (at X %.0f Y %.0f)", camera[0], camera[1]);
             Diagnostics.note(Diagnostics.CAMERA, how + (ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so few layers will get their picture"));
         }

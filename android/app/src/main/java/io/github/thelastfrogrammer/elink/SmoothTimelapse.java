@@ -47,24 +47,26 @@ final class SmoothTimelapse {
     }
 
     /** Remembers the park for these output files (or forgets it, when the slice had none). */
-    static void remember(Context context, Iterable<String> names, int corner, int waitMs, boolean on) {
+    static void remember(Context context, Iterable<String> names, int corner, int waitMs, boolean on) { remember(context, names, corner, waitMs, on, false); }
+    /** As above; `compare` also keeps a second set of pictures with the head far from the camera, to compare. */
+    static void remember(Context context, Iterable<String> names, int corner, int waitMs, boolean on, boolean compare) {
         SharedPreferences.Editor edit = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit();
         for (String name : names) {
             String key = GcodeLibrary.safeName(name);
             if (!on) { edit.remove(key); continue; }
-            try { edit.putString(key, new JSONObject().put("x", PARK[corner][0]).put("y", PARK[corner][1]).put("wait", waitMs).toString()); }
+            try { edit.putString(key, new JSONObject().put("x", PARK[corner][0]).put("y", PARK[corner][1]).put("wait", waitMs).put("compare", compare).toString()); }
             catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
         }
         edit.apply();
     }
 
-    /** The park {x, y, wait ms} for a printed file name, or null when it was not sliced here with a smooth timelapse. */
+    /** The park {x, y, wait ms, compare (1 or 0)} for a printed file name, or null when it was not sliced here with a smooth timelapse. */
     static double[] forFile(Context context, String filename) {
         if (filename == null || filename.isEmpty()) return null;
         String name = filename.replaceFirst("^.*/", "");
         String stored = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(GcodeLibrary.safeName(name), null);
         if (stored == null) return null;
-        try { JSONObject park = new JSONObject(stored); return new double[] {park.getDouble("x"), park.getDouble("y"), park.optDouble("wait", 3000)}; }
+        try { JSONObject park = new JSONObject(stored); return new double[] {park.getDouble("x"), park.getDouble("y"), park.optDouble("wait", 3000), park.optBoolean("compare") ? 1 : 0}; }
         catch (org.json.JSONException damaged) { return null; }
     }
 
