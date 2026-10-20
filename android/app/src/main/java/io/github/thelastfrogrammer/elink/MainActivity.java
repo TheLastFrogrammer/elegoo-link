@@ -2605,26 +2605,51 @@ public final class MainActivity extends Activity {
     /** Recording pictures: the default interval (Settings) or the running print's own (Print tab). 0 = none. */
     private Button pictureDefault;
     /** The choices: minutes (by time) then layers (at layer changes, for smooth timelapses). {minutes, layers}. */
-    private static final int[][] PICTURE_CHOICES = {{0, 0}, {1, 0}, {2, 0}, {5, 0}, {10, 0}, {15, 0}, {30, 0}, {60, 0}, {0, 1}, {0, 2}, {0, 5}, {0, 10}};
+    /** {minutes, layers, far from the camera}. */
+    private static final int[][] PICTURE_CHOICES = {{0, 0, 0}, {1, 0, 0}, {2, 0, 0}, {5, 0, 0}, {10, 0, 0}, {15, 0, 0}, {30, 0, 0}, {60, 0, 0}, {0, 1, 0}, {0, 2, 0}, {0, 5, 0}, {0, 10, 0},
+        {0, 1, 1}, {0, 2, 1}, {0, 5, 1}};
     private static String pictureText(int minutes) { return pictureText(minutes, 0); }
     private static String pictureText(int minutes, int layers) { return layers > 0 ? (layers == 1 ? "Every layer" : "Every " + layers + " layers") : minutes == 0 ? "No pictures" : minutes == 1 ? "Every minute" : "Every " + minutes + " minutes"; }
-    private void showPictureDefault() { if (pictureDefault != null) pictureDefault.setText("Recording pictures: " + pictureText(settings.getInt("pictureMinutes", 5), settings.getInt("pictureLayers", 0)).toLowerCase(Locale.ROOT) + "…"); }
+    private void showPictureDefault() {
+        if (pictureDefault == null) return;
+        int layers = settings.getInt("pictureLayers", 0); boolean far = layers > 0 && settings.getBoolean(printer != null ? printer.pictureFarKey() : "pictureFar", false);
+        pictureDefault.setText("Recording pictures: " + pictureText(settings.getInt("pictureMinutes", 5), layers).toLowerCase(Locale.ROOT) + (far ? ", head far from the camera" : "") + "…");
+    }
     private void pictureDialog(boolean forDefault) {
         PrintRecorder.Recording now = printer == null || printer.recorder == null ? null : printer.recorder.current();
         if (!forDefault && now == null) return;
         int minutes = forDefault ? settings.getInt("pictureMinutes", 5) : now.pictureMinutes, layers = forDefault ? settings.getInt("pictureLayers", 0) : now.pictureLayers, chosen = 0;
+        String farKey = printer != null ? printer.pictureFarKey() : "pictureFar";
+        boolean far = forDefault ? settings.getBoolean(farKey, false) : now.pictureFar;
         String[] names = new String[PICTURE_CHOICES.length];
         for (int i = 0; i < names.length; i++) {
-            int[] c = PICTURE_CHOICES[i]; names[i] = pictureText(c[0], c[1]) + (c[1] == 1 ? " (smoothest timelapse)" : "");
-            if (layers > 0 ? c[1] == layers : c[1] == 0 && c[0] == minutes) chosen = i;
+            int[] c = PICTURE_CHOICES[i]; names[i] = pictureText(c[0], c[1]) + (c[2] == 1 ? ", head far from the camera" : "");
+            if (layers > 0 ? c[1] == layers && (c[2] == 1) == far : c[1] == 0 && c[0] == minutes) chosen = i;
         }
         new AlertDialog.Builder(this).setTitle(forDefault ? "Pictures for new prints" : "Pictures for this print")
             .setSingleChoiceItems(names, chosen, (d, which) -> {
                 int[] c = PICTURE_CHOICES[which];
-                if (forDefault) { settings.edit().putInt("pictureMinutes", c[0]).putInt("pictureLayers", c[1]).apply(); showPictureDefault(); }
-                else if (printer != null && printer.recorder != null) { if (c[1] > 0) printer.recorder.setPictureLayers(c[1]); else printer.recorder.setPictureMinutes(c[0]); }
+                if (forDefault) { settings.edit().putInt("pictureMinutes", c[0]).putInt("pictureLayers", c[1]).putBoolean(farKey, c[2] == 1).apply(); showPictureDefault(); }
+                else if (printer != null && printer.recorder != null) { if (c[1] > 0) printer.recorder.setPictureLayers(c[1], c[2] == 1); else printer.recorder.setPictureMinutes(c[0]); }
                 d.dismiss(); render();
-            }).setNegativeButton("Cancel", null).show();
+            }).setNeutralButton("Camera position…", (d, w) -> pictureCameraPosition()).setNegativeButton("Cancel", null).show();
+    }
+    /**
+     * Where the picture camera is, for "head far from the camera": the same setting as Live toolpath's camera position (a
+     * preset spot, or lined up there by hand), kept for each camera.
+     */
+    private void pictureCameraPosition() {
+        ExtraCameras.Camera added = printer == null ? null : ExtraCameras.forPictures(this);
+        String id = added == null ? "" : added.id, key = GcodeViewerActivity.camKey("cameraSpot", id);
+        android.content.SharedPreferences viewer = getSharedPreferences("viewer-hints", MODE_PRIVATE);
+        int current = viewer.getInt(key, GcodeViewerActivity.defaultSpot(id));
+        boolean lined = GcodeViewerActivity.linedUp(viewer, id);
+        List<String> spots = new ArrayList<>(java.util.Arrays.asList(GcodeViewerActivity.CAMERA_SPOTS).subList(0, GcodeViewerActivity.CAMERA_SPOTS.length - 1));
+        if (lined) spots.add(GcodeViewerActivity.CAMERA_SPOTS[GcodeViewerActivity.CAMERA_SPOTS.length - 1]);
+        int chosen = Math.min(current, spots.size() - 1);
+        new AlertDialog.Builder(this).setTitle("Where is " + (added == null ? "the printer's camera" : "“" + added.name + "”") + "?")
+            .setSingleChoiceItems(spots.toArray(new String[0]), chosen, (d, which) -> { viewer.edit().putInt(key, which).apply(); d.dismiss(); })
+            .setNegativeButton("Cancel", null).show();
     }
     /** On the Print tab, ask for the CANVAS trays when they are missing or out of date: a read, at most every 30 seconds. */
     private long traysAskedAt;

@@ -58,4 +58,23 @@ public class SmoothTimelapseTest {
         assertTrue(read.smooth()); assertEquals("Every layer, head parked", read.pictureWords());
         assertTrue(Files.exists(new File(recorder.current().pictureFolder(), String.format("%06d.jpg", 5L)).toPath()));
     }
+
+    @Test public void farFromTheCameraWaitsForTheFarSideOfEachLayer() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(folder.newFolder("far"));
+        recorder.setDefaultPictureLayers(1); recorder.setDefaultPictureFar(true);
+        long t = 2_000_000; double cx = -10, cy = -20;   // a camera at the front left
+        recorder.update(t, t, status(1, 100, 100), "local", "Bedroom");
+        assertTrue(recorder.current().pictureFar); assertEquals("Every layer, head far from the camera", recorder.current().pictureWords());
+        // Layer 1 is only measured (nothing to compare with yet): the head reaches 150,150 at most.
+        assertFalse(recorder.headFrom(100, 100, cx, cy)); assertFalse(recorder.headFrom(150, 150, cx, cy));
+        recorder.update(t + 1000, t + 1000, status(2, 100, 100), "local", "Bedroom");
+        assertFalse("near the camera: wait", recorder.headFrom(100, 100, cx, cy)); assertFalse(recorder.pictureDue(t + 1000));
+        assertTrue("nearly as far as the last layer got", recorder.headFrom(148, 149, cx, cy)); assertTrue(recorder.pictureDue(t + 1000));
+        assertFalse("swung back toward the camera before the picture: called off", recorder.headFrom(60, 60, cx, cy)); assertFalse(recorder.pictureDue(t + 1000));
+        assertTrue(recorder.headFrom(150, 150, cx, cy));
+        assertTrue(recorder.savePicture(new byte[200], t + 1200));
+        assertFalse("one picture per layer", recorder.headFrom(151, 151, cx, cy));
+        recorder.update(t + 2000, t + 2000, status(3, 100, 100), "local", "Bedroom");
+        assertTrue(recorder.headFrom(150, 151, cx, cy));
+    }
 }

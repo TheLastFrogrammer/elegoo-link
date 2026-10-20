@@ -113,6 +113,7 @@ public final class PrinterService extends Service {
         android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         if (recorder == null || !settings.getBoolean("recordPrints", true)) return;
         recorder.setCanvas(canvas); recorder.setDefaultPictureMinutes(settings.getInt("pictureMinutes", 5)); recorder.setDefaultPictureLayers(settings.getInt("pictureLayers", 0));
+        recorder.setDefaultPictureFar(settings.getBoolean(pictureFarKey(), false));
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name, "local".equals(source) ? filePrinterId() : cloudSerial);
         keepAwakeForRecording(recorder.current() != null);
@@ -339,6 +340,8 @@ public final class PrinterService extends Service {
             });
         });
     }
+    /** The picture camera's own choice of far-from-the-camera pictures (each camera keeps its own). */
+    String pictureFarKey() { ExtraCameras.Camera added = ExtraCameras.forPictures(this); return GcodeViewerActivity.camKey("pictureFar", added == null ? "" : added.id); }
     /** The recording a smooth timelapse was last set up for (its id), for one log line and the fast status per print. */
     private String smoothFor = "";
     /**
@@ -349,7 +352,20 @@ public final class PrinterService extends Service {
         PrintRecorder.Recording now = recorder.current();
         if (now != null && !now.smooth()) { double[] park = SmoothTimelapse.forFile(this, now.file); if (park != null) recorder.setPark(park[0], park[1]); }
         boolean smooth = now != null && now.smooth();
-        if (session != null) session.fastStatus(smooth && ready());
+        if (session != null) session.fastStatus(now != null && now.followsHead() && ready());
+        if (now != null && !smooth && now.followsHead()) {
+            // Far from the camera: measured from where the picture camera is (its position, as set in Live toolpath or Recording pictures).
+            ExtraCameras.Camera added = ExtraCameras.forPictures(this); String id = added == null ? "" : added.id;
+            double[] camera = GcodeViewerActivity.cameraFor(getSharedPreferences("viewer-hints", MODE_PRIVATE), 0, id);
+            if (!now.id.equals(smoothFor)) {
+                smoothFor = now.id;
+                Diagnostics.note(Diagnostics.CAMERA, String.format(Locale.ROOT, "pictures with the head far from the camera (at X %.0f Y %.0f)%s", camera[0], camera[1],
+                    ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so few layers will get their picture"));
+            }
+            JSONObject position = Cc2Codec.position(value);
+            if (position != null && position.has("x") && position.has("y") && recorder.headFrom(position.optDouble("x"), position.optDouble("y"), camera[0], camera[1]) && nativeEmpty < 2) nativeNextAt = 0;
+            return;
+        }
         if (smooth && !now.id.equals(smoothFor)) {
             smoothFor = now.id;
             Diagnostics.note(Diagnostics.CAMERA, String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f%s", now.parkX, now.parkY,

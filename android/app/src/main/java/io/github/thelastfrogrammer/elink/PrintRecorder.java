@@ -37,6 +37,10 @@ public final class PrintRecorder {
         /** Smooth timelapse (the file parks the head at each layer change): the corner, or NaN; pictures are taken while the head is there. */
         public double parkX = Double.NaN, parkY = Double.NaN;
         public boolean smooth() { return !Double.isNaN(parkX) && !Double.isNaN(parkY); }
+        /** Pictures when the head is far from the camera on its layer (every pictureLayers layers), not at a fixed time. */
+        public boolean pictureFar;
+        /** Pictures follow the head (parked, or far from the camera) rather than the clock. */
+        public boolean followsHead() { return smooth() || pictureFar && pictureLayers > 0; }
         /** Filament fed so far (mm), summed from the extruder position (resets skipped), and the last position seen. */
         public double extrudedMm; double lastE = Double.NaN;
         /** The printer's own print time (s, print_duration) as last reported, or -1; progress when the recording began (-1 unknown). */
@@ -46,13 +50,14 @@ public final class PrintRecorder {
         /** The person's notes on the print (PrintJournal). */
         public PrintJournal journal = new PrintJournal();
         /** "Every 5 min", "Every layer", "Every 2 layers" or "No pictures". */
-        public String pictureWords() { return smooth() ? (pictureLayers > 1 ? "Every " + pictureLayers + " layers, head parked" : "Every layer, head parked") : pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") : pictureMinutes == 0 ? "No pictures" : pictureMinutes == 1 ? "Every minute" : "Every " + pictureMinutes + " minutes"; }
+        public String pictureWords() { return smooth() ? (pictureLayers > 1 ? "Every " + pictureLayers + " layers, head parked" : "Every layer, head parked")
+            : pictureFar && pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") + ", head far from the camera" : pictureLayers > 0 ? (pictureLayers == 1 ? "Every layer" : "Every " + pictureLayers + " layers") : pictureMinutes == 0 ? "No pictures" : pictureMinutes == 1 ? "Every minute" : "Every " + pictureMinutes + " minutes"; }
         Recording(File csv, File meta) { this.csv = csv; this.meta = meta; }
         JSONObject toJson() throws Exception {
             return new JSONObject().put("id", id).put("file", file).put("printer", printer).put("printer_id", printerId).put("outcome", outcome).put("source", source)
                 .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
                 .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
-                .put("park_x", smooth() ? parkX : null).put("park_y", smooth() ? parkY : null)
+                .put("park_x", smooth() ? parkX : null).put("park_y", smooth() ? parkY : null).put("picture_far", pictureFar)
                 .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
                 .put("journal", journal.empty() ? null : journal.toJson());
         }
@@ -65,7 +70,7 @@ public final class PrintRecorder {
             recording.start = json.optLong("start"); recording.end = json.optLong("end"); recording.lastSample = json.optLong("last_sample"); recording.elapsed = json.optLong("elapsed");
             recording.samples = json.optInt("samples"); recording.layers = json.optInt("layers");
             recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictureLayers = json.optInt("picture_layers"); recording.pictures = json.optInt("pictures");
-            recording.parkX = json.optDouble("park_x", Double.NaN); recording.parkY = json.optDouble("park_y", Double.NaN);
+            recording.parkX = json.optDouble("park_x", Double.NaN); recording.parkY = json.optDouble("park_y", Double.NaN); recording.pictureFar = json.optBoolean("picture_far");
             recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
             recording.printDuration = json.optLong("print_duration", -1); recording.startProgress = json.optInt("start_progress", -1); recording.estimate = json.optLong("estimate", 0);
             recording.journal = PrintJournal.fromJson(json.optJSONObject("journal"));
@@ -128,10 +133,15 @@ public final class PrintRecorder {
     public synchronized void setDefaultPictureMinutes(int minutes) { defaultPictureMinutes = Math.max(0, Math.min(120, minutes)); }
     /** Pictures every N layers for prints that start from now (0 = by time, as setDefaultPictureMinutes says). */
     public synchronized void setDefaultPictureLayers(int layers) { defaultPictureLayers = Math.max(0, Math.min(50, layers)); }
+    /** New prints take their every-N-layers pictures when the head is far from the camera (the picture camera's own setting). */
+    private boolean defaultPictureFar;
+    public synchronized void setDefaultPictureFar(boolean far) { defaultPictureFar = far; }
+    /** Changes the running print's pictures: every N layers, with the head far from the camera or at any moment of the layer. */
+    public synchronized void setPictureLayers(int layers, boolean far) { if (current != null) { current.pictureLayers = Math.max(0, Math.min(50, layers)); current.pictureFar = far && layers > 0; save(current); } }
     /** Changes the running print to pictures every N layers (0 goes back to its time interval). */
     public synchronized void setPictureLayers(int layers) { if (current != null) { current.pictureLayers = Math.max(0, Math.min(50, layers)); save(current); } }
     /** Changes the running print's picture interval (0 stops them). */
-    public synchronized void setPictureMinutes(int minutes) { if (current != null) { current.pictureMinutes = Math.max(0, Math.min(120, minutes)); current.pictureLayers = 0; save(current); } }
+    public synchronized void setPictureMinutes(int minutes) { if (current != null) { current.pictureMinutes = Math.max(0, Math.min(120, minutes)); current.pictureLayers = 0; current.pictureFar = false; save(current); } }
     /** Whether a camera picture is due for the running print (`mono`: the monotonic clock). */
     /** The running print's file parks the head at this corner each layer (from its slice): pictures follow the head. */
     public synchronized void setPark(double x, double y) { if (current != null && !current.smooth()) { current.parkX = x; current.parkY = y; save(current); } }
@@ -149,9 +159,27 @@ public final class PrintRecorder {
         boolean ask = wanted && !parkedArmed; parkedArmed = wanted;
         return ask;
     }
+    /**
+     * Far from the camera: how far the head got from the camera (mm, in the bed's plane) on this layer and the one before.
+     * A layer's picture is due once the head is nearly as far as it got on the previous layer (they are much alike), and is
+     * called off if the head comes back toward the camera before a picture arrives.
+     */
+    private double farThisLayer, farLastLayer; private int farLayer = -1;
+    static final double FAR_SHARE = 0.85, FAR_GIVE_UP = 0.7;
+    public synchronized boolean headFrom(double x, double y, double cameraX, double cameraY) {
+        if (current == null || current.smooth() || !current.pictureFar || current.pictureLayers <= 0 || Double.isNaN(x) || Double.isNaN(y)) return false;
+        if (lastLayer != farLayer) { if (farLayer >= 0) farLastLayer = farThisLayer; farThisLayer = 0; farLayer = lastLayer; parkedArmed = false; }
+        double d = Math.hypot(x - cameraX, y - cameraY);
+        farThisLayer = Math.max(farThisLayer, d);
+        boolean layerWanted = lastLayer >= 1 && (picturedLayer < 0 || lastLayer - picturedLayer >= current.pictureLayers);
+        if (!layerWanted || farLastLayer <= 0) return false;
+        if (parkedArmed && d < FAR_GIVE_UP * farLastLayer) { parkedArmed = false; return false; }
+        boolean ask = !parkedArmed && d >= FAR_SHARE * farLastLayer; if (ask) parkedArmed = true;
+        return ask;
+    }
     public synchronized boolean pictureDue(long mono) {
         if (current == null) return false;
-        if (current.smooth()) return parkedArmed;
+        if (current.followsHead()) return parkedArmed;
         if (current.pictureLayers > 0) return lastLayer >= 1 && (picturedLayer < 0 || lastLayer - picturedLayer >= current.pictureLayers);
         return current.pictureMinutes > 0 && mono - picturedMono >= current.pictureMinutes * 60_000L;
     }
@@ -301,7 +329,8 @@ public final class PrintRecorder {
         String base = now + "-" + file.replaceAll("[^A-Za-z0-9._-]", "_").replaceFirst("(?i)\\.gcode$", "");
         if (base.length() > 80) base = base.substring(0, 80);
         Recording recording = new Recording(new File(directory, base + ".csv"), new File(directory, base + ".json"));
-        parkedArmed = false;
+        parkedArmed = false; farThisLayer = farLastLayer = 0; farLayer = -1;
+        recording.pictureFar = defaultPictureFar && defaultPictureLayers > 0;
         recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now; recording.pictureMinutes = defaultPictureMinutes; recording.pictureLayers = defaultPictureLayers;
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(recording.csv), StandardCharsets.UTF_8)) { writer.write(String.join(",", COLUMNS) + "\n"); }
         catch (IOException ignored) { }
