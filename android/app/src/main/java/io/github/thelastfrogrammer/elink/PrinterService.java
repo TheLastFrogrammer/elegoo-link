@@ -1230,6 +1230,10 @@ public final class PrinterService extends Service {
     }
     public void start(String storage, String filename, boolean leveling, boolean force, boolean timelapse, String plate, JSONArray maps) {
         if (fileBusy()) { feedback = "A file is being sent or received. Wait for it to finish before starting a print."; changed(); return; }
+        String faults = StatusPresentation.faultCodes(liveStatus());
+        if (liveFresh() && !faults.isEmpty()) {   // the same rule the local session applies before sending
+            feedback = "The printer reports fault " + faults + ". Clear it on the printer's screen, refresh status, then start the print."; changed(); return;
+        }
         if (!liveFresh() || !Cc2Codec.idle(liveStatus()) || !knownFile(storage, filename) || maps.length() > 0 && (!canvasFresh() || !FeatureData.mappings(canvas, maps))) {
             feedback = "Refresh status, files and trays before starting. The printer must be idle and mappings must refer to reported trays."; changed(); return;
         }

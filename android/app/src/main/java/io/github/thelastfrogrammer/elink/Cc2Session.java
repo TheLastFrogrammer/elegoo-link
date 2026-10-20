@@ -298,11 +298,34 @@ public final class Cc2Session implements AutoCloseable {
             if (!ready() || requestQueue.isEmpty()) return;
             JSONObject message = requestQueue.removeFirst(); int method = message.optInt("method");
             if (!probes.containsKey(message.optInt("id"))) queued.remove(method);
-            if (!allowed(message)) { if (changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " not sent: printer state does not allow it"); }
-            if (!allowed(message)) emitResult("Control unavailable. Refresh status and check the printer state before trying again.");
+            String why = allowed(message) ? null : refusal(message);
+            if (why != null && changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " not sent: " + why);
+            if (why != null) emitResult(Cc2Codec.name(method) + " not sent: " + why + ". Refresh status, then try again.");
             else { nextRequestAt = System.nanoTime() + TimeUnit.SECONDS.toNanos(2); if (changing(method)) Diagnostics.note(Diagnostics.COMMANDS, "local network: " + Cc2Codec.name(method) + " sent"); transmit(message.optInt("id"), method, message); }
             scheduleDispatch();
         }, Math.max(0, nextRequestAt - System.nanoTime()), TimeUnit.NANOSECONDS);
+    }
+    /** Why allowed() said no, in words (the first check that failed), for the message and the command log. */
+    private String refusal(JSONObject message) {
+        int method = message.optInt("method");
+        if (readOnly()) return "the connection is read-only";
+        if (!fresh()) return statusAt == 0 ? "no printer status since the last command" : "the printer's status is more than 20 s old";
+        JSONObject status;
+        try { status = codec.snapshot(); } catch (org.json.JSONException unreadable) { return "the printer's status could not be read"; }
+        String faults = StatusPresentation.faultCodes(status);
+        if (method == Cc2Codec.START || method == Cc2Codec.DELETE || Cc2Codec.maintenance(method)) {
+            if (!Cc2Codec.idle(status)) return "the printer is not idle (" + StatusPresentation.state(status) + ")";
+            if (!faults.isEmpty()) return "the printer reports fault " + faults + " (clear it on the printer's screen)";
+        }
+        if (method == Cc2Codec.START) {
+            org.json.JSONArray maps = message.optJSONObject("params") == null || message.optJSONObject("params").optJSONObject("config") == null ? null
+                : message.optJSONObject("params").optJSONObject("config").optJSONArray("slot_map");
+            if (maps != null && maps.length() > 0) {
+                if (canvasAt == 0 || System.nanoTime() - canvasAt >= TimeUnit.SECONDS.toNanos(45)) return "the CANVAS trays were not reported in the last 45 s";
+                if (!FeatureData.mappings(status.optJSONObject("canvas_info"), maps)) return "a chosen tray is not loaded or not connected in the latest report";
+            }
+        }
+        return "the printer's state does not allow it";
     }
     private boolean allowed(JSONObject message) {
         int method = message.optInt("method");

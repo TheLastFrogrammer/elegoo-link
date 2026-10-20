@@ -251,7 +251,7 @@ public class Cc2SessionTest {
         try {s.connect();take(l.statuses);FakeMqtt f=clients.get(0);s.start("local","test.gcode",true,false,false,"A",new org.json.JSONArray());
             JSONObject push=new JSONObject().put("method",6000).put("id",1).put("result",new JSONObject().put("machine_status",new JSONObject().put("status",2).put("sub_status",2075)));
             f.callback.messageArrived(f.subscriptions.get(1),new MqttMessage(push.toString().getBytes(StandardCharsets.UTF_8)));take(l.statuses);
-            assertTrue(take(l.results).contains("Control unavailable"));assertTrue(f.writes.isEmpty());assertEquals(0,f.requests.stream().filter(r -> r.optInt("method")==Cc2Codec.START).count());
+            assertTrue(take(l.results).contains("Start print not sent: "));assertTrue(f.writes.isEmpty());assertEquals(0,f.requests.stream().filter(r -> r.optInt("method")==Cc2Codec.START).count());
         } finally {s.close();}
     }
     @Test public void stopTakesNextSlotAheadOfQueuedFeatureReads() throws Exception {

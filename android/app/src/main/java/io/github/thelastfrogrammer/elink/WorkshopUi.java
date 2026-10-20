@@ -101,11 +101,14 @@ final class WorkshopUi {
         lens = lens.mutate(); lens.setTint(outline); int size = Math.round(24 * d); lens.setBounds(0, 0, size, size);
         field.setCompoundDrawablesRelative(lens, null, null, null); field.setCompoundDrawablePadding(Math.round(12 * d));
     }
+    private static final String GRID_ROW = "grid-row";
     /** Cards two to a row in `grid`: the next row starts when the last one has two; an odd last card keeps half the width. */
     static void addToGrid(LinearLayout grid, View card, int gap) {
-        LinearLayout row = grid.getChildCount() == 0 ? null : (LinearLayout) grid.getChildAt(grid.getChildCount() - 1);
+        // Only rows this made count: the grid may also hold a heading or a note before its cards.
+        View last = grid.getChildCount() == 0 ? null : grid.getChildAt(grid.getChildCount() - 1);
+        LinearLayout row = last instanceof LinearLayout && GRID_ROW.equals(last.getTag()) ? (LinearLayout) last : null;
         if (row == null || row.getChildCount() >= 2) {
-            row = new LinearLayout(grid.getContext()); row.setOrientation(LinearLayout.HORIZONTAL); row.setWeightSum(2); row.setBaselineAligned(false);
+            row = new LinearLayout(grid.getContext()); row.setOrientation(LinearLayout.HORIZONTAL); row.setWeightSum(2); row.setBaselineAligned(false); row.setTag(GRID_ROW);
             LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-1, -2); at.topMargin = gap; grid.addView(row, at);
         }
         LinearLayout.LayoutParams cell = new LinearLayout.LayoutParams(0, -1, 1); if (row.getChildCount() > 0) cell.leftMargin = gap;

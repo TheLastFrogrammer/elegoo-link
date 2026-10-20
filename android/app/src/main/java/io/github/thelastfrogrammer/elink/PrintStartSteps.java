@@ -111,7 +111,9 @@ final class PrintStartSteps {
         JSONObject live = p == null ? new JSONObject() : p.liveStatus();
         JSONObject machine = live.optJSONObject("machine_status"), print = live.optJSONObject("print_status");
         long statusTime = p == null ? 0 : p.ready() ? p.statusAt : p.cloudCheckedAt;
-        int now = stage(refused, p != null && p.liveFresh() && statusTime > tappedAt, machine == null ? -1 : machine.optInt("status", -1),
+        // The local session can still refuse at the moment of sending (its checks run again then): its message says so.
+        boolean notSent = refused || p != null && p.feedback != null && p.feedback.startsWith("Start print not sent");
+        int now = stage(notSent, p != null && p.liveFresh() && statusTime > tappedAt, machine == null ? -1 : machine.optInt("status", -1),
             print == null ? "" : print.optString("filename", ""), file, System.currentTimeMillis() - tappedAt);
         if (now != shown) { shown = now; draw(now, p == null ? "" : p.feedback); }
         if (now >= 0 && now < 4) main.postDelayed(this, 1000);

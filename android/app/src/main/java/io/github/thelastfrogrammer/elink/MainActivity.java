@@ -2106,7 +2106,7 @@ public final class MainActivity extends Activity {
                     printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
                     // Refused before sending (the checks in start() say why); otherwise the steps page follows the printer's status.
                     String after = printer.feedback == null ? "" : printer.feedback;
-                    boolean refused = !after.equals(before) && (after.startsWith("Refresh status, files and trays") || after.startsWith("A file is being sent"));
+                    boolean refused = !after.equals(before) && (after.startsWith("Refresh status, files and trays") || after.startsWith("A file is being sent") || after.startsWith("The printer reports fault"));
                     new PrintStartSteps(this, () -> printer, name, printer.ready() ? "On your network" : "Through the Elegoo cloud", refused, INK, MUTED, TEAL, BACKGROUND, SURFACE, dark).show();
                 }
                 // Remember the grams per tray, so they come off the spools when the print ends (only with chosen trays: the printer's own mapping is not known).
