@@ -103,7 +103,8 @@ public final class SliceActivity extends Activity {
     private LinearLayout content, actionBar;
     private ScrollView scroll;
     private TextView modelsLabel, status, resultText;
-    private Spinner printerSpinner, processSpinner, supportSpinner, brimSpinner;
+    private Spinner printerSpinner, processSpinner, supportSpinner, brimSpinner, smoothCorner, smoothWait;
+    private Switch smoothSwitch;
     private LinearLayout slotList, modelAssign;
     private Button addSlot, removeSlot, fillTrays;
     private TextView traysNote;
@@ -468,6 +469,22 @@ public final class SliceActivity extends Activity {
         brimSpinner = spinner(brimColumn); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
         label(settingsCard, "Supports", 12, muted, false);
         supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList(SUPPORT_CHOICES), "Preset");
+        // Smooth timelapse: the head parks at a corner at each layer change, and the recording takes its picture then.
+        android.content.SharedPreferences workshop = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        smoothSwitch = new Switch(this); smoothSwitch.setText("Smooth timelapse: park the head for each layer's picture"); smoothSwitch.setTextColor(ink); smoothSwitch.setTextSize(15);
+        smoothSwitch.setMinHeight(dp(52)); smoothSwitch.setSwitchPadding(dp(16)); WorkshopUi.switchColours(smoothSwitch, teal, dark);
+        settingsCard.addView(smoothSwitch, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout smoothBox = new LinearLayout(this); smoothBox.setOrientation(LinearLayout.VERTICAL); settingsCard.addView(smoothBox);
+        label(smoothBox, "At each layer change the head lifts 0.6 mm, moves to this corner, waits, and returns to exactly where it was. The print's recording takes the picture while it waits (connected on your network). Adds the wait to every layer. Experimental: watch the first layers of a small print.", 12, muted, false);
+        label(smoothBox, "Park at", 12, muted, false);
+        smoothCorner = spinner(smoothBox); fill(smoothCorner, Arrays.asList(SmoothTimelapse.CORNERS), SmoothTimelapse.CORNERS[Math.max(0, Math.min(3, workshop.getInt("smoothCorner", 0)))]);
+        WorkshopUi.chipsFor(smoothCorner, teal, buttonColor, ink, dark);
+        label(smoothBox, "Wait there", 12, muted, false);
+        List<String> waits = new ArrayList<>(); for (int ms : SmoothTimelapse.WAITS_MS) waits.add(ms / 1000 + " s");
+        smoothWait = spinner(smoothBox); fill(smoothWait, waits, waits.get(Math.max(0, Math.min(waits.size() - 1, workshop.getInt("smoothWait", 1)))));
+        WorkshopUi.chipsFor(smoothWait, teal, buttonColor, ink, dark);
+        smoothSwitch.setOnCheckedChangeListener((v, on) -> { smoothBox.setVisibility(on ? View.VISIBLE : View.GONE); workshop.edit().putBoolean("smoothTimelapse", on).apply(); updateButtons(); });
+        smoothSwitch.setChecked(workshop.getBoolean("smoothTimelapse", false)); smoothBox.setVisibility(smoothSwitch.isChecked() ? View.VISIBLE : View.GONE);
         settingsSummary = label(settingsCard, "", 13, muted, false);
         // Overrides from All settings: opens by itself when there are any, so the changes are never hidden.
         LinearLayout settingsBox = new LinearLayout(this);
@@ -579,6 +596,11 @@ public final class SliceActivity extends Activity {
             case 4: overrides.put("enable_support", "1"); overrides.put("support_type", "normal(manual)"); break;
             case 5: overrides.put("enable_support", "1"); overrides.put("support_type", "tree(manual)"); break;
             default: break;
+        }
+        if (smoothSwitch != null && smoothSwitch.isChecked()) {
+            int corner = Math.max(0, smoothCorner.getSelectedItemPosition()), wait = SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())];
+            getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putInt("smoothCorner", corner).putInt("smoothWait", Math.max(0, smoothWait.getSelectedItemPosition())).apply();
+            overrides.put("time_lapse_gcode", SmoothTimelapse.gcode(corner, wait));
         }
         switch (brimSpinner.getSelectedItemPosition()) {
             case 1: overrides.put("brim_type", "no_brim"); break;
@@ -787,6 +809,9 @@ public final class SliceActivity extends Activity {
         TrayPlan withNeeds = plan.withNeeds(filaments, colours);
         for (int i = 0; i < names.size(); i++) plans.putString(GcodeLibrary.safeName(names.get(i)), withNeeds.withGrams(i < grams.size() ? grams.get(i) : null).toJson());
         plans.apply();
+        // The recording looks for the head at this corner to take each layer's picture (or forgets an earlier park for these names).
+        boolean smooth = smoothSwitch != null && smoothSwitch.isChecked();
+        SmoothTimelapse.remember(this, names, Math.max(0, smoothCorner.getSelectedItemPosition()), SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())], smooth);
         status.setText(String.format(Locale.getDefault(), "Sliced %sin %.1f s.", results.size() > 1 ? results.size() + " project plates " : "", elapsedMs / 1000.0));
         StringBuilder text = new StringBuilder();
         for (int i = 0; i < results.size(); i++) {

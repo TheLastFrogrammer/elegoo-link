@@ -30,6 +30,8 @@ public final class CloudAccountStore {
     public boolean china() { return prefs.getBoolean("china", false); }
     public void china(boolean china) { prefs.edit().putBoolean("china", china).apply(); }
 
+    /** Whether a sign-in is stored, without decrypting it (no key store access, so cheap on any thread). */
+    public boolean present() { return !prefs.getString("cipher", "").isEmpty() && !prefs.getString("iv", "").isEmpty(); }
     public CloudLogin.Account load() throws Exception {
         String stored = prefs.getString("cipher", ""), iv = prefs.getString("iv", "");
         if (stored.isEmpty() || iv.isEmpty()) return null;

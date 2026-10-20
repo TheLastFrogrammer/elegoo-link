@@ -71,7 +71,7 @@ public final class MainActivity extends Activity {
     /** The remembered choice; the first time, cloud for someone signed in to Elegoo without a saved printer address. */
     private boolean settingsModeAtStart() {
         if (settings.contains("settingsCloud")) return settings.getBoolean("settingsCloud", false);
-        boolean signedIn; try { signedIn = cloudAccounts != null && cloudAccounts.load() != null; } catch (Exception unreadable) { signedIn = false; }
+        boolean signedIn = cloudAccounts != null && cloudAccounts.present();
         return signedIn && host.getText().toString().trim().isEmpty();
     }
     private Button segment(LinearLayout row, String text, Runnable action) {
@@ -694,8 +694,20 @@ public final class MainActivity extends Activity {
         button(about, "About & licenses", this::showLicenses);
         currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
-        try { access.setText(credentials.load(host.getText().toString().trim())); remember.setChecked(saved == null ? credentials.remembers(host.getText().toString().trim()) : saved.getBoolean("remember", false)); }
-        catch (Exception error) { credentials.forget(host.getText().toString().trim()); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); }
+        // The saved access code is decrypted off the main thread (the key store reads the disk) and filled in when ready,
+        // unless the field was filled meanwhile (restored input, or typed).
+        String savedFor = host.getText().toString().trim();
+        remember.setChecked(saved == null ? credentials.remembers(savedFor) : saved.getBoolean("remember", false));
+        checks.execute(() -> {
+            String code = null; boolean unreadable = false;
+            try { code = credentials.load(savedFor); } catch (Exception error) { unreadable = true; }
+            String found = code; boolean failed = unreadable;
+            main.post(() -> {
+                if (isDestroyed() || !savedFor.equals(host.getText().toString().trim())) return;
+                if (failed) { credentials.forget(savedFor); remember.setChecked(false); message("Saved code could not be decrypted. Enter it again before connecting."); return; }
+                if (found != null && !found.isEmpty() && access.getText().length() == 0) access.setText(found);
+            });
+        });
         TransientInputs transientInputs = (TransientInputs) getLastNonConfigurationInstance();
         if (transientInputs != null && host.getText().toString().equals(transientInputs.host)) { access.setText(transientInputs.code); pendingSnapshot = transientInputs.snapshot; }
         selectPage(saved == null ? savedTab() : saved.getInt("tab", PRINT));
@@ -1398,14 +1410,28 @@ public final class MainActivity extends Activity {
         renderCloudAccount(); message("Signed out of Elegoo on this phone. Other apps signed in to the same account are not affected.");
     }
     private void renderCloudAccount() {
-        CloudLogin.Account account;
-        try { account = cloudAccounts.load(); }
-        catch (Exception error) { cloudAccounts.forget(); account = null; message("Saved Elegoo sign-in could not be decrypted. Sign in again."); }
-        cloudStatus.setText(account == null ? "Not signed in." : "Signed in as " + account.summary() + ".");
+        // Shown at once from whether a sign-in is stored; the account's name is decrypted off the main thread (the key store
+        // reads the disk) and filled in after.
+        boolean stored = cloudAccounts.present();
+        cloudStatus.setText(stored ? "Signed in." : "Not signed in.");
         // Signed out, these have nothing to act on, so they are not shown as dead buttons.
-        int signedIn = account != null ? View.VISIBLE : View.GONE;
+        int signedIn = stored ? View.VISIBLE : View.GONE;
         cloudSignOut.setVisibility(signedIn); cloudPrinters.setVisibility(signedIn); cloudBackground.setVisibility(signedIn);
         if (printer != null) printer.cloudSettingsChanged();
+        if (!stored) return;
+        checks.execute(() -> {
+            CloudLogin.Account account; boolean unreadable = false;
+            try { account = cloudAccounts.load(); } catch (Exception error) { account = null; unreadable = true; }
+            CloudLogin.Account shown = account; boolean failed = unreadable;
+            main.post(() -> {
+                if (isDestroyed()) return;
+                if (failed) {
+                    cloudAccounts.forget(); message("Saved Elegoo sign-in could not be decrypted. Sign in again.");
+                    cloudStatus.setText("Not signed in."); cloudSignOut.setVisibility(View.GONE); cloudPrinters.setVisibility(View.GONE); cloudBackground.setVisibility(View.GONE);
+                    if (printer != null) printer.cloudSettingsChanged();
+                } else if (shown != null && cloudAccounts.present()) cloudStatus.setText("Signed in as " + shown.summary() + ".");
+            });
+        });
     }
     private void appearanceDialog() {
         new AlertDialog.Builder(this).setTitle("Appearance").setSingleChoiceItems(new String[] {"Follow system", "Light", "Dark"}, settings.getInt("theme", 0), (dialog, which) -> {

@@ -187,6 +187,30 @@ public class SlicerIntegrationTest {
         assertFalse(gcode.matches("(?s).*\\nG1 X(-|2[6-9]\\d|[3-9]\\d\\d).*"));
     }
 
+    @Test public void smoothTimelapseParksAtEveryLayerChange() throws Exception {
+        File output = new File(context().getCacheDir(), "smooth.gcode");
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            slicer.slice(Collections.singletonList(box(20, 20, 4)), PRINTER, PROCESS, Collections.singletonList(PLA),
+                Collections.singletonList(new String[] {"time_lapse_gcode", SmoothTimelapse.gcode(0, 3000)}), output, (percent, text) -> true);
+        }
+        String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+        int layers = Integer.parseInt(gcode.replaceFirst("(?s).*; total layers count = (\\d+).*", "$1"));
+        int parks = gcode.split("\nSAVE_GCODE_STATE NAME=link_timelapse\n", -1).length - 1;
+        int restores = gcode.split("\nRESTORE_GCODE_STATE NAME=link_timelapse MOVE=1 MOVE_SPEED=250\n", -1).length - 1;
+        assertTrue("parks " + parks + " for " + layers + " layers", parks >= layers - 1 && parks <= layers);
+        assertEquals(parks, restores);
+        assertTrue(gcode.contains("\nG1 X250.0 Y250.0 F18000\nM400\nG4 P3000\n"));
+        assertFalse("placeholders are filled in (the settings summary at the end keeps the template)", gcode.contains("\nG1 Z{layer_z}"));
+        assertTrue(gcode.matches("(?s).*RESTORE_GCODE_STATE NAME=link_timelapse MOVE=1 MOVE_SPEED=250\nG1 Z0\\.\\d+ F900\n.*"));
+        // After each park the first XY move is a travel: anything reading the file (previews, the guardian) never sees a line drawn from the corner.
+        for (String block : gcode.split("\nRESTORE_GCODE_STATE NAME=link_timelapse MOVE=1 MOVE_SPEED=250\n")) {
+            if (!block.startsWith("G1 Z")) continue;
+            for (String line : block.split("\n")) {
+                if (line.matches("G[01] .*[XY]-?\\d.*")) { assertFalse("first move after a park extrudes: " + line, line.matches(".* E-?\\d.*") && !line.matches(".* E-.*")); break; }
+            }
+        }
+    }
+
     @Test public void slicesTwoFilamentsWithTrayColoursAndAssignment() throws Exception {
         File output = new File(context().getCacheDir(), "two.gcode");
         List<File> models = Arrays.asList(box(20, 20, 10), box(15, 15, 10));

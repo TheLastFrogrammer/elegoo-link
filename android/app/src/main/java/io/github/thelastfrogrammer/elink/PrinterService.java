@@ -116,6 +116,7 @@ public final class PrinterService extends Service {
         long mono = SystemClock.elapsedRealtime();
         recorder.update(System.currentTimeMillis(), mono, value, source, name, "local".equals(source) ? filePrinterId() : cloudSerial);
         keepAwakeForRecording(recorder.current() != null);
+        smoothTimelapse(value, source);
         if (recorder.pictureDue(mono)) {
             // Through the cloud with no local camera, only an open cloud video (Live toolpath or the cloud camera) can give pictures: say so once per print.
             PrintRecorder.Recording running = recorder.current();
@@ -337,6 +338,27 @@ public final class PrinterService extends Service {
                 if (!started && CloudFrameGrab.broken() != null) Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: the native video library cannot run on this phone (" + CloudFrameGrab.broken() + "); the app's screens take pictures while open");
             });
         });
+    }
+    /** The recording a smooth timelapse was last set up for (its id), for one log line and the fast status per print. */
+    private String smoothFor = "";
+    /**
+     * Smooth timelapse: a print sliced here to park the head each layer. Its recording learns the corner, the local
+     * connection asks for status every second while it runs, and the head reaching the corner makes that layer's picture due.
+     */
+    private void smoothTimelapse(JSONObject value, String source) {
+        PrintRecorder.Recording now = recorder.current();
+        if (now != null && !now.smooth()) { double[] park = SmoothTimelapse.forFile(this, now.file); if (park != null) recorder.setPark(park[0], park[1]); }
+        boolean smooth = now != null && now.smooth();
+        if (session != null) session.fastStatus(smooth && ready());
+        if (smooth && !now.id.equals(smoothFor)) {
+            smoothFor = now.id;
+            Diagnostics.note(Diagnostics.CAMERA, String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f%s", now.parkX, now.parkY,
+                ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so most parked moments will be missed"));
+        }
+        if (!smooth) return;
+        JSONObject position = Cc2Codec.position(value);
+        if (position != null && position.has("x") && position.has("y") && recorder.headAt(position.optDouble("x"), position.optDouble("y")) && nativeEmpty < 2)
+            nativeNextAt = 0;   // a join now rather than in a minute (two empty joins still wait their 30 minutes)
     }
     /** After 30 minutes a new try is allowed: the empty count goes back so the grabs lead again. */
     private void nativeRecover() { if (nativeEmpty >= 2 && SystemClock.elapsedRealtime() >= nativeNextAt) nativeEmpty = 0; }
@@ -1523,7 +1545,8 @@ public final class PrinterService extends Service {
     }
     /** An answer read through `api` for `serial` still belongs to what is shown: same sign-in and printer, still watched through the cloud. */
     private boolean cloudStill(CloudApi api, String serial) { return !destroyed && api != null && cloudApi == api && serial.equals(cloudSerial) && cloudRecords(); }
-    private boolean cloudAccountPresent() { try { return cloudAccounts != null && cloudAccounts.load() != null; } catch (Exception error) { return false; } }
+    /** A sign-in is stored. Checked often (notifications, polling) on the main thread, so it never decrypts; use() decrypts when it is needed. */
+    private boolean cloudAccountPresent() { return cloudAccounts != null && cloudAccounts.present(); }
     /** A successful cloud read in the last minute, with the printer online. */
     /**
      * The printer's cloud online state after a poll: the online endpoint's answer (1 online, 0 offline) when it gives one.

@@ -97,6 +97,9 @@ public final class Cc2Session implements AutoCloseable {
     String printerSerial() { return resolvedSerial; }
     public boolean fresh() { return ready() && statusAt != 0 && System.nanoTime() - statusAt < TimeUnit.SECONDS.toNanos(20); }
     public boolean uploading() { return uploading; }
+    /** Status every second instead of every 15 s (a read only request; for a smooth timelapse's parked moments). */
+    private volatile boolean fastStatus;
+    public void fastStatus(boolean on) { fastStatus = on; }
     /** A printer-changing command has been sent and not yet answered. */
     public boolean commandPending() { return pending.values().stream().anyMatch(p -> changing(p.method)) || queued.stream().anyMatch(Cc2Session::changing); }
     public boolean downloading() { return downloading; }
@@ -187,6 +190,10 @@ public final class Cc2Session implements AutoCloseable {
                 if (!ready()) return;
                 if (pending.values().stream().noneMatch(p -> p.method == Cc2Codec.STATUS)) send(Cc2Codec.STATUS);
             }, 15, 15, TimeUnit.SECONDS);
+            // While a smooth timelapse is recorded, status every second: the head waits at its corner only a few seconds.
+            worker.scheduleWithFixedDelay(() -> {
+                if (fastStatus && ready() && pending.values().stream().noneMatch(p -> p.method == Cc2Codec.STATUS)) send(Cc2Codec.STATUS);
+            }, 1, 1, TimeUnit.SECONDS);
             worker.scheduleWithFixedDelay(() -> { if (ready() && canvasSupported && pending.values().stream().noneMatch(p -> p.method == Cc2Codec.CANVAS)) send(Cc2Codec.CANVAS); }, 30, 30, TimeUnit.SECONDS);
             worker.scheduleWithFixedDelay(this::expireRequests, 1, 1, TimeUnit.SECONDS);
         } catch (Exception exception) {
