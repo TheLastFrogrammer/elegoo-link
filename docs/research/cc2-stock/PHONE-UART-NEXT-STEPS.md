@@ -1,6 +1,8 @@
 # Next owner-access steps with the phone
 
-Current checkpoint: 17 October 2026. The owner has Termux/Python, limited convenient laptop access and no USB UART adapter. Current screenshots establish TCP 22/80 refusal and TCP 1883/8080 reachability, without a protocol handshake. Exact current firmware and network mode remain unrecorded. The [field record](access/evidence/OWNER-NETWORK-OBSERVATIONS.json) and prior app tests are the starting point; do not repeat PIN/port/camera experiments as a new access lead.
+Current checkpoint: 20 October 2026. The owner reports obtaining a UART device; its model, signal-level settings and phone compatibility remain unverified. The owner has Termux/Python and limited convenient laptop access. Earlier screenshots establish TCP 22/80 refusal and TCP 1883/8080 reachability, without a protocol handshake. Exact current firmware and network mode remain unrecorded. The [field record](access/evidence/OWNER-NETWORK-OBSERVATIONS.json) and prior app tests are the starting point; do not repeat PIN/port/camera experiments as a new access lead.
+
+The shared [OpenCentauri FEL/UART guide review](OPENCENTAURI-FEL-UART-REVIEW.md) separates its CC1 bench procedure from the CC2 header reference and normal stock-console trial. FEL/RAM recovery is a separate candidate, not a prerequisite for ordinary UART observation.
 
 ## 1. Prepare without opening or buying anything
 
