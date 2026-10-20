@@ -10,4 +10,15 @@ public class TimelapseEncoderTest {
         assertArrayEquals(new int[] {1280, 720}, TimelapseEncoder.size(1920, 1080));
         int[] odd = TimelapseEncoder.size(1000, 750); assertEquals(0, odd[0] % 16); assertEquals(0, odd[1] % 16);
     }
+
+    /** Side by side: each parked picture beside the far one of its layer (taken after it, before the next park). */
+    @Test public void pairsEachLayersParkedAndFarPictures() {
+        // Parked at 10, 70, 130; far at 40 (layer 1), none in layer 2, 150 (layer 3).
+        int[][] pairs = TimelapseEncoder.pair(new double[] {10, 70, 130}, new double[] {40, 150});
+        assertArrayEquals(new int[] {0, 0}, pairs[0]);
+        assertArrayEquals("a layer without its far picture keeps the last one", new int[] {1, 0}, pairs[1]);
+        assertArrayEquals(new int[] {2, 1}, pairs[2]);
+        assertArrayEquals("none yet: that side stays dark", new int[] {0, -1}, TimelapseEncoder.pair(new double[] {10, 70}, new double[] {80})[0]);
+        int[] wide = TimelapseEncoder.size(1280 * 2, 720, 1920); assertEquals(1920, wide[0]); assertEquals(0, wide[1] % 16);
+    }
 }

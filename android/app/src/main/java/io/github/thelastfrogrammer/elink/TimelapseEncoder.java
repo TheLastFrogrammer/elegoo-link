@@ -28,17 +28,53 @@ final class TimelapseEncoder {
     /** Pictures a second: about ten seconds of video, at least 2 and at most 15 a second. */
     static int framesPerSecond(int pictures) { return Math.max(2, Math.min(15, Math.round(pictures / 10f))); }
     /** Video size for pictures of this size: at most 1280 wide, both sides even multiples of 16 (what encoders accept everywhere). */
-    static int[] size(int width, int height) {
-        double scale = width > 1280 ? 1280.0 / width : 1;
+    static int[] size(int width, int height) { return size(width, height, 1280); }
+    static int[] size(int width, int height, int maxWidth) {
+        double scale = width > maxWidth ? (double) maxWidth / width : 1;
         int w = Math.max(160, (int) (width * scale) / 16 * 16), h = Math.max(128, (int) (height * scale) / 16 * 16);
         return new int[] {w, h};
     }
 
     static void encode(List<File> pictures, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
-        if (pictures.isEmpty()) throw new IOException("No pictures");
-        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true; BitmapFactory.decodeFile(pictures.get(0).getPath(), bounds);
+        List<File[]> frames = new java.util.ArrayList<>(); for (File picture : pictures) frames.add(new File[] {picture});
+        encode(frames, null, out, cancelled, progress);
+    }
+
+    /**
+     * Two sets of one print side by side, a layer per frame: each parked picture with the far picture of the same layer (the
+     * last far one before the next parked one; else the last before it). Picture times as seconds (their names), sorted.
+     * Returns {left index, right index or -1} per frame. Pure, for tests.
+     */
+    static int[][] pair(double[] left, double[] right) {
+        int[][] pairs = new int[left.length][];
+        for (int i = 0; i < left.length; i++) {
+            double until = i + 1 < left.length ? left[i + 1] : Double.MAX_VALUE;
+            int match = -1;
+            for (int j = 0; j < right.length; j++) if (right[j] < until) match = j;   // the latest one before the next parked picture
+            pairs[i] = new int[] {i, match};
+        }
+        return pairs;
+    }
+    /** As `pair`, for picture files. */
+    static List<File[]> pairFiles(List<File> left, List<File> right) {
+        double[] l = new double[left.size()], r = new double[right.size()];
+        for (int i = 0; i < l.length; i++) l[i] = seconds(left.get(i));
+        for (int i = 0; i < r.length; i++) r[i] = seconds(right.get(i));
+        List<File[]> frames = new java.util.ArrayList<>();
+        for (int[] p : pair(l, r)) frames.add(new File[] {left.get(p[0]), p[1] < 0 ? null : right.get(p[1])});
+        return frames;
+    }
+
+    /**
+     * The video from frames of one picture, or of two side by side (`labels` names each side; a missing picture leaves its
+     * side dark). Each panel keeps its picture's shape; the whole frame is at most 1920 wide with two.
+     */
+    static void encode(List<File[]> frames, String[] labels, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
+        if (frames.isEmpty()) throw new IOException("No pictures");
+        int panels = frames.get(0).length;
+        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true; BitmapFactory.decodeFile(frames.get(0)[0].getPath(), bounds);
         if (bounds.outWidth <= 0) throw new IOException("Unreadable picture");
-        int[] wh = size(bounds.outWidth, bounds.outHeight); int fps = framesPerSecond(pictures.size());
+        int[] wh = size(bounds.outWidth * panels, bounds.outHeight, panels > 1 ? 1920 : 1280); int fps = framesPerSecond(frames.size());
         MediaFormat format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, wh[0], wh[1]);
         format.setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface);
         format.setInteger(MediaFormat.KEY_BIT_RATE, wh[0] * wh[1] * 4); format.setInteger(MediaFormat.KEY_FRAME_RATE, fps); format.setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1);
@@ -52,24 +88,27 @@ final class TimelapseEncoder {
             Drain drain = new Drain(codec, muxer, fps);
             Paint picture = new Paint(Paint.FILTER_BITMAP_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint();
             text.setColor(Color.WHITE); text.setTextSize(wh[1] / 22f); shade.setColor(0x88000000);
-            for (int i = 0; i < pictures.size(); i++) {
+            float panelWidth = (float) wh[0] / panels, pad = wh[1] / 40f;
+            for (int i = 0; i < frames.size(); i++) {
                 if (cancelled.get()) throw new IOException("Cancelled");
-                Bitmap image = BitmapFactory.decodeFile(pictures.get(i).getPath());
                 Canvas canvas = input.lockHardwareCanvas();
                 try {
                     canvas.drawColor(Color.BLACK);
-                    if (image != null) {
-                        float s = Math.min((float) wh[0] / image.getWidth(), (float) wh[1] / image.getHeight()), dw = image.getWidth() * s, dh = image.getHeight() * s;
-                        canvas.drawBitmap(image, null, new RectF((wh[0] - dw) / 2, (wh[1] - dh) / 2, (wh[0] + dw) / 2, (wh[1] + dh) / 2), picture);
+                    for (int k = 0; k < panels; k++) {
+                        File file = frames.get(i)[k]; float left = k * panelWidth;
+                        Bitmap image = file == null ? null : BitmapFactory.decodeFile(file.getPath());
+                        if (image != null) {
+                            float s = Math.min(panelWidth / image.getWidth(), (float) wh[1] / image.getHeight()), dw = image.getWidth() * s, dh = image.getHeight() * s;
+                            canvas.drawBitmap(image, null, new RectF(left + (panelWidth - dw) / 2, (wh[1] - dh) / 2, left + (panelWidth + dw) / 2, (wh[1] + dh) / 2), picture);
+                            image.recycle();
+                        }
+                        if (labels != null && k < labels.length) label(canvas, labels[k], left + pad, pad, text, shade, pad);
+                        // The time into the print: each side's own (the far picture comes later in the layer).
+                        if (file != null) label(canvas, ChartView.elapsed(seconds(file)), left + pad, wh[1] - pad * 3 - text.getTextSize(), text, shade, pad);
                     }
-                    String at = ChartView.elapsed(seconds(pictures.get(i)));
-                    float pad = wh[1] / 40f, tw = text.measureText(at);
-                    canvas.drawRect(pad, wh[1] - pad * 2 - text.getTextSize(), pad * 3 + tw, wh[1] - pad, shade);
-                    canvas.drawText(at, pad * 2, wh[1] - pad * 1.6f, text);
                 } finally { input.unlockCanvasAndPost(canvas); }
-                if (image != null) image.recycle();
                 drain.until(i + 1, 1000);
-                progress.at(i + 1, pictures.size());
+                progress.at(i + 1, frames.size());
             }
             codec.signalEndOfInputStream();
             drain.until(Integer.MAX_VALUE, 5000);
@@ -79,6 +118,12 @@ final class TimelapseEncoder {
             codec.release(); if (input != null) input.release();
             if (muxer != null) try { muxer.stop(); } catch (RuntimeException ignored) { } finally { muxer.release(); }
         }
+    }
+    /** Words on a dark band, its top left corner at x, y. */
+    private static void label(Canvas canvas, String words, float x, float y, Paint text, Paint shade, float pad) {
+        float tw = text.measureText(words);
+        canvas.drawRect(x, y, x + tw + pad * 2, y + text.getTextSize() + pad * 1.4f, shade);
+        canvas.drawText(words, x + pad, y + text.getTextSize() + pad * 0.4f, text);
     }
     /** Seconds into the print, from the picture's name ("000060.jpg"). */
     private static double seconds(File picture) { try { return Double.parseDouble(picture.getName().replace(".jpg", "")); } catch (NumberFormatException e) { return 0; } }
