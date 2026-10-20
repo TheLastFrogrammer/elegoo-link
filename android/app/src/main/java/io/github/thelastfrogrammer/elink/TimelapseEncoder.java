@@ -27,6 +27,42 @@ final class TimelapseEncoder {
 
     /** Pictures a second: about ten seconds of video, at least 2 and at most 15 a second. */
     static int framesPerSecond(int pictures) { return Math.max(2, Math.min(15, Math.round(pictures / 10f))); }
+    /** The finished print stays on screen this long at the end (s). */
+    static final double HOLD_SECONDS = 1.5;
+    /** Frames that repeat the last picture at the end. */
+    static int holdFrames(int fps) { return (int) Math.round(fps * HOLD_SECONDS); }
+
+    /**
+     * Brightness evened out between pictures (the chamber light, auto exposure): each picture's gain toward the median of
+     * its neighbours (seven pictures around it; the median, so one odd picture does not shift the ones beside it), at most a
+     * quarter brighter or a fifth darker so real changes stay. Mean brightness per picture (0-255; 0 or less: unknown, left
+     * as it is). Pure, for tests.
+     */
+    static double[] gains(double[] means) {
+        double[] out = new double[means.length];
+        for (int i = 0; i < means.length; i++) {
+            if (means[i] <= 0) { out[i] = 1; continue; }
+            List<Double> around = new java.util.ArrayList<>();
+            for (int j = Math.max(0, i - 3); j <= Math.min(means.length - 1, i + 3); j++) if (means[j] > 0) around.add(means[j]);
+            java.util.Collections.sort(around);
+            int n = around.size(); double median = n % 2 == 1 ? around.get(n / 2) : (around.get(n / 2 - 1) + around.get(n / 2)) / 2;
+            out[i] = Math.max(0.8, Math.min(1.25, median / means[i]));
+        }
+        return out;
+    }
+    /** A picture's mean brightness (0-255), from a small copy; -1 when unreadable. */
+    static double brightness(File picture) {
+        if (picture == null) return -1;
+        BitmapFactory.Options small = new BitmapFactory.Options(); small.inSampleSize = 16;
+        Bitmap image = BitmapFactory.decodeFile(picture.getPath(), small);
+        if (image == null) return -1;
+        long sum = 0; int n = 0;
+        for (int y = 0; y < image.getHeight(); y += 2) for (int x = 0; x < image.getWidth(); x += 2) {
+            int c = image.getPixel(x, y); sum += (299 * Color.red(c) + 587 * Color.green(c) + 114 * Color.blue(c)) / 1000; n++;
+        }
+        image.recycle();
+        return n == 0 ? -1 : (double) sum / n;
+    }
     /** Video size for pictures of this size: at most 1280 wide, both sides even multiples of 16 (what encoders accept everywhere). */
     static int[] size(int width, int height) { return size(width, height, 1280); }
     static int[] size(int width, int height, int maxWidth) {
@@ -89,14 +125,26 @@ final class TimelapseEncoder {
             Paint picture = new Paint(Paint.FILTER_BITMAP_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG), shade = new Paint();
             text.setColor(Color.WHITE); text.setTextSize(wh[1] / 22f); shade.setColor(0x88000000);
             float panelWidth = (float) wh[0] / panels, pad = wh[1] / 40f;
-            for (int i = 0; i < frames.size(); i++) {
+            // Each side's brightness, evened out along the video.
+            double[][] gain = new double[panels][];
+            for (int k = 0; k < panels; k++) {
+                double[] means = new double[frames.size()];
+                for (int i = 0; i < means.length; i++) { if (cancelled.get()) throw new IOException("Cancelled"); means[i] = brightness(frames.get(i)[k]); }
+                gain[k] = gains(means);
+            }
+            int last = frames.size() - 1, total = frames.size() + holdFrames(fps);
+            for (int n = 0; n < total; n++) {
                 if (cancelled.get()) throw new IOException("Cancelled");
+                int i = Math.min(n, last);   // the last picture is held at the end
                 Canvas canvas = input.lockHardwareCanvas();
                 try {
                     canvas.drawColor(Color.BLACK);
                     for (int k = 0; k < panels; k++) {
                         File file = frames.get(i)[k]; float left = k * panelWidth;
                         Bitmap image = file == null ? null : BitmapFactory.decodeFile(file.getPath());
+                        float g = (float) gain[k][i];
+                        picture.setColorFilter(Math.abs(g - 1) < 0.01 ? null : new android.graphics.ColorMatrixColorFilter(
+                            new android.graphics.ColorMatrix(new float[] {g, 0, 0, 0, 0, 0, g, 0, 0, 0, 0, 0, g, 0, 0, 0, 0, 0, 1, 0})));
                         if (image != null) {
                             float s = Math.min(panelWidth / image.getWidth(), (float) wh[1] / image.getHeight()), dw = image.getWidth() * s, dh = image.getHeight() * s;
                             canvas.drawBitmap(image, null, new RectF(left + (panelWidth - dw) / 2, (wh[1] - dh) / 2, left + (panelWidth + dw) / 2, (wh[1] + dh) / 2), picture);
@@ -107,8 +155,8 @@ final class TimelapseEncoder {
                         if (file != null) label(canvas, ChartView.elapsed(seconds(file)), left + pad, wh[1] - pad * 3 - text.getTextSize(), text, shade, pad);
                     }
                 } finally { input.unlockCanvasAndPost(canvas); }
-                drain.until(i + 1, 1000);
-                progress.at(i + 1, frames.size());
+                drain.until(n + 1, 1000);
+                progress.at(Math.min(n + 1, frames.size()), frames.size());
             }
             codec.signalEndOfInputStream();
             drain.until(Integer.MAX_VALUE, 5000);

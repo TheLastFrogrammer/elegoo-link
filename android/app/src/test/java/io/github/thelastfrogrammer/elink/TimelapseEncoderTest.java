@@ -21,4 +21,15 @@ public class TimelapseEncoderTest {
         assertArrayEquals("none yet: that side stays dark", new int[] {0, -1}, TimelapseEncoder.pair(new double[] {10, 70}, new double[] {80})[0]);
         int[] wide = TimelapseEncoder.size(1280 * 2, 720, 1920); assertEquals(1920, wide[0]); assertEquals(0, wide[1] % 16);
     }
+
+    /** Flicker evened out toward the neighbours, within limits; the end held for a moment. */
+    @Test public void brightnessIsEvenedOutAndTheEndHeld() {
+        double[] gains = TimelapseEncoder.gains(new double[] {100, 100, 100, 70, 100, 100, 100});
+        assertEquals(1.0, gains[0], 1e-9);
+        assertEquals("a dark picture is brightened, by at most a quarter", 1.25, gains[3], 1e-9);
+        assertEquals("its neighbours stay as they are", 1.0, gains[2], 1e-9);
+        assertEquals("never more than a fifth darker", 0.8, TimelapseEncoder.gains(new double[] {100, 250, 100})[1], 1e-9);
+        assertEquals("unknown pictures stay as they are", 1.0, TimelapseEncoder.gains(new double[] {-1, 100})[0], 1e-9);
+        assertEquals(15, TimelapseEncoder.holdFrames(10)); assertEquals(3, TimelapseEncoder.holdFrames(2));
+    }
 }

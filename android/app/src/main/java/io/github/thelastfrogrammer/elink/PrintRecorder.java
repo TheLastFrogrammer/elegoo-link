@@ -45,6 +45,9 @@ public final class PrintRecorder {
         public int farPictures;
         /** Measured while the print ran: status rate, parking, layer numbers, head position, picture timing (PrintChecks). */
         public PrintChecks checks = new PrintChecks();
+        /** The timelapse video made when the print ended (in its picture folder), and the side-by-side one for comparing. */
+        public File video() { return new File(pictureFolder(), "timelapse.mp4"); }
+        public File sideBySide() { return new File(pictureFolder(), "side-by-side.mp4"); }
         /** The folder of the second set, inside the picture folder. */
         public File farFolder() { return new File(pictureFolder(), "far"); }
         /** Pictures follow the head (parked, or far from the camera) rather than the clock. */
@@ -257,6 +260,9 @@ public final class PrintRecorder {
     /** Told about each kept picture with the printer's layer then and the active tray's colour (-1 when unknown), e.g. for the print guardian. Called with the recorder locked: hand the work off. */
     interface PictureKept { void kept(Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId); }
     volatile PictureKept pictureKept;
+    /** Told when a print's recording ends complete or stopped (not when it was only interrupted). Called with the recorder locked: hand the work off. */
+    interface PrintEnded { void ended(Recording recording); }
+    volatile PrintEnded printEnded;
     /** Seconds since the running print's last picture (monotonic `mono`), or -1 when none yet / no print. */
     public synchronized long secondsSincePicture(long mono) { return current == null || current.pictures == 0 || picturedMono < 0 ? -1 : Math.max(0, mono - picturedMono) / 1000; }
     /** A recording's pictures, oldest first, each with its elapsed seconds. */
@@ -319,6 +325,7 @@ public final class PrintRecorder {
         JSONObject at = Cc2Codec.position(status);
         double hx = at != null && at.has("x") ? at.optDouble("x") : Double.NaN, hy = at != null && at.has("y") ? at.optDouble("y") : Double.NaN, hz = at != null && at.has("z") ? at.optDouble("z") : Double.NaN;
         current.checks.selfTest = SelfTest.is(current.file);
+        current.checks.faults(StatusPresentation.faultCodes(status));
         current.checks.status(mono, layer, hx, hy, hz, "local".equals(source) && current.followsHead(), current.parkX, current.parkY, reach);
         JSONObject nozzle = status.optJSONObject("extruder"), bed = status.optJSONObject("heater_bed"), machineNow = status.optJSONObject("machine_status");
         current.checks.heat(mono, layer, nozzle == null ? Double.NaN : nozzle.optDouble("temperature", Double.NaN), nozzle == null ? -1 : nozzle.optDouble("target", -1),
@@ -476,7 +483,9 @@ public final class PrintRecorder {
         if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; endedPrinter = current.printerId; }
         current.checks.ended(mono, "complete".equals(outcome));
         for (PrintChecks.Finding f : PrintChecks.of(current)) Diagnostics.note(Diagnostics.STATUS, "measured: " + PrintChecks.mark(f.verdict) + " " + f.title + " · " + f.evidence);
-        save(current); current = null; lastLayer = -1; learnedRead = false;
+        save(current);
+        PrintEnded told = printEnded; if (told != null && !"interrupted".equals(outcome)) told.ended(current);
+        current = null; lastLayer = -1; learnedRead = false;
     }
 
     /** How long the print has run (s): this phone's own measure when it saw the start, else the printer's print time; -1 unknown. */

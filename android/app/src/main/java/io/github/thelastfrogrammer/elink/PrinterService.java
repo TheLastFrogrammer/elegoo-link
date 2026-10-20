@@ -258,6 +258,7 @@ public final class PrinterService extends Service {
         cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         guardian = new GuardianRun(this); recorder.pictureKept = this::guard; PrintRecorder.active = recorder;
+        recorder.printEnded = this::autoVideo;
         automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);
@@ -1101,6 +1102,55 @@ public final class PrinterService extends Service {
     /** The last "Try the local camera" result, in words (null before any). */
     public String localCameraText; public boolean localCameraTrying;
     private android.content.SharedPreferences workshop() { return getSharedPreferences("workshop-settings", MODE_PRIVATE); }
+
+    /** Pictures a print needs before its video is made by itself at the end. */
+    static final int AUTO_VIDEO_PICTURES = 10;
+    private final java.util.concurrent.ExecutorService videoWorker = java.util.concurrent.Executors.newSingleThreadExecutor();
+    /**
+     * A print ended (complete or stopped): its timelapse video is made on the phone, and for a print that kept both sets the
+     * side-by-side one too, then one notification says it is ready. Its tap only opens the recording. Called with the
+     * recorder locked, so the work goes to its own thread.
+     */
+    private void autoVideo(PrintRecorder.Recording recording) {
+        if (!workshop().getBoolean("autoTimelapse", true)) return;
+        videoWorker.execute(() -> {
+            List<File> kept = PrintRecorder.pictures(recording);
+            if (kept.size() < AUTO_VIDEO_PICTURES) return;
+            java.util.concurrent.atomic.AtomicBoolean never = new java.util.concurrent.atomic.AtomicBoolean();
+            boolean side = false;
+            try {
+                File made = recording.video(), part = new File(made.getPath() + ".part");
+                TimelapseEncoder.encode(kept, part, never, (done, total) -> { });
+                if (!part.renameTo(made)) throw new java.io.IOException("could not keep the video");
+                List<File> far = recording.compare && recording.smooth() ? PrintRecorder.farPictures(recording) : java.util.Collections.emptyList();
+                if (far.size() >= 2) {
+                    File both = recording.sideBySide(), bothPart = new File(both.getPath() + ".part");
+                    TimelapseEncoder.encode(TimelapseEncoder.pairFiles(kept, far), new String[] {"Parked", "Head far"}, bothPart, never, (done, total) -> { });
+                    side = bothPart.renameTo(both);
+                }
+                Diagnostics.note(Diagnostics.CAMERA, "timelapse video made at the end of the print from " + kept.size() + " pictures (" + made.length() / 1024 + " KB)" + (side ? ", with the side-by-side one" : ""));
+            } catch (Exception | OutOfMemoryError failed) {
+                Diagnostics.note(Diagnostics.CAMERA, "timelapse video at the end of the print not made: " + failed.getClass().getSimpleName());
+                return;
+            }
+            boolean both = side;
+            main.post(() -> videoReady(recording, kept.get(kept.size() - 1), both));
+        });
+    }
+    private void videoReady(PrintRecorder.Recording recording, File lastPicture, boolean side) {
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("timelapse", "Timelapse videos", NotificationManager.IMPORTANCE_DEFAULT));
+        Intent show = new Intent(this, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, recording.meta.getAbsolutePath()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        PendingIntent open = PendingIntent.getActivity(this, recording.meta.getName().hashCode(), show, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        String name = StatusPresentation.clean(recording.file.replaceFirst("(?i)\\.gcode$", "")).replace('_', ' ');
+        String text = side ? "The timelapse and the side-by-side comparison are ready. Tap to watch or save them." : "The timelapse is ready. Tap to watch or save it.";
+        Notification.Builder builder = new Notification.Builder(this, "timelapse").setSmallIcon(R.drawable.ic_launcher).setContentTitle("Timelapse: " + name)
+            .setContentText(text).setContentIntent(open).setAutoCancel(true);
+        android.graphics.Bitmap picture = android.graphics.BitmapFactory.decodeFile(lastPicture.getPath());
+        if (picture != null) builder.setLargeIcon(scaled(picture, 128)).setStyle(new Notification.BigPictureStyle().bigPicture(scaled(picture, 720)).setSummaryText(text));
+        manager.notify(("timelapse:" + recording.meta.getName()).hashCode(), builder.build());
+    }
     /** Watched through the cloud, with the local camera chosen and the printer found on this Wi-Fi: the picture comes from the printer's own stream. */
     public boolean localCamera() { return !ready() && usingCloud() && localHost != null && workshop().getBoolean("localCameraInCloud", false); }
     public String localCameraUrl() { return "http://" + localHost + ":8080/?action=stream"; }

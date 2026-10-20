@@ -9,6 +9,18 @@ import org.junit.Test;
 
 /** The measured checks, fed with status streams like the printer's. */
 public class PrintChecksTest {
+    /** Faults: said only once the print ended; each code once, read back from the recording. */
+    @Test public void faultsAreCollectedAndToldAtTheEnd() throws Exception {
+        PrintChecks quiet = new PrintChecks(), loud = new PrintChecks();
+        for (int i = 0; i < 40; i++) { quiet.faults(""); loud.faults(i == 5 || i == 6 ? "1203, 1501" : i == 20 ? "1203" : ""); }
+        assertTrue("not before the end", byId(quiet.findings(0, 0, false)).get("faults") == null);
+        quiet.ended(1000, true); loud.ended(1000, false);
+        assertEquals(PrintChecks.Verdict.WORKS, byId(quiet.findings(0, 0, false)).get("faults").verdict);
+        PrintChecks.Finding told = byId(PrintChecks.fromJson(loud.toJson()).findings(0, 0, false)).get("faults");
+        assertEquals(PrintChecks.Verdict.PROBLEM, told.verdict);
+        assertTrue(told.evidence, told.evidence.contains("codes 1203, 1501 while it ran (40 statuses)"));
+    }
+
     /** Ten 0.2 mm layers of a 40 mm square at 100–140, with nothing outside it. */
     private static LayerReach square() throws Exception {
         StringBuilder g = new StringBuilder("G90\nM83\n");

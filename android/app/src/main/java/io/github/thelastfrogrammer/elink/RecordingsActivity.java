@@ -417,15 +417,38 @@ public final class RecordingsActivity extends Activity {
         LinearLayout farCard = card(); label(farCard, "Camera pictures · head far from the camera", 15, ink, true);
         label(farCard, far.isEmpty() ? "No pictures in this set yet. They are taken while each layer prints, when the head reaches the side away from the camera."
             : far.size() + (far.size() == 1 ? " picture" : " pictures") + ", taken while each layer printed. Compare with the parked set above.", 13, muted, false);
-        if (!far.isEmpty() && files.size() >= 2) {
+        madeAlready(farCard, recording.sideBySide(), "Side-by-side video, made when the print ended");
+        if (!far.isEmpty() && files.size() >= 2 && !recording.sideBySide().isFile()) {
             LinearLayout both = new LinearLayout(this); both.setOrientation(LinearLayout.HORIZONTAL); farCard.addView(both);
             action(both, "Side by side video…", () -> makeVideo(recording, TimelapseEncoder.pairFiles(files, far), new String[] {"Parked", "Head far"}, "-side-by-side"));
         }
         if (!far.isEmpty()) strip(farCard, recording, far, "-far");
     }
+    /** A video the app made by itself when the print ended: play it in the phone's player, or save a copy. */
+    private void madeAlready(LinearLayout card, File video, String what) {
+        if (!video.isFile()) return;
+        label(card, what + " (" + Math.max(1, video.length() / 1024) + " KB).", 13, ink, false);
+        LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); card.addView(row);
+        String name = (shown == null ? "timelapse" : shown.csv.getName().replaceFirst("\\.csv$", "")) + "-" + video.getName();
+        action(row, "Play", () -> {
+            try {
+                File copy = ShareProvider.fresh(this, name); java.nio.file.Files.copy(video.toPath(), copy.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                startActivity(new Intent(Intent.ACTION_VIEW).setDataAndType(ShareProvider.uriFor(this, copy), "video/mp4").addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION));
+            } catch (IOException | android.content.ActivityNotFoundException failed) { Toast.makeText(this, "No app on this phone can play it. Save it instead.", Toast.LENGTH_LONG).show(); }
+        });
+        action(row, "Save…", () -> {
+            try {
+                File copy = new File(new File(getCacheDir(), "timelapse"), name); copy.getParentFile().mkdirs();
+                java.nio.file.Files.copy(video.toPath(), copy.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                madeVideo = copy;   // saving removes this copy, never the kept video
+                startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("video/mp4").addCategory(Intent.CATEGORY_OPENABLE).putExtra(Intent.EXTRA_TITLE, name), VIDEO);
+            } catch (IOException failed) { Toast.makeText(this, "The video could not be copied.", Toast.LENGTH_SHORT).show(); }
+        });
+    }
     /** A set of pictures in a strip, with its timelapse video button; tap one for the full picture. */
     private void strip(LinearLayout card, PrintRecorder.Recording recording, List<File> files, String videoSuffix) {
-        if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, "Make a timelapse video…", () -> makeVideo(recording, files, videoSuffix)); }
+        if (videoSuffix.isEmpty()) madeAlready(card, recording.video(), "Timelapse video, made when the print ended");
+        if (files.size() >= 2) { LinearLayout videoRow = new LinearLayout(this); videoRow.setOrientation(LinearLayout.HORIZONTAL); card.addView(videoRow); action(videoRow, recording.video().isFile() && videoSuffix.isEmpty() ? "Make it again…" : "Make a timelapse video…", () -> makeVideo(recording, files, videoSuffix)); }
         LinearLayout strip = new LinearLayout(this); strip.setOrientation(LinearLayout.HORIZONTAL);
         HorizontalScrollView scroll = new HorizontalScrollView(this); scroll.addView(strip); card.addView(scroll);
         for (File file : files) {

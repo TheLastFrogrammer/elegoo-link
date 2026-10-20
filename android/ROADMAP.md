@@ -1,51 +1,42 @@
 # Link Workshop roadmap
 
-State as of v0.12.0. "Done" means in the app and covered by automated tests where possible; almost nothing has
-been checked on a real Centauri Carbon 2 yet, so every area also lists what still needs hardware. The field-test
-checklist is [FIELD_TEST.md](FIELD_TEST.md); Settings → Share diagnostics records what the app saw.
+State as of v0.86.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
+on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings › Field check gathers the manual checklist
+([FIELD_TEST.md](FIELD_TEST.md)), the checks measured during prints, and the self-test print into one report to share
+(no codes, PINs, addresses or serials).
 
 ## By area
 
-| Area | Done | Still to do |
+| Area | Done | Still to confirm on the printer, or to do |
 | --- | --- | --- |
-| Connection | LAN (MQTT + HTTP) with discovery, saved printers, encrypted access codes, reconnect and connection diagnosis; home-VPN route; Elegoo cloud sign-in for monitoring, control and uploads (the printer fetches the file from Elegoo's storage) without LAN Only; read-only PIN probe | First successful LAN registration on the user's CC2; first cloud upload on hardware; Matrix coexistence proof (see [MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md)) |
-| Monitor | Live camera on top while printing, job card with the file's preview, large percentage, layer and time left; temperatures with heating/cooling trend, faults, pause/resume/stop, light, printer settings (temperatures, fans, speed modes), maintenance (filament, CANVAS trays, homing, axis moves, leveling, vibration test, self-check, emergency stop), CANVAS colour strip with the active tray, alerts and background watching; switching between saved printers from the header | Hardware check of maintenance commands |
-| Files | Printer files (internal/USB, including folders) with start, delete, download and download-and-save; upload (locally or through the cloud); offline G-code inspection with embedded previews and material evidence; print setup with plate, checks, timelapse and per-tool CANVAS tray mapping (suggested by material and colour, always overridable, refreshed while the dialog is open) | Why the Files tab can show blank on one phone (layout diagnostics added in 0.26.1) |
-| Print history | History with durations; timelapse status per print; download and save of finished timelapse videos (LAN) | Check the timelapse download on hardware: the app follows Elegoo's own printer page, untested here |
-| Camera | Local MJPEG stream with snapshots; cloud camera | Stream variations across firmware versions |
-| Toolpath viewer | 3D G-code viewer with layers, moves, playback, features and travel; Live toolpath following the running print, over the camera picture with a line-up from taps, lens curve, plate margins, printhead mask and delay | Confirm the printer's layer numbering and nozzle position frame (logged in diagnostics) |
-| Slicer | ElegooSlicer's own engine on the phone (identical G-code to the desktop on tested models); Elegoo presets; multi-filament with CANVAS trays, colours, flushing and prime tower; preview thumbnail; plate view (move, turn, scale evenly or per axis, fit to the bed, copy or several copies, remove, arrange; oversized models can be scaled down there); models added over several picks; full print settings editor with saved sets; 3MF projects with plate choice, all-plates slicing and project settings; lay on face; per-slot filament settings; settings for one model (per-object); calibration prints (temperature, flow, pressure advance tower, lines and pattern, max volumetric speed, retraction, input shaping frequency and damping); upload and print straight from the result; memory estimate before big slices; "Open with" from other apps | Speed and memory on a real phone; painting/supports/seam painting tools; modifier volumes (settings for part of a model); printer preset editing; whether the CC2 accepts SET_INPUT_SHAPER |
-| Recordings | Graphs of each watched print (progress, layers, temperatures, fans) | — |
+| Connection | LAN (MQTT + HTTP) with discovery, saved printers, encrypted access codes, reconnect and diagnosis; home-VPN route; Elegoo cloud sign-in for monitoring, control and uploads; read-only PIN probe; following the printer's mode | First LAN registration on the user's CC2; first cloud upload; Matrix coexistence ([MATRIX_COEXISTENCE.md](MATRIX_COEXISTENCE.md)) |
+| Print tab | Camera or live toolpath on top, job card, temperatures and trends, faults, pause/resume/stop, light, printer settings, maintenance, CANVAS strip, start steps page that follows the printer's own status, alerts, widget and live progress notification | Maintenance commands on hardware |
+| Files | Printer files (internal/USB) with start, delete, download; upload locally or through the cloud; G-code inspection; print setup with per-tool tray mapping; refused starts explained | Files tab blank on one phone |
+| History and recordings | History with durations and statistics; recordings with charts, trays, material, journal; camera pictures by time, by layers, with the head far from the camera (from the G-code), or parked (smooth timelapse); a second far set to compare; timelapse, far and side-by-side videos, made by themselves when a print ends, with the end held and flicker evened out | Videos made on the user's phone (MediaCodec) |
+| Live toolpath | 3D G-code viewer; Live toolpath following the print over the camera picture, with line-up, lens curve, plate margins, printhead mask and delay | Camera line-up and delay on hardware (manual checks) |
+| Slicer | ElegooSlicer's engine on the phone; presets; multi-filament with CANVAS trays; plate view; full settings editor; 3MF projects; per-object settings; support blockers and enforcers; calibration prints; smooth timelapse (park at a chosen corner or the one farthest from the camera, with a comparison set); the self-test print; upload and print from the result; the reason Slice is off, with a tap to fix it | Speed and memory on a real phone; colour, support and seam painting |
+| Measured checks | Status rate; parking, lift and return; layer numbers; head position on the layer; the self-test's position probe (exact, shifted or mirrored); picture timing; heaters; filament use; slicer estimate; printer's time left; faults. Kept with each recording, in Diagnostics at the end, and in Field check | Their first answers, from the self-test print |
+| Automations and links | Rules with notify, light (once, off by default) and webhooks; Home Assistant (read only); print guardian (notify only); projects; backup and restore | — |
 
 ## Next
 
-Plans, in order. Each round ends with tests, a build and a field check on the phone.
+In order. Each round ends with tests, a build, and the self-test print when there is hardware time.
 
-1. **Field check (closes the loop with the hardware).** An in-app "Field check" page that walks through FIELD_TEST.md on the phone and
-   CC2, records pass/fail and notes, and gathers the matching diagnostics lines into one report to share (no codes, PINs, addresses
-   or serials, as now). Open items it covers first: the Files tab shown blank, plate margins for the camera line-up, printhead mask
-   and fan sizes, the camera delay, tray refresh through the cloud, maintenance commands, timelapse download, first LAN connection.
-2. **Printing workflow.** Print setup shows the trays as the Monitor's colour strip and remembers the last tray choice per file
-   (prefilled, still confirmed); Print again from history opens Print setup prefilled; a progress notification with the file's
-   preview and time left (its buttons only open the app).
-3. **Layout and slicer.** A drag handle to scale in the 3D view; support blockers and enforcers as boxes; modifier boxes (settings
-   for part of a model); then support and seam painting. Measure slicing speed and memory on the phone.
-4. **Live toolpath.** Line up from a printed test shape (tap its corners) to set the plate margins without guessing; keep a line-up
-   per saved printer.
-5. **Engineering.** Split MainActivity (over 2,000 lines) into one controller per tab, behind the existing tests; move the UI text
-   into string resources (translations, and wording changes without touching code). Done: the slicer engine is pinned in
-   android/engine/ (slicer/scripts/pin-engine.sh), so CI and release builds ship it; CI runs on every branch push and fails when
-   the APK lacks the engine or the pin is older than the engine source; crashes leave a secret-free record in the diagnostics.
-6. **Pinned: a helper on the printer's USB port.** Answered: stock cloud mode never opens port 80 (PROTOCOL.md). Next idea,
-   no firmware change: a board posing as a USB drive (Pi 4 or Zero W via USB-C/OTG gadget mode with separate power, or an
-   ESP32-S3 with microSD) that the app fills over Wi-Fi; prints are started through the cloud from "USB drive", so their
-   G-code stays readable in cloud mode, and the board can see which file and part of it the printer reads. First a free
-   test: a plain USB stick, then in cloud mode Files → USB drive and start a print from it. The printer, as USB host, uses
-   only storage, so the port is not a way to query it.
+1. **Answers from the printer.** Run the self-test print once; read Field check's measured section. Fix what it shows
+   (position frame, status rate, parking), then turn its numbers into defaults (camera delay, printhead mask).
+2. **Safer printing.** Failure detection from the pictures on the phone (spaghetti, nothing on the bed), notify only;
+   a clearer "is it still printing" in cloud mode, where status comes about every 30 s.
+3. **Timelapse.** Frame alignment (small camera shifts); a camera timing marker in the self-test (the head at a known
+   place at a known moment) to measure the camera's delay without guessing.
+4. **Slicer.** Colour painting for multi-colour prints, then support and seam painting; measure slicing on the phone.
+5. **Engineering.** UI text into string resources (translations, wording without code changes); a first-run guide;
+   a signed release build.
+6. **Pinned: a helper on the printer's USB port** (a board posing as a USB drive, filled over Wi-Fi), so G-code stays
+   readable in cloud mode. First a free test with a plain USB stick.
 7. Other printer models (the Centauri Carbon 1 uses a different protocol).
 
 ## Rules that stay
 
 No command that changes the printer is ever repeated automatically. An acknowledgement is not treated as the
 resulting state. Starting, deleting and temperature changes need a fresh status; tray mappings need fresh CANVAS
-data with a loaded tray.
+data with a loaded tray. Measured checks only read what the printer reports. Slices carry standard G-code only.

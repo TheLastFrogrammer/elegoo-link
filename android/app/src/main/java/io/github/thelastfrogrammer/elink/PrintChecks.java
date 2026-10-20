@@ -33,6 +33,7 @@ final class PrintChecks {
         {"filament", "Filament use matches the G-code"},
         {"estimate", "Slicer time estimate"},
         {"eta", "Printer's time left"},
+        {"faults", "No faults during the print"},
     };
 
     /** Margin (mm) around a layer's printed area for a head position to count as on it (travel, wipes, the nozzle's own size). */
@@ -61,6 +62,15 @@ final class PrintChecks {
     // The self-test's position probe: where the head stood still (the same position in readings in a row), {x, y, readings}.
     boolean selfTest; final List<double[]> stops = new ArrayList<>(); private double stillX = Double.NaN, stillY = Double.NaN;
     static final int MAX_STOPS = 60;
+    // Faults: every status counted, and the fault codes the printer reported while the print ran (at most 20 different ones).
+    int statuses; final java.util.TreeSet<String> faults = new java.util.TreeSet<>();
+
+    /** The printer's fault codes in one status (StatusPresentation.faultCodes: "a, b", empty when none). */
+    void faults(String codes) {
+        statuses++;
+        if (codes == null || codes.isEmpty()) return;
+        for (String code : codes.split(",\\s*")) if (!code.isEmpty() && !code.equals("…") && faults.size() < 20) faults.add(code.trim());
+    }
 
     /**
      * One status: the time (monotonic ms), the printer's layer, the head position (NaN when not reported), whether it came
@@ -185,6 +195,11 @@ final class PrintChecks {
             out.add(new Finding("pictures", title("pictures"), worst <= 3_000 ? Verdict.WORKS : worst <= 8_000 ? Verdict.UNSURE : Verdict.PROBLEM, words.toString().trim()));
         }
         if (selfTest && maxLayer > SelfTest.PROBE_LAYER + 2) out.add(probe());
+        // Only once the print has ended: "none" says something only about a whole print.
+        if (endedAt >= 0 && statuses >= 30)
+            out.add(new Finding("faults", title("faults"), faults.isEmpty() ? Verdict.WORKS : Verdict.PROBLEM, faults.isEmpty()
+                ? "No fault codes in the " + statuses + " statuses received while it ran."
+                : "The printer reported fault code" + (faults.size() == 1 ? " " : "s ") + String.join(", ", faults) + " while it ran (" + statuses + " statuses). The printer's screen or the diagnostics have the details."));
         if (heatSamples >= 30) {
             int share = percent(heatOk, heatSamples);
             out.add(new Finding("heat", title("heat"), share >= 95 ? Verdict.WORKS : share >= 80 ? Verdict.UNSURE : Verdict.PROBLEM,
@@ -278,7 +293,8 @@ final class PrintChecks {
             .put("waits", new org.json.JSONArray(new long[] {waits[0], waitSum[0], waitMax[0], waits[1], waitSum[1], waitMax[1]}))
             .put("heat", new org.json.JSONArray(new double[] {heatSamples, heatOk, worstNozzle, worstBed}))
             .put("time", new org.json.JSONArray(new long[] {firstLayerAt, endedAt, fileSeconds, etaAt, etaRemaining, complete ? 1 : 0}))
-            .put("file_extruded", fileExtruded).put("self_test", selfTest).put("stops", stopsJson());
+            .put("file_extruded", fileExtruded).put("self_test", selfTest).put("stops", stopsJson())
+            .put("statuses", statuses).put("faults", new org.json.JSONArray(faults));
     }
     private org.json.JSONArray stopsJson() throws org.json.JSONException {
         org.json.JSONArray all = new org.json.JSONArray(); for (double[] s : stops) all.put(new org.json.JSONArray(s)); return all;
@@ -296,6 +312,8 @@ final class PrintChecks {
         if (h != null) { c.heatSamples = h.optInt(0); c.heatOk = h.optInt(1); c.worstNozzle = h.optDouble(2, 0); c.worstBed = h.optDouble(3, 0); }
         if (t != null) { c.firstLayerAt = t.optLong(0, -1); c.endedAt = t.optLong(1, -1); c.fileSeconds = t.optLong(2); c.etaAt = t.optLong(3, -1); c.etaRemaining = t.optLong(4); c.complete = t.optInt(5) == 1; }
         c.fileExtruded = json.optDouble("file_extruded", 0); c.selfTest = json.optBoolean("self_test");
+        c.statuses = json.optInt("statuses");
+        org.json.JSONArray fs = json.optJSONArray("faults"); for (int i = 0; fs != null && i < fs.length(); i++) c.faults.add(fs.optString(i));
         org.json.JSONArray st = json.optJSONArray("stops");
         for (int i = 0; st != null && i < st.length(); i++) { org.json.JSONArray one = st.optJSONArray(i); if (one != null) c.stops.add(new double[] {one.optDouble(0), one.optDouble(1), one.optDouble(2)}); }
         return c;

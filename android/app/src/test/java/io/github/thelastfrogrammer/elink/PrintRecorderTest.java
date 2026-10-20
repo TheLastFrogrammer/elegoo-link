@@ -60,6 +60,18 @@ public class PrintRecorderTest {
         assertEquals("ended", all.get(0).outcome); assertEquals("stopped", all.get(1).outcome); assertEquals("interrupted", all.get(2).outcome);
     }
 
+    /** The end of a print is told once (for its video), but not a print only interrupted by another one starting. */
+    @Test public void theEndOfAPrintIsToldButNotAnInterruption() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        List<String> told = new java.util.ArrayList<>();
+        recorder.printEnded = r -> told.add(r.file + ":" + r.outcome);
+        recorder.update(0, status(2075, "a.gcode", 1, 1), "local", "CC2");
+        recorder.update(20_000, status(2075, "b.gcode", 1, 1), "local", "CC2");   // a interrupted
+        recorder.update(40_000, status(2077, "b.gcode", 3, 100), "local", "CC2");
+        recorder.update(41_000, status(2077, "b.gcode", 3, 100), "local", "CC2");   // the printer keeps reporting the end
+        assertEquals(java.util.Collections.singletonList("b.gcode:complete"), told);
+    }
+
     @Test public void anUnfinishedRecordingResumesAfterAnAppRestart() throws Exception {
         new PrintRecorder(dir).update(0, status(2075, "a.gcode", 1, 1), "local", "CC2");
         PrintRecorder restarted = new PrintRecorder(dir);
