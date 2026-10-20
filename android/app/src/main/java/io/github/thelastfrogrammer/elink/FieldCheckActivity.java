@@ -35,12 +35,30 @@ public final class FieldCheckActivity extends Activity {
         ui.rowButton(top, "Share report…", this::share, true);
         ui.rowButton(top, "Clear results…", this::clearAll, false);
         ui.label(page, "Notes go into the report as you type them; leave out access codes, PINs and addresses.", 12, ui.muted, false);
+        // The self-test print: one short print that gives every measured check its evidence. Only opens the Slice screen, set up.
+        LinearLayout selfCard = ui.card(page, "Self-test print");
+        ui.label(selfCard, SelfTest.ABOUT, 13, ui.muted, false);
+        TextView lastSelf = ui.label(selfCard, "", 13, ui.ink, false); lastSelf.setVisibility(View.GONE);
+        LinearLayout selfRow = ui.row(selfCard);
+        ui.rowButton(selfRow, "Set up the self-test print…", () -> startActivity(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "selftest")), true);
         // Measured: filled in by prints the app watches, with nothing to tap (read on a worker: it opens every recording).
         LinearLayout measuredCard = ui.card(page, "Measured during prints");
         TextView measuredText = ui.label(measuredCard, "Reading the recordings…", 13, ui.muted, false);
         new Thread(() -> {
-            List<Object[]> found = PrintChecks.latest(new PrintRecorder(RecordingsActivity.directory(this)).list());
-            runOnUiThread(() -> { if (!isDestroyed()) { measured = found; showMeasured(measuredCard, measuredText); } });
+            List<PrintRecorder.Recording> all = new PrintRecorder(RecordingsActivity.directory(this)).list();
+            List<Object[]> found = PrintChecks.latest(all);
+            PrintRecorder.Recording self = null; for (PrintRecorder.Recording r : all) if (self == null && SelfTest.is(r.file)) self = r;
+            PrintRecorder.Recording lastTest = self;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                measured = found; showMeasured(measuredCard, measuredText);
+                if (lastTest != null) {
+                    java.text.DateFormat when = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT);
+                    lastSelf.setText("Last run " + when.format(new Date(lastTest.start)) + " · " + ("printing".equals(lastTest.outcome) ? "still running" : lastTest.outcome)
+                        + " · " + PrintChecks.of(lastTest).size() + " checks answered");
+                    lastSelf.setVisibility(View.VISIBLE);
+                }
+            });
         }, "field-measured").start();
         String area = null; LinearLayout card = null;
         for (FieldCheck.Check check : FieldCheck.CHECKS) {
@@ -60,7 +78,7 @@ public final class FieldCheckActivity extends Activity {
             PrintChecks.Finding f = (PrintChecks.Finding) m[0]; PrintRecorder.Recording r = (PrintRecorder.Recording) m[1];
             TextView title = ui.label(card, PrintChecks.mark(f.verdict) + "  " + f.title, 15, f.verdict == PrintChecks.Verdict.PROBLEM ? ui.error : ui.ink, true);
             title.setContentDescription((f.verdict == PrintChecks.Verdict.WORKS ? "Works: " : f.verdict == PrintChecks.Verdict.PROBLEM ? "Problem: " : "Unsure: ") + f.title);
-            ui.label(card, f.evidence + "\n" + StatusPresentation.clean(r.file) + " · " + when.format(new Date(r.start)), 13, ui.muted, false);
+            ui.label(card, f.evidence + "\n" + (SelfTest.is(r.file) ? "Self-test print" : StatusPresentation.clean(r.file)) + " · " + when.format(new Date(r.start)), 13, ui.muted, false);
         }
     }
 
@@ -141,7 +159,7 @@ public final class FieldCheckActivity extends Activity {
         String header = "App " + appVersion() + "\nDevice " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL + " · Android " + android.os.Build.VERSION.RELEASE;
         StringBuilder measuredText = new StringBuilder("\n## Measured during prints\n");
         if (measured.isEmpty()) measuredText.append("Nothing measured yet.\n");
-        for (Object[] m : measured) { PrintChecks.Finding f = (PrintChecks.Finding) m[0]; measuredText.append(PrintChecks.mark(f.verdict)).append(' ').append(f.title).append("\n    ").append(f.evidence).append("\n"); }
+        for (Object[] m : measured) { PrintChecks.Finding f = (PrintChecks.Finding) m[0]; measuredText.append(PrintChecks.mark(f.verdict)).append(' ').append(f.title).append(SelfTest.is(((PrintRecorder.Recording) m[1]).file) ? " (self-test)" : "").append("\n    ").append(f.evidence).append("\n"); }
         String text = FieldCheck.report(entries, header, TimeZone.getDefault()) + measuredText + "\n\n" + Diagnostics.report("Diagnostics (no codes, PINs, addresses or serial numbers)");
         Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "Link Workshop field check").putExtra(Intent.EXTRA_TEXT, text);
         startActivity(Intent.createChooser(send, "Share field check"));

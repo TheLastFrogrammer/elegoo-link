@@ -59,4 +59,36 @@ public class PrintChecksTest {
         checks.status(1000, 1, 120, 120, 0.2, false, Double.NaN, Double.NaN, null);   // the cloud, no file, not smooth
         assertTrue(checks.findings(0, 0, false).isEmpty());
     }
+
+    /** Heat, filament, the slicer's estimate and the printer's time left, on a print that ends complete. */
+    @Test public void heatFilamentAndTimes() throws Exception {
+        PrintChecks checks = new PrintChecks(); checks.fileSeconds = 600; checks.fileExtruded = 1000;
+        long t = 0;
+        for (int i = 0; i < 700; i++) {
+            t += 1000; int layer = i < 30 ? 0 : 1 + i / 30;
+            checks.status(t, layer, Double.NaN, Double.NaN, Double.NaN, false, Double.NaN, Double.NaN, null);
+            checks.heat(t, layer, 220 + (i % 3) - 1, 220, 60, 60);
+            checks.progress(t, Math.min(99, i * 100 / 700), i == 350 ? 310 : 700 - i);
+        }
+        checks.ended(t, true);
+        Map<String, PrintChecks.Finding> found = byId(checks.findings(0, 0, false, 1012));
+        assertEquals(found.get("heat").evidence, PrintChecks.Verdict.WORKS, found.get("heat").verdict);
+        assertEquals(found.get("filament").evidence, PrintChecks.Verdict.WORKS, found.get("filament").verdict);
+        assertEquals(found.get("estimate").evidence, PrintChecks.Verdict.WORKS, found.get("estimate").verdict);   // 670 s against 600: +12 %
+        assertEquals(found.get("eta").evidence, PrintChecks.Verdict.UNSURE, found.get("eta").verdict);            // 350 s left, said 310: +13 %
+        assertTrue(found.get("estimate").evidence.contains("10 min 0 s"));
+        // Not complete: nothing about times or filament.
+        checks.ended(t, false);
+        found = byId(checks.findings(0, 0, false, 1012));
+        assertNull(found.get("estimate")); assertNull(found.get("filament")); assertNull(found.get("eta"));
+        assertEquals(4 * 3600 + 5 * 60 + 7, LayerReach.seconds(" 4h 5m 7s")); assertEquals(1 * 86400 + 60, LayerReach.seconds("1d 0h 1m 0s"));
+    }
+
+    /** A heater that drifts off its target is a problem. */
+    @Test public void aDriftingHeaterIsNamed() {
+        PrintChecks checks = new PrintChecks(); long t = 0;
+        for (int i = 0; i < 200; i++) { t += 1000; checks.heat(t, 1, i < 80 ? 220 : 210, 220, 60, 60); }
+        Map<String, PrintChecks.Finding> found = byId(checks.findings(0, 0, false));
+        assertEquals(PrintChecks.Verdict.PROBLEM, found.get("heat").verdict);
+    }
 }

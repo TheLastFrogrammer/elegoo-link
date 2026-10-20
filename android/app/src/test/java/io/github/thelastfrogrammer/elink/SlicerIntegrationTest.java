@@ -211,6 +211,29 @@ public class SlicerIntegrationTest {
         }
     }
 
+    /** The self-test block slices to a short print the measured checks can read: layers, filament and time match the file's own header. */
+    @Test public void selfTestPrintSlicesShortAndReadable() throws Exception {
+        File output = new File(context().getCacheDir(), SelfTest.NAME + ".gcode");
+        File block = SelfTest.model(new File(context().getFilesDir(), "selftest"));
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) {
+            slicer.slice(Collections.singletonList(block), PRINTER, PROCESS, Collections.singletonList(PLA),
+                Arrays.asList(new String[] {"time_lapse_gcode", SmoothTimelapse.gcode(0, 3000)}, new String[] {"sparse_infill_density", SelfTest.INFILL + "%"}), output, (percent, text) -> true);
+        }
+        String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+        int layers = Integer.parseInt(gcode.replaceFirst("(?s).*; total layers count = (\\d+).*", "$1"));
+        LayerReach reach = LayerReach.read(output, 0, 0);
+        assertEquals(layers, reach.layers);
+        assertTrue("estimate " + reach.estimatedSeconds + " s", reach.estimatedSeconds > 120 && reach.estimatedSeconds < 20 * 60);
+        // Every extrusion move counted (the header's total also counts filament outside the moves, so it is not the measure).
+        double moves = 0;
+        for (String line : gcode.split("\n")) { String code = line.replaceFirst(";.*", "").trim(); java.util.regex.Matcher m = java.util.regex.Pattern.compile("^G[0-3] .*\\bE(-?[0-9.]+)").matcher(code); if (m.find()) moves += Double.parseDouble(m.group(1)); }
+        assertTrue(moves > 100);
+        assertEquals("filament summed through the parks' G91 … G90", moves, reach.extruded, 0.01);
+        float[] box = reach.boxForPrinterLayer(layers / 2);
+        assertEquals(SelfTest.WIDTH, box[2] - box[0], 1.5); assertEquals(SelfTest.DEPTH, box[3] - box[1], 1.5);
+        assertTrue(SelfTest.is("/local/" + SelfTest.NAME + ".gcode"));
+    }
+
     @Test public void slicesTwoFilamentsWithTrayColoursAndAssignment() throws Exception {
         File output = new File(context().getCacheDir(), "two.gcode");
         List<File> models = Arrays.asList(box(20, 20, 10), box(15, 15, 10));

@@ -318,6 +318,10 @@ public final class PrintRecorder {
         JSONObject at = Cc2Codec.position(status);
         double hx = at != null && at.has("x") ? at.optDouble("x") : Double.NaN, hy = at != null && at.has("y") ? at.optDouble("y") : Double.NaN, hz = at != null && at.has("z") ? at.optDouble("z") : Double.NaN;
         current.checks.status(mono, layer, hx, hy, hz, "local".equals(source) && current.followsHead(), current.parkX, current.parkY, reach);
+        JSONObject nozzle = status.optJSONObject("extruder"), bed = status.optJSONObject("heater_bed"), machineNow = status.optJSONObject("machine_status");
+        current.checks.heat(mono, layer, nozzle == null ? Double.NaN : nozzle.optDouble("temperature", Double.NaN), nozzle == null ? -1 : nozzle.optDouble("target", -1),
+            bed == null ? Double.NaN : bed.optDouble("temperature", Double.NaN), bed == null ? -1 : bed.optDouble("target", -1));
+        if (machineNow != null) current.checks.progress(mono, machineNow.optInt("progress", -1), print.optLong("remaining_time_sec", -1));
         if (mono - sampledMono < MIN_INTERVAL_MS && layer == lastLayer && !last) return false;
         append(now, mono, status, source, sub);
         lastLayer = layer; sampledMono = mono;
@@ -468,6 +472,7 @@ public final class PrintRecorder {
         if (current.end == 0) current.end = now;
         if (!"interrupted".equals(outcome)) try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), current.meta.getName().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
         if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; endedPrinter = current.printerId; }
+        current.checks.ended(mono, "complete".equals(outcome));
         for (PrintChecks.Finding f : PrintChecks.of(current)) Diagnostics.note(Diagnostics.STATUS, "measured: " + PrintChecks.mark(f.verdict) + " " + f.title + " · " + f.evidence);
         save(current); current = null; lastLayer = -1; learnedRead = false;
     }

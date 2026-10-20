@@ -186,6 +186,7 @@ public final class SliceActivity extends Activity {
             String open = getIntent().getStringExtra(EXTRA_OPEN);
             if ("find".equals(open)) startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS);
             else if ("calibration".equals(open)) getWindow().getDecorView().post(this::chooseCalibration);
+            else if ("selftest".equals(open)) getWindow().getDecorView().post(this::setUpSelfTest);
         }
         if (slicing) { busy = true; keepAwake(true); progress.setVisibility(View.VISIBLE); progress.setProgress(slicingPercent); status.setText(slicingText); updateButtons(); }
         else checkInterrupted();
@@ -488,10 +489,10 @@ public final class SliceActivity extends Activity {
         smoothCompare = new Switch(this); smoothCompare.setText("Also take a set with the head far from the camera, to compare"); smoothCompare.setTextColor(ink); smoothCompare.setTextSize(14);
         smoothCompare.setMinHeight(dp(52)); smoothCompare.setSwitchPadding(dp(16)); WorkshopUi.switchColours(smoothCompare, teal, dark);
         smoothCompare.setChecked(workshop.getBoolean("smoothCompare", false));
-        smoothCompare.setOnCheckedChangeListener((v, on) -> workshop.edit().putBoolean("smoothCompare", on).apply());
+        smoothCompare.setOnCheckedChangeListener((v, on) -> { if (!selfTest) workshop.edit().putBoolean("smoothCompare", on).apply(); });
         smoothBox.addView(smoothCompare, new LinearLayout.LayoutParams(-1, -2));
         label(smoothBox, "Each layer then gets two pictures: one parked, and one while it prints with the head at the far side of the layer. The recording keeps them as two sets, each with its own timelapse video.", 12, muted, false);
-        smoothSwitch.setOnCheckedChangeListener((v, on) -> { smoothBox.setVisibility(on ? View.VISIBLE : View.GONE); workshop.edit().putBoolean("smoothTimelapse", on).apply(); updateButtons(); });
+        smoothSwitch.setOnCheckedChangeListener((v, on) -> { smoothBox.setVisibility(on ? View.VISIBLE : View.GONE); if (!selfTest) workshop.edit().putBoolean("smoothTimelapse", on).apply(); updateButtons(); });
         smoothSwitch.setChecked(workshop.getBoolean("smoothTimelapse", false)); smoothBox.setVisibility(smoothSwitch.isChecked() ? View.VISIBLE : View.GONE);
         settingsSummary = label(settingsCard, "", 13, muted, false);
         // Overrides from All settings: opens by itself when there are any, so the changes are never hidden.
@@ -597,6 +598,23 @@ public final class SliceActivity extends Activity {
         });
     }
 
+    /** Set up for the self-test print: its choices are for this slice only, so the person's own defaults are left as they were. */
+    private boolean selfTest;
+    /** The self-test print (SelfTest): its block, with every measured feature on. Slicing and printing stay the person's taps. */
+    private void setUpSelfTest() {
+        if (isDestroyed()) return;
+        File block;
+        try { block = SelfTest.model(new File(getFilesDir(), "selftest")); }
+        catch (IOException failed) { status.setText("The self-test block could not be written: " + failed.getClass().getSimpleName()); status.setTextColor(error); return; }
+        selfTest = true;
+        smoothSwitch.setChecked(true); smoothCompare.setChecked(true);
+        smoothCorner.setSelection(SmoothTimelapse.FARTHEST); smoothWait.setSelection(1);
+        infill.setText(String.valueOf(SelfTest.INFILL)); supportSpinner.setSelection(1);
+        importModels(new ArrayList<>(Collections.singletonList(Uri.fromFile(block))));
+        new AlertDialog.Builder(this).setTitle("Self-test print").setMessage(SelfTest.ABOUT + "\n\nSmooth timelapse, the comparison set, 15 % infill and no supports are set for this slice only.")
+            .setPositiveButton("OK", null).show();
+    }
+
     /** The park corner (0-3): the one chosen, or the one farthest from the camera that takes the pictures (its position as set). */
     private int smoothCornerNow() {
         int choice = Math.max(0, smoothCorner.getSelectedItemPosition());
@@ -623,7 +641,7 @@ public final class SliceActivity extends Activity {
         }
         if (smoothSwitch != null && smoothSwitch.isChecked()) {
             int choice = Math.max(0, smoothCorner.getSelectedItemPosition()), corner = smoothCornerNow(), wait = SmoothTimelapse.WAITS_MS[Math.max(0, smoothWait.getSelectedItemPosition())];
-            getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putInt("smoothCorner", choice).putInt("smoothWait", Math.max(0, smoothWait.getSelectedItemPosition())).apply();
+            if (!selfTest) getSharedPreferences("workshop-settings", MODE_PRIVATE).edit().putInt("smoothCorner", choice).putInt("smoothWait", Math.max(0, smoothWait.getSelectedItemPosition())).apply();
             overrides.put("time_lapse_gcode", SmoothTimelapse.gcode(corner, wait));
         }
         switch (brimSpinner.getSelectedItemPosition()) {

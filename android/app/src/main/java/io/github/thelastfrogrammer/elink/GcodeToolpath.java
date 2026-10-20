@@ -55,7 +55,7 @@ public final class GcodeToolpath {
         GcodeToolpath path = new GcodeToolpath();
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8), 1 << 16);
         double x = 0, y = 0, z = 0, e = 0;
-        boolean absolute = true, absoluteE = true, pendingLayer = false;
+        boolean absolute = true, absoluteE = true, extrudeAbsolute = true, pendingLayer = false;
         float lineWidth = 0.45f, layerHeight = 0.2f, lastLayerZ = -1;
         int feature = OTHER;
         String line;
@@ -118,10 +118,12 @@ public final class GcodeToolpath {
                 for (String word : code.split("\\s+"))
                     if (word.length() > 1 && Character.toUpperCase(word.charAt(0)) == 'R') try { path.addTime(Float.parseFloat(word.substring(1))); } catch (NumberFormatException ignored) { }
             }
-            else if (kind == 'G' && number == 90) { absolute = true; absoluteE = true; }
+            // As Klipper: G90/G91 switch the axes and, with them, E; M82/M83 set E's own mode, which G90 brings back
+            // (a G91 … G90 pair, as the smooth timelapse park uses, leaves relative extrusion relative).
+            else if (kind == 'G' && number == 90) { absolute = true; absoluteE = extrudeAbsolute; }
             else if (kind == 'G' && number == 91) { absolute = false; absoluteE = false; }
-            else if (kind == 'M' && number == 82) absoluteE = true;
-            else if (kind == 'M' && number == 83) absoluteE = false;
+            else if (kind == 'M' && number == 82) { extrudeAbsolute = true; absoluteE = absolute; }
+            else if (kind == 'M' && number == 83) { extrudeAbsolute = false; absoluteE = false; }
             else if (kind == 'G' && number == 92) {
                 for (String word : code.split("\\s+")) {
                     if (word.length() < 2) continue;

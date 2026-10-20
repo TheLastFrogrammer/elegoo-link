@@ -28,6 +28,10 @@ final class PrintChecks {
         {"layers", "Layer numbers match the G-code"},
         {"position", "Reported head position is on the layer"},
         {"pictures", "Pictures arrive in time"},
+        {"heat", "Heaters hold their temperature"},
+        {"filament", "Filament use matches the G-code"},
+        {"estimate", "Slicer time estimate"},
+        {"eta", "Printer's time left"},
     };
 
     /** Margin (mm) around a layer's printed area for a head position to count as on it (travel, wipes, the nozzle's own size). */
@@ -46,6 +50,13 @@ final class PrintChecks {
     int positions, positionsOn;
     // Pictures: how long from asking to keeping (ms), per set (0 the main set, 1 the far one).
     final long[] waitSum = new long[2], waitMax = new long[2]; final int[] waits = new int[2];
+    // Heat while printing: readings within 4 °C of the target (once reached, and not just after the target changed), and the largest miss.
+    int heatSamples, heatOk; double worstNozzle, worstBed;
+    private boolean nozzleReached, bedReached; private double nozzleTarget = -1, bedTarget = -1; private long targetChangedAt = -1;
+    // Time: the first layer's start, the end (complete prints), the file's estimate, and the printer's time left at half way.
+    long firstLayerAt = -1, endedAt = -1, fileSeconds, etaAt = -1, etaRemaining; boolean complete;
+    // Filament the file feeds (mm), for comparing with the extruder's count.
+    double fileExtruded;
 
     /**
      * One status: the time (monotonic ms), the printer's layer, the head position (NaN when not reported), whether it came
@@ -58,7 +69,8 @@ final class PrintChecks {
             lastFastAt = mono;
         } else lastFastAt = -1;
         if (layer > maxLayer) maxLayer = layer;
-        if (reach != null) fileLayers = reach.layers;
+        if (layer >= 1 && firstLayerAt < 0) firstLayerAt = mono;
+        if (reach != null) { fileLayers = reach.layers; fileSeconds = reach.estimatedSeconds; fileExtruded = reach.extruded; }
         if (Double.isNaN(x) || Double.isNaN(y) || layer < 1) return;
         boolean smooth = !Double.isNaN(parkX) && !Double.isNaN(parkY);
         boolean parked = smooth && SmoothTimelapse.parked(x, y, parkX, parkY);
@@ -85,6 +97,26 @@ final class PrintChecks {
         }
     }
 
+    /** Heater readings while printing (layer 1 on): °C, NaN when not reported. */
+    void heat(long mono, int layer, double nozzle, double nozzleSet, double bed, double bedSet) {
+        if (nozzleSet != nozzleTarget || bedSet != bedTarget) { nozzleTarget = nozzleSet; bedTarget = bedSet; targetChangedAt = mono; nozzleReached = bedReached = false; }
+        if (layer < 1 || mono - targetChangedAt < 60_000) return;   // a new target takes a while to reach: not counted for a minute
+        boolean counted = false, ok = true;
+        if (nozzleSet > 0 && !Double.isNaN(nozzle)) {
+            double miss = Math.abs(nozzle - nozzleSet); if (miss <= 2) nozzleReached = true;
+            if (nozzleReached) { counted = true; if (miss > 4) ok = false; worstNozzle = Math.max(worstNozzle, miss); }
+        }
+        if (bedSet > 0 && !Double.isNaN(bed)) {
+            double miss = Math.abs(bed - bedSet); if (miss <= 2) bedReached = true;
+            if (bedReached) { counted = true; if (miss > 4) ok = false; worstBed = Math.max(worstBed, miss); }
+        }
+        if (counted) { heatSamples++; if (ok) heatOk++; }
+    }
+    /** Progress (%) and the printer's time left (s): the time left at half way is compared with the real rest of the print. */
+    void progress(long mono, int percent, long remaining) { if (etaAt < 0 && percent >= 50 && percent < 95 && remaining > 0) { etaAt = mono; etaRemaining = remaining; } }
+    /** The print ended (complete, or stopped or interrupted). */
+    void ended(long mono, boolean completed) { endedAt = mono; complete = completed; }
+
     /** A kept picture: its set (0 main, 1 far) and how long after it was asked for (ms; negative when it came unasked). */
     void picture(int set, long waitedMs) {
         if (waitedMs < 0 || set < 0 || set > 1) return;
@@ -92,7 +124,9 @@ final class PrintChecks {
     }
 
     /** The answers so far; questions without enough evidence are left out. `pictures`: pictures kept (main, far). */
-    List<Finding> findings(int picturesMain, int picturesFar, boolean comparing) {
+    List<Finding> findings(int picturesMain, int picturesFar, boolean comparing) { return findings(picturesMain, picturesFar, comparing, Double.NaN); }
+    /** As above; `extrudedMm`: the extruder's own count for the whole print (NaN when the start was not seen). */
+    List<Finding> findings(int picturesMain, int picturesFar, boolean comparing, double extrudedMm) {
         List<Finding> out = new ArrayList<>();
         if (fastGaps >= 30) {
             int share = percent(fastQuick, fastGaps);
@@ -131,11 +165,35 @@ final class PrintChecks {
             words.append(" Kept: ").append(picturesMain).append(comparing ? " parked, " + picturesFar + " far." : ".");
             out.add(new Finding("pictures", title("pictures"), worst <= 3_000 ? Verdict.WORKS : worst <= 8_000 ? Verdict.UNSURE : Verdict.PROBLEM, words.toString().trim()));
         }
+        if (heatSamples >= 30) {
+            int share = percent(heatOk, heatSamples);
+            out.add(new Finding("heat", title("heat"), share >= 95 ? Verdict.WORKS : share >= 80 ? Verdict.UNSURE : Verdict.PROBLEM,
+                String.format(Locale.ROOT, "%d%% of %d readings within 4 °C of the target; largest miss %.1f °C at the nozzle, %.1f °C at the bed.", share, heatSamples, worstNozzle, worstBed)));
+        }
+        if (complete && fileExtruded > 100 && !Double.isNaN(extrudedMm) && extrudedMm > 0) {
+            double off = (extrudedMm - fileExtruded) / fileExtruded * 100;
+            // The printer's own start routine (its purge line) may feed some more than the file's moves.
+            out.add(new Finding("filament", title("filament"), Math.abs(off) <= 5 ? Verdict.WORKS : Math.abs(off) <= 25 ? Verdict.UNSURE : Verdict.PROBLEM,
+                String.format(Locale.ROOT, "The printer's extruder position moved %.0f mm; the G-code's moves feed %.0f mm (%+.1f%%). The recording's filament figures come from the printer's count.", extrudedMm, fileExtruded, off)));
+        }
+        if (complete && fileSeconds > 60 && firstLayerAt >= 0 && endedAt > firstLayerAt) {
+            long took = (endedAt - firstLayerAt) / 1000; double off = (took - fileSeconds) * 100.0 / fileSeconds;
+            out.add(new Finding("estimate", title("estimate"), Math.abs(off) <= 15 ? Verdict.WORKS : Math.abs(off) <= 30 ? Verdict.UNSURE : Verdict.PROBLEM,
+                "The slicer estimated " + span(fileSeconds) + "; printing took " + span(took) + " from the first layer" + String.format(Locale.ROOT, " (%+.0f%%).", off)));
+        }
+        if (complete && etaAt >= 0 && endedAt > etaAt && etaRemaining > 0) {
+            long took = (endedAt - etaAt) / 1000; double off = (took - etaRemaining) * 100.0 / etaRemaining;
+            out.add(new Finding("eta", title("eta"), Math.abs(off) <= 10 ? Verdict.WORKS : Math.abs(off) <= 25 ? Verdict.UNSURE : Verdict.PROBLEM,
+                "At half way the printer said " + span(etaRemaining) + " left; it took " + span(took) + String.format(Locale.ROOT, " (%+.0f%%). Notifications show the printer's figure.", off)));
+        }
         return out;
     }
 
     /** A recording's answers so far. */
-    static List<Finding> of(PrintRecorder.Recording r) { return r.checks.findings(r.pictures, r.farPictures, r.compare && r.smooth()); }
+    static List<Finding> of(PrintRecorder.Recording r) {
+        boolean sawStart = r.startProgress >= 0 && r.startProgress <= 1;
+        return r.checks.findings(r.pictures, r.farPictures, r.compare && r.smooth(), sawStart ? r.extrudedMm : Double.NaN);
+    }
     /** "✓", "✕" or "?" before a finding in plain text. */
     static String mark(Verdict v) { return v == Verdict.WORKS ? "✓" : v == Verdict.PROBLEM ? "✕" : "?"; }
     /**
@@ -152,6 +210,8 @@ final class PrintChecks {
         return out;
     }
 
+    /** "7 min 41 s", "1 h 05 min". */
+    static String span(long seconds) { return seconds >= 3600 ? seconds / 3600 + " h " + String.format(Locale.ROOT, "%02d", seconds % 3600 / 60) + " min" : seconds / 60 + " min " + seconds % 60 + " s"; }
     static String title(String id) { for (String[] q : QUESTIONS) if (q[0].equals(id)) return q[1]; return id; }
     private static int percent(int part, int whole) { return whole == 0 ? 0 : Math.round(100f * part / whole); }
 
@@ -159,7 +219,10 @@ final class PrintChecks {
         return new JSONObject().put("fast", new org.json.JSONArray(new int[] {fastGaps, fastQuick, fastSlow}))
             .put("park", new org.json.JSONArray(new long[] {parkLayers, smoothLayers, lifts, liftsOk, returns, returnsOk, dwellMs, dwells}))
             .put("layers", new org.json.JSONArray(new int[] {maxLayer, fileLayers})).put("positions", new org.json.JSONArray(new int[] {positions, positionsOn}))
-            .put("waits", new org.json.JSONArray(new long[] {waits[0], waitSum[0], waitMax[0], waits[1], waitSum[1], waitMax[1]}));
+            .put("waits", new org.json.JSONArray(new long[] {waits[0], waitSum[0], waitMax[0], waits[1], waitSum[1], waitMax[1]}))
+            .put("heat", new org.json.JSONArray(new double[] {heatSamples, heatOk, worstNozzle, worstBed}))
+            .put("time", new org.json.JSONArray(new long[] {firstLayerAt, endedAt, fileSeconds, etaAt, etaRemaining, complete ? 1 : 0}))
+            .put("file_extruded", fileExtruded);
     }
     static PrintChecks fromJson(JSONObject json) {
         PrintChecks c = new PrintChecks();
@@ -170,6 +233,10 @@ final class PrintChecks {
         if (l != null) { c.maxLayer = l.optInt(0); c.fileLayers = l.optInt(1); }
         if (q != null) { c.positions = q.optInt(0); c.positionsOn = q.optInt(1); }
         if (w != null) for (int set = 0; set < 2; set++) { c.waits[set] = w.optInt(set * 3); c.waitSum[set] = w.optLong(set * 3 + 1); c.waitMax[set] = w.optLong(set * 3 + 2); }
+        org.json.JSONArray h = json.optJSONArray("heat"), t = json.optJSONArray("time");
+        if (h != null) { c.heatSamples = h.optInt(0); c.heatOk = h.optInt(1); c.worstNozzle = h.optDouble(2, 0); c.worstBed = h.optDouble(3, 0); }
+        if (t != null) { c.firstLayerAt = t.optLong(0, -1); c.endedAt = t.optLong(1, -1); c.fileSeconds = t.optLong(2); c.etaAt = t.optLong(3, -1); c.etaRemaining = t.optLong(4); c.complete = t.optInt(5) == 1; }
+        c.fileExtruded = json.optDouble("file_extruded", 0);
         return c;
     }
 }

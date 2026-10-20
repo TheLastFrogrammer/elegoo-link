@@ -19,6 +19,8 @@ final class LayerReach {
     /** Each layer's printed area: its extrusions' smallest and largest X and Y. */
     final float[] minX, minY, maxX, maxY;
     final int layers;
+    /** Filament the file feeds in all (mm, retractions cancelling out) and the slicer's time estimate (s, 0 when the file has none). */
+    double extruded; long estimatedSeconds;
 
     private LayerReach(float[] near, float[] far, float[] minX, float[] minY, float[] maxX, float[] maxY, int layers) {
         this.near = near; this.far = far; this.minX = minX; this.minY = minY; this.maxX = maxX; this.maxY = maxY; this.layers = layers;
@@ -45,11 +47,15 @@ final class LayerReach {
         float[] near = new float[256], far = new float[256], minX = new float[256], minY = new float[256], maxX = new float[256], maxY = new float[256];
         int layers = 0;
         double x = 0, y = 0, z = 0, e = 0, lastLayerZ = -1;
-        boolean absolute = true, absoluteE = true, pendingLayer = false, sawLayerComment = false;
-        String line;
+        boolean absolute = true, absoluteE = true, extrudeAbsolute = true, pendingLayer = false, sawLayerComment = false;
+        String line; double extruded = 0; long estimate = 0;
         while ((line = reader.readLine()) != null) {
             if (line.isEmpty()) continue;
-            if (line.charAt(0) == ';') { if (line.startsWith(";LAYER_CHANGE")) pendingLayer = true; continue; }
+            if (line.charAt(0) == ';') {
+                if (line.startsWith(";LAYER_CHANGE")) pendingLayer = true;
+                else if (estimate == 0 && line.contains("estimated printing time") && line.indexOf('=') > 0) estimate = seconds(line.substring(line.indexOf('=') + 1));
+                continue;
+            }
             int comment = line.indexOf(';');
             String code = (comment >= 0 ? line.substring(0, comment) : line).trim();
             if (code.length() < 2) continue;
@@ -68,6 +74,7 @@ final class LayerReach {
                         default: break;
                     }
                 }
+                if (hasE) extruded += ne - e;
                 boolean moves = nx != x || ny != y;
                 if (hasE && ne - e > 1e-6 && moves) {
                     // The same layer rules as GcodeToolpath, so the numbers match the printer's.
@@ -92,10 +99,12 @@ final class LayerReach {
                 }
                 x = nx; y = ny; z = nz; e = ne;
             }
-            else if (kind == 'G' && number == 90) { absolute = true; absoluteE = true; }
+            // As Klipper: G90/G91 switch the axes and, with them, E; M82/M83 set E's own mode, which G90 brings back
+            // (a G91 … G90 pair, as the smooth timelapse park uses, leaves relative extrusion relative).
+            else if (kind == 'G' && number == 90) { absolute = true; absoluteE = extrudeAbsolute; }
             else if (kind == 'G' && number == 91) { absolute = false; absoluteE = false; }
-            else if (kind == 'M' && number == 82) absoluteE = true;
-            else if (kind == 'M' && number == 83) absoluteE = false;
+            else if (kind == 'M' && number == 82) { extrudeAbsolute = true; absoluteE = absolute; }
+            else if (kind == 'M' && number == 83) { extrudeAbsolute = false; absoluteE = false; }
             else if (kind == 'G' && number == 92) {
                 for (String word : code.split("\\s+")) {
                     if (word.length() < 2) continue;
@@ -106,7 +115,16 @@ final class LayerReach {
                 }
             }
         }
-        return new LayerReach(near, far, minX, minY, maxX, maxY, layers);
+        LayerReach reach = new LayerReach(near, far, minX, minY, maxX, maxY, layers);
+        reach.extruded = extruded; reach.estimatedSeconds = estimate;
+        return reach;
+    }
+
+    /** "1d 2h 3m 4s" (any of them) as seconds. Pure, for tests. */
+    static long seconds(String words) {
+        long total = 0; java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)\\s*([dhms])").matcher(words);
+        while (m.find()) { long n = Long.parseLong(m.group(1)); switch (m.group(2)) { case "d": total += n * 86400; break; case "h": total += n * 3600; break; case "m": total += n * 60; break; default: total += n; } }
+        return total;
     }
 
     private static int number(String code) {

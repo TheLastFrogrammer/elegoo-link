@@ -154,4 +154,16 @@ public class SmoothTimelapseTest {
         recorder.delete(now);
         assertFalse(now.pictureFolder().exists());
     }
+
+    /** The park's G91 … G90 leaves relative extrusion relative (as Klipper does): every extrusion after it still counts. */
+    @Test public void aParkKeepsRelativeExtrusion() throws Exception {
+        String gcode = String.join("\n", "G90", "M83", ";LAYER_CHANGE", "G1 Z0.2", "G1 X10 Y10", "G1 X20 Y10 E1", SmoothTimelapse.gcode(0, 2000).replace("{layer_z}", "0.4"),
+            ";LAYER_CHANGE", "G1 X10 Y20", "G1 X20 Y20 E0.5", "G1 X20 Y30 E0.5", "G1 X10 Y30 E0.5", "");
+        GcodeToolpath path = GcodeToolpath.read(new java.io.ByteArrayInputStream(gcode.getBytes("UTF-8")));
+        assertEquals(2, path.layerCount);
+        assertEquals("all four extrusions drawn", 4, path.count);
+        LayerReach reach = LayerReach.read(new java.io.ByteArrayInputStream(gcode.getBytes("UTF-8")), 0, 0);
+        assertEquals(2.5, reach.extruded, 1e-6);
+        assertArrayEquals(new float[] {10, 20, 20, 30}, reach.boxForPrinterLayer(2), 0.001f);
+    }
 }
