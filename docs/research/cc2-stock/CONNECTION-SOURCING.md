@@ -1,5 +1,7 @@
 # Stock-firmware connection findings and hardware sourcing
 
+20 October owner update: SH-U09C5 is now confirmed; follow the [current execution plan](FINAL-CONNECTION-AND-APP-PLAN.md) and phone/adapter loopback before printer wiring. The purchase comparisons/prices below are the dated 17 October research, not a new shopping requirement.
+
 Checked 17 October 2026. Scope: the signature-verified stock **02.01.01.07** image already pinned in this repository. The owner's exact installed build, header revision and electrical measurements remain pending. No firmware was executed, altered or installed, and no printer was contacted for this pass.
 
 ## What the deeper firmware pass changes

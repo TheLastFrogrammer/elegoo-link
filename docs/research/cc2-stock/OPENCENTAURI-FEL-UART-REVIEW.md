@@ -1,6 +1,6 @@
 # OpenCentauri FEL/UART guide review
 
-Checked 20 October 2026. The owner now reports obtaining a UART device; its model, logic-level configuration, phone enumeration and printer wiring remain unverified.
+Checked 20 October 2026. The owner has now confirmed **DSD TECH SH-U09C5** and supplied its photo; logic-level configuration, phone loopback and printer wiring remain unverified. Current execution order is in [FINAL-CONNECTION-AND-APP-PLAN.md](FINAL-CONNECTION-AND-APP-PLAN.md).
 
 The shared guide is [FEL & UART Setup](https://docs.opencentauri.cc/hardware/CC1/fel-uart-setup/), filed under **CC1**. Its 3.3-V recommendation and J5 bench wiring must not be treated as CC2-specific validation. It describes a removed-board 24-V bench supply, crossed TX/RX, common ground and no UART VCC connection. A bench supply/FEL cable is not required merely to attempt the existing normal-boot UART route on an installed printer.
 
@@ -15,7 +15,7 @@ The separate [CC2 board reference](https://docs.opencentauri.cc/hardware/CC2/mai
 
 The [FEL software guide](https://docs.opencentauri.cc/software/FEL-mode/) separates identification, UART initialization, DDR initialization and bootloader load/execute from eMMC restoration. This supports investigating RAM-only recovery without assuming that community firmware must be installed. It does **not** validate the example resistor location, DDR preset, bootloader binary, entry address or subsequent behavior for the owner's CC2. The companion restore document uses a different DDR preset; identify the actual tool/image pairing before executing either sequence. Do not run restore scripts to obtain an initial shell.
 
-Next owner inputs: adapter model or clear photo; exact printer firmware; actual board/header photo before pin-by-pin wiring. Phone/adapter loopback and normal receive-only boot remain the first experiments. No printer was connected, booted into FEL, flashed or modified during this review.
+Next owner inputs: phone-only loopback result; exact printer firmware; actual board/header photo before pin-by-pin wiring. Adapter identity is now known; phone compatibility and normal receive-only boot remain hardware experiments. No printer was connected, booted into FEL, flashed or modified during this review.
 
 ## Source pins
 

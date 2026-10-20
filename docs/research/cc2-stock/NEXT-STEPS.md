@@ -1,12 +1,14 @@
 # Ordered next steps
 
+**Current execution order:** [final connection and app plan](FINAL-CONNECTION-AND-APP-PLAN.md), 20 October 2026. The app is now v0.86.0/build 180 and the owner has confirmed SH-U09C5 hardware. Start with phone-only loopback, oriented board/voltage qualification and receive-only boot. In parallel, resolve the latest Android browser validation failure and connect companion archives to existing file/project provenance. The N01–N08 sections below retain the historical investigation breakdown; they are not a second current app roadmap.
+
 Next implementation is prepared: [read-only status and file ranges](../../../tools/research/READONLY-STATUS-AND-FILES.md). After initial owner access, fresh endpoint discovery and identity observation, qualify the fixed objects capture, then snapshot, then optional short subscription. Independently qualify one known finalized idle G-code range and USB v2 export; assemble a complete candidate archive on Pi before attempting app/job association. No automatic recurring request or active-print reader is enabled by this pass.
 
 Concrete placement map: [COMPANION-FEATURE-PLACEMENTS.md](COMPANION-FEATURE-PLACEMENTS.md). The shipping dispatch reaches VirtualSD file path/position/size and PrintStats lifecycle data. The bounded status and file-range tools are now implemented; next qualify them against the owner's installed firmware while idle. Subsequent software work is controlled refresh, opaque source selection and explicit app/job association. Embedded thumbnails can then be parsed from archived bytes on the Pi. The map also identifies media finalization, camera source/binary differences, configuration rename behavior and the boundary between an external helper and a compiled firmware fork.
 
 Pi setup implementation: [PI-COMPANION-SETUP.md](../../../tools/research/PI-COMPANION-SETUP.md). Start hardware qualification with identity-only USB export, then one finalized fixed-inventory capture, before the new status/range profiles. The optional boot hook requires independent temporary-transport qualification, matching executable/helper fingerprints and an observed USB route. UART bootstrap/recovery, authenticated maintenance operations, finalized-media exports and automatic source capture remain separate steps.
 
-Research baseline: dde7699 / v0.64.0. Follow-on app implementation: v0.65.0 / build 156, based on 7239d9b. Device access is not established. Keep the vendor printer executable intact and do not toggle mode to work around file access.
+Historical research baseline: dde7699 / v0.64.0; initial file-identity follow-on v0.65.0/build 156, based on 7239d9b. Current app review is v0.86.0/build 180. Device access is still not established. Keep the vendor printer executable intact and do not toggle mode to work around file access.
 
 | Priority / ID | Work | Done when | Dependency |
 |---|---|---|---|

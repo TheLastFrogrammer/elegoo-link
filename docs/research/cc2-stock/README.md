@@ -1,6 +1,8 @@
 # CC2 stock firmware and file-access research
 
-Owner-access update, 20 October: the owner has obtained a UART device; exact adapter/levels and board mapping remain pending. The [OpenCentauri FEL/UART review](OPENCENTAURI-FEL-UART-REVIEW.md) distinguishes its CC1 bench setup, the CC2 header reference, temporary RAM recovery and persistent eMMC changes. Normal receive-only UART boot remains the first hardware trial.
+Current execution plan: [FINAL-CONNECTION-AND-APP-PLAN.md](FINAL-CONNECTION-AND-APP-PLAN.md), finalized 20 October after reviewing v0.86.0/build 180, the UART tooling fixes and current CI. It records the failed Android viewer pixel checks, passing updated research tools, independently verified current starter, confirmed SH-U09C5 and staged hardware/app acceptance. [Machine-readable review](RECENT-CHANGES-20261020.json).
+
+Owner-access update, 20 October: the owner has confirmed a SH-U09C5; actual settings/levels and board mapping remain pending. The [OpenCentauri FEL/UART review](OPENCENTAURI-FEL-UART-REVIEW.md) distinguishes its CC1 bench setup, the CC2 header reference, temporary RAM recovery and persistent eMMC changes. Phone-only loopback precedes receive-only UART boot on the printer.
 
 Read-only implementation follow-up: [READONLY-STATUS-AND-FILES.md](../../../tools/research/READONLY-STATUS-AND-FILES.md) provides fixed boot-qualified native object/snapshot/subscription captures, strict offline status/delta inspection, a native one-MiB G-code range recorder, stable-source range assembly with full SHA-256, and separate USB v2 export profiles. These are operator-driven tools; source finalization, actual printer/Pi behavior, job binding and Android integration remain unqualified. The original identity-only startup behavior is preserved.
 
