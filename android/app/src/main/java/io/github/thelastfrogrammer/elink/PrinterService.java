@@ -353,7 +353,7 @@ public final class PrinterService extends Service {
         if (reachReading || key.equals(reachFor) && (recorder.hasReach() || at - reachTriedAt < 60_000)) return;
         boolean again = key.equals(reachFor); reachFor = key; reachTriedAt = at;
         GuardianRun.Source source = GuardianRun.source(library, fileJob(), now.file);
-        if (source.file == null) { recorder.setReach(null); if (!again) Diagnostics.note(Diagnostics.CAMERA, "far pictures: no copy of this print's G-code on the phone; learning each layer's far side from the one before"); return; }
+        if (source.file == null) { recorder.setReach(null); if (!again) Diagnostics.note(Diagnostics.CAMERA, "no copy of this print's G-code on the phone: far pictures learn each layer's far side from the one before; layer and position checks wait for a copy"); return; }
         reachReading = true; File file = source.file;
         pictureWorker.execute(() -> {
             LayerReach read = null; String why = null;
@@ -364,7 +364,7 @@ public final class PrinterService extends Service {
                 PrintRecorder.Recording still = recorder.current();
                 if (still == null || !still.id.equals(now.id)) return;
                 recorder.setReach(done);
-                Diagnostics.note(Diagnostics.CAMERA, done != null ? "far pictures: each layer's far side from the print's G-code (" + done.layers + " layers)" : "far pictures: the print's G-code could not be read (" + problem + "); learning from the layer before");
+                Diagnostics.note(Diagnostics.CAMERA, done != null ? "print's G-code read for far pictures and checks (" + done.layers + " layers)" : "the print's G-code could not be read (" + problem + "); far pictures learn from the layer before");
             });
         });
     }
@@ -381,10 +381,13 @@ public final class PrinterService extends Service {
         if (now != null && !now.smooth()) { double[] park = SmoothTimelapse.forFile(this, now.file); if (park != null) recorder.setPark(park[0], park[1], park[3] > 0); }
         boolean smooth = now != null && now.smooth();
         if (session != null) session.fastStatus(now != null && now.followsHead() && ready());
-        if (now == null || !now.followsHead()) return;
+        if (now == null) return;
         // Far from the camera: measured from where the picture camera is (its position, as set in Live toolpath or Recording pictures).
         ExtraCameras.Camera added = ExtraCameras.forPictures(this); String id = added == null ? "" : added.id;
         double[] camera = GcodeViewerActivity.cameraFor(getSharedPreferences("viewer-hints", MODE_PRIVATE), 0, id);
+        // Every print's G-code (when the phone has it): the measured checks compare the printer's layers and head position with it.
+        loadReach(now, camera);
+        if (!now.followsHead()) return;
         if (!now.id.equals(smoothFor)) {
             smoothFor = now.id;
             String how = smooth && now.compare ? String.format(Locale.ROOT, "smooth timelapse with a second set to compare: parked pictures at X %.0f Y %.0f, and far from the camera (at X %.0f Y %.0f)", now.parkX, now.parkY, camera[0], camera[1])
@@ -392,7 +395,6 @@ public final class PrinterService extends Service {
                 : String.format(Locale.ROOT, "pictures with the head far from the camera (at X %.0f Y %.0f)", camera[0], camera[1]);
             Diagnostics.note(Diagnostics.CAMERA, how + (ready() ? "; status every second" : "; through the cloud status comes about every 30 s, so few layers will get their picture"));
         }
-        loadReach(now, camera);
         JSONObject position = Cc2Codec.position(value);
         if (position == null || !position.has("x") || !position.has("y")) return;
         double x = position.optDouble("x"), y = position.optDouble("y");

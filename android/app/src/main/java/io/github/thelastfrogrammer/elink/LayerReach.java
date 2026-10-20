@@ -16,9 +16,19 @@ import java.util.Arrays;
  */
 final class LayerReach {
     final float[] near, far;
+    /** Each layer's printed area: its extrusions' smallest and largest X and Y. */
+    final float[] minX, minY, maxX, maxY;
     final int layers;
 
-    private LayerReach(float[] near, float[] far, int layers) { this.near = near; this.far = far; this.layers = layers; }
+    private LayerReach(float[] near, float[] far, float[] minX, float[] minY, float[] maxX, float[] maxY, int layers) {
+        this.near = near; this.far = far; this.minX = minX; this.minY = minY; this.maxX = maxX; this.maxY = maxY; this.layers = layers;
+    }
+
+    /** The layer's printed area {min x, min y, max x, max y} for the printer's current_layer, or null. */
+    float[] boxForPrinterLayer(int currentLayer) {
+        int i = currentLayer - 1;
+        return i < 0 || i >= layers || far[i] <= 0 ? null : new float[] {minX[i], minY[i], maxX[i], maxY[i]};
+    }
 
     /** The layer's {nearest, farthest} for the printer's current_layer (1-based), or null when the file has no such layer. */
     float[] forPrinterLayer(int currentLayer) {
@@ -32,7 +42,7 @@ final class LayerReach {
 
     static LayerReach read(InputStream input, double cameraX, double cameraY) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8), 1 << 16);
-        float[] near = new float[256], far = new float[256];
+        float[] near = new float[256], far = new float[256], minX = new float[256], minY = new float[256], maxX = new float[256], maxY = new float[256];
         int layers = 0;
         double x = 0, y = 0, z = 0, e = 0, lastLayerZ = -1;
         boolean absolute = true, absoluteE = true, pendingLayer = false, sawLayerComment = false;
@@ -65,13 +75,19 @@ final class LayerReach {
                     if (pendingLayer) { newLayer = !(layers == 1 && !sawLayerComment); sawLayerComment = true; pendingLayer = false; lastLayerZ = nz; }
                     else if (layers == 0 || (!sawLayerComment && nz > lastLayerZ + 1e-4)) { newLayer = true; lastLayerZ = nz; }
                     if (newLayer) {
-                        if (layers == near.length) { near = Arrays.copyOf(near, layers * 2); far = Arrays.copyOf(far, layers * 2); }
-                        near[layers] = Float.MAX_VALUE; far[layers] = 0; layers++;
+                        if (layers == near.length) {
+                            near = Arrays.copyOf(near, layers * 2); far = Arrays.copyOf(far, layers * 2);
+                            minX = Arrays.copyOf(minX, layers * 2); minY = Arrays.copyOf(minY, layers * 2); maxX = Arrays.copyOf(maxX, layers * 2); maxY = Arrays.copyOf(maxY, layers * 2);
+                        }
+                        near[layers] = Float.MAX_VALUE; far[layers] = 0;
+                        minX[layers] = minY[layers] = Float.MAX_VALUE; maxX[layers] = maxY[layers] = -Float.MAX_VALUE; layers++;
                     }
                     int at = layers - 1;
                     for (double[] p : new double[][] {{x, y}, {nx, ny}}) {
                         float d = (float) Math.hypot(p[0] - cameraX, p[1] - cameraY);
                         if (d < near[at]) near[at] = d; if (d > far[at]) far[at] = d;
+                        float px = (float) p[0], py = (float) p[1];
+                        if (px < minX[at]) minX[at] = px; if (px > maxX[at]) maxX[at] = px; if (py < minY[at]) minY[at] = py; if (py > maxY[at]) maxY[at] = py;
                     }
                 }
                 x = nx; y = ny; z = nz; e = ne;
@@ -90,7 +106,7 @@ final class LayerReach {
                 }
             }
         }
-        return new LayerReach(near, far, layers);
+        return new LayerReach(near, far, minX, minY, maxX, maxY, layers);
     }
 
     private static int number(String code) {

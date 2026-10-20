@@ -347,6 +347,7 @@ public final class RecordingsActivity extends Activity {
         if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
         double[] t = column(rows, "elapsed_s");
         pictures(recording);   // the quickest look at how the print went, before the charts
+        checks(recording);
         // One card with the print's four charts, one at a time (the tour shows them all, one after another).
         boolean all = Showcase.running();
         LinearLayout charts = all ? content : card();
@@ -439,6 +440,18 @@ public final class RecordingsActivity extends Activity {
                 new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
             });
             strip.addView(cell);
+        }
+    }
+    /** What the app measured during the print (PrintChecks): shown only when there is something to say. */
+    private void checks(PrintRecorder.Recording recording) {
+        List<PrintChecks.Finding> found = PrintChecks.of(recording);
+        if (found.isEmpty()) return;
+        LinearLayout card = card(); label(card, "Measured during this print", 15, ink, true);
+        label(card, "From the statuses the app received; nothing was sent to the printer for these. They also fill in Settings › Field check.", 12, muted, false);
+        for (PrintChecks.Finding f : found) {
+            TextView title = label(card, PrintChecks.mark(f.verdict) + "  " + f.title, 14, f.verdict == PrintChecks.Verdict.PROBLEM ? orange : ink, true);
+            title.setContentDescription((f.verdict == PrintChecks.Verdict.WORKS ? "Works: " : f.verdict == PrintChecks.Verdict.PROBLEM ? "Problem: " : "Unsure: ") + f.title);
+            label(card, f.evidence, 13, muted, false);
         }
     }
     /** Turns the pictures into a short MP4 on the phone (about ten seconds), then asks where to save it. */

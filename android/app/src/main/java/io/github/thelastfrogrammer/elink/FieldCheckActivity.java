@@ -35,10 +35,32 @@ public final class FieldCheckActivity extends Activity {
         ui.rowButton(top, "Share report…", this::share, true);
         ui.rowButton(top, "Clear results…", this::clearAll, false);
         ui.label(page, "Notes go into the report as you type them; leave out access codes, PINs and addresses.", 12, ui.muted, false);
+        // Measured: filled in by prints the app watches, with nothing to tap (read on a worker: it opens every recording).
+        LinearLayout measuredCard = ui.card(page, "Measured during prints");
+        TextView measuredText = ui.label(measuredCard, "Reading the recordings…", 13, ui.muted, false);
+        new Thread(() -> {
+            List<Object[]> found = PrintChecks.latest(new PrintRecorder(RecordingsActivity.directory(this)).list());
+            runOnUiThread(() -> { if (!isDestroyed()) { measured = found; showMeasured(measuredCard, measuredText); } });
+        }, "field-measured").start();
         String area = null; LinearLayout card = null;
         for (FieldCheck.Check check : FieldCheck.CHECKS) {
             if (!check.area.equals(area)) { area = check.area; card = ui.card(page, area); }
             addCheck(card, check);
+        }
+    }
+
+    /** The newest measured answer to each question, with its recording ({finding, recording}). */
+    private List<Object[]> measured = new ArrayList<>();
+    private void showMeasured(LinearLayout card, TextView intro) {
+        intro.setText(measured.isEmpty()
+            ? "Nothing measured yet. Leave the app connected (on your network) during any print: it measures how often status arrives, whether layers and head positions match the print's G-code (when the phone has a copy), and, for prints sliced with Smooth timelapse, whether the head parks and comes back. Results appear here and in the report, with nothing to tap."
+            : "From prints the app watched; nothing was sent to the printer for these. Each shows the newest print that measured it.");
+        java.text.DateFormat when = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT);
+        for (Object[] m : measured) {
+            PrintChecks.Finding f = (PrintChecks.Finding) m[0]; PrintRecorder.Recording r = (PrintRecorder.Recording) m[1];
+            TextView title = ui.label(card, PrintChecks.mark(f.verdict) + "  " + f.title, 15, f.verdict == PrintChecks.Verdict.PROBLEM ? ui.error : ui.ink, true);
+            title.setContentDescription((f.verdict == PrintChecks.Verdict.WORKS ? "Works: " : f.verdict == PrintChecks.Verdict.PROBLEM ? "Problem: " : "Unsure: ") + f.title);
+            ui.label(card, f.evidence + "\n" + StatusPresentation.clean(r.file) + " · " + when.format(new Date(r.start)), 13, ui.muted, false);
         }
     }
 
@@ -117,7 +139,10 @@ public final class FieldCheckActivity extends Activity {
 
     private void share() {
         String header = "App " + appVersion() + "\nDevice " + android.os.Build.MANUFACTURER + " " + android.os.Build.MODEL + " · Android " + android.os.Build.VERSION.RELEASE;
-        String text = FieldCheck.report(entries, header, TimeZone.getDefault()) + "\n\n" + Diagnostics.report("Diagnostics (no codes, PINs, addresses or serial numbers)");
+        StringBuilder measuredText = new StringBuilder("\n## Measured during prints\n");
+        if (measured.isEmpty()) measuredText.append("Nothing measured yet.\n");
+        for (Object[] m : measured) { PrintChecks.Finding f = (PrintChecks.Finding) m[0]; measuredText.append(PrintChecks.mark(f.verdict)).append(' ').append(f.title).append("\n    ").append(f.evidence).append("\n"); }
+        String text = FieldCheck.report(entries, header, TimeZone.getDefault()) + measuredText + "\n\n" + Diagnostics.report("Diagnostics (no codes, PINs, addresses or serial numbers)");
         Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_SUBJECT, "Link Workshop field check").putExtra(Intent.EXTRA_TEXT, text);
         startActivity(Intent.createChooser(send, "Share field check"));
     }

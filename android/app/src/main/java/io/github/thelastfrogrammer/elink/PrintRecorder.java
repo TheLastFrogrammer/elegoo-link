@@ -43,6 +43,8 @@ public final class PrintRecorder {
         public boolean compare;
         /** Pictures in the second (far from the camera) set. */
         public int farPictures;
+        /** Measured while the print ran: status rate, parking, layer numbers, head position, picture timing (PrintChecks). */
+        public PrintChecks checks = new PrintChecks();
         /** The folder of the second set, inside the picture folder. */
         public File farFolder() { return new File(pictureFolder(), "far"); }
         /** Pictures follow the head (parked, or far from the camera) rather than the clock. */
@@ -64,7 +66,7 @@ public final class PrintRecorder {
                 .put("start", start).put("end", end).put("last_sample", lastSample).put("elapsed", elapsed).put("samples", samples).put("layers", layers)
                 .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
                 .put("park_x", smooth() ? parkX : null).put("park_y", smooth() ? parkY : null).put("picture_far", pictureFar)
-                .put("compare", compare && smooth()).put("far_pictures", farPictures)
+                .put("compare", compare && smooth()).put("far_pictures", farPictures).put("checks", checks.toJson())
                 .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
                 .put("journal", journal.empty() ? null : journal.toJson());
         }
@@ -79,6 +81,7 @@ public final class PrintRecorder {
             recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictureLayers = json.optInt("picture_layers"); recording.pictures = json.optInt("pictures");
             recording.parkX = json.optDouble("park_x", Double.NaN); recording.parkY = json.optDouble("park_y", Double.NaN); recording.pictureFar = json.optBoolean("picture_far");
             recording.compare = json.optBoolean("compare"); recording.farPictures = json.optInt("far_pictures");
+            recording.checks = PrintChecks.fromJson(json.optJSONObject("checks"));
             recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
             recording.printDuration = json.optLong("print_duration", -1); recording.startProgress = json.optInt("start_progress", -1); recording.estimate = json.optLong("estimate", 0);
             recording.journal = PrintJournal.fromJson(json.optJSONObject("journal"));
@@ -237,6 +240,7 @@ public final class PrintRecorder {
         long elapsed = Math.max(0, mono - current.monoStart) / 1000;
         try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
         catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
+        current.checks.picture(toFar ? 1 : 0, asked == 0 ? -1 : clockMs() - askedAt);
         asked = 0; picturedMono = mono;
         if (toFar) {
             farPicturedLayer = lastLayer; farArmed = false; current.farPictures++; save(current);
@@ -310,6 +314,10 @@ public final class PrintRecorder {
             lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2; picturedLayer = -1; farPicturedLayer = -1; asked = 0;
         }
         int layer = print.optInt("current_layer", -1);
+        // Every status counts for the measured checks, also the ones between samples.
+        JSONObject at = Cc2Codec.position(status);
+        double hx = at != null && at.has("x") ? at.optDouble("x") : Double.NaN, hy = at != null && at.has("y") ? at.optDouble("y") : Double.NaN, hz = at != null && at.has("z") ? at.optDouble("z") : Double.NaN;
+        current.checks.status(mono, layer, hx, hy, hz, "local".equals(source) && current.followsHead(), current.parkX, current.parkY, reach);
         if (mono - sampledMono < MIN_INTERVAL_MS && layer == lastLayer && !last) return false;
         append(now, mono, status, source, sub);
         lastLayer = layer; sampledMono = mono;
@@ -460,6 +468,7 @@ public final class PrintRecorder {
         if (current.end == 0) current.end = now;
         if (!"interrupted".equals(outcome)) try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), current.meta.getName().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
         if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; endedPrinter = current.printerId; }
+        for (PrintChecks.Finding f : PrintChecks.of(current)) Diagnostics.note(Diagnostics.STATUS, "measured: " + PrintChecks.mark(f.verdict) + " " + f.title + " · " + f.evidence);
         save(current); current = null; lastLayer = -1; learnedRead = false;
     }
 
