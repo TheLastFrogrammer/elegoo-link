@@ -2638,6 +2638,16 @@ public final class MainActivity extends Activity {
         label(byLayers, "Moment in the layer", 13, MUTED, true);
         Spinner moment = spinner(byLayers, new String[] {"Any moment", "Head far from the camera"});
         TextView about = label(byLayers, "", 12, MUTED, false);
+        // Where the chosen camera is: picked in a list over this dialog, which stays open (the spot is kept at once).
+        Spinner[] cameraPick = new Spinner[1];
+        java.util.function.Supplier<ExtraCameras.Camera> pickedCamera = () -> {
+            if (cameraPick[0] == null) return ExtraCameras.forPictures(this);
+            int at = cameraPick[0].getSelectedItemPosition(); return at > 0 && at <= added.size() ? added.get(at - 1) : null;
+        };
+        Button[] position = new Button[1];
+        Runnable showPosition = () -> position[0].setText("Camera position: " + cameraSpotName(pickedCamera.get()) + "…");
+        position[0] = button(byLayers, "", () -> pictureCameraPosition(pickedCamera.get(), showPosition));
+        showPosition.run();
         label(body, "Prints sliced here with Smooth timelapse take each layer's picture with the head parked, whatever is chosen here.", 12, MUTED, false);
         Runnable fill = () -> {
             String id = PictureSettings.camera(this);
@@ -2661,10 +2671,13 @@ public final class MainActivity extends Activity {
             public void onNothingSelected(android.widget.AdapterView<?> p) { }
         };
         when.setOnItemSelectedListener(changed); moment.setOnItemSelectedListener(changed); show.run();
-        Spinner cameraChoice = camera;
+        Spinner cameraChoice = camera; cameraPick[0] = camera;
+        if (camera != null) camera.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(android.widget.AdapterView<?> p, View v, int pos, long id) { showPosition.run(); }
+            public void onNothingSelected(android.widget.AdapterView<?> p) { }
+        });
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         new AlertDialog.Builder(this).setTitle(forDefault ? "Recording pictures" : "Pictures for this print").setView(scroll)
-            .setNeutralButton("Camera position…", (d, w) -> pictureCameraPosition())
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Save", (d, w) -> {
                 if (cameraChoice != null) {
@@ -2684,8 +2697,12 @@ public final class MainActivity extends Activity {
      * Where the picture camera is, for "head far from the camera": the same setting as Live toolpath's camera position (a
      * preset spot, or lined up there by hand), kept for each camera.
      */
-    private void pictureCameraPosition() {
-        ExtraCameras.Camera added = printer == null ? null : ExtraCameras.forPictures(this);
+    private String cameraSpotName(ExtraCameras.Camera added) {
+        String id = added == null ? "" : added.id;
+        int spot = getSharedPreferences("viewer-hints", MODE_PRIVATE).getInt(GcodeViewerActivity.camKey("cameraSpot", id), GcodeViewerActivity.defaultSpot(id));
+        return GcodeViewerActivity.CAMERA_SPOTS[Math.max(0, Math.min(spot, GcodeViewerActivity.CAMERA_SPOTS.length - 1))];
+    }
+    private void pictureCameraPosition(ExtraCameras.Camera added, Runnable saved) {
         String id = added == null ? "" : added.id, key = GcodeViewerActivity.camKey("cameraSpot", id);
         android.content.SharedPreferences viewer = getSharedPreferences("viewer-hints", MODE_PRIVATE);
         int current = viewer.getInt(key, GcodeViewerActivity.defaultSpot(id));
@@ -2694,7 +2711,7 @@ public final class MainActivity extends Activity {
         if (lined) spots.add(GcodeViewerActivity.CAMERA_SPOTS[GcodeViewerActivity.CAMERA_SPOTS.length - 1]);
         int chosen = Math.min(current, spots.size() - 1);
         new AlertDialog.Builder(this).setTitle("Where is " + (added == null ? "the printer's camera" : "“" + added.name + "”") + "?")
-            .setSingleChoiceItems(spots.toArray(new String[0]), chosen, (d, which) -> { viewer.edit().putInt(key, which).apply(); d.dismiss(); })
+            .setSingleChoiceItems(spots.toArray(new String[0]), chosen, (d, which) -> { viewer.edit().putInt(key, which).apply(); d.dismiss(); saved.run(); })
             .setNegativeButton("Cancel", null).show();
     }
     /** On the Print tab, ask for the CANVAS trays when they are missing or out of date: a read, at most every 30 seconds. */

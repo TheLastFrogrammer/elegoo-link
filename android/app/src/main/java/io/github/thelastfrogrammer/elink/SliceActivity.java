@@ -75,6 +75,7 @@ public final class SliceActivity extends Activity {
     private final List<String> slicedNames = new ArrayList<>();
     private Button uploadPrint, objectButton, printerFix;
     private TextView printerHint, sliceHint;
+    private Runnable hintAction;   // what a tap on the reason under Slice does, when it can fix it
     // What the model files hold (engine inspect: objects, 3MF plates, project settings, preview meshes).
     private org.json.JSONObject inspected;
     private int plate;                        // 3MF plate, 1-based; 0 = the first
@@ -109,6 +110,8 @@ public final class SliceActivity extends Activity {
     private Button addSlot, removeSlot, fillTrays;
     private TextView traysNote;
     private String[] filamentPresets = new String[0];
+    /** Why the printer's print or filament profiles did not load (null when they did, or have not been asked for yet). */
+    private String presetProblem;
     private final List<Slot> slots = new ArrayList<>();
     private final List<Integer> modelSlots = new ArrayList<>(); // per model: 1-based slot, 0 = as in the 3MF
     private PrinterService printer;
@@ -495,7 +498,8 @@ public final class SliceActivity extends Activity {
         status = A11y.polite(label(sliceCard, "Loading presets…", 14, ink, false)); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(5); // the Slice bar stays on screen whatever the message
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgressTintList(ColorStateList.valueOf(teal));
         progress.setVisibility(View.GONE); sliceCard.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
-        sliceHint = label(sliceCard, "", 12, muted, false); sliceHint.setVisibility(View.GONE);
+        sliceHint = label(sliceCard, "", 12, muted, false); sliceHint.setVisibility(View.GONE); sliceHint.setMinHeight(dp(48)); sliceHint.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        sliceHint.setOnClickListener(v -> { if (hintAction != null) hintAction.run(); });
         LinearLayout row = buttonRow(); sliceCard.addView(row);
         slice = rowButton(row, "Slice", this::startSlice, true);
         cancel = rowButton(row, "Cancel", () -> { cancelRequested.set(true); status.setText("Cancelling…"); }, false);
@@ -556,13 +560,21 @@ public final class SliceActivity extends Activity {
         if (printer == null) return;
         busy = true; updateButtons();
         worker.execute(() -> {
-            String[] processes, filaments;
+            String[] processes, filaments; String problem = null;
             try { processes = engine.presets(NativeSlicer.PROCESS, printer); filaments = engine.presets(NativeSlicer.FILAMENT, printer); }
-            catch (RuntimeException failure) { processes = new String[0]; filaments = new String[0]; }
-            String[] p = processes, f = filaments;
+            catch (RuntimeException failure) {
+                processes = new String[0]; filaments = new String[0];
+                problem = "The profiles for " + printer + " could not be loaded" + (failure.getMessage() == null ? "." : ": " + failure.getMessage());
+                Diagnostics.note(Diagnostics.SLICER, "compatible presets failed to load: " + failure.getClass().getSimpleName());
+            }
+            if (problem == null && (processes.length == 0 || filaments.length == 0)) {
+                problem = "The slicer found no " + (processes.length == 0 ? "print" : "filament") + " profiles for " + printer + ".";
+                Diagnostics.note(Diagnostics.SLICER, "compatible presets empty: " + processes.length + " print, " + filaments.length + " filament");
+            }
+            String[] p = processes, f = filaments; String why = problem;
             main.post(() -> {
                 if (isDestroyed()) return;
-                busy = slicing;
+                busy = slicing; presetProblem = why;
                 String process = restoredProcess != null && Arrays.asList(p).contains(restoredProcess) ? restoredProcess : remembered(p, "sliceProcess", "0.20mm Standard");
                 restoredProcess = null;
                 fill(processSpinner, Arrays.asList(p), process);
@@ -1703,10 +1715,23 @@ public final class SliceActivity extends Activity {
         boolean slicing = busy && progress.getVisibility() == View.VISIBLE;
         cancel.setEnabled(slicing); cancel.setVisibility(slicing ? View.VISIBLE : View.GONE); slice.setVisibility(slicing ? View.GONE : View.VISIBLE);
         boolean loaded = processSpinner.getAdapter() != null && processSpinner.getAdapter().getCount() > 0; // presets have arrived, not still loading
-        String reason = null;
-        if (!busy && models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
-        else if (!busy && loaded && !presetsReady) reason = "Choose a printer, a print preset and a filament preset for each filament to slice.";
-        sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null || slicing ? View.GONE : View.VISIBLE);
+        // Slice off always says why, and the line leads to the fix when there is one.
+        String reason = null; hintAction = null;
+        Slot unset = null; for (Slot slot : slots) if (unset == null && selected(slot.preset) == null) unset = slot;
+        if (busy) reason = null;   // the status line says what is going on
+        else if (models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
+        else if (presetProblem != null) { reason = presetProblem + " Tap here to try again."; hintAction = () -> loadCompatible(selected(printerSpinner)); }
+        else if (selected(printerSpinner) == null) reason = "Choose a printer profile to slice.";
+        else if (!loaded) { reason = "The print profiles are not loaded yet. Tap here to load them."; hintAction = () -> loadCompatible(selected(printerSpinner)); }
+        else if (selected(processSpinner) == null) reason = "Choose a print profile to slice.";
+        else if (unset != null) {
+            Slot open = unset;
+            reason = open.title.getText() + " has no filament profile. Tap here to choose one.";
+            hintAction = () -> { open.details.setVisibility(View.VISIBLE); scroll.post(() -> scroll.smoothScrollTo(0, Math.max(0, top(open.row) - dp(24)))); open.preset.performClick(); };
+        }
+        sliceHint.setText(reason == null ? "" : reason); sliceHint.setVisibility(reason == null ? View.GONE : View.VISIBLE);
+        sliceHint.setTextColor(hintAction != null || presetProblem != null ? error : muted);
+        sliceHint.setClickable(hintAction != null); if (hintAction != null) A11y.button(sliceHint);
         restoreLast.setVisibility(!busy && models.isEmpty() && calibration == null && hasSavedSelection ? View.VISIBLE : View.GONE);
         keepAwake(SliceActivity.slicing);
         chooseModels.setEnabled(!busy); if (findModels != null) findModels.setEnabled(!busy); chooseModels.setText(models.isEmpty() ? "Choose model files" : "Add more models…");
@@ -1797,6 +1822,8 @@ public final class SliceActivity extends Activity {
         return hours > 0 ? hours + " h " + minutes + " min" : minutes > 0 ? minutes + " min " + total % 60 + " s" : total + " s";
     }
 
+    /** A view's top within the scrolled page. */
+    private int top(View view) { int y = 0; for (View v = view; v != null && v != content; v = (View) v.getParent()) y += v.getTop(); return y; }
     private static String selected(Spinner spinner) { Object item = spinner == null ? null : spinner.getSelectedItem(); return item == null ? null : item.toString(); }
     private void fill(Spinner spinner, List<String> values, String preferred) {
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, values) {
