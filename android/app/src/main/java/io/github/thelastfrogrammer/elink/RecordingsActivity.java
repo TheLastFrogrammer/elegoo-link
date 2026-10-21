@@ -393,7 +393,7 @@ public final class RecordingsActivity extends Activity {
         } else if (!all) content.removeView(charts);
         trays(rows, t);
         material(recording, rows, t);
-        layerCharts(recording);
+        layerCharts(recording, rows);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
         action(actions, "All readings…", () -> table(recording, rows));
         action(actions, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
@@ -419,19 +419,34 @@ public final class RecordingsActivity extends Activity {
      * What the print's G-code asks of each layer (LayerProfile): its cross section by line type, stacked in the viewer's
      * colours, and the speed, flow and acceleration its lines run at. Needs the file on the phone, as the material card.
      */
-    private void layerCharts(PrintRecorder.Recording recording) {
+    /** The guardian's answers, at the layer printing when each was given (the first sample at or after it). Pure, for tests. */
+    static List<double[]> answerLayers(PrintJournal journal, List<double[]> rows) {
+        List<double[]> out = new ArrayList<>();
+        double[] time = column(rows, "time_ms"), layer = column(rows, "layer");
+        for (org.json.JSONObject g : journal.guardian) {
+            long at = g.optLong("at"); double found = Double.NaN;
+            for (int i = 0; i < time.length && Double.isNaN(found); i++) if (time[i] >= at && !Double.isNaN(layer[i])) found = layer[i];
+            if (Double.isNaN(found)) for (int i = layer.length - 1; i >= 0 && Double.isNaN(found); i--) if (!Double.isNaN(layer[i])) found = layer[i];
+            if (!Double.isNaN(found) && found > 0) out.add(new double[] {found, g.optBoolean("fine") ? 1 : 0});
+        }
+        return out;
+    }
+
+    private void layerCharts(PrintRecorder.Recording recording, List<double[]> rows) {
         File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
-        LinearLayout card = card(); label(card, "Each layer, from the print's G-code", 15, ink, true);
-        if (file == null) { label(card, "The print's file is not on this phone. Download it from the Files tab, or slice it here, to see each layer's line types, speed, flow and acceleration.", 13, muted, false); return; }
-        TextView note = label(card, "Reading the print's file…", 13, muted, false);
+        LayerCharts.Guardian guardian = new LayerCharts.Guardian(recording.guardianChecks, answerLayers(recording.journal, rows));
+        LinearLayout card = card(); label(card, guardian.any() ? "Each layer, with the print guardian's checks" : "Each layer, from the print's G-code", 15, ink, true);
+        if (guardian.any()) label(card, "Marks: amber where a guardian measure went over its limit, red where it raised the alarm (or you said it was a real problem), teal where you said it looked fine. Touch a mark's layer to read it.", 12, muted, false);
+        if (file == null && !guardian.any()) { label(card, "The print's file is not on this phone. Download it from the Files tab, or slice it here, to see each layer's line types, speed, flow and acceleration.", 13, muted, false); return; }
+        TextView note = label(card, file == null ? "The print's file is not on this phone, so only the guardian's measures are shown." : "Reading the print's file…", 13, muted, false);
         new Thread(() -> {
-            LayerProfile read; try { read = LayerProfile.read(file); } catch (Exception | OutOfMemoryError failed) { read = null; }
+            LayerProfile read = null; if (file != null) try { read = LayerProfile.read(file); } catch (Exception | OutOfMemoryError failed) { read = null; }
             LayerProfile p = read;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
-                if (p == null || p.layers == 0) { note.setText("The print's file could not be read."); return; }
-                note.setText(LayerCharts.note(p));
-                LayerCharts.fill(this, card, p, ink, muted, grid, surface, dark, getSharedPreferences("workshop-settings", MODE_PRIVATE),
+                if (file != null && (p == null || p.layers == 0)) { note.setText("The print's file could not be read." + (guardian.any() ? " The guardian's measures are shown alone." : "")); if (!guardian.any()) return; }
+                if (p != null && p.layers > 0) note.setText(LayerCharts.note(p));
+                LayerCharts.fill(this, card, p != null && p.layers > 0 ? p : null, guardian, ink, muted, grid, surface, dark, getSharedPreferences("workshop-settings", MODE_PRIVATE),
                     (row, text, action) -> { action(row, text, action); Button b = (Button) row.getChildAt(row.getChildCount() - 1); b.setPadding(0, dp(8), 0, dp(8)); return b; });
             });
         }, "recording-layers").start();

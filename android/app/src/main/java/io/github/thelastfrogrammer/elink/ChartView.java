@@ -38,6 +38,9 @@ final class ChartView extends View {
     private boolean layerAxis, stacked;
     ChartView layers() { layerAxis = true; invalidate(); return this; }
     ChartView stacked() { stacked = true; invalidate(); return this; }
+    /** Marks at x values (layers): a coloured line across the plot, and their text in the readout at that point. */
+    private final List<double[]> markAt = new ArrayList<>(); private final List<String> markText = new ArrayList<>();
+    ChartView mark(double x, int colour, String text) { markAt.add(new double[] {x, colour}); markText.add(text); invalidate(); return this; }
     /** The stacked total at point i (NaN where every series is). */
     private double total(int i) { double sum = 0; boolean any = false; for (Series s : series) if (i < s.values.length && !Double.isNaN(s.values[i])) { sum += s.values[i]; any = true; } return any ? sum : Double.NaN; }
 
@@ -180,6 +183,13 @@ final class ChartView extends View {
                 px = x; py = y; have = true;
             }
         }
+        // Marks: a line across the plot at each one (on top of the data, so it shows across stacked areas too).
+        for (double[] m : markAt) {
+            if (m[0] < x0 || m[0] > x1) continue;
+            float x = (float) (left + (m[0] - x0) / (x1 - x0) * (right - left));
+            Paint mark = new Paint(Paint.ANTI_ALIAS_FLAG); mark.setColor((((int) m[1]) & 0x00ffffff) | 0xc0000000); mark.setStrokeWidth(2.5f * density);
+            canvas.drawLine(x, top, x, bottom, mark);
+        }
         line.setPathEffect(null);
         // Direct end labels for measured series, nudged apart so they never overlap; text stays in ink.
         if (series.size() > 1 && !stacked) {
@@ -209,6 +219,8 @@ final class ChartView extends View {
                 rows.add(s.name + "  " + format(s.values[touched]) + unit + (stacked && whole > 0 ? " · " + Math.round(100 * s.values[touched] / whole) + " %" : ""));
                 colors.add(s.color);
             }
+            for (int m = 0; m < markAt.size(); m++)
+                if (Math.abs(markAt.get(m)[0] - seconds[touched]) < (layerAxis ? 0.5 : 30)) { rows.add(markText.get(m)); colors.add((int) markAt.get(m)[1]); }
             if (!stacked) for (Series s : series) if (!s.dashed && touched < s.values.length && !Double.isNaN(s.values[touched])) {
                 float y = (float) (bottom - (s.values[touched] - lo) / (hi - lo) * (bottom - top));
                 fill.setColor(surface); canvas.drawCircle(x, y, 6 * density, fill); fill.setColor(s.color); canvas.drawCircle(x, y, 4 * density, fill);

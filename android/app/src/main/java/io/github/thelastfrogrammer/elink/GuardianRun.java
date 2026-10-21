@@ -41,7 +41,7 @@ final class GuardianRun {
                 if (rgb == null) verdict = "Could not read the picture.";
                 else {
                     // The change check first: it needs no G-code, line-up or colour, so it runs where the colour check cannot.
-                    changeCheck(recording, rgb, aspect[0], head, cameraId, parked, alarm);
+                    changeCheck(recording, rgb, aspect[0], layer, head, cameraId, parked, alarm);
                     run(recording, rgb, aspect[0], layer, total, head, trayRgb, cameraId, job, alarm);
                     if (!changeVerdict.isEmpty()) verdict = verdict + (verdict.isEmpty() ? "" : "\n") + "Changes between pictures: " + changeVerdict;
                 }
@@ -76,7 +76,7 @@ final class GuardianRun {
      * Each picture against the ones before it. Parked pictures (smooth timelapse) show the bed alike each time; otherwise
      * the head moves about the picture, so it is masked out with the lined-up camera, or the check waits.
      */
-    private void changeCheck(PrintRecorder.Recording recording, int[] rgb, double aspect, double[] head, String cameraId, boolean parked, Alarm alarm) {
+    private void changeCheck(PrintRecorder.Recording recording, int[] rgb, double aspect, int layer, double[] head, String cameraId, boolean parked, Alarm alarm) {
         if (!recording.id.equals(changePrint) || !cameraId.equals(changeCamera)) { changePrint = recording.id; changeCamera = cameraId; change = new PictureChange.Watch(); changeVerdict = ""; changeChecks = 0; }
         boolean[] ignore = null;
         // A smooth print's picture taken when the park was missed shows the head: it is left out rather than compared.
@@ -92,6 +92,11 @@ final class GuardianRun {
         }
         boolean raise = change.add(PictureChange.luminance(rgb), ignore);
         changeChecks++;
+        PrintRecorder recorder = PrintRecorder.active;
+        if (recorder != null) {
+            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_SPREAD, change.spreadNow, change.spreadLimit, change.spreadOver, raise && change.reason.startsWith("changes spreading"));
+            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_SUDDEN, change.jumpNow, change.jumpLimit, change.jumpOver, raise && change.reason.contains("come loose"));
+        }
         changeVerdict = change.alarmed ? "something looks wrong: " + change.reason : change.reason;
         if (changeChecks == 1 || changeChecks % 10 == 0 || raise) Diagnostics.note(Diagnostics.GUARDIAN, "change check " + changeChecks + ": " + change.reason + (raise ? "; ALARM" : ""));
         if (raise) { alarmed = true; overlay = changeOverlay(rgb, change); alarm.raise(change.reason, overlay); }
@@ -202,6 +207,11 @@ final class GuardianRun {
         PrintGuardian.Result result = PrintGuardian.analyse(rgb, colours, expected, bed, headMask);
         if (result.undecided) { verdict = "The filament looks too much like the bed in this picture, so it is not checked."; overlay = null; return; }
         boolean raise = watch.add(result, at + 1);
+        PrintRecorder recorder = PrintRecorder.active;
+        if (recorder != null && !Double.isNaN(watch.outsideLimit)) {
+            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_OFF_PRINT, result.outside, watch.outsideLimit, watch.outsideBad, raise && watch.outsideBad);
+            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_COVERAGE, result.coverage, watch.coverageLimit, watch.coverageBad, raise && watch.coverageBad);
+        }
         checks++; alarmed = watch.alarmed || change.alarmed;
         verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")")
             + (source.chosen ? "" : ". Compared with the only phone copy of " + GcodeLibrary.baseName(recording.file) + " (assumed; choose it in Live toolpath to confirm)");

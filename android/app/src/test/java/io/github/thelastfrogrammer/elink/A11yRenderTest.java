@@ -212,10 +212,13 @@ public class A11yRenderTest {
         }
         ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6).layers().stacked();
         chart.set("Cross section by line type", " mm²", layer, parts, 0, Double.NaN);
+        java.util.List<double[]> checks = java.util.Arrays.asList(new double[] {22, PrintRecorder.GUARDIAN_SPREAD, 0.03, 0.015, 1, 0}, new double[] {38, PrintRecorder.GUARDIAN_OFF_PRINT, 0.06, 0.03, 1, 1});
+        java.util.List<double[]> answers = new java.util.ArrayList<>(); answers.add(new double[] {40, 1});
+        for (Object[] m : LayerCharts.marks(new LayerCharts.Guardian(checks, answers), 0xff00796b)) chart.mark((Double) m[0], (Integer) m[1], (String) m[2]);
         android.widget.FrameLayout frame = new android.widget.FrameLayout(context()); frame.setBackgroundColor(0xfff2f5f6); frame.addView(chart);
         frame.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(780, View.MeasureSpec.EXACTLY));
         frame.layout(0, 0, 1080, 780);
-        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, 600, 400, 0));
+        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, 704, 400, 0));
         shot(frame, 780, "layer-cross-section", 1.0f);
     }
 

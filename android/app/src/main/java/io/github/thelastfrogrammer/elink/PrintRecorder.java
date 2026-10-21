@@ -45,9 +45,19 @@ public final class PrintRecorder {
         public boolean compare;
         /** Pictures in the second (far from the camera) set. */
         public int farPictures;
+        /**
+         * The print guardian's checks, one entry per measure per picture: {printer layer, measure (GUARDIAN_*), value, limit,
+         * over the limit 0/1, raised an alarm 0/1}; values and limits as shares (0-1). For the recording's guardian chart.
+         */
+        public final List<double[]> guardianChecks = new ArrayList<>();
         /** Measured while the print ran: status rate, parking, layer numbers, head position, picture timing (PrintChecks). */
         public PrintChecks checks = new PrintChecks();
         /** The timelapse video made when the print ended (in its picture folder), and the side-by-side one for comparing. */
+        private org.json.JSONArray guardianJson() throws org.json.JSONException {
+            org.json.JSONArray all = new org.json.JSONArray();
+            for (double[] e : guardianChecks) { org.json.JSONArray one = new org.json.JSONArray(); for (double v : e) one.put(Double.isNaN(v) ? null : v); all.put(one); }
+            return all;
+        }
         public File video() { return new File(pictureFolder(), "timelapse.mp4"); }
         public File sideBySide() { return new File(pictureFolder(), "side-by-side.mp4"); }
         /** The folder of the second set, inside the picture folder. */
@@ -72,6 +82,7 @@ public final class PrintRecorder {
                 .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
                 .put("park_x", smooth() ? parkX : null).put("park_y", smooth() ? parkY : null).put("picture_far", pictureFar)
                 .put("compare", compare && smooth()).put("far_pictures", farPictures).put("checks", checks.toJson())
+                .put("guardian_checks", guardianJson())
                 .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
                 .put("journal", journal.empty() ? null : journal.toJson());
         }
@@ -87,6 +98,12 @@ public final class PrintRecorder {
             recording.parkX = json.optDouble("park_x", Double.NaN); recording.parkY = json.optDouble("park_y", Double.NaN); recording.pictureFar = json.optBoolean("picture_far");
             recording.compare = json.optBoolean("compare"); recording.farPictures = json.optInt("far_pictures");
             recording.checks = PrintChecks.fromJson(json.optJSONObject("checks"));
+            org.json.JSONArray g = json.optJSONArray("guardian_checks");
+            for (int i = 0; g != null && i < g.length(); i++) {
+                org.json.JSONArray one = g.optJSONArray(i); if (one == null || one.length() < 6) continue;
+                double[] entry = new double[6]; for (int k = 0; k < 6; k++) entry[k] = one.optDouble(k, Double.NaN);
+                recording.guardianChecks.add(entry);
+            }
             recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
             recording.printDuration = json.optLong("print_duration", -1); recording.startProgress = json.optInt("start_progress", -1); recording.estimate = json.optLong("estimate", 0);
             recording.journal = PrintJournal.fromJson(json.optJSONObject("journal"));
@@ -198,6 +215,15 @@ public final class PrintRecorder {
     private LayerReach reach;
     public synchronized void setReach(LayerReach reach) { this.reach = reach; }
     public synchronized boolean hasReach() { return reach != null; }
+    /** The guardian's measures, as kept in Recording.guardianChecks. */
+    static final int GUARDIAN_OFF_PRINT = 0, GUARDIAN_COVERAGE = 1, GUARDIAN_SPREAD = 2, GUARDIAN_SUDDEN = 3;
+    static final String[] GUARDIAN_NAMES = {"Filament off the print", "Print area covered", "Change away from the print", "Sudden change"};
+    /** Keeps one guardian check with the print it was made for (`meta`), while that print is being recorded. */
+    public synchronized void noteGuardianCheck(File meta, int layer, int measure, double value, double limit, boolean over, boolean alarm) {
+        if (current == null || !current.meta.equals(meta) || Double.isNaN(value) || current.guardianChecks.size() >= 4000) return;
+        current.guardianChecks.add(new double[] {layer, measure, value, limit, over ? 1 : 0, alarm ? 1 : 0});
+        save(current);
+    }
     /** The running print's moves reported after a stop, between two times (monotonic ms), for the camera clock. */
     public synchronized long[] departures(long from, long to) {
         if (current == null) return new long[0];

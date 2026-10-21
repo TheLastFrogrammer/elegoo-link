@@ -120,6 +120,8 @@ final class PrintGuardian {
         private final List<Double> start = new ArrayList<>();
         private double baseline = -1, bestCoverage, tolerance = 1;
         private int badOutside, badCoverage; boolean alarmed;
+        /** The last check's limits and whether it was over them (NaN: not judged yet), for the recording's guardian chart. */
+        double outsideLimit = Double.NaN, coverageLimit = Double.NaN; boolean outsideBad, coverageBad;
         String reason = "";
         /** Feeds one check; true the moment it becomes an alarm (once per run of bad checks). */
         boolean add(Result r, int layer) {
@@ -127,8 +129,10 @@ final class PrintGuardian {
             if (baseline < 0) { start.add(r.outside); if (start.size() < 3) { reason = "learning what is normal (" + start.size() + " of 3)"; return false; }
                 List<Double> sorted = new ArrayList<>(start); Collections.sort(sorted); baseline = Math.max(0.002, sorted.get(1)); }
             bestCoverage = Math.max(bestCoverage, r.coverage);
-            boolean outsideBad = r.outside > Math.max(0.03, 3 * baseline) * tolerance;
-            boolean coverageBad = layer >= 5 && bestCoverage > 0.25 && r.coverage < bestCoverage * 0.4 / tolerance;
+            outsideLimit = Math.max(0.03, 3 * baseline) * tolerance;
+            coverageLimit = layer >= 5 && bestCoverage > 0.25 ? bestCoverage * 0.4 / tolerance : Double.NaN;
+            outsideBad = r.outside > outsideLimit;
+            coverageBad = !Double.isNaN(coverageLimit) && r.coverage < coverageLimit;
             badOutside = outsideBad ? badOutside + 1 : 0; badCoverage = coverageBad ? badCoverage + 1 : 0;
             reason = outsideBad ? "filament-coloured area off the print: " + percent(r.outside) + " of the bed (normal " + percent(baseline) + ")"
                 : coverageBad ? "the print's area shows " + percent(r.coverage) + " filament (was " + percent(bestCoverage) + ")" : "looks as expected";

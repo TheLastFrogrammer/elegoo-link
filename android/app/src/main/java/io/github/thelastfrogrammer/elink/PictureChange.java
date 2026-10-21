@@ -60,6 +60,8 @@ final class PictureChange {
         private int spreadRun, jumpRun;
         boolean alarmed;
         String reason = "";
+        /** The last picture's measures and limits (NaN: not judged), for the recording's guardian chart: spread of change, and a sudden change. */
+        double spreadNow = Double.NaN, spreadLimit = Double.NaN, jumpNow = Double.NaN, jumpLimit = Double.NaN; boolean spreadOver, jumpOver;
         /** The last picture's changed cells, for the overlay. */
         boolean[] last = new boolean[N];
         /** Where the print has been changing so far (the overlay shows it). */
@@ -80,6 +82,7 @@ final class PictureChange {
                 reason = "looks as expected"; return false;
             }
             double big = Math.max(0.12, 6 * noise) * tolerance;
+            jumpNow = share; jumpLimit = big; jumpOver = share > big;
             // A large change waits for the next picture: if the picture goes back, it was the light or a passing shadow.
             if (beforeJump != null) {
                 double kept = count(changed(beforeJump, now, ignore)) / (double) N;
@@ -97,6 +100,7 @@ final class PictureChange {
             int away = 0; for (int i = 0; i < N; i++) if (since[i] && !near[i]) away++;
             double spread = away / (double) N;
             boolean spreadBad = beforeJump == null && spread > Math.max(0.015, 4 * noise) * tolerance;
+            spreadNow = spread; spreadLimit = Math.max(0.015, 4 * noise) * tolerance; spreadOver = spreadBad;
             spreadRun = spreadBad ? spreadRun + 1 : 0;
             boolean spreading = spreadRun >= 3;
             boolean[] beside = PrintGuardian.grow(region, 1);

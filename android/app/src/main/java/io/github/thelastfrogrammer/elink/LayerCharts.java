@@ -21,6 +21,42 @@ final class LayerCharts {
     /** Adds a chip-style button to a row, as the screen showing the charts draws them. */
     interface Chip { Button add(LinearLayout row, String text, Runnable action); }
 
+    /** The print guardian's checks and the answers to its alarms, laid over the charts (a recording's; null before printing). */
+    static final class Guardian {
+        /** As Recording.guardianChecks: {layer, measure, value, limit, over 0/1, alarm 0/1}. */
+        final List<double[]> checks;
+        /** {layer, 1 "looks fine" or 0 "real problem"}. */
+        final List<double[]> answers;
+        Guardian(List<double[]> checks, List<double[]> answers) { this.checks = checks; this.answers = answers; }
+        boolean any() { return !checks.isEmpty() || !answers.isEmpty(); }
+        int lastLayer() { int last = 0; for (double[] c : checks) last = Math.max(last, (int) c[0]); for (double[] a : answers) last = Math.max(last, (int) a[0]); return last; }
+    }
+    static final int AMBER = 0xffe0a030, RED = 0xffd64545;
+
+    /**
+     * The marks to lay over every chart: one per layer and measure that went over its limit (the worst picture of that
+     * layer; red when it raised the alarm), and each answer. {layer, colour} with its words. Pure, for tests.
+     */
+    static List<Object[]> marks(Guardian g, int teal) {
+        java.util.Map<String, double[]> worst = new java.util.TreeMap<>();
+        for (double[] c : g.checks) {
+            if (c[4] < 0.5) continue;
+            String key = String.format(Locale.ROOT, "%08d-%d", (int) c[0], (int) c[1]);
+            double[] was = worst.get(key);
+            boolean coverage = (int) c[1] == PrintRecorder.GUARDIAN_COVERAGE;
+            if (was == null || c[5] > was[5] || c[5] == was[5] && (coverage ? c[2] < was[2] : c[2] > was[2])) worst.put(key, c);
+        }
+        List<Object[]> out = new ArrayList<>();
+        for (double[] c : worst.values()) {
+            int measure = (int) c[1];
+            String name = measure >= 0 && measure < PrintRecorder.GUARDIAN_NAMES.length ? PrintRecorder.GUARDIAN_NAMES[measure] : "Check";
+            out.add(new Object[] {c[0], c[5] > 0.5 ? RED : AMBER, String.format(Locale.getDefault(), "%s %s %.1f %% (limit %.1f %%)",
+                c[5] > 0.5 ? "Guardian alarm:" : "Guardian:", name.toLowerCase(Locale.ROOT), c[2] * 100, c[3] * 100)});
+        }
+        for (double[] a : g.answers) out.add(new Object[] {a[0], a[1] > 0.5 ? teal : RED, a[1] > 0.5 ? "You said it looked fine" : "You said it was a real problem"});
+        return out;
+    }
+
     /** The chart colours for the app's theme: blue, orange, aqua (the validated palette's first slots). */
     static int[] colours(boolean dark) { return dark ? new int[] {0xff3987e5, 0xffd95926, 0xff199e70} : new int[] {0xff2a78d6, 0xffeb6834, 0xff149a69}; }
 
@@ -45,10 +81,50 @@ final class LayerCharts {
 
     /** Adds the chips and charts for `p` to `card`; the chosen chart is remembered in `prefs`. */
     static void fill(Context context, LinearLayout card, LayerProfile p, int ink, int muted, int grid, int surface, boolean dark, SharedPreferences prefs, Chip chip) {
+        fill(context, card, p, null, ink, muted, grid, surface, dark, prefs, chip);
+    }
+    /** As above, with the guardian's checks and answers laid over every chart and charted on their own (`p` may be null: then only that). */
+    static void fill(Context context, LinearLayout card, LayerProfile p, Guardian guardian, int ink, int muted, int grid, int surface, boolean dark, SharedPreferences prefs, Chip chip) {
         int[] c = colours(dark); int blue = c[0], orange = c[1], aqua = c[2];
         float density = context.getResources().getDisplayMetrics().density;
-        double[] layer = new double[p.layers]; for (int i = 0; i < layer.length; i++) layer[i] = i + 1;
         List<View> views = new ArrayList<>(); List<String> names = new ArrayList<>();
+        if (p != null) profileCharts(context, p, ink, muted, grid, surface, blue, orange, aqua, views, names);
+        if (guardian != null && guardian.any()) {
+            int layers = Math.max(p == null ? 0 : p.layers, guardian.lastLayer());
+            ChartView g = guardianChart(context, guardian, layers, ink, muted, grid, surface, new int[] {orange, blue, aqua, RED});
+            if (g != null) { views.add(g); names.add("Guardian"); }
+            int teal = dark ? 0xff5fd4c4 : 0xff00796b;
+            for (Object[] m : marks(guardian, teal)) for (View v : views) ((ChartView) v).mark((Double) m[0], (Integer) m[1], (String) m[2]);
+        }
+        if (views.isEmpty()) return;
+        chips(context, card, views, names, dark, prefs, chip, density);
+    }
+
+    /** Each measure the guardian kept, per layer (the highest of the layer's pictures; the lowest for coverage), against its limit (dashed). */
+    private static ChartView guardianChart(Context context, Guardian g, int layers, int ink, int muted, int grid, int surface, int[] colours) {
+        if (layers <= 0 || g.checks.isEmpty()) return null;
+        double[] layer = new double[layers]; for (int i = 0; i < layers; i++) layer[i] = i + 1;
+        List<ChartView.Series> lines = new ArrayList<>();
+        for (int measure = 0; measure < PrintRecorder.GUARDIAN_NAMES.length; measure++) {
+            double[] value = new double[layers], limit = new double[layers]; Arrays.fill(value, Double.NaN); Arrays.fill(limit, Double.NaN);
+            boolean any = false, coverage = measure == PrintRecorder.GUARDIAN_COVERAGE;
+            for (double[] c : g.checks) {
+                int i = (int) c[0] - 1; if ((int) c[1] != measure || i < 0 || i >= layers) continue;
+                any = true;
+                value[i] = Double.isNaN(value[i]) ? c[2] * 100 : coverage ? Math.min(value[i], c[2] * 100) : Math.max(value[i], c[2] * 100);
+                if (!Double.isNaN(c[3])) limit[i] = c[3] * 100;
+            }
+            if (!any) continue;
+            lines.add(new ChartView.Series(PrintRecorder.GUARDIAN_NAMES[measure], colours[measure % colours.length], value, false));
+            lines.add(new ChartView.Series(PrintRecorder.GUARDIAN_NAMES[measure] + " limit", colours[measure % colours.length], limit, true));
+        }
+        ChartView chart = new ChartView(context, ink, muted, grid, surface).layers();
+        chart.set("Print guardian's measures (dashed: their limits)", " %", layer, lines, 0, Double.NaN);
+        return chart;
+    }
+
+    private static void profileCharts(Context context, LayerProfile p, int ink, int muted, int grid, int surface, int blue, int orange, int aqua, List<View> views, List<String> names) {
+        double[] layer = new double[p.layers]; for (int i = 0; i < layer.length; i++) layer[i] = i + 1;
         List<ChartView.Series> parts = new ArrayList<>();
         for (int type : p.typesUsed()) parts.add(new ChartView.Series(GcodeToolpath.FEATURES[type], Color.parseColor(GcodeViewerActivity.PALETTE[type]), p.series(type), false));
         ChartView cross = new ChartView(context, ink, muted, grid, surface).layers().stacked();
@@ -65,7 +141,9 @@ final class LayerCharts {
         ChartView accel = new ChartView(context, ink, muted, grid, surface).layers();
         accel.set("Acceleration", " mm/s²", layer, Arrays.asList(new ChartView.Series("Mean", blue, p.column(p.accel), false), new ChartView.Series("Highest", aqua, p.column(p.accelMax), false)), 0, Double.NaN);
         views.add(accel); names.add("Accel");
+    }
 
+    private static void chips(Context context, LinearLayout card, List<View> views, List<String> names, boolean dark, SharedPreferences prefs, Chip chip, float density) {
         LinearLayout chips = new LinearLayout(context); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
         List<Button> buttons = new ArrayList<>(); int accent = dark ? 0xff5fd4c4 : 0xff00796b;
         Runnable[] pick = new Runnable[1];
