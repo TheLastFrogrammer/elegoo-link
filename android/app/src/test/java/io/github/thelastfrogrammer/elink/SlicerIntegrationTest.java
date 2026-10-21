@@ -211,6 +211,31 @@ public class SlicerIntegrationTest {
         }
     }
 
+    /** Colour by height: a 10 mm block in filament 1 up to 5 mm and filament 2 above it changes filament once, at 5 mm. */
+    @Test public void colourBandsChangeFilamentAtTheirHeight() throws Exception {
+        File output = new File(context().getCacheDir(), "bands.gcode");
+        NativeSlicer.Selection selection = new NativeSlicer.Selection(PRINTER, PROCESS, Arrays.asList(PLA, PLA));
+        selection.colours.add("#D02828"); selection.colours.add("#F0F0F0");
+        selection.heightRanges.add(new double[] {0, 5, 1});
+        selection.heightRanges.add(new double[] {5, 10, 2});
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) { slicer.slice(Collections.singletonList(box(20, 20, 10)), selection, output, null); }
+        String gcode = new String(Files.readAllBytes(output.toPath()), StandardCharsets.UTF_8);
+        GcodeToolpath path = GcodeToolpath.read(output);
+        // Each layer's main filament, from the tool changes: filament 1 below 5 mm, filament 2 from there up.
+        java.util.regex.Matcher change = java.util.regex.Pattern.compile("\n(T[01])\n").matcher(gcode);
+        java.util.List<String> changes = new java.util.ArrayList<>(); while (change.find()) changes.add(change.group(1));
+        assertTrue("a change to filament 2: " + changes, changes.contains("T1"));
+        // Where the first change to T1 happens: the last layer Z before it is about 5 mm.
+        String before = gcode.substring(0, gcode.indexOf("\nT1\n"));
+        java.util.regex.Matcher z = java.util.regex.Pattern.compile(";Z:([0-9.]+)").matcher(before); double last = -1; while (z.find()) last = Double.parseDouble(z.group(1));
+        assertEquals("filament 2 starts at the band's height", 5.0, last, 0.25);
+        assertTrue(path.layerCount >= 40);
+        // A band beyond the filaments set up is refused with a clear reason.
+        selection.heightRanges.add(new double[] {2, 3, 3});
+        try (NativeSlicer slicer = NativeSlicer.open(context(), "Elegoo")) { slicer.slice(Collections.singletonList(box(20, 20, 10)), selection, output, null); fail("filament 3 of 2"); }
+        catch (Exception refused) { assertTrue(refused.getMessage(), refused.getMessage().contains("colour band uses filament 3")); }
+    }
+
     /** The self-test block slices to a short print the measured checks can read: layers, filament and time match the file's own header. */
     @Test public void selfTestPrintSlicesShortAndReadable() throws Exception {
         File output = new File(context().getCacheDir(), SelfTest.NAME + ".gcode");

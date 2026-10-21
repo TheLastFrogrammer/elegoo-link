@@ -328,6 +328,9 @@ public final class SliceActivity extends Activity {
         state.putString("objectSettings", perObject.toString());
         if (placements != null) state.putString("placements", placements.toString());
         if (supportBoxes != null) state.putString("supportBoxes", supportBoxes.toString());
+        state.putInt("bandStart", bandStart);
+        double[] changes = new double[bandChanges.size() * 2]; for (int i = 0; i < bandChanges.size(); i++) { changes[i * 2] = bandChanges.get(i)[0]; changes[i * 2 + 1] = bandChanges.get(i)[1]; }
+        state.putDoubleArray("bandChanges", changes);
         if (!slicing && !busy) state.putString("status", status.getText().toString());
     }
 
@@ -381,6 +384,10 @@ public final class SliceActivity extends Activity {
             showObjectSettings();
         } catch (org.json.JSONException ignored) { }
         plate = saved.getInt("plate", 0); projectSettings = saved.getBoolean("projectSettings", true);
+        bandStart = saved.getInt("bandStart", 1); bandChanges.clear();
+        double[] changes = saved.getDoubleArray("bandChanges");
+        for (int i = 0; changes != null && i + 1 < changes.length; i += 2) bandChanges.add(new double[] {changes[i], changes[i + 1]});
+        showBands();
         if (saved.getString("calibration") != null && saved.getStringArray("calibrationSpec") != null) {
             calibration = saved.getString("calibration"); calibrationRange = saved.getDoubleArray("calibrationRange"); calibrationSpec = saved.getStringArray("calibrationSpec"); showCalibration();
         }
@@ -435,6 +442,7 @@ public final class SliceActivity extends Activity {
         arrangeOptions = button(holders, "", this::arrangeDialog, false); showArrangeOptions();
         LinearLayout modelExtrasBox = new LinearLayout(this);
         objectButton = button(modelExtrasBox, "Model settings…", this::chooseObjectSettings, false);
+        bandsButton = button(modelExtrasBox, "", this::colourBandsDialog, false); showBands();
         calibrate = button(modelExtrasBox, "Calibration print…", () -> { if (calibration != null) { calibration = null; showCalibration(); updateButtons(); } else chooseCalibration(); }, false);
         modelExtrasBody = modelExtrasBox; modelExtras = section(holders, "Model settings and calibration", modelExtrasBox);
 
@@ -710,7 +718,96 @@ public final class SliceActivity extends Activity {
                     Math.min(p.optInt("slot", 0), slots.size())});
             }
         if (withPlacements && placements != null && supportBoxes != null) selection.supportBoxes.addAll(supportBoxes(supportBoxes));
+        if (calibration == null) selection.heightRanges.addAll(bands(bandStart, bandChanges));
         return selection;
+    }
+
+    // ------------------------------------------------------------------ Colour by height
+    /** Colour by height: the filament to start with (1-based), and each change {height mm, filament} going up. */
+    private int bandStart = 1;
+    private final List<double[]> bandChanges = new ArrayList<>();
+    private Button bandsButton;
+    /** Above the tallest model: the last band goes to the top (the engine stops it at each model's height). */
+    static final double TOP = 10_000;
+
+    /** The bands for the engine, {from, to, filament}, from a start filament and changes going up. Pure, for tests. */
+    static List<double[]> bands(int start, List<double[]> changes) {
+        List<double[]> out = new ArrayList<>();
+        if (changes.isEmpty()) return out;
+        List<double[]> sorted = new ArrayList<>(changes); sorted.sort((a, b) -> Double.compare(a[0], b[0]));
+        double from = 0; int slot = start;
+        for (double[] change : sorted) {
+            if (change[0] > from) out.add(new double[] {from, change[0], slot});
+            from = Math.max(from, change[0]); slot = (int) change[1];
+        }
+        out.add(new double[] {from, TOP, slot});
+        return out;
+    }
+
+    private void showBands() {
+        if (bandsButton == null) return;
+        if (bandChanges.isEmpty()) { bandsButton.setText("Colour by height…"); return; }
+        StringBuilder words = new StringBuilder("Colour by height: filament ").append(bandStart);
+        List<double[]> sorted = new ArrayList<>(bandChanges); sorted.sort((a, b) -> Double.compare(a[0], b[0]));
+        for (double[] c : sorted) words.append(", ").append((int) c[1]).append(" at ").append(trimNumber(c[0])).append(" mm");
+        bandsButton.setText(words.append("…"));
+    }
+
+    /** Start filament and the changes going up; every model on the plate changes at the same heights from its own bottom. */
+    private void colourBandsDialog() {
+        if (slots.size() < 2) {
+            new AlertDialog.Builder(this).setTitle("Colour by height")
+                .setMessage("Each height band prints in its own filament, so set up at least two filaments first (2 · Printer and filaments, Add).")
+                .setPositiveButton("OK", null).show();
+            return;
+        }
+        List<String> names = new ArrayList<>();
+        for (int i = 0; i < slots.size(); i++) { String preset = selected(slots.get(i).preset); names.add("Filament " + (i + 1) + (preset == null ? "" : " · " + preset.replaceFirst(" @.*$", ""))); }
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), 0);
+        label(body, "Heights are from the bottom of each model; every model on the plate changes at the same heights. The slicer makes the filament change at the nearest layer.", 13, muted, false);
+        label(body, "Start with", 12, muted, false);
+        Spinner start = spinner(body); fill(start, names, names.get(Math.max(0, Math.min(names.size() - 1, bandStart - 1))));
+        LinearLayout rows = new LinearLayout(this); rows.setOrientation(LinearLayout.VERTICAL); body.addView(rows);
+        List<EditText> heights = new ArrayList<>(); List<Spinner> picks = new ArrayList<>();
+        java.util.function.BiConsumer<Double, Integer> addRow = (height, slot) -> {
+            LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            TextView at = new TextView(this); at.setText("At"); at.setTextColor(ink); row.addView(at);
+            EditText mm = new EditText(this); mm.setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            mm.setText(height == null ? "" : trimNumber(height)); mm.setTextColor(ink); mm.setMinWidth(dp(72)); mm.setContentDescription("Height in millimetres");
+            row.addView(mm);
+            TextView then = new TextView(this); then.setText("mm →"); then.setTextColor(ink); row.addView(then);
+            Spinner pick = new Spinner(this); pick.setBackgroundTintList(ColorStateList.valueOf(teal)); row.addView(pick, new LinearLayout.LayoutParams(0, dp(48), 1));
+            fill(pick, names, names.get(Math.max(0, Math.min(names.size() - 1, slot - 1)))); A11y.name(pick, () -> "Filament from that height");
+            Button remove = new Button(this); remove.setText("✕"); remove.setAllCaps(false); remove.setContentDescription("Remove this change");
+            remove.setOnClickListener(v -> { int i = heights.indexOf(mm); if (i >= 0) { heights.remove(i); picks.remove(i); } rows.removeView(row); });
+            row.addView(remove, new LinearLayout.LayoutParams(dp(48), dp(48)));
+            heights.add(mm); picks.add(pick); rows.addView(row);
+        };
+        List<double[]> sorted = new ArrayList<>(bandChanges); sorted.sort((a, b) -> Double.compare(a[0], b[0]));
+        for (double[] c : sorted) addRow.accept(c[0], (int) c[1]);
+        Button add = new Button(this); add.setText("Add a change"); add.setAllCaps(false);
+        add.setOnClickListener(v -> {
+            double last = 0; for (EditText e : heights) try { last = Math.max(last, Double.parseDouble(e.getText().toString().trim())); } catch (NumberFormatException ignored) { }
+            int next = picks.isEmpty() ? start.getSelectedItemPosition() + 2 : picks.get(picks.size() - 1).getSelectedItemPosition() + 2;
+            addRow.accept(last + 2, next > names.size() ? 1 : next);
+        });
+        body.addView(add);
+        if (sorted.isEmpty()) addRow.accept(2.0, Math.min(2, names.size()));
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Colour by height").setView(scroll)
+            .setNeutralButton("Turn off", (d, w) -> { bandChanges.clear(); showBands(); })
+            .setNegativeButton("Cancel", null).setPositiveButton("Save", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            List<double[]> read = new ArrayList<>();
+            for (int i = 0; i < heights.size(); i++) {
+                double h; try { h = Double.parseDouble(heights.get(i).getText().toString().trim().replace(',', '.')); } catch (NumberFormatException bad) { h = -1; }
+                if (!(h > 0)) { heights.get(i).setError("A height above 0 mm"); return; }
+                read.add(new double[] {h, picks.get(i).getSelectedItemPosition() + 1});
+            }
+            bandStart = start.getSelectedItemPosition() + 1;
+            bandChanges.clear(); bandChanges.addAll(read); showBands(); dialog.dismiss();
+        }));
+        dialog.show();
     }
 
     /** The plate view's boxes as the engine's {enforcer, center x, y, z, size x, y, z}; malformed ones are left out. */

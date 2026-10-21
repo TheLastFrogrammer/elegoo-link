@@ -75,6 +75,8 @@ final class NativeSlicer implements AutoCloseable {
         final List<Map<String, String>> filamentOverrides = new ArrayList<>();
         /** Per object and all its copies, keyed "file,object" (0-based): setting key -> value (object settings only). */
         final Map<String, Map<String, String>> objectSettings = new LinkedHashMap<>();
+        /** Colour by height: {from mm, to mm, filament slot (1-based), file (-1 all), object (-1 all)}, heights above the placed object's bottom. */
+        final List<double[]> heightRanges = new ArrayList<>();
         /** A calibration print instead of model files: mode ("temperature", "pressure_advance", "flow", "max_flow", "retraction") and range. */
         String calibration; double calibrationStart, calibrationEnd, calibrationStep;
         /** Automatic arranging: may turn copies to fit more; may shrink every copy by one factor (not below arrangeMinScale) so all fit; gap in mm (below 0: default). */
@@ -117,6 +119,10 @@ final class NativeSlicer implements AutoCloseable {
                     objects.put(new JSONObject().put("file", Integer.parseInt(id[0])).put("object", Integer.parseInt(id[1])).put("values", values));
                 }
                 json.put("object_settings", objects);
+                JSONArray bands = new JSONArray();
+                for (double[] r : heightRanges)
+                    bands.put(new JSONObject().put("from", r[0]).put("to", r[1]).put("slot", (int) r[2]).put("file", r.length > 3 ? (int) r[3] : -1).put("object", r.length > 4 ? (int) r[4] : -1));
+                if (bands.length() > 0) json.put("height_ranges", bands);
                 if (calibration != null) json.put("calibration", new JSONObject().put("mode", calibration).put("start", calibrationStart).put("end", calibrationEnd).put("step", calibrationStep));
                 return json.toString();
             } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
