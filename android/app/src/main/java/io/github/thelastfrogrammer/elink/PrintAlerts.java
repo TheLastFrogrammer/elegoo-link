@@ -12,6 +12,8 @@ public final class PrintAlerts {
     /** Also alert when the first layer is done, and when the print (`layerKey`) reaches `layer` (0 = no layer alert). */
     public boolean firstLayer; public int layer; public String layerKey = "";
     private int lastLayer = -1; private boolean firstSent, layerSent;
+    /** The printer's last state other than idle ("Preparing: levelling the bed"), "" once it has been idle. */
+    private String lastDoing = "";
     /**
      * The alert for this status, or "": a new fault, then a completion, then a layer alert. Layer alerts need the layer seen
      * changing (an app that connects at layer 50 does not report the first layer as just done).
@@ -37,7 +39,14 @@ public final class PrintAlerts {
                 if (current >= 0) lastLayer = current;
             }
         } else if (machine != null && machine.optInt("status", -1) == 1) armed = false;
-        if (!added.isEmpty()) return "Printer fault: " + codes;
+        // What the printer was doing when the fault came (its last state before going idle), and whether it stopped.
+        String doing = lastDoing; int state = machine == null ? -1 : machine.optInt("status", -1);
+        if (machine != null && state != 1) lastDoing = StatusPresentation.state(status);
+        if (!added.isEmpty()) {
+            String during = state != 1 && machine != null ? StatusPresentation.state(status) : doing;
+            return "Printer fault: " + codes + (during.isEmpty() ? "" : " · while " + during) + (state == 1 && !doing.isEmpty() ? " · the printer is idle now" : "");
+        }
+        if (state == 1) lastDoing = "";
         return completed ? "Print complete: " + StatusPresentation.clean(name.isEmpty() ? observedName : name) : reached;
     }
     public void disconnected() { armed = false; }

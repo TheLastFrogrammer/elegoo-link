@@ -60,6 +60,20 @@ public class PrintRecorderTest {
         assertEquals("ended", all.get(0).outcome); assertEquals("stopped", all.get(1).outcome); assertEquals("interrupted", all.get(2).outcome);
     }
 
+    /** Written on the background thread, the files still read back complete, in order, right after each update. */
+    @Test public void backgroundWritesReadBackInOrder() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir); recorder.writeInBackground();
+        recorder.update(1_000, status(2075, "a.gcode", 1, 1), "local", "CC2");
+        for (int i = 2; i <= 30; i++) recorder.update(i * 11_000L, status(2075, "a.gcode", i, i), "local", "CC2");
+        recorder.update(400_000, status(2077, "a.gcode", 31, 100), "local", "CC2");
+        List<PrintRecorder.Recording> all = recorder.list();
+        assertEquals(1, all.size()); assertEquals("complete", all.get(0).outcome);
+        List<double[]> rows = PrintRecorder.samples(all.get(0));
+        assertEquals(31, rows.size());
+        for (int i = 0; i < rows.size(); i++) assertEquals(i + 1, rows.get(i)[PrintRecorder.column("layer")], 0);
+        assertNotNull(recorder.lastFinished());
+    }
+
     /** The end of a print is told once (for its video), but not a print only interrupted by another one starting. */
     @Test public void theEndOfAPrintIsToldButNotAnInterruption() throws Exception {
         PrintRecorder recorder = new PrintRecorder(dir);

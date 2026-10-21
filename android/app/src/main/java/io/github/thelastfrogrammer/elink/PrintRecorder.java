@@ -135,6 +135,7 @@ public final class PrintRecorder {
     }
     /** The recording of the print that ended last (complete or stopped), or null; kept across app restarts. */
     public File lastFinished() {
+        flush();
         File note = new File(directory, "last-finished.txt");
         try { String path = new String(java.nio.file.Files.readAllBytes(note.toPath()), StandardCharsets.UTF_8).trim(); File meta = new File(directory, path); return meta.isFile() ? meta : null; }
         catch (IOException none) { return null; }
@@ -201,9 +202,9 @@ public final class PrintRecorder {
         List<Long> found = new ArrayList<>(); for (long d : current.checks.departures) if (d >= from && d <= to) found.add(d);
         long[] out = new long[found.size()]; for (int i = 0; i < out.length; i++) out[i] = found.get(i); return out;
     }
-    /** The camera clock's answer for print `id` (still running): the measured delay, or why there is none. */
-    public synchronized void setCameraDelay(String id, CameraClock.Result result, String problem) {
-        if (current == null || !current.id.equals(id)) return;
+    /** The camera clock's answer for the print kept in `meta` (still running): the measured delay, or why there is none. */
+    public synchronized void setCameraDelay(File meta, CameraClock.Result result, String problem) {
+        if (current == null || !current.meta.equals(meta)) return;   // the print's own file: its id can change once its uuid is known
         if (result != null) { current.checks.cameraDelayMs = result.delayMs; current.checks.cameraMoves = result.moves; current.checks.cameraSpreadMs = result.spreadMs; current.checks.cameraProblem = ""; }
         else current.checks.cameraProblem = problem;
         save(current);
@@ -357,6 +358,7 @@ public final class PrintRecorder {
 
     /** Recordings, newest first. Unfinished ones from an earlier app run stay listed with outcome "printing" until resumed or closed. */
     public synchronized List<Recording> list() {
+        flush();
         List<Recording> result = new ArrayList<>();
         File[] files = directory.listFiles((dir, name) -> name.endsWith(".json"));
         if (files != null) for (File meta : files) try { result.add(Recording.read(meta)); } catch (Exception ignored) { }
@@ -365,6 +367,7 @@ public final class PrintRecorder {
     }
 
     public synchronized void delete(Recording recording) {
+        flush();
         if (current != null && current.meta.equals(recording.meta)) current = null;
         deletePictures(recording); recording.csv.delete(); recording.meta.delete();
     }
@@ -377,6 +380,7 @@ public final class PrintRecorder {
 
     /** Reads a recording's samples as rows of numbers keyed by column (NaN where missing). */
     public static List<double[]> samples(Recording recording) throws IOException {
+        PrintRecorder running = active; if (running != null) running.flush();   // the rows still queued for the disk
         List<double[]> rows = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(recording.csv), StandardCharsets.UTF_8))) {
             String line = reader.readLine(); // header
@@ -427,8 +431,8 @@ public final class PrintRecorder {
         parkedArmed = farArmed = false; farThisLayer = farLastLayer = 0; farLayer = -1; reach = null; asked = 0; farPicturedLayer = -1;
         recording.pictureFar = defaultPictureFar && defaultPictureLayers > 0;
         recording.id = key; recording.file = file; recording.printer = printer; recording.source = source; recording.start = now; recording.pictureMinutes = defaultPictureMinutes; recording.pictureLayers = defaultPictureLayers;
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(recording.csv), StandardCharsets.UTF_8)) { writer.write(String.join(",", COLUMNS) + "\n"); }
-        catch (IOException ignored) { }
+        File csv = recording.csv;
+        write(() -> { try (Writer out = new OutputStreamWriter(new FileOutputStream(csv), StandardCharsets.UTF_8)) { out.write(String.join(",", COLUMNS) + "\n"); } catch (IOException ignored) { } });
         save(recording); prune();
         return recording;
     }
@@ -462,8 +466,8 @@ public final class PrintRecorder {
                 Diagnostics.note(Diagnostics.STATUS, "estimate at " + progressNow + " %: " + current.estimate + " s in all (printer print time " + current.printDuration + " s, this phone " + (Math.max(0, mono - current.monoStart) / 1000) + " s)");
             }
         }
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(current.csv, true), StandardCharsets.UTF_8)) { writer.write(String.join(",", cells) + "\n"); }
-        catch (IOException ignored) { return; }
+        File csv = current.csv; String line = String.join(",", cells) + "\n";
+        write(() -> { try (Writer out = new OutputStreamWriter(new FileOutputStream(csv, true), StandardCharsets.UTF_8)) { out.write(line); } catch (IOException ignored) { } });
         current.samples++; current.lastSample = now; current.elapsed = Math.max(0, mono - current.monoStart);
         if (print != null) current.layers = Math.max(current.layers, print.optInt("total_layer", 0));
         save(current);
@@ -496,7 +500,7 @@ public final class PrintRecorder {
         current.elapsed += since;
         current.outcome = outcome; current.end = current.lastSample + since;
         if (current.end == 0) current.end = now;
-        if (!"interrupted".equals(outcome)) try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), current.meta.getName().getBytes(StandardCharsets.UTF_8)); } catch (IOException ignored) { }
+        if (!"interrupted".equals(outcome)) { byte[] name = current.meta.getName().getBytes(StandardCharsets.UTF_8); write(() -> { try { java.nio.file.Files.write(new File(directory, "last-finished.txt").toPath(), name); } catch (IOException ignored) { } }); }
         if (!"interrupted".equals(outcome)) { endedKey = current.id; endedFile = current.file; endedPrinter = current.printerId; }
         current.checks.ended(mono, "complete".equals(outcome));
         for (PrintChecks.Finding f : PrintChecks.of(current)) Diagnostics.note(Diagnostics.STATUS, "measured: " + PrintChecks.mark(f.verdict) + " " + f.title + " · " + f.evidence);
@@ -552,8 +556,24 @@ public final class PrintRecorder {
     }
 
     private void save(Recording recording) {
-        try (Writer writer = new OutputStreamWriter(new FileOutputStream(recording.meta), StandardCharsets.UTF_8)) { writer.write(recording.toJson().toString()); }
-        catch (Exception ignored) { }
+        String json; try { json = recording.toJson().toString(); } catch (Exception unwritable) { return; }
+        File meta = recording.meta;
+        write(() -> { try (Writer out = new OutputStreamWriter(new FileOutputStream(meta), StandardCharsets.UTF_8)) { out.write(json); } catch (IOException ignored) { } });
+    }
+
+    /**
+     * Where the recording's files are written: on the caller's thread (tests, and until the service asks), or in order on
+     * one background thread, so statuses handled on the screen thread never wait for the disk.
+     */
+    private java.util.concurrent.ExecutorService writer;
+    private static final String WRITER = "recorder-writes";
+    public synchronized void writeInBackground() { if (writer == null) writer = java.util.concurrent.Executors.newSingleThreadExecutor(r -> new Thread(r, WRITER)); }
+    private void write(Runnable task) { if (writer == null) task.run(); else writer.execute(task); }
+    /** Waits (briefly) for the writes already queued, before files are read back or removed. */
+    private void flush() {
+        java.util.concurrent.ExecutorService w = writer;
+        if (w == null || WRITER.equals(Thread.currentThread().getName())) return;
+        try { w.submit(() -> { }).get(3, java.util.concurrent.TimeUnit.SECONDS); } catch (Exception late) { }
     }
 
     /** Keeps the newest KEEP recordings, and any older one a project links to (when the projects cannot be read, all of them). */

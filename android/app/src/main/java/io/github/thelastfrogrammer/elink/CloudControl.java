@@ -266,10 +266,25 @@ public final class CloudControl implements AutoCloseable {
     /** Connects and stays connected for `ms` only listening (nothing is sent), to hear what the printer reports unasked; `result` gets "" or why not. */
     public void listen(long ms, java.util.function.Consumer<String> result) {
         worker.execute(() -> {
-            try { ensureConnected(); listenUntil = System.currentTimeMillis() + ms; scheduleIdleClose(); Diagnostics.note(Diagnostics.HYBRID, "listening on the cloud channel for " + ms / 60_000 + " min (nothing sent)"); result.accept(""); }
+            try {
+                ensureConnected(); listenUntil = System.currentTimeMillis() + ms; scheduleIdleClose();
+                synchronized (listenHeard) { listenHeard.clear(); }
+                Diagnostics.note(Diagnostics.HYBRID, "listening on the cloud channel for " + ms / 60_000 + " min (nothing sent)");
+                // When the window ends, what was heard, also when it was nothing: an empty listen is an answer too.
+                worker.schedule(() -> {
+                    String heardText;
+                    synchronized (listenHeard) { heardText = listenHeard.isEmpty() ? "" : listenHeard.toString(); }
+                    Diagnostics.note(Diagnostics.HYBRID, "listening ended after " + ms / 60_000 + " min: " + (heardText.isEmpty()
+                        ? "the printer sent nothing unasked to this app (another app's commands go to the printer only, so they are not heard)"
+                        : "heard unasked messages by method (count): " + heardText));
+                }, ms, TimeUnit.MILLISECONDS);
+                result.accept("");
+            }
             catch (IOException error) { result.accept(String.valueOf(error.getMessage())); }
         });
     }
+    /** Unasked messages heard during the current listen, by method. */
+    private final java.util.Map<Integer, Integer> listenHeard = new java.util.TreeMap<>();
     private final java.util.Set<Integer> shapesLogged = new java.util.HashSet<>();
     /**
      * A message the printer sent without being asked (for example while it fetches a file another app, such as Elegoo's,
@@ -309,6 +324,7 @@ public final class CloudControl implements AutoCloseable {
         if (wait == null) {
             int method = message.optInt("method", -1);
             unasked.saw("cloud", method);
+            if (System.currentTimeMillis() < listenUntil) synchronized (listenHeard) { listenHeard.merge(method, 1, Integer::sum); }
             String uid; synchronized (this) { uid = userId; }
             if (uid != null && publisher.startsWith(uid) && publisher.length() > uid.length()) heard(publisher.substring(uid.length()), method, message);
             return;

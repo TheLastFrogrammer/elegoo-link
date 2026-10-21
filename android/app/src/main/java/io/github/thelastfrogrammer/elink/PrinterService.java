@@ -259,6 +259,7 @@ public final class PrinterService extends Service {
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         guardian = new GuardianRun(this); recorder.pictureKept = this::guard; PrintRecorder.active = recorder;
         recorder.printEnded = this::autoVideo;
+        recorder.writeInBackground();   // statuses are handled on the screen thread: its files are written off it
         automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);
@@ -349,7 +350,7 @@ public final class PrinterService extends Service {
      * points: once per print and camera spot, and while there is no copy, looked for again at most once a minute.
      */
     private void loadReach(PrintRecorder.Recording now, double[] camera) {
-        String key = now.id + "|" + Math.round(camera[0]) + "," + Math.round(camera[1]);
+        String key = now.meta.getName() + "|" + Math.round(camera[0]) + "," + Math.round(camera[1]);
         long at = SystemClock.elapsedRealtime();
         if (reachReading || key.equals(reachFor) && (recorder.hasReach() || at - reachTriedAt < 60_000)) return;
         boolean again = key.equals(reachFor); reachFor = key; reachTriedAt = at;
@@ -363,7 +364,7 @@ public final class PrinterService extends Service {
             main.post(() -> {
                 reachReading = false;
                 PrintRecorder.Recording still = recorder.current();
-                if (still == null || !still.id.equals(now.id)) return;
+                if (still == null || !still.meta.equals(now.meta)) return;
                 recorder.setReach(done);
                 Diagnostics.note(Diagnostics.CAMERA, done != null ? "print's G-code read for far pictures and checks (" + done.layers + " layers)" : "the print's G-code could not be read (" + problem + "); far pictures learn from the layer before");
             });
@@ -389,8 +390,8 @@ public final class PrinterService extends Service {
         // Every print's G-code (when the phone has it): the measured checks compare the printer's layers and head position with it.
         loadReach(now, camera);
         if (!now.followsHead()) return;
-        if (!now.id.equals(smoothFor)) {
-            smoothFor = now.id;
+        if (!now.meta.getName().equals(smoothFor)) {
+            smoothFor = now.meta.getName();
             String how = smooth && now.compare ? String.format(Locale.ROOT, "smooth timelapse with a second set to compare: parked pictures at X %.0f Y %.0f, and far from the camera (at X %.0f Y %.0f)", now.parkX, now.parkY, camera[0], camera[1])
                 : smooth ? String.format(Locale.ROOT, "smooth timelapse: pictures when the head parks at X %.0f Y %.0f, or else with it far from the camera", now.parkX, now.parkY)
                 : String.format(Locale.ROOT, "pictures with the head far from the camera (at X %.0f Y %.0f)", camera[0], camera[1]);
@@ -405,19 +406,19 @@ public final class PrinterService extends Service {
         if (ask && nativeEmpty < 2) nativeNextAt = 0;   // a join now rather than in a minute (two empty joins still wait their 30 minutes)
         // The self-test's camera clock: the park before the position probe starts recording the camera through the probe.
         JSONObject print = value.optJSONObject("print_status");
-        if (smooth && SelfTest.is(now.file) && !now.id.equals(clockFor) && print != null && print.optInt("current_layer", -1) == SelfTest.PROBE_LAYER
+        if (smooth && SelfTest.is(now.file) && !now.meta.getName().equals(clockFor) && print != null && print.optInt("current_layer", -1) == SelfTest.PROBE_LAYER
             && SmoothTimelapse.parked(x, y, now.parkX, now.parkY)) startCameraClock(now);
     }
     /** The print the camera clock last ran for (its recording's id), once per print. */
     private String clockFor = "";
     private void startCameraClock(PrintRecorder.Recording now) {
-        clockFor = now.id;
+        clockFor = now.meta.getName();
         String why = ExtraCameras.forPictures(this) != null ? "print pictures come from an added camera; the clock measures the printer's own"
             : !ready() || route == null ? "the printer's camera is not reachable on this network" : grabbing ? "the camera was busy with a picture" : null;
-        if (why != null) { recorder.setCameraDelay(now.id, null, why); Diagnostics.note(Diagnostics.CAMERA, "camera clock not run: " + why); return; }
+        if (why != null) { recorder.setCameraDelay(now.meta, null, why); Diagnostics.note(Diagnostics.CAMERA, "camera clock not run: " + why); return; }
         String url; PrinterHttp.ConnectionFactory http;
         try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); http = route.http(); }
-        catch (Exception invalid) { recorder.setCameraDelay(now.id, null, "the camera address is not usable"); return; }
+        catch (Exception invalid) { recorder.setCameraDelay(now.meta, null, "the camera address is not usable"); return; }
         grabbing = true;   // one connection to the printer's camera at a time: this one also gives the parked picture
         long started = SystemClock.elapsedRealtime();
         Diagnostics.note(Diagnostics.CAMERA, "camera clock: recording the printer's camera through the self-test's position probe");
@@ -428,7 +429,7 @@ public final class PrinterService extends Service {
                 CameraClock.Result result = frames.length < 20 ? null : CameraClock.delay(moves, CameraClock.starts(at, CameraClock.motion(frames)));
                 String why2 = result != null ? "" : frames.length < 20 ? "the camera gave too few frames (" + frames.length + (problem == null ? "" : ", " + problem) + "); a camera view open in the app holds the stream"
                     : "the moves were not seen in the pictures (" + moves.length + " reported); the probe may be out of the camera's view";
-                recorder.setCameraDelay(now.id, result, why2);
+                recorder.setCameraDelay(now.meta, result, why2);
                 Diagnostics.note(Diagnostics.CAMERA, "camera clock: " + frames.length + " frames, " + moves.length + " reported moves; " + (result == null ? "not measured: " + why2
                     : String.format(Locale.ROOT, "delay %.2f s from %d moves (spread %.2f s)", result.delayMs / 1000.0, result.moves, result.spreadMs / 1000.0)));
                 main.post(() -> grabbing = false);

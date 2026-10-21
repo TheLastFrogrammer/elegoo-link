@@ -22,6 +22,16 @@ public class PrintAlertsTest {
         s.getJSONObject("exception").getJSONObject("exception_code").put("1101",new JSONObject()); assertTrue(a.update(s).contains("1101"));
         s.getJSONObject("exception").put("exception_code",new JSONObject()); assertEquals("",a.update(s)); s.getJSONObject("exception").put("exception_code",new JSONObject("{\"803\":{}}")); assertEquals("Printer fault: 803",a.update(s));
     }
+    /** A fault says what the printer was doing: here, as in the user's log, it went idle in the same status the fault came in. */
+    @Test public void aFaultSaysWhatThePrinterWasDoing() throws Exception {
+        PrintAlerts a = new PrintAlerts(); JSONObject levelling = state(2, 1066, "a");
+        String doing = StatusPresentation.state(levelling);
+        assertEquals("", a.update(levelling));
+        JSONObject idle = state(1, 0, ""); idle.put("exception", new JSONObject("{\"exception_code\":{\"704\":{}}}"));
+        assertEquals("Printer fault: 704 · while " + doing + " · the printer is idle now", a.update(idle));
+        JSONObject printing = layer("b", 135); printing.put("exception", new JSONObject("{\"exception_code\":{\"1243\":{}}}"));
+        assertEquals("a fault while still printing names the state it came in", "Printer fault: 1243 · while " + StatusPresentation.state(printing), a.update(printing));
+    }
     private static JSONObject layer(String job, int layer) throws Exception { JSONObject s = state(2, 2075, job); s.getJSONObject("print_status").put("current_layer", layer); return s; }
     @Test public void firstLayerAndChosenLayerAlertOnceAndOnlyWhenSeenChanging() throws Exception {
         PrintAlerts a = new PrintAlerts(); a.firstLayer = true; a.layer = 3; a.layerKey = "a";
