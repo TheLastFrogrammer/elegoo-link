@@ -121,7 +121,7 @@ final class AutomationValues {
             JSONObject move = status.optJSONObject("gcode_move_inf");
             if (move != null) {
                 for (String axis : new String[] {"x", "y", "z"}) if (move.has(axis)) v.put(axis, String.format(Locale.ROOT, "%.2f", move.optDouble(axis)));
-                if (move.has("e")) v.put("extruded_mm", one(move.optDouble("e")));
+                double fed = Cc2Codec.extruderPosition(move); if (!Double.isNaN(fed)) v.put("extruded_mm", one(fed));
                 if (move.has("speed_mode")) v.put("speed_mode", String.valueOf(move.optInt("speed_mode")));
             }
             JSONObject toolhead = status.optJSONObject("toolhead"); if (toolhead != null && toolhead.has("homed_axes")) v.put("homed_axes", toolhead.optString("homed_axes"));

@@ -1746,7 +1746,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (hasPosition) {
             line.append(String.format(Locale.ROOT, " · nozzle X %.2f Y %.2f", position.optDouble("x"), position.optDouble("y")));
             if (position.has("z")) line.append(String.format(Locale.ROOT, " Z %.2f", position.optDouble("z")));
-            if (position.has("e")) line.append(String.format(Locale.ROOT, " E %.2f", position.optDouble("e")));
+            double fed = Cc2Codec.extruderPosition(position); if (!Double.isNaN(fed)) line.append(String.format(Locale.ROOT, " E %.2f", fed));
         } else line.append(" · no nozzle position");
         if (located < path.count) {
             line.append(String.format(Locale.ROOT, " · shown layer[%d] move %d/%d ends at X %.2f Y %.2f Z %.2f", layer, move, layerSize(layer), path.x1[located], path.y1[located], path.z1[located]));

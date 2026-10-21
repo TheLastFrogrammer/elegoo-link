@@ -34,6 +34,12 @@ final class ChartView extends View {
     private int touched = -1;
     /** Start of the print in epoch milliseconds, or 0 when the axis should show elapsed time only. */
     private long clockStart;
+    /** x is a layer number rather than seconds; series are stacked areas (each a share of the whole, its total on top). */
+    private boolean layerAxis, stacked;
+    ChartView layers() { layerAxis = true; invalidate(); return this; }
+    ChartView stacked() { stacked = true; invalidate(); return this; }
+    /** The stacked total at point i (NaN where every series is). */
+    private double total(int i) { double sum = 0; boolean any = false; for (Series s : series) if (i < s.values.length && !Double.isNaN(s.values[i])) { sum += s.values[i]; any = true; } return any ? sum : Double.NaN; }
 
     ChartView(Context context, int ink, int muted, int grid, int surface) {
         super(context);
@@ -81,7 +87,7 @@ final class ChartView extends View {
 
     private float plotLeft() { return 44 * density * f; }
     /** Room on the right for direct end labels when there are several series. */
-    private float plotRight() { return (series.size() > 1 ? 64 : 12) * density; }
+    private float plotRight() { return (series.size() > 1 && !stacked ? 64 : 12) * density; }
     private float plotTop() { return series.size() > 1 ? (30 + 20 * legendRows(getWidth())) * density * f : 30 * density * f; }
     private float plotBottom() { return 24 * density * f; }
 
@@ -93,7 +99,8 @@ final class ChartView extends View {
         double lo = fixedMin, hi = fixedMax;
         if (Double.isNaN(lo) || Double.isNaN(hi)) {
             lo = Double.POSITIVE_INFINITY; hi = Double.NEGATIVE_INFINITY;
-            for (Series s : series) for (double v : s.values) if (!Double.isNaN(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+            if (stacked) { lo = 0; hi = 0; for (int i = 0; i < seconds.length; i++) { double v = total(i); if (!Double.isNaN(v)) hi = Math.max(hi, v); } }
+            else for (Series s : series) for (double v : s.values) if (!Double.isNaN(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
             if (Double.isInfinite(lo)) { lo = 0; hi = 1; }
             if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
             double pad = (hi - lo) * 0.08; lo = lo >= 0 && lo - pad < 0 ? 0 : lo - pad; hi += pad;
@@ -109,8 +116,11 @@ final class ChartView extends View {
         }
         // Time ticks: clock times on round hours and minutes when the print's start is known, otherwise elapsed time.
         small.setTextAlign(Paint.Align.CENTER);
-        double xStep = niceTime((x1 - x0) / 4);
-        if (clockStart > 0) {
+        double xStep = layerAxis ? Math.max(1, niceStep((x1 - x0) / 4)) : niceTime((x1 - x0) / 4);
+        if (layerAxis) for (double t = Math.ceil(x0 / xStep) * xStep; t <= x1; t += xStep) {
+            float x = (float) (left + (t - x0) / (x1 - x0) * (right - left));
+            canvas.drawText(format(t), x, bottom + 16 * density * f, small);
+        } else if (clockStart > 0) {
             double local0 = localSeconds(clockStart);
             for (double local = Math.ceil((local0 + x0) / xStep) * xStep; local <= local0 + x1; local += xStep) {
                 float x = (float) (left + (local - local0 - x0) / (x1 - x0) * (right - left));
@@ -120,8 +130,34 @@ final class ChartView extends View {
             float x = (float) (left + (t - x0) / (x1 - x0) * (right - left));
             canvas.drawText(elapsed(t), x, bottom + 16 * density * f, small);
         }
+        // Stacked: each series an area on top of the ones before, a thin gap of the background between them, the total on top.
+        if (stacked) {
+            double[] base = new double[seconds.length];
+            for (Series s : series) {
+                Path area = new Path(); boolean open = false; int first = -1, lastPoint = -1;
+                for (int i = 0; i < seconds.length && i < s.values.length; i++) {
+                    double v = Double.isNaN(s.values[i]) ? 0 : s.values[i];
+                    float x = (float) (left + (seconds[i] - x0) / (x1 - x0) * (right - left)), y = (float) (bottom - (base[i] + v - lo) / (hi - lo) * (bottom - top));
+                    if (open) area.lineTo(x, y); else { area.moveTo(x, y); open = true; first = i; }
+                    lastPoint = i;
+                }
+                for (int i = lastPoint; i >= first && i >= 0; i--) {
+                    float x = (float) (left + (seconds[i] - x0) / (x1 - x0) * (right - left)), y = (float) (bottom - (base[i] - lo) / (hi - lo) * (bottom - top));
+                    area.lineTo(x, y);
+                }
+                area.close(); fill.setColor(s.color); canvas.drawPath(area, fill);
+                for (int i = 0; i < seconds.length && i < s.values.length; i++) base[i] += Double.isNaN(s.values[i]) ? 0 : s.values[i];
+                path.reset(); boolean on = false;
+                for (int i = 0; i < seconds.length; i++) {
+                    float x = (float) (left + (seconds[i] - x0) / (x1 - x0) * (right - left)), y = (float) (bottom - (base[i] - lo) / (hi - lo) * (bottom - top));
+                    if (on) path.lineTo(x, y); else { path.moveTo(x, y); on = true; }
+                }
+                line.setColor(surface); line.setStrokeWidth(1f * density); canvas.drawPath(path, line);
+            }
+            line.setColor(ink); line.setStrokeWidth(2f * density); canvas.drawPath(path, line);
+        }
         // Lines; targets dashed.
-        for (Series s : series) {
+        if (!stacked) for (Series s : series) {
             line.setColor(s.color); line.setStrokeWidth((s.dashed ? 1.5f : 2f) * density);
             line.setPathEffect(s.dashed ? new DashPathEffect(new float[] {6 * density, 4 * density}, 0) : null);
             path.reset(); boolean open = false;
@@ -146,7 +182,7 @@ final class ChartView extends View {
         }
         line.setPathEffect(null);
         // Direct end labels for measured series, nudged apart so they never overlap; text stays in ink.
-        if (series.size() > 1) {
+        if (series.size() > 1 && !stacked) {
             List<float[]> ends = new ArrayList<>(); List<String> names = new ArrayList<>();
             for (Series s : series) {
                 if (s.dashed) continue; double v = last(s.values); if (Double.isNaN(v)) continue;
@@ -164,10 +200,16 @@ final class ChartView extends View {
             float x = (float) (left + (seconds[touched] - x0) / (x1 - x0) * (right - left));
             rule.setColor(muted); canvas.drawLine(x, top, x, bottom, rule);
             List<String> rows = new ArrayList<>(); List<Integer> colors = new ArrayList<>();
-            rows.add(clockStart > 0 ? clockOfDay((long) (localSeconds(clockStart) + seconds[touched])) + " · " + spanWords(seconds[touched]) + " into the print" : elapsed(seconds[touched]));
+            if (layerAxis) rows.add("Layer " + format(seconds[touched]));
+            else rows.add(clockStart > 0 ? clockOfDay((long) (localSeconds(clockStart) + seconds[touched])) + " · " + spanWords(seconds[touched]) + " into the print" : elapsed(seconds[touched]));
             colors.add(0);
-            for (Series s : series) if (touched < s.values.length && !Double.isNaN(s.values[touched])) { rows.add(s.name + "  " + format(s.values[touched]) + unit); colors.add(s.color); }
-            for (Series s : series) if (!s.dashed && touched < s.values.length && !Double.isNaN(s.values[touched])) {
+            double whole = stacked ? total(touched) : Double.NaN;
+            if (stacked && !Double.isNaN(whole)) { rows.add("All  " + format(whole) + unit); colors.add(0); }
+            for (Series s : series) if (touched < s.values.length && !Double.isNaN(s.values[touched]) && !(stacked && s.values[touched] <= 0)) {
+                rows.add(s.name + "  " + format(s.values[touched]) + unit + (stacked && whole > 0 ? " · " + Math.round(100 * s.values[touched] / whole) + " %" : ""));
+                colors.add(s.color);
+            }
+            if (!stacked) for (Series s : series) if (!s.dashed && touched < s.values.length && !Double.isNaN(s.values[touched])) {
                 float y = (float) (bottom - (s.values[touched] - lo) / (hi - lo) * (bottom - top));
                 fill.setColor(surface); canvas.drawCircle(x, y, 6 * density, fill); fill.setColor(s.color); canvas.drawCircle(x, y, 4 * density, fill);
             }

@@ -200,6 +200,25 @@ public class A11yRenderTest {
     }
 
     /** The field checklist, with one check marked so its note box shows. */
+    /** The recording's per-layer cross section: line types stacked in the viewer's colours, the total on top, a layer read out. */
+    @Test public void layerCrossSection() throws Exception {
+        int[] types = {0, 1, 3, 4, 5};
+        double[] layer = new double[60]; for (int i = 0; i < 60; i++) layer[i] = i + 1;
+        java.util.List<ChartView.Series> parts = new java.util.ArrayList<>();
+        for (int type : types) {
+            double[] v = new double[60];
+            for (int i = 0; i < 60; i++) v[i] = type == 0 ? 40 : type == 1 ? 70 : type == 3 ? (i < 5 || i > 54 ? 0 : 120 + 30 * Math.sin(i / 6.0)) : type == 4 ? (i < 5 ? 300 : i > 54 ? 0 : 20) : (i > 54 ? 300 : 0);
+            parts.add(new ChartView.Series(GcodeToolpath.FEATURES[type], android.graphics.Color.parseColor(GcodeViewerActivity.PALETTE[type]), v, false));
+        }
+        ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6).layers().stacked();
+        chart.set("Cross section by line type", " mm²", layer, parts, 0, Double.NaN);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(context()); frame.setBackgroundColor(0xfff2f5f6); frame.addView(chart);
+        frame.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(780, View.MeasureSpec.EXACTLY));
+        frame.layout(0, 0, 1080, 780);
+        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, 600, 400, 0));
+        shot(frame, 780, "layer-cross-section", 1.0f);
+    }
+
     @Test public void fieldCheck() throws Exception {
         out();
         for (float scale : SCALES) {

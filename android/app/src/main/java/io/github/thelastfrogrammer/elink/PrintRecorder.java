@@ -18,7 +18,9 @@ public final class PrintRecorder {
     public static final String[] COLUMNS = {"time_ms", "elapsed_s", "progress", "layer", "total_layers", "remaining_s", "z_mm",
         "nozzle_c", "nozzle_target_c", "bed_c", "bed_target_c", "chamber_c", "part_fan_pct", "aux_fan_pct", "chamber_fan_pct", "speed_mode", "sub_status", "source",
         "tray", "tray_rgb",   // the active CANVAS tray (1 = unit 0 tray 0) and its filament colour as 0xRRGGBB, when reported
-        "extruded_mm"};       // filament the G-code has fed so far (commanded, from the extruder position; not measured)
+        "extruded_mm",        // filament the G-code has fed so far (commanded, from the extruder position; not measured)
+        "speed",              // the speed the printer reports for its current move, as it reports it
+        "filament_detected"}; // the filament sensor: 1 filament there, 0 none (runout), blank when not reported
 
     public static final class Recording {
         public final File csv, meta;
@@ -447,13 +449,14 @@ public final class PrintRecorder {
             number(status.optJSONObject("heater_bed"), "temperature"), number(status.optJSONObject("heater_bed"), "target"),
             number(status.optJSONObject("ztemperature_sensor"), "temperature"),
             fan(status, "fan"), fan(status, "aux_fan"), fan(status, "box_fan"),
-            number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1], "" };
+            number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1], "", number(position, "speed"),
+            number(status.optJSONObject("extruder"), "filament_detected") };
         // Filament fed: the extruder position's steps, skipping resets (a G92 E0 jumps back) and jumps; retractions cancel out.
-        double e = position == null || !position.has("e") ? Double.NaN : position.optDouble("e", Double.NaN);
+        double e = Cc2Codec.extruderPosition(position);
         if (!Double.isNaN(e)) {
             if (!Double.isNaN(current.lastE)) { double step = e - current.lastE; if (step > -50 && step < 5000) current.extrudedMm = Math.max(0, current.extrudedMm + step); }
             current.lastE = e;
-            cells[cells.length - 1] = String.format(Locale.ROOT, "%.1f", current.extrudedMm);
+            cells[column("extruded_mm")] = String.format(Locale.ROOT, "%.1f", current.extrudedMm);
         }
         if (current.samples == 0 && current.startProgress < 0 && machine != null) current.startProgress = machine.optInt("progress", -1);
         if (print != null && print.has("print_duration")) current.printDuration = print.optLong("print_duration");

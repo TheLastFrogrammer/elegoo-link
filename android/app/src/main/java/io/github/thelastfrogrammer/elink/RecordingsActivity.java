@@ -342,6 +342,8 @@ public final class RecordingsActivity extends Activity {
         if (!Double.isNaN(q)) extra.add(String.format(Locale.getDefault(), "The printer estimated %s at 10 %%; it took %s (%+.0f %%).", duration(recording.estimate * 1000), duration(Math.round(recording.estimate * q) * 1000), (q - 1) * 100));
         String last = lastReading(rows);
         if (!last.isEmpty()) extra.add(last + ".");
+        String runout = runouts(rows, t0(rows));
+        if (!runout.isEmpty()) extra.add(runout);
         String coverage = coverage(rows, recording);
         if (!coverage.isEmpty()) extra.add(coverage);
         if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
@@ -353,7 +355,7 @@ public final class RecordingsActivity extends Activity {
         LinearLayout charts = all ? content : card();
         LinearLayout choices = new LinearLayout(this); choices.setOrientation(LinearLayout.HORIZONTAL); if (!all) charts.addView(choices);
         List<View> shownCharts = new ArrayList<>(); List<Button> chips = new ArrayList<>();
-        String[][] names = {{"Progress", "Progress"}, {"Layer", "Layer number"}, {"Temps", "Temperatures"}, {"Fans", "Fan speed"}};
+        String[][] names = {{"Progress", "Progress"}, {"Layer", "Layer number"}, {"Temps", "Temperatures"}, {"Fans", "Fan speed"}, {"Speed", "Speed (as the printer reports it)"}};
         List<List<ChartView.Series>> series = Arrays.asList(
             Collections.singletonList(new ChartView.Series("Progress", blue, column(rows, "progress"), false)),
             Collections.singletonList(new ChartView.Series("Layer", blue, column(rows, "layer"), false)),
@@ -361,9 +363,10 @@ public final class RecordingsActivity extends Activity {
                 new ChartView.Series("Bed", orange, column(rows, "bed_c"), false), new ChartView.Series("Bed target", orange, column(rows, "bed_target_c"), true),
                 new ChartView.Series("Chamber", aqua, column(rows, "chamber_c"), false)),
             Arrays.asList(new ChartView.Series("Part fan", blue, column(rows, "part_fan_pct"), false), new ChartView.Series("Aux fan", orange, column(rows, "aux_fan_pct"), false),
-                new ChartView.Series("Chamber fan", aqua, column(rows, "chamber_fan_pct"), false)));
-        String[] units = {" %", "", " °C", " %"};
-        double[][] ranges = {{0, 100}, {Double.NaN, Double.NaN}, {Double.NaN, Double.NaN}, {0, 100}};
+                new ChartView.Series("Chamber fan", aqua, column(rows, "chamber_fan_pct"), false)),
+            Collections.singletonList(new ChartView.Series("Speed", blue, column(rows, "speed"), false)));
+        String[] units = {" %", "", " °C", " %", ""};
+        double[][] ranges = {{0, 100}, {Double.NaN, Double.NaN}, {Double.NaN, Double.NaN}, {0, 100}, {Double.NaN, Double.NaN}};
         android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         int accent = dark ? 0xff5fd4c4 : 0xff00796b;
         Runnable[] pick = new Runnable[1];
@@ -390,12 +393,96 @@ public final class RecordingsActivity extends Activity {
         } else if (!all) content.removeView(charts);
         trays(rows, t);
         material(recording, rows, t);
+        layerCharts(recording);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
         action(actions, "All readings…", () -> table(recording, rows));
         action(actions, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
             .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
+    }
+
+    private static double[] t0(List<double[]> rows) { return column(rows, "elapsed_s"); }
+    /** When the filament sensor reported no filament during the print, in words ("" when it never did or does not report). */
+    static String runouts(List<double[]> rows, double[] t) {
+        double[] sensor = column(rows, "filament_detected"); List<String> when = new ArrayList<>(); boolean was = true;
+        for (int i = 0; i < sensor.length; i++) {
+            if (Double.isNaN(sensor[i])) continue;
+            boolean there = sensor[i] > 0.5;
+            if (!there && was) when.add(ChartView.elapsed(t[i]));
+            was = there;
+        }
+        return when.isEmpty() ? "" : "The filament sensor reported no filament at " + String.join(", ", when.subList(0, Math.min(6, when.size()))) + (when.size() > 6 ? " and more" : "") + " into the print.";
+    }
+
+    /**
+     * What the print's G-code asks of each layer (LayerProfile): its cross section by line type, stacked in the viewer's
+     * colours, and the speed, flow and acceleration its lines run at. Needs the file on the phone, as the material card.
+     */
+    private void layerCharts(PrintRecorder.Recording recording) {
+        File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
+        LinearLayout card = card(); label(card, "Each layer, from the print's G-code", 15, ink, true);
+        if (file == null) { label(card, "The print's file is not on this phone. Download it from the Files tab, or slice it here, to see each layer's line types, speed, flow and acceleration.", 13, muted, false); return; }
+        TextView note = label(card, "Reading the print's file…", 13, muted, false);
+        new Thread(() -> {
+            LayerProfile read; try { read = LayerProfile.read(file); } catch (Exception | OutOfMemoryError failed) { read = null; }
+            LayerProfile p = read;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (p == null || p.layers == 0) { note.setText("The print's file could not be read."); return; }
+                double[] layer = new double[p.layers]; for (int i = 0; i < layer.length; i++) layer[i] = i + 1;
+                List<View> views = new ArrayList<>(); List<String> chipNames = new ArrayList<>();
+                // Cross section, by line type: how much of each layer each kind of line is.
+                List<ChartView.Series> parts = new ArrayList<>();
+                for (int type : p.typesUsed()) parts.add(new ChartView.Series(GcodeToolpath.FEATURES[type], Color.parseColor(GcodeViewerActivity.PALETTE[type]), p.series(type), false));
+                ChartView cross = new ChartView(this, ink, muted, grid, surface).layers().stacked();
+                cross.set("Cross section by line type", " mm²", layer, parts, 0, Double.NaN);
+                views.add(cross); chipNames.add("Section");
+                ChartView speed = new ChartView(this, ink, muted, grid, surface).layers();
+                speed.set("Print speed (mean of the lines)", " mm/s", layer, Collections.singletonList(new ChartView.Series("Speed", blue, p.column(p.speed), false)), 0, Double.NaN);
+                views.add(speed); chipNames.add("Speed");
+                List<ChartView.Series> flowLines = new ArrayList<>(); flowLines.add(new ChartView.Series("Highest flow", orange, p.column(p.flowMax), false));
+                if (p.maxFlow > 0) { double[] limit = new double[p.layers]; Arrays.fill(limit, p.maxFlow); flowLines.add(new ChartView.Series("Filament's limit", orange, limit, true)); }
+                ChartView flow = new ChartView(this, ink, muted, grid, surface).layers();
+                flow.set("Flow (filament melted per second)", " mm³/s", layer, flowLines, 0, Double.NaN);
+                views.add(flow); chipNames.add("Flow");
+                ChartView accel = new ChartView(this, ink, muted, grid, surface).layers();
+                accel.set("Acceleration", " mm/s²", layer, Arrays.asList(new ChartView.Series("Mean", blue, p.column(p.accel), false), new ChartView.Series("Highest", aqua, p.column(p.accelMax), false)), 0, Double.NaN);
+                views.add(accel); chipNames.add("Accel");
+                // Layers asking for more than the filament can melt: a common reason for thin, rough walls.
+                StringBuilder words = new StringBuilder("What the file asks for at each layer; the printer may run slower (speed modes, its own limits). Touch a chart to read a layer.");
+                if (p.maxFlow > 0) {
+                    List<String> over = new ArrayList<>(); int startRun = -1;
+                    for (int i = 0; i <= p.layers; i++) {
+                        boolean high = i < p.layers && p.flowMax[i] > p.maxFlow;
+                        if (high && startRun < 0) startRun = i;
+                        if (!high && startRun >= 0) { over.add(startRun + 1 == i ? String.valueOf(i) : (startRun + 1) + "–" + i); startRun = -1; }
+                    }
+                    if (!over.isEmpty()) words.append(String.format(Locale.getDefault(), "\nLayers %s ask for more flow than the filament's limit (%.0f mm³/s): those can come out thin or rough.", String.join(", ", over.subList(0, Math.min(5, over.size()))) + (over.size() > 5 ? "…" : ""), p.maxFlow));
+                }
+                note.setText(words);
+                LinearLayout chips = new LinearLayout(this); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
+                android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+                List<Button> buttons = new ArrayList<>(); int accent = dark ? 0xff5fd4c4 : 0xff00796b;
+                Runnable[] pick = new Runnable[1];
+                for (int i = 0; i < views.size(); i++) {
+                    int index = i;
+                    action(chips, chipNames.get(i), () -> { prefs.edit().putInt("layerChart", index).apply(); pick[0].run(); });
+                    Button chip = (Button) chips.getChildAt(chips.getChildCount() - 1); chip.setMaxLines(1); chip.setTextSize(14); chip.setPadding(0, dp(8), 0, dp(8)); buttons.add(chip);
+                    card.addView(views.get(i), new LinearLayout.LayoutParams(-1, dp(260)));
+                }
+                pick[0] = () -> {
+                    int chosen = Math.min(prefs.getInt("layerChart", 0), views.size() - 1);
+                    for (int i = 0; i < views.size(); i++) {
+                        boolean on = i == chosen; views.get(i).setVisibility(on ? View.VISIBLE : View.GONE);
+                        buttons.get(i).setTextColor(on ? (dark ? 0xff0e1417 : Color.WHITE) : accent);
+                        ((android.graphics.drawable.RippleDrawable) buttons.get(i).getBackground()).getDrawable(0).setTint(on ? accent : (dark ? 0xff21343a : 0xffe2efed));
+                        A11y.state(buttons.get(i), on ? "Chosen" : "");
+                    }
+                };
+                pick[0].run();
+            });
+        }, "recording-layers").start();
     }
 
     // ---- Pictures, trays and material ----

@@ -129,6 +129,17 @@ public final class Cc2Codec {
         return head != null && head.optString("homed_axes", "").toLowerCase(Locale.ROOT).contains(axis);
     }
     /** Print head position: gcode_move (Elegoo's page) or gcode_move_inf (SDK). */
+    /**
+     * The extruder's position (mm of filament fed since its last reset) from a position object, or NaN: the CC2 reports it
+     * as gcode_move.extruder (Klipper-style "e" is read too).
+     */
+    public static double extruderPosition(JSONObject move) {
+        if (move == null) return Double.NaN;
+        Object value = move.has("e") ? move.opt("e") : move.opt("extruder");
+        return value instanceof Number ? ((Number) value).doubleValue() : Double.NaN;
+    }
+    /** The speed the printer reports in its position object (as it reports it), or NaN. */
+    public static double reportedSpeed(JSONObject move) { Object value = move == null ? null : move.opt("speed"); return value instanceof Number ? ((Number) value).doubleValue() : Double.NaN; }
     public static JSONObject position(JSONObject status) {
         JSONObject move = status.optJSONObject("gcode_move"); return move != null ? move : status.optJSONObject("gcode_move_inf");
     }
