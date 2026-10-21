@@ -10,7 +10,7 @@ N03 (physical serial access) and N04 (console discovery) are still hardware expe
 | Mainboard marking/revision and header orientation photo | |
 | Header reference and evidence tying it to this exact board | |
 | Measured TX/RX logic levels and measurement method | |
-| UART adapter model and supported logic levels | |
+| UART adapter model and supported logic levels | Owner-confirmed SH-U09C5; manufacturer documents selectable 1.8/2.5/3.3/5-V TTL. Actual selection and electrical checks pending. |
 | Receive-only connections used; adapter power lead disconnected | |
 | Observed baud, data bits, parity and stop bits | |
 | Raw boot-capture filename, duration and SHA-256 | |

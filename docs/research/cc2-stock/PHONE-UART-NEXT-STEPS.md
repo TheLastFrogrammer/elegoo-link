@@ -1,6 +1,8 @@
 # Next owner-access steps with the phone
 
-Current checkpoint: 17 October 2026. The owner has Termux/Python, limited convenient laptop access and no USB UART adapter. Current screenshots establish TCP 22/80 refusal and TCP 1883/8080 reachability, without a protocol handshake. Exact current firmware and network mode remain unrecorded. The [field record](access/evidence/OWNER-NETWORK-OBSERVATIONS.json) and prior app tests are the starting point; do not repeat PIN/port/camera experiments as a new access lead.
+Current checkpoint: 20 October 2026. The owner has confirmed a **DSD TECH SH-U09C5** and supplied its photo; actual jumper setting, phone loopback, printer-side logic levels and header mapping remain unverified. The owner has Termux/Python and limited convenient laptop access. Earlier screenshots establish TCP 22/80 refusal and TCP 1883/8080 reachability, without a protocol handshake. Exact current firmware and network mode remain unrecorded. The [field record](access/evidence/OWNER-NETWORK-OBSERVATIONS.json) and prior app tests are the starting point; do not repeat PIN/port/camera experiments as a new access lead. Follow the current [hardware/app execution plan](FINAL-CONNECTION-AND-APP-PLAN.md).
+
+The shared [OpenCentauri FEL/UART guide review](OPENCENTAURI-FEL-UART-REVIEW.md) separates its CC1 bench procedure from the CC2 header reference and normal stock-console trial. FEL/RAM recovery is a separate candidate, not a prerequisite for ordinary UART observation.
 
 ## 1. Prepare without opening or buying anything
 
@@ -22,7 +24,7 @@ Current checkpoint: 17 October 2026. The owner has Termux/Python, limited conven
 
 An adapter with a 5-V supply pin is not necessarily a 5-V logic adapter. A common CP2102/FT232/CH340 name is not enough to select an exact board. Match both the adapter's transmitted voltage and the printer receiver's tolerance before enabling transmit. Avoid PC RS-232 voltage-level adapters. The phone gets USB-device access through Android's permission API; a Termux process should not be assumed to see `/dev/ttyUSB0`.
 
-The current inexpensive candidate is **DFRobot FIT0416** (documented selectable 1.8/3.3/5-V TTL signals, $10.90 at check time), with exact distributor links and USB-cable qualifications in the [sourcing guide](CONNECTION-SOURCING.md). Qualify phone enumeration and an adapter-only loopback before printer wiring. Do not select the signal voltage from the UART label.
+The owner now has **DSD TECH SH-U09C5**, whose [manufacturer](https://www.deshide.com/product-details_1663161.html) documents 1.8/2.5/3.3/5-V TTL levels. The older [sourcing guide](CONNECTION-SOURCING.md) remains a comparison, not a need to buy another adapter. Qualify phone enumeration and an adapter-only loopback before printer wiring. A 3V3 setting used for the isolated loopback does not establish the printer's signal voltage. Do not select the printer-side level from the UART label.
 
 A plain USB cable is not a qualified mainboard shell path. The printer's toolhead USB-C connection is documented as carrying **24 V** and must not be connected to the phone or laptop.
 
