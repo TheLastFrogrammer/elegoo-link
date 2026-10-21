@@ -261,11 +261,15 @@ static void compute_flush_volumes(DynamicPrintConfig& config)
 static std::set<int> used_filaments(const Model& model)
 {
     std::set<int> used;
-    for (const ModelObject* object : model.objects)
+    for (const ModelObject* object : model.objects) {
         for (const ModelVolume* volume : object->volumes)
             if (volume->is_model_part())
                 for (int id : volume->get_extruders())
                     if (id > 0) used.insert(id);
+        // Colour by height: each band's filament prints too.
+        for (const auto& [range, band] : object->layer_config_ranges)
+            if (band.has("extruder") && band.opt_int("extruder") > 0) used.insert(band.opt_int("extruder"));
+    }
     return used;
 }
 
@@ -1155,6 +1159,25 @@ Engine::Loaded Engine::load(const std::vector<std::string>& models, const Select
             if (vector->size() < filament_count) vector->resize(filament_count);
             vector->set_at(single.get(), slot, 0);
         }
+    // Colour by height: each band becomes a height range of its object with its filament, at the object's layer height.
+    if (!calibrating)
+        for (size_t file = 0; file < loaded.objects.size(); ++file)
+            for (size_t o = 0; o < loaded.objects[file].size(); ++o) {
+                const int index = loaded.objects[file][o];
+                if (index < 0) continue;
+                ModelObject* object = loaded.model.objects[index];
+                for (const Selection::HeightRange& range : selection.height_ranges) {
+                    if ((range.file >= 0 && range.file != int(file)) || (range.object >= 0 && range.object != int(o))) continue;
+                    if (!(range.from >= 0 && range.to > range.from))
+                        throw std::runtime_error("A colour band must start at 0 mm or above and end above its start");
+                    if (range.slot < 1 || range.slot > int(filament_count))
+                        throw std::runtime_error("A colour band uses filament " + std::to_string(range.slot) + ", but only " + std::to_string(filament_count) + " are set up");
+                    const double layer = object->config.has("layer_height") ? object->config.opt_float("layer_height") : config.opt_float("layer_height");
+                    ModelConfig& band = object->layer_config_ranges[t_layer_height_range(range.from, range.to)];
+                    band.set_key_value("layer_height", new ConfigOptionFloat(layer));   // a range always carries its layer height
+                    band.set_key_value("extruder", new ConfigOptionInt(range.slot));
+                }
+            }
     if (calibrating) {
         if (need_models)
             loaded.calibration = setup_calibration(loaded.model, config, selection.calibration, m_state->resources, loaded.pattern);
@@ -1246,6 +1269,13 @@ Selection selection_from_json(const std::string& text)
             if (item.contains("values"))
                 for (const auto& [key, value] : item["values"].items()) settings.values.emplace_back(key, value.is_string() ? value.get<std::string>() : value.dump());
             selection.object_settings.push_back(settings);
+        }
+    if (json.contains("height_ranges"))
+        for (const auto& item : json["height_ranges"]) {
+            Selection::HeightRange range;
+            range.file = item.value("file", -1); range.object = item.value("object", -1);
+            range.from = item.value("from", 0.0); range.to = item.value("to", 0.0); range.slot = item.value("slot", 1);
+            selection.height_ranges.push_back(range);
         }
     if (json.contains("arrange")) {
         const auto& a = json["arrange"];

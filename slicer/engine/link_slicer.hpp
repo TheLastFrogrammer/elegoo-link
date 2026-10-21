@@ -56,6 +56,10 @@ struct Selection {
     // Add settings): process settings an object can have (see object_setting()), on top of the process and `overrides`.
     struct ObjectSettings { int file = 0, object = 0; std::vector<std::pair<std::string, std::string>> values; };
     std::vector<ObjectSettings> object_settings;
+    // Colour by height, as the desktop's height range modifier: from `from` to `to` mm above the bottom of the placed
+    // object, it prints with filament `slot` (1-based). `file` / `object` pick one object (-1: every one).
+    struct HeightRange { int file = -1, object = -1; double from = 0, to = 0; int slot = 1; };
+    std::vector<HeightRange> height_ranges;
     // A calibration print instead of the model files, set up as ElegooSlicer's Calibration menu does it with filament
     // slot 1: "temperature" (tower, start/end in °C), "pressure_advance" (tower), "flow" (pass 1 or 2 in `start`),
     // "max_flow" (mm³/s), "retraction" (mm), "pa_line" and "pa_pattern" (pressure advance lines or the corner
