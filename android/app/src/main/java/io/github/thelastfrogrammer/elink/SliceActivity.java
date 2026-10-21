@@ -531,6 +531,7 @@ public final class SliceActivity extends Activity {
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
         uploadPrint = button(resultCard, "Upload and print…", this::uploadAndPrint, true);
+        button(resultCard, "Layer charts", () -> { if (sliced != null && sliced.isFile()) startActivity(new Intent(this, LayerChartsActivity.class).putExtra(LayerChartsActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, slicedName)); }, false);
         printerHint = label(resultCard, "", 12, muted, false);
         printerFix = button(resultCard, "Open Settings (the file waits in Files)", this::openSettingsTab, false);
         resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));

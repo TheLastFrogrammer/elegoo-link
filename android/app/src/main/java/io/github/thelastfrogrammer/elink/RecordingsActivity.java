@@ -430,57 +430,9 @@ public final class RecordingsActivity extends Activity {
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 if (p == null || p.layers == 0) { note.setText("The print's file could not be read."); return; }
-                double[] layer = new double[p.layers]; for (int i = 0; i < layer.length; i++) layer[i] = i + 1;
-                List<View> views = new ArrayList<>(); List<String> chipNames = new ArrayList<>();
-                // Cross section, by line type: how much of each layer each kind of line is.
-                List<ChartView.Series> parts = new ArrayList<>();
-                for (int type : p.typesUsed()) parts.add(new ChartView.Series(GcodeToolpath.FEATURES[type], Color.parseColor(GcodeViewerActivity.PALETTE[type]), p.series(type), false));
-                ChartView cross = new ChartView(this, ink, muted, grid, surface).layers().stacked();
-                cross.set("Cross section by line type", " mm²", layer, parts, 0, Double.NaN);
-                views.add(cross); chipNames.add("Section");
-                ChartView speed = new ChartView(this, ink, muted, grid, surface).layers();
-                speed.set("Print speed (mean of the lines)", " mm/s", layer, Collections.singletonList(new ChartView.Series("Speed", blue, p.column(p.speed), false)), 0, Double.NaN);
-                views.add(speed); chipNames.add("Speed");
-                List<ChartView.Series> flowLines = new ArrayList<>(); flowLines.add(new ChartView.Series("Highest flow", orange, p.column(p.flowMax), false));
-                if (p.maxFlow > 0) { double[] limit = new double[p.layers]; Arrays.fill(limit, p.maxFlow); flowLines.add(new ChartView.Series("Filament's limit", orange, limit, true)); }
-                ChartView flow = new ChartView(this, ink, muted, grid, surface).layers();
-                flow.set("Flow (filament melted per second)", " mm³/s", layer, flowLines, 0, Double.NaN);
-                views.add(flow); chipNames.add("Flow");
-                ChartView accel = new ChartView(this, ink, muted, grid, surface).layers();
-                accel.set("Acceleration", " mm/s²", layer, Arrays.asList(new ChartView.Series("Mean", blue, p.column(p.accel), false), new ChartView.Series("Highest", aqua, p.column(p.accelMax), false)), 0, Double.NaN);
-                views.add(accel); chipNames.add("Accel");
-                // Layers asking for more than the filament can melt: a common reason for thin, rough walls.
-                StringBuilder words = new StringBuilder("What the file asks for at each layer; the printer may run slower (speed modes, its own limits). Touch a chart to read a layer.");
-                if (p.maxFlow > 0) {
-                    List<String> over = new ArrayList<>(); int startRun = -1;
-                    for (int i = 0; i <= p.layers; i++) {
-                        boolean high = i < p.layers && p.flowMax[i] > p.maxFlow;
-                        if (high && startRun < 0) startRun = i;
-                        if (!high && startRun >= 0) { over.add(startRun + 1 == i ? String.valueOf(i) : (startRun + 1) + "–" + i); startRun = -1; }
-                    }
-                    if (!over.isEmpty()) words.append(String.format(Locale.getDefault(), "\nLayers %s ask for more flow than the filament's limit (%.0f mm³/s): those can come out thin or rough.", String.join(", ", over.subList(0, Math.min(5, over.size()))) + (over.size() > 5 ? "…" : ""), p.maxFlow));
-                }
-                note.setText(words);
-                LinearLayout chips = new LinearLayout(this); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
-                android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
-                List<Button> buttons = new ArrayList<>(); int accent = dark ? 0xff5fd4c4 : 0xff00796b;
-                Runnable[] pick = new Runnable[1];
-                for (int i = 0; i < views.size(); i++) {
-                    int index = i;
-                    action(chips, chipNames.get(i), () -> { prefs.edit().putInt("layerChart", index).apply(); pick[0].run(); });
-                    Button chip = (Button) chips.getChildAt(chips.getChildCount() - 1); chip.setMaxLines(1); chip.setTextSize(14); chip.setPadding(0, dp(8), 0, dp(8)); buttons.add(chip);
-                    card.addView(views.get(i), new LinearLayout.LayoutParams(-1, dp(260)));
-                }
-                pick[0] = () -> {
-                    int chosen = Math.min(prefs.getInt("layerChart", 0), views.size() - 1);
-                    for (int i = 0; i < views.size(); i++) {
-                        boolean on = i == chosen; views.get(i).setVisibility(on ? View.VISIBLE : View.GONE);
-                        buttons.get(i).setTextColor(on ? (dark ? 0xff0e1417 : Color.WHITE) : accent);
-                        ((android.graphics.drawable.RippleDrawable) buttons.get(i).getBackground()).getDrawable(0).setTint(on ? accent : (dark ? 0xff21343a : 0xffe2efed));
-                        A11y.state(buttons.get(i), on ? "Chosen" : "");
-                    }
-                };
-                pick[0].run();
+                note.setText(LayerCharts.note(p));
+                LayerCharts.fill(this, card, p, ink, muted, grid, surface, dark, getSharedPreferences("workshop-settings", MODE_PRIVATE),
+                    (row, text, action) -> { action(row, text, action); Button b = (Button) row.getChildAt(row.getChildCount() - 1); b.setPadding(0, dp(8), 0, dp(8)); return b; });
             });
         }, "recording-layers").start();
     }

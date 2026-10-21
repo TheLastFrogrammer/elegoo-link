@@ -50,7 +50,7 @@ public final class MainActivity extends Activity {
     private String dismissedFeedback = "", renderedCanvas;
     private GcodeInspector.Report renderedReport;
     private Button materialDetails;
-    private Button saveCopy, shareInspection, clearCopy, cancelDownload;
+    private Button saveCopy, shareInspection, clearCopy, cancelDownload, layerCharts;
     private int INK = 0xff17252c, MUTED = 0xff5a6d76, TEAL = 0xff00796b, BACKGROUND = 0xfff2f5f6, SURFACE = Color.WHITE, BUTTON = 0xffe2efed,
         TILE = 0xfff4f8f8, TRACK = 0xffdbe6e6, ERROR = 0xffb3261e, AMBER = 0xff855700, NAV = Color.WHITE;
     private boolean dark;
@@ -579,6 +579,10 @@ public final class MainActivity extends Activity {
         previewToolpath = rowButton(viewRow, "Preview toolpath", () -> {
             if (printer == null || printer.selectedFile == null) return;
             startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, printer.selectedFile.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, printer.selectedName));
+        }, false);
+        layerCharts = rowButton(viewRow, "Layer charts", () -> {
+            if (printer == null || printer.selectedFile == null) return;
+            startActivity(new Intent(this, LayerChartsActivity.class).putExtra(LayerChartsActivity.EXTRA_FILE, printer.selectedFile.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, printer.selectedName));
         }, false);
         materialDetails = rowButton(viewRow, "Materials…", () -> {
             if (printer == null || printer.selectedReport == null) return;
@@ -1929,6 +1933,7 @@ public final class MainActivity extends Activity {
             else if (printer != null) { previewAfterDownload = name; printer.download(storage, name); }
         });
         preview.setEnabled(phoneCopy != null || printer != null && !printer.fileBusy());
+        if (phoneCopy != null) button(body, "Layer charts", () -> { dialog.dismiss(); startActivity(new Intent(this, LayerChartsActivity.class).putExtra(LayerChartsActivity.EXTRA_FILE, phoneCopy.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, name)); });
         Button save = button(body, "Save to phone…", () -> { dialog.dismiss(); if (printer != null) { saveAfterDownload = name; printer.download(storage, name); } });
         Button download = button(body, "Keep a copy in this app", () -> { dialog.dismiss(); if (printer != null) printer.download(storage, name); });
         save.setEnabled(printer != null && !printer.fileBusy()); download.setEnabled(printer != null && !printer.fileBusy());
@@ -2945,6 +2950,7 @@ public final class MainActivity extends Activity {
         upload.setEnabled((ready && !printer.pinProbe() || cloudFresh && cloudOk && printer.cloudUploadReady() && !printer.cloudCommandBusy()) && printer.selectedFile != null && !fileBusy && !printer.replacesActivePrint(printer.selectedName));
         upload.setText(printer != null && printer.replacesActivePrint(printer.selectedName) ? "Being printed: cannot replace" : ready || !cloud ? "Upload to printer" : "Upload through the cloud"); pick.setEnabled(printer != null && !fileBusy); recentSlices.setEnabled(printer != null && !fileBusy && !SliceStore.list(this).isEmpty());
         boolean hasReport = printer != null && printer.selectedFile != null && printer.selectedReport != null;
+        layerCharts.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
         saveCopy.setEnabled(hasReport && !fileBusy); shareInspection.setEnabled(hasReport && !fileBusy); clearCopy.setEnabled(printer != null && printer.selectedFile != null && !fileBusy);
         GcodeInspector.Report report = hasReport ? printer.selectedReport : null;
         if (renderedReport != report || !hasReport) { renderedReport = report; inspection.setText(hasReport ? report.text() : ""); }

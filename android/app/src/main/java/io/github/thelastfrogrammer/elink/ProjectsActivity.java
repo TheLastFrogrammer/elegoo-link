@@ -766,6 +766,7 @@ public final class ProjectsActivity extends Activity {
         LinearLayout row = ui.row(card);
         if (asset.sliceable() || asset.storage.equals(Projects.EXTERNAL) && ModelSites.MODEL_TYPES.contains(ModelSites.extension(asset.name))) ui.rowButton(row, "Slice", () -> slice(asset), true);
         if (asset.gcode()) ui.rowButton(row, "Preview", () -> preview(asset), true);
+        if (asset.gcode() && asset.storage.equals(Projects.MANAGED)) ui.rowButton(row, "Charts", () -> charts(asset), false).setContentDescription("Layer charts for " + asset.name);
         ui.rowButton(row, asset.storage.equals(Projects.WEB) ? "Open link" : "Open", () -> open(asset), false);
         ui.rowButton(row, "More…", () -> assetMenu(asset, p, partId), false).setContentDescription("More for " + asset.name);
     }
@@ -1006,6 +1007,11 @@ public final class ProjectsActivity extends Activity {
     private void preview(Projects.Asset asset) {
         File f = Projects.managedFile(dir, asset); if (f == null || !f.isFile()) { toast("The kept copy is missing."); return; }
         startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FILE, f.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, asset.name));
+    }
+    /** Each layer of a kept G-code: line types, speed, flow and acceleration (LayerChartsActivity). */
+    private void charts(Projects.Asset asset) {
+        File f = Projects.managedFile(dir, asset); if (f == null || !f.isFile()) { toast("The kept copy is missing."); return; }
+        startActivity(new Intent(this, LayerChartsActivity.class).putExtra(LayerChartsActivity.EXTRA_FILE, f.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, asset.name));
     }
     private void open(Projects.Asset asset) {
         try {

@@ -61,6 +61,7 @@
         <activity android:name=".LogsActivity" android:exported="false" android:label="Logs" />
         <activity android:name=".AutomationActivity" android:exported="false" android:label="Automation workshop" />
         <activity android:name=".FieldCheckActivity" android:exported="false" android:label="Field check" />
+        <activity android:name=".LayerChartsActivity" android:exported="false" android:label="Layer charts" />
         <!-- "Open with" and "Share" for model files (and ZIPs of them, as model sites download) from other apps. -->
         <activity android:name=".SliceActivity" android:exported="true" android:label="Slice a model"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden">
