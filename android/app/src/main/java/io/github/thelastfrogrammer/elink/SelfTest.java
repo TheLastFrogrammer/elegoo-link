@@ -24,13 +24,15 @@ final class SelfTest {
      * in the G-code's frame, shifted, or mirrored. Standard G-code only, as the park.
      */
     static final double[][] PROBES = {{30, 30}, {220, 220}};
+    /** The stops in order: each probe point twice, so the camera clock gets four moves that each start after a stop. */
+    static final int[] PROBE_ORDER = {0, 1, 0, 1};
     static final int PROBE_LAYER = 3, PROBE_WAIT_MS = 3000;
     /** How close a reported stop must be to a probe point to count as it (mm). */
     static final double PROBE_NEAR = 1.0;
     static String probeGcode() {
         StringBuilder g = new StringBuilder("{if layer_num == " + PROBE_LAYER + "}\n; Link Workshop self-test: position probe\n")
             .append("SAVE_GCODE_STATE NAME=link_probe\nG91\nG1 Z0.6 F900\nG90\n");
-        for (double[] p : PROBES) g.append(String.format(Locale.ROOT, "G1 X%.1f Y%.1f F18000\nM400\nG4 P%d\n", p[0], p[1], PROBE_WAIT_MS));
+        for (int i : PROBE_ORDER) g.append(String.format(Locale.ROOT, "G1 X%.1f Y%.1f F18000\nM400\nG4 P%d\n", PROBES[i][0], PROBES[i][1], PROBE_WAIT_MS));
         return g.append("RESTORE_GCODE_STATE NAME=link_probe MOVE=1 MOVE_SPEED=250\n{endif}").toString();
     }
     /** Whether a reported position is at one of the probe points (the picture logic leaves those moments alone). */
@@ -65,7 +67,7 @@ final class SelfTest {
 
     /** What it is, for the Field check page and the Slice screen. */
     static final String ABOUT = "A " + (int) WIDTH + " × " + (int) DEPTH + " × " + (int) HEIGHT + " mm block, about ten minutes and 3 g of filament, sliced on this phone "
-        + "with Smooth timelapse, the comparison set and a position probe (on one layer the head stops at two known points). Choose the filament you have loaded, tap Slice, then Upload and print. "
+        + "with Smooth timelapse, the comparison set and a position probe (on one layer the head stops four times at two known points, and the camera's delay is timed from those moves). Choose the filament you have loaded, tap Slice, then Upload and print. "
         + "Keep the phone on your network with the app open or in the background until it finishes: every measured check below gets its answer from this one print.";
 
     private SelfTest() { }

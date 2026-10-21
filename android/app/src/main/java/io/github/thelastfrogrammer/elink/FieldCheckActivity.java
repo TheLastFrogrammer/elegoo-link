@@ -79,6 +79,20 @@ public final class FieldCheckActivity extends Activity {
             TextView title = ui.label(card, PrintChecks.mark(f.verdict) + "  " + f.title, 15, f.verdict == PrintChecks.Verdict.PROBLEM ? ui.error : ui.ink, true);
             title.setContentDescription((f.verdict == PrintChecks.Verdict.WORKS ? "Works: " : f.verdict == PrintChecks.Verdict.PROBLEM ? "Problem: " : "Unsure: ") + f.title);
             ui.label(card, f.evidence + "\n" + (SelfTest.is(r.file) ? "Self-test print" : StatusPresentation.clean(r.file)) + " · " + when.format(new Date(r.start)), 13, ui.muted, false);
+            if (f.id.equals("cameraDelay") && r.checks.cameraDelayMs >= 0) {
+                // Live toolpath's delay for the printer's camera, in tenths of a second (its slider), set only on this tap.
+                int tenths = (int) Math.max(0, Math.min(100, Math.round(r.checks.cameraDelayMs / 100.0)));
+                SharedPreferences viewer = getSharedPreferences("viewer-hints", MODE_PRIVATE);
+                String key = GcodeViewerActivity.camKey("liveDelay", "");
+                LinearLayout row = ui.row(card);
+                Button use = ui.rowButton(row, String.format(Locale.getDefault(), "Use %.1f s in Live toolpath", tenths / 10.0), () -> { }, false);
+                Runnable show = () -> {
+                    boolean set = viewer.getInt(key, 0) == tenths;
+                    use.setEnabled(!set); use.setText(set ? String.format(Locale.getDefault(), "Live toolpath waits %.1f s", tenths / 10.0) : String.format(Locale.getDefault(), "Use %.1f s in Live toolpath (now %.1f s)", tenths / 10.0, viewer.getInt(key, 0) / 10.0));
+                };
+                use.setOnClickListener(v -> { viewer.edit().putInt(key, tenths).apply(); show.run(); });
+                show.run();
+            }
         }
     }
 

@@ -195,6 +195,19 @@ public final class PrintRecorder {
     private LayerReach reach;
     public synchronized void setReach(LayerReach reach) { this.reach = reach; }
     public synchronized boolean hasReach() { return reach != null; }
+    /** The running print's moves reported after a stop, between two times (monotonic ms), for the camera clock. */
+    public synchronized long[] departures(long from, long to) {
+        if (current == null) return new long[0];
+        List<Long> found = new ArrayList<>(); for (long d : current.checks.departures) if (d >= from && d <= to) found.add(d);
+        long[] out = new long[found.size()]; for (int i = 0; i < out.length; i++) out[i] = found.get(i); return out;
+    }
+    /** The camera clock's answer for print `id` (still running): the measured delay, or why there is none. */
+    public synchronized void setCameraDelay(String id, CameraClock.Result result, String problem) {
+        if (current == null || !current.id.equals(id)) return;
+        if (result != null) { current.checks.cameraDelayMs = result.delayMs; current.checks.cameraMoves = result.moves; current.checks.cameraSpreadMs = result.spreadMs; current.checks.cameraProblem = ""; }
+        else current.checks.cameraProblem = problem;
+        save(current);
+    }
     public synchronized boolean headFrom(double x, double y, double cameraX, double cameraY) {
         // A smooth timelapse uses this as its fallback: a layer whose parked moment was missed gets its picture with the head far away.
         if (current == null || !(current.smooth() || current.pictureFar && current.pictureLayers > 0) || Double.isNaN(x) || Double.isNaN(y)) return false;

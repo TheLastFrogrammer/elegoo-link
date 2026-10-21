@@ -27,8 +27,8 @@ In order. Each round ends with tests, a build, and the self-test print when ther
 2. **Safer printing.** Done: the guardian's change check (PictureChange) compares each picture with the ones before it,
    needing no G-code, line-up or colour, and tells of a mess spreading or a part knocked loose (notify only). Next: tune
    it on real recordings; a clearer "is it still printing" in cloud mode, where status comes about every 30 s.
-3. **Timelapse.** Frame alignment (small camera shifts); a camera timing marker in the self-test (the head at a known
-   place at a known moment) to measure the camera's delay without guessing.
+3. **Timelapse.** Frame alignment (small camera shifts). Done: the camera clock in the self-test measures the printer's
+   camera delay from the probe's moves; Field check applies it to Live toolpath on a tap.
 4. **Slicer.** Colour painting for multi-colour prints, then support and seam painting; measure slicing on the phone.
 5. **Engineering.** UI text into string resources (translations, wording without code changes); a first-run guide;
    a signed release build.

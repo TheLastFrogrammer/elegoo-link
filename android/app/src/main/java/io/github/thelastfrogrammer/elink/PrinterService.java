@@ -403,6 +403,36 @@ public final class PrinterService extends Service {
         boolean ask = smooth && recorder.headAt(x, y);
         if (recorder.headFrom(x, y, camera[0], camera[1])) ask = true;
         if (ask && nativeEmpty < 2) nativeNextAt = 0;   // a join now rather than in a minute (two empty joins still wait their 30 minutes)
+        // The self-test's camera clock: the park before the position probe starts recording the camera through the probe.
+        JSONObject print = value.optJSONObject("print_status");
+        if (smooth && SelfTest.is(now.file) && !now.id.equals(clockFor) && print != null && print.optInt("current_layer", -1) == SelfTest.PROBE_LAYER
+            && SmoothTimelapse.parked(x, y, now.parkX, now.parkY)) startCameraClock(now);
+    }
+    /** The print the camera clock last ran for (its recording's id), once per print. */
+    private String clockFor = "";
+    private void startCameraClock(PrintRecorder.Recording now) {
+        clockFor = now.id;
+        String why = ExtraCameras.forPictures(this) != null ? "print pictures come from an added camera; the clock measures the printer's own"
+            : !ready() || route == null ? "the printer's camera is not reachable on this network" : grabbing ? "the camera was busy with a picture" : null;
+        if (why != null) { recorder.setCameraDelay(now.id, null, why); Diagnostics.note(Diagnostics.CAMERA, "camera clock not run: " + why); return; }
+        String url; PrinterHttp.ConnectionFactory http;
+        try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); http = route.http(); }
+        catch (Exception invalid) { recorder.setCameraDelay(now.id, null, "the camera address is not usable"); return; }
+        grabbing = true;   // one connection to the printer's camera at a time: this one also gives the parked picture
+        long started = SystemClock.elapsedRealtime();
+        Diagnostics.note(Diagnostics.CAMERA, "camera clock: recording the printer's camera through the self-test's position probe");
+        CameraClock.capture(url, http, 25_000, () -> recorder.pictureDue(SystemClock.elapsedRealtime()),
+            frame -> main.post(() -> { if (!destroyed) offerFrame(frame, PrintRecorder.PRINTER_CAMERA, "the camera clock's stream"); }),
+            (at, frames, problem) -> {
+                long[] moves = recorder.departures(started, SystemClock.elapsedRealtime());
+                CameraClock.Result result = frames.length < 20 ? null : CameraClock.delay(moves, CameraClock.starts(at, CameraClock.motion(frames)));
+                String why2 = result != null ? "" : frames.length < 20 ? "the camera gave too few frames (" + frames.length + (problem == null ? "" : ", " + problem) + "); a camera view open in the app holds the stream"
+                    : "the moves were not seen in the pictures (" + moves.length + " reported); the probe may be out of the camera's view";
+                recorder.setCameraDelay(now.id, result, why2);
+                Diagnostics.note(Diagnostics.CAMERA, "camera clock: " + frames.length + " frames, " + moves.length + " reported moves; " + (result == null ? "not measured: " + why2
+                    : String.format(Locale.ROOT, "delay %.2f s from %d moves (spread %.2f s)", result.delayMs / 1000.0, result.moves, result.spreadMs / 1000.0)));
+                main.post(() -> grabbing = false);
+            });
     }
     /** After 30 minutes a new try is allowed: the empty count goes back so the grabs lead again. */
     private void nativeRecover() { if (nativeEmpty >= 2 && SystemClock.elapsedRealtime() >= nativeNextAt) nativeEmpty = 0; }

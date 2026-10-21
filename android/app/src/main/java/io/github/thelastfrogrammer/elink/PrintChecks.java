@@ -34,6 +34,7 @@ final class PrintChecks {
         {"estimate", "Slicer time estimate"},
         {"eta", "Printer's time left"},
         {"faults", "No faults during the print"},
+        {"cameraDelay", "Camera delay (printer's camera)"},
     };
 
     /** Margin (mm) around a layer's printed area for a head position to count as on it (travel, wipes, the nozzle's own size). */
@@ -62,6 +63,9 @@ final class PrintChecks {
     // The self-test's position probe: where the head stood still (the same position in readings in a row), {x, y, readings}.
     boolean selfTest; final List<double[]> stops = new ArrayList<>(); private double stillX = Double.NaN, stillY = Double.NaN;
     static final int MAX_STOPS = 60;
+    // The camera clock (self-test): status times of moves after a stop, and the delay measured from them (ms, -1 not yet).
+    final List<Long> departures = new ArrayList<>(); private int stillCount;
+    long cameraDelayMs = -1, cameraSpreadMs; int cameraMoves; String cameraProblem = "";
     // Faults: every status counted, and the fault codes the printer reported while the print ran (at most 20 different ones).
     int statuses; final java.util.TreeSet<String> faults = new java.util.TreeSet<>();
 
@@ -97,6 +101,9 @@ final class PrintChecks {
                     if (stops.size() < MAX_STOPS) stops.add(new double[] {x, y, 2});
                 }
             }
+            // A move reported after a stop (the position jumps when the move starts): the camera clock's events.
+            if (same) stillCount++;
+            else { if (stillCount >= 1 && departures.size() < 400) departures.add(mono); stillCount = 0; }
             stillX = x; stillY = y;
         }
         boolean smooth = !Double.isNaN(parkX) && !Double.isNaN(parkY);
@@ -195,6 +202,12 @@ final class PrintChecks {
             out.add(new Finding("pictures", title("pictures"), worst <= 3_000 ? Verdict.WORKS : worst <= 8_000 ? Verdict.UNSURE : Verdict.PROBLEM, words.toString().trim()));
         }
         if (selfTest && maxLayer > SelfTest.PROBE_LAYER + 2) out.add(probe());
+        if (cameraDelayMs >= 0)
+            out.add(new Finding("cameraDelay", title("cameraDelay"), cameraSpreadMs <= 800 ? Verdict.WORKS : Verdict.UNSURE, String.format(Locale.ROOT,
+                "The picture shows the head moving %.1f s after the status reports it (the middle of %d moves, %.1f s apart at most).%s",
+                cameraDelayMs / 1000.0, cameraMoves, cameraSpreadMs / 1000.0, cameraSpreadMs <= 800 ? " Live toolpath can wait this long so drawing and picture move together." : " They differ a lot, so take it as rough.")));
+        else if (!cameraProblem.isEmpty())
+            out.add(new Finding("cameraDelay", title("cameraDelay"), Verdict.UNSURE, "Not measured: " + cameraProblem + "."));
         // Only once the print has ended: "none" says something only about a whole print.
         if (endedAt >= 0 && statuses >= 30)
             out.add(new Finding("faults", title("faults"), faults.isEmpty() ? Verdict.WORKS : Verdict.PROBLEM, faults.isEmpty()
@@ -294,7 +307,8 @@ final class PrintChecks {
             .put("heat", new org.json.JSONArray(new double[] {heatSamples, heatOk, worstNozzle, worstBed}))
             .put("time", new org.json.JSONArray(new long[] {firstLayerAt, endedAt, fileSeconds, etaAt, etaRemaining, complete ? 1 : 0}))
             .put("file_extruded", fileExtruded).put("self_test", selfTest).put("stops", stopsJson())
-            .put("statuses", statuses).put("faults", new org.json.JSONArray(faults));
+            .put("statuses", statuses).put("faults", new org.json.JSONArray(faults))
+            .put("camera_delay", new org.json.JSONArray(new long[] {cameraDelayMs, cameraMoves, cameraSpreadMs})).put("camera_problem", cameraProblem);
     }
     private org.json.JSONArray stopsJson() throws org.json.JSONException {
         org.json.JSONArray all = new org.json.JSONArray(); for (double[] s : stops) all.put(new org.json.JSONArray(s)); return all;
@@ -313,6 +327,9 @@ final class PrintChecks {
         if (t != null) { c.firstLayerAt = t.optLong(0, -1); c.endedAt = t.optLong(1, -1); c.fileSeconds = t.optLong(2); c.etaAt = t.optLong(3, -1); c.etaRemaining = t.optLong(4); c.complete = t.optInt(5) == 1; }
         c.fileExtruded = json.optDouble("file_extruded", 0); c.selfTest = json.optBoolean("self_test");
         c.statuses = json.optInt("statuses");
+        org.json.JSONArray cd = json.optJSONArray("camera_delay");
+        if (cd != null) { c.cameraDelayMs = cd.optLong(0, -1); c.cameraMoves = cd.optInt(1); c.cameraSpreadMs = cd.optLong(2); }
+        c.cameraProblem = json.optString("camera_problem", "");
         org.json.JSONArray fs = json.optJSONArray("faults"); for (int i = 0; fs != null && i < fs.length(); i++) c.faults.add(fs.optString(i));
         org.json.JSONArray st = json.optJSONArray("stops");
         for (int i = 0; st != null && i < st.length(); i++) { org.json.JSONArray one = st.optJSONArray(i); if (one != null) c.stops.add(new double[] {one.optDouble(0), one.optDouble(1), one.optDouble(2)}); }
