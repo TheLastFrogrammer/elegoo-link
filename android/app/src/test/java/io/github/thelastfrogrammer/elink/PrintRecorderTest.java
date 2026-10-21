@@ -168,6 +168,30 @@ public class PrintRecorderTest {
         for (int i = 0; i < 20; i++) { assertEquals(3.6, rate[i][0], 1e-9); assertEquals(0, rate[i][1], 1e-9); }
     }
 
+    /** Progress in whole percents, read every 20 s: the rate comes out steady, not a sawtooth between step counts. */
+    @Test public void depositionRateIsSteadyWhenProgressMovesInSteps() {
+        int n = 900; double[] t = new double[n]; double[][] cumulative = new double[n][1];
+        for (int i = 0; i < n; i++) { t[i] = i * 20; cumulative[i][0] = Math.floor(t[i] / 147.0) * 147.0; }   // 1 mm³/s, stepping every 147 s
+        double[][] rate = RecordingsActivity.depositionRates(t, cumulative, new double[] {0.001});
+        for (int i = 100; i < n - 100; i++) assertEquals("reading " + i, 3.6, rate[i][0], 0.15);   // within the 20 s reading spacing (whole-window counting swung ±25 %)
+    }
+
+    /** The tray band merges readings into stretches and names the stretches the printer did not report. */
+    @Test public void trayReadingsMergeIntoStretchesWithGapsNamed() {
+        double n = Double.NaN;
+        double[] t = {0, 60, 120, 180, 600, 900, 960}, tray = {3, 3, 3, n, n, 3, 1}, rgb = {0xFF8800, 0xFF8800, 0xFF8800, n, n, 0xFF8800, 0xFFFFFF};
+        List<double[]> s = RecordingsActivity.traySegments(tray, rgb, t);
+        assertEquals(4, s.size());
+        assertArrayEquals(new double[] {0, 180, 3, 0xFF8800}, s.get(0), 0);
+        assertTrue(Double.isNaN(s.get(1)[2])); assertEquals(180, s.get(1)[0], 0); assertEquals(900, s.get(1)[1], 0);
+        assertArrayEquals(new double[] {960, 960, 1, 0xFFFFFF}, s.get(3), 0);
+        String gaps = RecordingsActivity.trayGaps(s);
+        assertTrue(gaps, gaps.contains("0:03–0:15"));
+        assertNull("all reported", RecordingsActivity.trayGaps(RecordingsActivity.traySegments(new double[] {2, 2}, new double[] {1, 1}, new double[] {0, 60})));
+        // One tray before and after a gap is still one tray.
+        assertEquals(1, RecordingsActivity.trayChanges(new double[] {3, n, 3}, new double[] {1, n, 1}, new double[] {0, 60, 120}).size());
+    }
+
     @Test public void filamentUsedAddsUpEachFilamentAndAll() {
         double[][] cumulative = {{0, 0}, {1000, 0}, {Double.NaN, Double.NaN}, {2000, 500}};
         double[][] used = RecordingsActivity.usedGrams(cumulative, new double[] {0.00124, 0.001});

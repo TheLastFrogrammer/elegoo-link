@@ -568,27 +568,77 @@ public final class RecordingsActivity extends Activity {
         return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
     }
 
-    /** Which CANVAS tray fed the print over time: a colour band, and the changes in words. */
+    /**
+     * Which CANVAS tray fed the print over time. One tray all along: a swatch and a sentence. Otherwise a band of solid
+     * stretches (one per tray, readings merged) and the changes in words. Stretches where the printer did not report a
+     * tray are shown faint and named, rather than left out.
+     */
     private void trays(List<double[]> rows, double[] t) {
         double[] tray = column(rows, "tray"), rgb = column(rows, "tray_rgb");
+        List<double[]> stretches = traySegments(tray, rgb, t);
         List<String> changes = trayChanges(tray, rgb, t);
         if (changes.isEmpty()) return;
         LinearLayout card = card(); label(card, "Filament over time", 15, ink, true);
+        String gaps = trayGaps(stretches);
+        if (changes.size() == 1) {
+            double[] only = null; for (double[] s : stretches) if (!Double.isNaN(s[2])) { only = s; break; }
+            LinearLayout line = new LinearLayout(this); line.setOrientation(LinearLayout.HORIZONTAL); line.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            View swatch = new View(this);
+            android.graphics.drawable.GradientDrawable dot = new android.graphics.drawable.GradientDrawable(); dot.setShape(android.graphics.drawable.GradientDrawable.OVAL);
+            dot.setColor(Double.isNaN(only[3]) ? muted : 0xff000000 | (int) only[3]); dot.setStroke(dp(1), grid); swatch.setBackground(dot);
+            LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(dp(18), dp(18)); at.rightMargin = dp(8); line.addView(swatch, at);
+            card.addView(line);
+            label(line, "The whole print came from " + trayName(only[2], only[3]) + ".", 14, ink, false);
+            if (gaps != null) label(card, gaps, 13, muted, false);
+            return;
+        }
         label(card, "Which CANVAS tray fed the print, and when it switched.", 13, muted, false);
+        double first = t.length == 0 ? 0 : t[0], last = t.length == 0 ? 1 : t[t.length - 1];
         View band = new View(this) {
+            final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
             @Override protected void onDraw(android.graphics.Canvas canvas) {
-                android.graphics.Paint paint = new android.graphics.Paint(); double end = t.length == 0 ? 1 : Math.max(1, t[t.length - 1]);
-                for (int i = 0; i < t.length; i++) {
-                    if (Double.isNaN(tray[i])) continue;
-                    double next = i + 1 < t.length ? t[i + 1] : end;
-                    paint.setColor(Double.isNaN(rgb[i]) ? muted : 0xff000000 | (int) rgb[i]);
-                    canvas.drawRect((float) (t[i] / end * getWidth()), 0, (float) (next / end * getWidth()), getHeight(), paint);
+                double span = Math.max(1, last - first); int w = getWidth(), h = getHeight();
+                for (double[] s : stretches) {
+                    int x0 = (int) Math.round((s[0] - first) / span * w), x1 = (int) Math.round((s[1] - first) / span * w);
+                    if (x1 <= x0) x1 = x0 + 1;
+                    boolean unknown = Double.isNaN(s[2]);
+                    paint.setColor(unknown ? (muted & 0x00ffffff) | 0x33000000 : Double.isNaN(s[3]) ? muted : 0xff000000 | (int) s[3]);
+                    canvas.drawRect(x0, unknown ? h * 0.35f : 0, x1, unknown ? h * 0.65f : h, paint);
                 }
             }
         };
-        band.setContentDescription("Filament over time: " + String.join("; ", changes));
+        band.setContentDescription("Filament over time: " + String.join("; ", changes) + (gaps == null ? "" : ". " + gaps));
         LinearLayout.LayoutParams bandLayout = new LinearLayout.LayoutParams(-1, dp(28)); bandLayout.topMargin = dp(4); card.addView(band, bandLayout);
-        label(card, String.join("\n", changes), 13, muted, false);
+        label(card, String.join("\n", changes) + (gaps == null ? "" : "\n" + gaps), 13, muted, false);
+    }
+    private static String trayName(double tray, double rgb) {
+        String colour = Double.isNaN(rgb) ? null : WorkshopUi.colourName(String.format(Locale.ROOT, "#%06X", (int) rgb & 0xffffff));
+        return "tray " + (int) tray + (colour == null ? "" : " (" + colour + ")");
+    }
+    /**
+     * The readings merged into stretches {from s, to s, tray or NaN when not reported, rgb or NaN}: a new stretch only where
+     * the tray (or its colour) changes. Each stretch runs to the next one's first reading; the last to the last reading. Pure.
+     */
+    static List<double[]> traySegments(double[] tray, double[] rgb, double[] t) {
+        List<double[]> out = new ArrayList<>();
+        for (int i = 0; i < t.length; i++) {
+            double[] open = out.isEmpty() ? null : out.get(out.size() - 1);
+            boolean same = open != null && (Double.isNaN(open[2]) ? Double.isNaN(tray[i]) : open[2] == tray[i] && (Double.isNaN(open[3]) ? Double.isNaN(rgb[i]) : open[3] == rgb[i]));
+            if (same) { open[1] = t[i]; continue; }
+            if (open != null) open[1] = t[i];
+            out.add(new double[] {t[i], t[i], tray[i], Double.isNaN(tray[i]) ? Double.NaN : rgb[i]});
+        }
+        return out;
+    }
+    /** "The printer did not report the tray 1:30–4:00, 5:10–5:20." for the stretches with no tray, or null. Pure. */
+    static String trayGaps(List<double[]> stretches) {
+        List<String> parts = new ArrayList<>(); int more = 0;
+        for (double[] s : stretches) {
+            if (!Double.isNaN(s[2]) || s[1] - s[0] < 60) continue;
+            if (parts.size() < 3) parts.add(ChartView.elapsed(s[0]) + "–" + ChartView.elapsed(s[1])); else more++;
+        }
+        if (parts.isEmpty()) return null;
+        return "The printer did not report the tray " + String.join(", ", parts) + (more > 0 ? " and " + more + " more times" : "") + ", so those stretches are shown faint.";
     }
     /** "From 0:00: tray 1 (red)" each time the active tray changes; empty when no tray was reported. */
     static List<String> trayChanges(double[] tray, double[] rgb, double[] t) {
@@ -777,12 +827,20 @@ public final class RecordingsActivity extends Activity {
 
     /**
      * Grams per hour of each filament at each reading: the material laid down per tool (`cumulative`, mm³, from the print's
-     * progress) over a window of a few minutes around the reading (wider for long prints), so a progress that moves in whole
-     * percents still gives a smooth line. NaN where there is no progress to go on.
+     * progress) over a window around the reading (ten minutes, wider for long prints). The printer's progress moves in whole
+     * percents, so the rate is measured between the readings where it stepped (first and last step in the window) rather
+     * than between the window's edges, which would count three steps one time and four the next: a sawtooth. NaN where
+     * there is no progress to go on.
      */
     static double[][] depositionRates(double[] t, double[][] cumulative, double[] gramsPerMm3) {
         int n = t.length, tools = gramsPerMm3.length; double[][] out = new double[n][tools];
-        double window = Math.max(300, (n == 0 ? 0 : t[n - 1] - t[0]) / 30);
+        double window = Math.max(600, (n == 0 ? 0 : t[n - 1] - t[0]) / 20);
+        boolean[] step = new boolean[n]; double before = Double.NaN;
+        for (int i = 0; i < n; i++) {
+            if (Double.isNaN(cumulative[i][0])) continue;
+            double total = 0; for (int k = 0; k < tools; k++) total += cumulative[i][k];
+            step[i] = !Double.isNaN(before) && total != before; before = total;
+        }
         int lo = 0, hi = 0;
         for (int i = 0; i < n; i++) {
             while (lo < i && t[lo] < t[i] - window / 2) lo++;
@@ -790,6 +848,8 @@ public final class RecordingsActivity extends Activity {
             int a = lo, b = Math.max(hi, i);
             while (a < b && Double.isNaN(cumulative[a][0])) a++;
             while (b > a && Double.isNaN(cumulative[b][0])) b--;
+            int fa = -1, lb = -1; for (int j = a; j <= b; j++) if (step[j]) { if (fa < 0) fa = j; lb = j; }
+            if (fa >= 0 && lb > fa) { a = fa; b = lb; }   // two steps or more: step to step
             double span = t[b] - t[a];
             for (int k = 0; k < tools; k++)
                 out[i][k] = span <= 0 || Double.isNaN(cumulative[i][0]) ? Double.NaN : Math.max(0, cumulative[b][k] - cumulative[a][k]) / span * gramsPerMm3[k] * 3600;
