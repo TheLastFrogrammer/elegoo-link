@@ -245,6 +245,7 @@ public final class PrintRecorder {
         try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
         catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
         current.checks.picture(toFar ? 1 : 0, asked == 0 ? -1 : clockMs() - askedAt);
+        boolean parkedPicture = current.smooth() && (asked == ASKED_PARKED || asked == 0 && parkedArmed);
         asked = 0; picturedMono = mono;
         if (toFar) {
             farPicturedLayer = lastLayer; farArmed = false; current.farPictures++; save(current);
@@ -254,11 +255,14 @@ public final class PrintRecorder {
         picturedLayer = lastLayer; parkedArmed = false; if (!current.compare) farArmed = false; current.pictures++; save(current);
         if (current.pictures == 1 || current.pictures % 10 == 0) Diagnostics.note(Diagnostics.CAMERA, "picture " + current.pictures + " of this print kept from " + source + " (" + jpeg.length / 1024 + " KB)");
         PictureKept told = pictureKept;
-        if (told != null) { String rgb = activeTray()[1]; told.kept(current, jpeg, lastLayer, rgb.isEmpty() ? -1 : Integer.parseInt(rgb), cameraId); }
+        if (told != null) { String rgb = activeTray()[1]; told.kept(current, jpeg, lastLayer, rgb.isEmpty() ? -1 : Integer.parseInt(rgb), cameraId, parkedPicture); }
         return true;
     }
-    /** Told about each kept picture with the printer's layer then and the active tray's colour (-1 when unknown), e.g. for the print guardian. Called with the recorder locked: hand the work off. */
-    interface PictureKept { void kept(Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId); }
+    /**
+     * Told about each kept picture with the printer's layer then and the active tray's colour (-1 when unknown), e.g. for the
+     * print guardian; `parked`: taken with the head parked (smooth timelapse). Called with the recorder locked: hand the work off.
+     */
+    interface PictureKept { void kept(Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId, boolean parked); }
     volatile PictureKept pictureKept;
     /** Told when a print's recording ends complete or stopped (not when it was only interrupted). Called with the recorder locked: hand the work off. */
     interface PrintEnded { void ended(Recording recording); }

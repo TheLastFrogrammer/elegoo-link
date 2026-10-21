@@ -112,6 +112,8 @@ public class SmoothTimelapseTest {
         assertEquals(0, SmoothTimelapse.farthestCorner(-10, -20));
         assertEquals(3, SmoothTimelapse.farthestCorner(266, 276));
         PrintRecorder recorder = new PrintRecorder(folder.newFolder("both"));
+        java.util.List<Boolean> parked = new java.util.ArrayList<>();
+        recorder.pictureKept = (r, jpeg, layer, rgb, camera, wasParked) -> parked.add(wasParked);
         long t = 4_000_000;
         recorder.update(t, t, status(1, 100, 100), "local", "Bedroom");
         recorder.setPark(250, 250);
@@ -122,6 +124,9 @@ public class SmoothTimelapseTest {
         assertTrue(recorder.savePicture(new byte[200], t));
         recorder.update(t + 9000, t + 9000, status(2, 250, 250), "local", "Bedroom");
         assertTrue("next layer: parked, as planned", recorder.headAt(250, 250));
+        assertTrue(recorder.savePicture(new byte[200], t + 9000));
+        // The guardian is told which pictures show the head (the missed park's far one) and which were parked.
+        assertEquals(java.util.Arrays.asList(false, true), parked);
     }
 
     /** Comparing: each layer keeps a parked picture and a far one, in two sets; a far one waits while a parked one is on its way. */

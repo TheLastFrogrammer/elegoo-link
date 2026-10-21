@@ -24,8 +24,9 @@ In order. Each round ends with tests, a build, and the self-test print when ther
 
 1. **Answers from the printer.** Run the self-test print once; read Field check's measured section. Fix what it shows
    (position frame, status rate, parking), then turn its numbers into defaults (camera delay, printhead mask).
-2. **Safer printing.** Failure detection from the pictures on the phone (spaghetti, nothing on the bed), notify only;
-   a clearer "is it still printing" in cloud mode, where status comes about every 30 s.
+2. **Safer printing.** Done: the guardian's change check (PictureChange) compares each picture with the ones before it,
+   needing no G-code, line-up or colour, and tells of a mess spreading or a part knocked loose (notify only). Next: tune
+   it on real recordings; a clearer "is it still printing" in cloud mode, where status comes about every 30 s.
 3. **Timelapse.** Frame alignment (small camera shifts); a camera timing marker in the self-test (the head at a known
    place at a known moment) to measure the camera's delay without guessing.
 4. **Slicer.** Colour painting for multi-colour prints, then support and seam painting; measure slicing on the phone.

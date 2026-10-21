@@ -33,12 +33,80 @@ final class GuardianRun {
     /** Checks one kept picture. `layer`/`total`: the printer's layer report; `head`: nozzle x, y, z (NaN when not reported); `trayRgb`: active tray colour or -1. */
     /** `cameraId`: the camera the picture came from (PrintRecorder.PRINTER_CAMERA or "added:" and its id), fixed when it was kept. */
     /** `job`: the print as the service observes it (printer, file name, continuity token), or null when there is none. */
-    void check(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm, Runnable changed) {
+    void check(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, boolean parked, GcodeJobTracker.Job job, Alarm alarm, Runnable changed) {
         worker.execute(() -> {
-            try { run(recording, jpeg, layer, total, head, trayRgb, cameraId, job, alarm); }
+            try {
+                double[] aspect = new double[1];
+                int[] rgb = grid(jpeg, aspect);
+                if (rgb == null) verdict = "Could not read the picture.";
+                else {
+                    // The change check first: it needs no G-code, line-up or colour, so it runs where the colour check cannot.
+                    changeCheck(recording, rgb, aspect[0], head, cameraId, parked, alarm);
+                    run(recording, rgb, aspect[0], layer, total, head, trayRgb, cameraId, job, alarm);
+                    if (!changeVerdict.isEmpty()) verdict = verdict + (verdict.isEmpty() ? "" : "\n") + "Changes between pictures: " + changeVerdict;
+                }
+            }
             catch (Throwable failed) { verdict = "Could not check this picture."; Diagnostics.note(Diagnostics.GUARDIAN, "check failed: " + failed.getClass().getSimpleName()); }
             changed.run();
         });
+    }
+
+    /** The picture on the guardian's grid (RGB), and its width over height; null when unreadable. */
+    private static int[] grid(byte[] jpeg, double[] aspect) {
+        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, bounds);
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(1, bounds.outWidth / (PrintGuardian.W * 2))));
+        Bitmap picture = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, options);
+        if (picture == null) return null;
+        aspect[0] = bounds.outWidth / (double) bounds.outHeight;
+        Bitmap small = Bitmap.createScaledBitmap(picture, PrintGuardian.W, PrintGuardian.H, true);
+        int[] rgb = new int[PrintGuardian.W * PrintGuardian.H];
+        small.getPixels(rgb, 0, PrintGuardian.W, 0, 0, PrintGuardian.W, PrintGuardian.H);
+        return rgb;
+    }
+
+    /** The change check (PictureChange) for this print and camera, and what it last said. */
+    private PictureChange.Watch change = new PictureChange.Watch();
+    private String changePrint = "", changeCamera = "";
+    volatile String changeVerdict = "";
+    private int changeChecks;
+    /**
+     * Each picture against the ones before it. Parked pictures (smooth timelapse) show the bed alike each time; otherwise
+     * the head moves about the picture, so it is masked out with the lined-up camera, or the check waits.
+     */
+    private void changeCheck(PrintRecorder.Recording recording, int[] rgb, double aspect, double[] head, String cameraId, boolean parked, Alarm alarm) {
+        if (!recording.id.equals(changePrint) || !cameraId.equals(changeCamera)) { changePrint = recording.id; changeCamera = cameraId; change = new PictureChange.Watch(); changeVerdict = ""; changeChecks = 0; }
+        boolean[] ignore = null;
+        // A smooth print's picture taken when the park was missed shows the head: it is left out rather than compared.
+        if (recording.smooth() && !parked) return;
+        if (!recording.smooth()) {
+            String id = cameraId.startsWith("added:") ? cameraId.substring(6) : "";
+            android.content.SharedPreferences hints = context.getSharedPreferences("viewer-hints", Context.MODE_PRIVATE);
+            if (!GcodeViewerActivity.linedUp(hints, id) || Double.isNaN(head[0]) || Double.isNaN(head[1]) || Double.isNaN(head[2])) {
+                changeVerdict = "needs parked pictures (Smooth timelapse) or the camera lined up in Live toolpath, so the head can be left out.";
+                return;
+            }
+            ignore = PrintGuardian.headMask(GcodeViewerActivity.cameraFor(hints, head[2], id), aspect, head[0], head[1], head[2]);
+        }
+        boolean raise = change.add(PictureChange.luminance(rgb), ignore);
+        changeChecks++;
+        changeVerdict = change.alarmed ? "something looks wrong: " + change.reason : change.reason;
+        if (changeChecks == 1 || changeChecks % 10 == 0 || raise) Diagnostics.note(Diagnostics.GUARDIAN, "change check " + changeChecks + ": " + change.reason + (raise ? "; ALARM" : ""));
+        if (raise) { alarmed = true; overlay = changeOverlay(rgb, change); alarm.raise(change.reason, overlay); }
+    }
+    /** The picture dimmed, where the print has been changing in teal, and the last picture's changes away from it in red. */
+    static Bitmap changeOverlay(int[] rgb, PictureChange.Watch watch) {
+        boolean[] region = watch.region(), near = PrintGuardian.grow(region, 3); int[] out = new int[rgb.length];
+        for (int i = 0; i < rgb.length; i++) {
+            int p = rgb[i], red = ((p >> 16) & 255) * 6 / 10, green = ((p >> 8) & 255) * 6 / 10, blue = (p & 255) * 6 / 10;
+            if (watch.last[i] && !near[i]) { red = 255; green = 40; blue = 40; }
+            else if (region[i]) { red = red / 2; green = (green + 200) / 2; blue = (blue + 180) / 2; }
+            out[i] = 0xff000000 | red << 16 | green << 8 | blue;
+        }
+        Bitmap small = Bitmap.createBitmap(out, PrintGuardian.W, PrintGuardian.H, Bitmap.Config.ARGB_8888);
+        return Bitmap.createScaledBitmap(small, PrintGuardian.W * 3, PrintGuardian.H * 3, false);
     }
 
     /**
@@ -79,7 +147,7 @@ final class GuardianRun {
         return "File source: " + (source.problem == null ? "unknown" : source.problem);
     }
 
-    private void run(PrintRecorder.Recording recording, byte[] jpeg, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm) throws Exception {
+    private void run(PrintRecorder.Recording recording, int[] rgb, double aspect, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm) throws Exception {
         if (!recording.id.equals(printId)) { printId = recording.id; watch = new PrintGuardian.Watch(); overlay = null; alarmed = false; checks = 0; verdict = ""; watchedCamera = cameraId; printedColours.clear(); }
         // Coverage learned from one camera means nothing for another: a different camera starts the comparison again.
         if (!cameraId.equals(watchedCamera)) { watchedCamera = cameraId; watch = new PrintGuardian.Watch(); alarmed = false; }
@@ -110,18 +178,6 @@ final class GuardianRun {
         int at = total > 0 ? (int) Math.round(layer / (double) total * path.layerCount) - 1 : layer - 1;
         at = Math.max(0, Math.min(path.layerCount - 1, at));
 
-        BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
-        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, bounds);
-        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) { verdict = "Could not read the picture."; return; }
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inSampleSize = Math.max(1, Integer.highestOneBit(Math.max(1, bounds.outWidth / (PrintGuardian.W * 2))));
-        Bitmap picture = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length, options);
-        if (picture == null) { verdict = "Could not read the picture."; return; }
-        double aspect = bounds.outWidth / (double) bounds.outHeight;
-        Bitmap small = Bitmap.createScaledBitmap(picture, PrintGuardian.W, PrintGuardian.H, true);
-        int[] rgb = new int[PrintGuardian.W * PrintGuardian.H];
-        small.getPixels(rgb, 0, PrintGuardian.W, 0, 0, PrintGuardian.W, PrintGuardian.H);
-
         android.content.SharedPreferences hints = context.getSharedPreferences("viewer-hints", Context.MODE_PRIVATE);
         // The camera this picture came from (not whichever is chosen now) and its own line-up.
         String id = cameraId.startsWith("added:") ? cameraId.substring(6) : "";
@@ -146,10 +202,10 @@ final class GuardianRun {
         PrintGuardian.Result result = PrintGuardian.analyse(rgb, colours, expected, bed, headMask);
         if (result.undecided) { verdict = "The filament looks too much like the bed in this picture, so it is not checked."; overlay = null; return; }
         boolean raise = watch.add(result, at + 1);
-        checks++; alarmed = watch.alarmed;
+        checks++; alarmed = watch.alarmed || change.alarmed;
         verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")")
             + (source.chosen ? "" : ". Compared with the only phone copy of " + GcodeLibrary.baseName(recording.file) + " (assumed; choose it in Live toolpath to confirm)");
-        overlay = overlay(rgb, result);
+        if (!change.alarmed) overlay = overlay(rgb, result);   // the change check's alarm keeps its own picture
         if (checks == 1 || checks % 10 == 0 || raise)
             Diagnostics.note(Diagnostics.GUARDIAN, "check " + checks + " at layer " + layer + ": print area " + Math.round(result.coverage * 100) + " % filament, bed " + Math.round(result.outside * 1000) / 10.0
                 + " % (" + result.expectedPixels + "/" + result.bedPixels + " cells)" + (linedUp ? "" : ", camera not lined up") + (raise ? "; ALARM: " + watch.reason : ""));
@@ -159,8 +215,8 @@ final class GuardianRun {
     /** The person's answer to the last alarm, for tuning (logged): "looks fine" also allows more before the next. */
     void feedback(boolean fine) {
         worker.execute(() -> {
-            Diagnostics.note(Diagnostics.GUARDIAN, (fine ? "person says it looks fine" : "person says it is a real problem") + " after " + checks + " checks: " + watch.reason);
-            if (fine) { watch.looksFine(); alarmed = false; verdict = "Thanks. The guardian allows more before the next alarm for this print."; }
+            Diagnostics.note(Diagnostics.GUARDIAN, (fine ? "person says it looks fine" : "person says it is a real problem") + " after " + checks + " checks: " + watch.reason + "; changes: " + change.reason);
+            if (fine) { watch.looksFine(); change.looksFine(); alarmed = false; verdict = "Thanks. The guardian allows more before the next alarm for this print."; }
             else verdict = "Noted as a real problem. The guardian keeps watching; what to do with the print is up to you.";
         });
     }

@@ -2080,13 +2080,13 @@ public final class PrinterService extends Service {
     }
     /** Print guardian (beta): each kept picture compared with the toolpath so far (see GuardianRun). Notify only, never acts on the printer. */
     public GuardianRun guardian;   // made in onCreate (the service has no context before)
-    private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId) {
+    private void guard(PrintRecorder.Recording recording, byte[] jpeg, int layer, int trayRgb, String cameraId, boolean parked) {
         if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("guardian", true)) return;
         JSONObject now = liveStatus(), print = now.optJSONObject("print_status"), move = now.optJSONObject("gcode_move_inf");
         int total = print == null ? 0 : print.optInt("total_layer", 0);
         double[] head = move == null ? new double[] {Double.NaN, Double.NaN, Double.NaN}
             : new double[] {move.optDouble("x", Double.NaN), move.optDouble("y", Double.NaN), move.optDouble("z", Double.NaN)};
-        guardian.check(recording, jpeg, layer, total, head, trayRgb, cameraId, fileJob(), this::guardianAlarm, this::changed);
+        guardian.check(recording, jpeg, layer, total, head, trayRgb, cameraId, parked, fileJob(), this::guardianAlarm, this::changed);
     }
     private void guardianAlarm(String reason, android.graphics.Bitmap overlay) {
         // The alarm is an event for automations (webhooks, Home Assistant) whether or not the phone may show notifications;
