@@ -222,6 +222,26 @@ public class A11yRenderTest {
         shot(frame, 780, "layer-cross-section", 1.0f);
     }
 
+    /** A recording's volume printed so far over time, stacked by line type. */
+    @Test public void volumeOverTime() throws Exception {
+        int n = 120; double[] t = new double[n]; double[][] at = new double[n][GcodeToolpath.FEATURES.length];
+        for (int i = 0; i < n; i++) {
+            t[i] = i * 60; double f = i / (double) (n - 1);
+            at[i][6] = Math.min(f, 0.05) * 20 * 2000; at[i][0] = f * 4000; at[i][1] = f * 6000; at[i][3] = Math.max(0, Math.min(f, 0.9) - 0.05) * 9000; at[i][5] = Math.max(0, f - 0.9) * 10 * 2500;
+            if (i == 40) java.util.Arrays.fill(at[i], Double.NaN);
+        }
+        double[][] soFar = RecordingsActivity.soFarByType(at);
+        java.util.List<ChartView.Series> parts = new java.util.ArrayList<>();
+        for (int type : new int[] {0, 1, 3, 5, 6}) parts.add(new ChartView.Series(GcodeToolpath.FEATURES[type], android.graphics.Color.parseColor(GcodeViewerActivity.PALETTE[type]), soFar[type], false));
+        ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6).stacked();
+        chart.set("Printed so far, by line type", " cm³", t, parts, 0, Double.NaN);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(context()); frame.setBackgroundColor(0xfff2f5f6); frame.addView(chart);
+        frame.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(780, View.MeasureSpec.EXACTLY));
+        frame.layout(0, 0, 1080, 780);
+        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, 704, 400, 0));
+        shot(frame, 780, "volume-over-time", 1.0f);
+    }
+
     @Test public void fieldCheck() throws Exception {
         out();
         for (float scale : SCALES) {

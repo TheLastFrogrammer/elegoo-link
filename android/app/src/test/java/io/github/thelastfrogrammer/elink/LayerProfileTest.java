@@ -43,6 +43,22 @@ public class LayerProfileTest {
         assertEquals(10, p.speed[1], 1e-9);
     }
 
+    /** Volume by line type, added up layer by layer (cm³) and over a print's progress (per type, in the file's order). */
+    @Test public void volumeSoFarByLineType() throws Exception {
+        LayerProfile p = LayerProfile.read(new java.io.ByteArrayInputStream(GCODE.getBytes("UTF-8")));
+        double[] inner = p.cumulative(1), outer = p.cumulative(0);
+        assertEquals(0, inner[0], 1e-9); assertEquals(2 * MM3 / 1000, inner[1], 1e-9);
+        assertEquals(MM3 / 1000, outer[0], 1e-9); assertEquals(outer[0], outer[1], 1e-12);
+        String gcode = ";LAYER_CHANGE\n;Z:0.2\n;HEIGHT:0.2\nG1 X0 Y0 Z0.2 F600\n;TYPE:Outer wall\n;WIDTH:0.4\nG1 X10 Y0 E1\n;TYPE:Sparse infill\nG1 X20 Y0 E2\n";
+        GcodeToolpath path = GcodeToolpath.read(new java.io.ByteArrayInputStream(gcode.getBytes("UTF-8")));
+        double[][] at = path.typeVolumesAt(new double[] {0, 0.5, Double.NaN, 1});
+        double half = 10 * 0.4 * 0.2;
+        assertEquals(half, at[1][0], 1e-6); assertEquals(0, at[1][3], 1e-6); assertEquals(half, at[3][3], 1e-6);
+        double[][] soFar = RecordingsActivity.soFarByType(at);
+        assertEquals(half / 1000, soFar[0][2], 1e-9);   // no progress at that reading: kept from the one before
+        assertEquals(0, soFar[3][2], 1e-9); assertEquals(half / 1000, soFar[3][3], 1e-9);
+    }
+
     @Test public void theFilamentSensorAndTheExtruderAreRead() throws Exception {
         // The CC2 reports the extruder position as gcode_move.extruder; Klipper-style "e" is read too.
         assertEquals(12.5, Cc2Codec.extruderPosition(new JSONObject().put("x", 1).put("extruder", 12.5)), 1e-9);

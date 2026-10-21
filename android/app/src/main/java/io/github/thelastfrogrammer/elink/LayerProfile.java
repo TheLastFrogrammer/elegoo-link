@@ -122,6 +122,12 @@ final class LayerProfile {
         for (int i = 0; i < layers; i++) for (int t = 0; t < TYPES; t++) if (area[i][t] > 1e-6 && !used[t]) { used[t] = true; count++; }
         int[] out = new int[count]; int k = 0; for (int t = 0; t < TYPES; t++) if (used[t]) out[k++] = t; return out;
     }
+    /** One type's material printed by the end of each layer (cm³): its cross section × the layer's height, added up. */
+    double[] cumulative(int type) {
+        double[] out = new double[layers]; double sum = 0;
+        for (int i = 0; i < layers; i++) { sum += area[i][type] * (height[i] > 0 ? height[i] : 0.2) / 1000; out[i] = sum; }
+        return out;
+    }
     double[] column(double[] perLayer) { return Arrays.copyOf(perLayer, layers); }
 
     private static String first(String line) { String v = line.substring(line.indexOf('=') + 1).trim(); int cut = v.indexOf(','); return cut >= 0 ? v.substring(0, cut) : v; }

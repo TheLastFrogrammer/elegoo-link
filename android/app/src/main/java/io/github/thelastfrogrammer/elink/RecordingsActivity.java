@@ -681,15 +681,15 @@ public final class RecordingsActivity extends Activity {
         File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
         if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download the file from the Files tab, or slice it here, to see material per layer and per colour."); return; }
         new Thread(() -> {
-            double[] volumes = null; double[][] laidDown = null; double[] perTool = null; SlicedMaterials materials = null;
+            double[] volumes = null; double[][] laidDown = null, byType = null; double[] perTool = null; SlicedMaterials materials = null;
             double[] progress = column(rows, "progress"), fractions = new double[progress.length];
             for (int i = 0; i < progress.length; i++) fractions[i] = Double.isNaN(progress[i]) ? Double.NaN : progress[i] / 100.0;
             try {
                 GcodeToolpath path = GcodeToolpath.read(file); volumes = path.layerVolumes();
-                int tools = path.toolCount(); laidDown = path.toolVolumesAt(fractions, tools); perTool = path.toolVolumes(tools);
+                int tools = path.toolCount(); laidDown = path.toolVolumesAt(fractions, tools); perTool = path.toolVolumes(tools); byType = path.typeVolumesAt(fractions);
             } catch (Exception ignored) { }
             try { materials = GcodeInspector.inspect(file).materials; } catch (Exception ignored) { }
-            double[] perLayer = volumes; double[][] cumulative = laidDown; double[] toolTotals = perTool; SlicedMaterials used = materials;
+            double[] perLayer = volumes; double[][] cumulative = laidDown, typeSoFar = byType; double[] toolTotals = perTool; SlicedMaterials used = materials;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
                 note.setText(perLayer == null || cumulative == null ? "The print's file could not be read."
@@ -778,6 +778,7 @@ public final class RecordingsActivity extends Activity {
                     usedView.set("Used so far", " g", t, totals, 0, Double.NaN);
                     if (shown != null && shown.start > 0) usedView.clock(shown.start);
                     chartBox.addView(usedView, new LinearLayout.LayoutParams(-1, dp(220)));
+                    printedByType(chartBox, t, typeSoFar);
                 }
                 if (used != null) for (SlicedMaterials.Entry entry : used.entries) {
                     if (entry.lengthMm == null && entry.massG == null) continue;
@@ -821,6 +822,35 @@ public final class RecordingsActivity extends Activity {
             double sum = 0; boolean known = cumulative[i].length >= tools && tools > 0 && !Double.isNaN(cumulative[i][0]);
             for (int k = 0; k < tools; k++) { out[i][k] = known ? cumulative[i][k] * gramsPerMm3[k] : Double.NaN; if (known) sum += out[i][k]; }
             out[i][tools] = known ? sum : Double.NaN;
+        }
+        return out;
+    }
+
+    /** The volume printed so far over the print's time, stacked by line type in the viewer's colours. */
+    private void printedByType(LinearLayout box, double[] t, double[][] at) {
+        if (at == null) return;
+        double[][] soFar = soFarByType(at);
+        List<ChartView.Series> parts = new ArrayList<>();
+        for (int type = 0; type < soFar.length; type++) {
+            double end = soFar[type].length == 0 ? 0 : soFar[type][soFar[type].length - 1];
+            if (end > 1e-4) parts.add(new ChartView.Series(GcodeToolpath.FEATURES[type], Color.parseColor(GcodeViewerActivity.PALETTE[type]), soFar[type], false));
+        }
+        if (parts.isEmpty()) return;
+        ChartView view = new ChartView(this, ink, muted, grid, surface).stacked();
+        view.set("Printed so far, by line type", " cm³", t, parts, 0, Double.NaN);
+        if (shown != null && shown.start > 0) view.clock(shown.start);
+        LinearLayout.LayoutParams at4 = new LinearLayout.LayoutParams(-1, dp(260)); at4.topMargin = dp(8);
+        box.addView(view, at4);
+    }
+    /**
+     * [type][reading]: each line type's volume printed so far (cm³), from typeVolumesAt's [reading][type] mm³. A reading
+     * with no progress keeps the one before (0 before the first), so the stack does not drop to nothing there. Pure.
+     */
+    static double[][] soFarByType(double[][] at) {
+        int types = GcodeToolpath.FEATURES.length; double[][] out = new double[types][at.length]; double[] last = new double[types];
+        for (int i = 0; i < at.length; i++) {
+            boolean known = at[i].length > 0 && !Double.isNaN(at[i][0]);
+            for (int k = 0; k < types; k++) { if (known && k < at[i].length) last[k] = at[i][k] / 1000; out[k][i] = last[k]; }
         }
         return out;
     }

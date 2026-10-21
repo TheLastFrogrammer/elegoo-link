@@ -130,6 +130,11 @@ final class LayerCharts {
         ChartView cross = new ChartView(context, ink, muted, grid, surface).layers().stacked();
         cross.set("Cross section by line type", " mm²", layer, parts, 0, Double.NaN);
         views.add(cross); names.add("Section");
+        List<ChartView.Series> soFar = new ArrayList<>();
+        for (int type : p.typesUsed()) soFar.add(new ChartView.Series(GcodeToolpath.FEATURES[type], Color.parseColor(GcodeViewerActivity.PALETTE[type]), p.cumulative(type), false));
+        ChartView volume = new ChartView(context, ink, muted, grid, surface).layers().stacked();
+        volume.set("Volume printed by each layer, by line type", " cm³", layer, soFar, 0, Double.NaN);
+        views.add(volume); names.add("Volume");
         ChartView speed = new ChartView(context, ink, muted, grid, surface).layers();
         speed.set("Print speed (mean of the lines)", " mm/s", layer, Collections.singletonList(new ChartView.Series("Speed", blue, p.column(p.speed), false)), 0, Double.NaN);
         views.add(speed); names.add("Speed");
@@ -144,7 +149,8 @@ final class LayerCharts {
     }
 
     private static void chips(Context context, LinearLayout card, List<View> views, List<String> names, boolean dark, SharedPreferences prefs, Chip chip, float density) {
-        LinearLayout chips = new LinearLayout(context); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
+        LinearLayout chips = new LinearLayout(context); chips.setOrientation(LinearLayout.HORIZONTAL);
+        android.widget.HorizontalScrollView slide = new android.widget.HorizontalScrollView(context); slide.setHorizontalScrollBarEnabled(false); slide.addView(chips); card.addView(slide);
         List<Button> buttons = new ArrayList<>(); int accent = dark ? 0xff5fd4c4 : 0xff00796b;
         Runnable[] pick = new Runnable[1];
         for (int i = 0; i < views.size(); i++) {

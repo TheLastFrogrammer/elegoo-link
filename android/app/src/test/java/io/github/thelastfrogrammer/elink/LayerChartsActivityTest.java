@@ -41,7 +41,7 @@ public class LayerChartsActivityTest {
             new Intent().putExtra(LayerChartsActivity.EXTRA_FILE, file.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, "box.gcode")).setup().get();
         View root = activity.findViewById(android.R.id.content);
         for (int i = 0; i < 100 && count(root, ChartView.class) == 0; i++) { Thread.sleep(20); ShadowLooper.idleMainLooper(); }
-        assertEquals("cross section, speed, flow, acceleration", 4, count(root, ChartView.class));
+        assertEquals("cross section, volume, speed, flow, acceleration", 5, count(root, ChartView.class));
         assertTrue("the layers asking for more than the filament's 1 mm³/s are named", says(root, "Layers 1–2 ask for more flow"));
     }
 
