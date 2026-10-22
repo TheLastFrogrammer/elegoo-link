@@ -29,6 +29,8 @@ public final class RecordingsActivity extends Activity {
     private int blue, orange, aqua;
     private LinearLayout content;
     private PrintRecorder.Recording shown;
+    /** The shown print's warm-up phases {from s, to s, name}, shaded on its time charts. */
+    private List<Object[]> warmUp = new ArrayList<>();
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -348,6 +350,9 @@ public final class RecordingsActivity extends Activity {
         if (!coverage.isEmpty()) extra.add(coverage);
         if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
         double[] t = column(rows, "elapsed_s");
+        warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
+        String warm = warmUpWords(warmUp);
+        if (!warm.isEmpty()) { TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3)); }
         pictures(recording);   // the quickest look at how the print went, before the charts
         checks(recording);
         // One card with the print's four charts, one at a time (the tour shows them all, one after another).
@@ -750,7 +755,7 @@ public final class RecordingsActivity extends Activity {
                         if (words.size() <= 12) label(chartBox, String.join("\n", words), 12, muted, false);
                     }
                     ChartView view = new ChartView(this, ink, muted, grid, surface);
-                    view.set("Laying down", " g/h", t, lines, 0, Double.NaN);
+                    view.set("Laying down", " g/h", t, lines, 0, Double.NaN); warmUp(view);
                     if (shown != null && shown.start > 0) view.clock(shown.start);
                     chartBox.addView(view, new LinearLayout.LayoutParams(-1, dp(220)));
                     // The total so far: each filament's grams added up over the build (all of them together in words, so no line hides a filament's own).
@@ -775,7 +780,7 @@ public final class RecordingsActivity extends Activity {
                         label(chartBox, String.format(Locale.getDefault(), "Filament used by %s: %.1f g of the %.1f g sliced%s.", ChartView.elapsed(t[last]), usedSoFar[last][tools], planned, each), 13, ink, false);
                     }
                     ChartView usedView = new ChartView(this, ink, muted, grid, surface);
-                    usedView.set("Used so far", " g", t, totals, 0, Double.NaN);
+                    usedView.set("Used so far", " g", t, totals, 0, Double.NaN); warmUp(usedView);
                     if (shown != null && shown.start > 0) usedView.clock(shown.start);
                     chartBox.addView(usedView, new LinearLayout.LayoutParams(-1, dp(220)));
                     printedByType(chartBox, t, typeSoFar);
@@ -837,7 +842,7 @@ public final class RecordingsActivity extends Activity {
         }
         if (parts.isEmpty()) return;
         ChartView view = new ChartView(this, ink, muted, grid, surface).stacked();
-        view.set("Printed so far, by line type", " cm³", t, parts, 0, Double.NaN);
+        view.set("Printed so far, by line type", " cm³", t, parts, 0, Double.NaN); warmUp(view);
         if (shown != null && shown.start > 0) view.clock(shown.start);
         LinearLayout.LayoutParams at4 = new LinearLayout.LayoutParams(-1, dp(260)); at4.topMargin = dp(8);
         box.addView(view, at4);
@@ -939,8 +944,54 @@ public final class RecordingsActivity extends Activity {
         ChartView view = new ChartView(this, ink, muted, grid, surface);
         view.set(title, unit, t, present, min, max);
         if (shown != null && shown.start > 0) view.clock(shown.start);
+        warmUp(view);
         LinearLayout.LayoutParams at = new LinearLayout.LayoutParams(-1, dp(240)); at.topMargin = dp(4); parent.addView(view, at);
         return view;
+    }
+
+    private void warmUp(ChartView view) { for (Object[] phase : warmUp) view.span((Double) phase[0], (Double) phase[1], (String) phase[2]); }
+
+    /**
+     * The print's warm-up, from its first reading to the first layer: each stretch named by the printer's step (as the
+     * status line names it: getting the file, heating, homing, levelling) and, once it reports printing but before layer 1,
+     * "the file's start" (its own start code). {from s, to s, name}; empty when the recording begins already printing. Pure.
+     */
+    static List<Object[]> warmUpPhases(double[] sub, double[] layer, double[] t) {
+        List<Object[]> out = new ArrayList<>();
+        int end = -1;
+        for (int i = 0; i < t.length; i++) if (!Double.isNaN(sub[i]) && (int) sub[i] == 2075 && !Double.isNaN(layer[i]) && layer[i] >= 1) { end = i; break; }
+        if (end <= 0) return out;
+        for (int i = 0; i < end; i++) {
+            String name = warmUpStep(Double.isNaN(sub[i]) ? -1 : (int) sub[i]);
+            if (name == null) continue;
+            Object[] open = out.isEmpty() ? null : out.get(out.size() - 1);
+            if (open != null && open[2].equals(name) && (Double) open[1] == t[i]) { open[1] = t[i + 1]; continue; }
+            out.add(new Object[] {t[i], t[i + 1], name});
+        }
+        return out;
+    }
+    /** A warm-up step's name for a print's sub status, or null for the ones that are not warm-up (paused, stopping…). */
+    static String warmUpStep(int sub) {
+        switch (sub) {
+            case 2075: return "the file's start";
+            case 2501: case 2502: case 2505: case 2401: case 2402: case 2503: case 2504: case 2077: case -1: return null;
+            default: {
+                String state = StatusPresentation.state(statusOf(sub));
+                return state.startsWith("Preparing: ") ? state.substring(11) : "preparing";
+            }
+        }
+    }
+    private static org.json.JSONObject statusOf(int sub) {
+        try { return new org.json.JSONObject().put("machine_status", new org.json.JSONObject().put("status", 2).put("sub_status", sub)); } catch (org.json.JSONException impossible) { return new org.json.JSONObject(); }
+    }
+    /** "Warm-up: 7 min before the first layer (heating the bed 3 min, levelling the bed 2 min, …)", or "". Pure. */
+    static String warmUpWords(List<Object[]> phases) {
+        if (phases.isEmpty()) return "";
+        java.util.LinkedHashMap<String, Double> each = new java.util.LinkedHashMap<>(); double all = 0;
+        for (Object[] p : phases) { double span = (Double) p[1] - (Double) p[0]; each.merge((String) p[2], span, Double::sum); all += span; }
+        List<String> parts = new ArrayList<>();
+        for (java.util.Map.Entry<String, Double> e : each.entrySet()) parts.add(e.getKey() + " " + ChartView.spanWords(e.getValue()));
+        return "Warm-up: " + ChartView.spanWords(all) + " before the first layer (" + String.join(", ", parts) + "). Shaded on the charts.";
     }
 
     static double[] column(List<double[]> rows, String name) {

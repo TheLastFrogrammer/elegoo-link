@@ -222,6 +222,27 @@ public class A11yRenderTest {
         shot(frame, 780, "layer-cross-section", 1.0f);
     }
 
+    /** A recording's temperatures with its warm-up phases shaded, one touched. */
+    @Test public void warmUpOnTheCharts() throws Exception {
+        int n = 90; double[] t = new double[n], nozzle = new double[n], bed = new double[n], nozzleTarget = new double[n], bedTarget = new double[n];
+        for (int i = 0; i < n; i++) {
+            t[i] = i * 20; bedTarget[i] = 60; nozzleTarget[i] = i < 12 ? 140 : 220;
+            bed[i] = Math.min(60, 25 + i * 4); nozzle[i] = i < 12 ? Math.min(140, 25 + i * 15) : Math.min(220, 140 + (i - 12) * 12);
+        }
+        double[] sub = new double[n], layer = new double[n];
+        for (int i = 0; i < n; i++) { sub[i] = i < 2 ? 1081 : i < 10 ? 1405 : i < 16 ? 2901 : i < 20 ? 1045 : 2075; layer[i] = i < 22 ? 0 : 1 + (i - 22) / 4; }
+        java.util.List<ChartView.Series> lines = java.util.Arrays.asList(new ChartView.Series("Nozzle", 0xff2a78d6, nozzle, false), new ChartView.Series("Nozzle target", 0xff2a78d6, nozzleTarget, true),
+            new ChartView.Series("Bed", 0xffeb6834, bed, false), new ChartView.Series("Bed target", 0xffeb6834, bedTarget, true));
+        ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6);
+        chart.set("Temperatures", " °C", t, lines, Double.NaN, Double.NaN);
+        for (Object[] p : RecordingsActivity.warmUpPhases(sub, layer, t)) chart.span((Double) p[0], (Double) p[1], (String) p[2]);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(context()); frame.setBackgroundColor(0xfff2f5f6); frame.addView(chart);
+        frame.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(780, View.MeasureSpec.EXACTLY));
+        frame.layout(0, 0, 1080, 780);
+        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, 260, 400, 0));
+        shot(frame, 780, "warm-up", 1.0f);
+    }
+
     /** A recording's volume printed so far over time, stacked by line type. */
     @Test public void volumeOverTime() throws Exception {
         int n = 120; double[] t = new double[n]; double[][] at = new double[n][GcodeToolpath.FEATURES.length];

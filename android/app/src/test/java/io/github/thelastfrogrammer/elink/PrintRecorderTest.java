@@ -176,6 +176,23 @@ public class PrintRecorderTest {
         for (int i = 100; i < n - 100; i++) assertEquals("reading " + i, 3.6, rate[i][0], 0.15);   // within the 20 s reading spacing (whole-window counting swung ±25 %)
     }
 
+    /** Warm-up: each step the printer reports before the first layer, merged, and the file's own start once it reports printing. */
+    @Test public void warmUpIsTheStepsBeforeTheFirstLayer() {
+        double n = Double.NaN;
+        double[] t = {0, 30, 90, 180, 300, 360, 420}, sub = {1081, 1405, 1405, 2901, 2075, 2075, 2075}, layer = {n, n, n, 0, 0, 1, 2};
+        List<Object[]> phases = RecordingsActivity.warmUpPhases(sub, layer, t);
+        assertEquals(4, phases.size());
+        assertEquals("getting the file", phases.get(0)[2]);
+        assertEquals("heating the bed", phases.get(1)[2]); assertEquals(30.0, phases.get(1)[0]); assertEquals(180.0, phases.get(1)[1]);
+        assertEquals("levelling the bed", phases.get(2)[2]);
+        assertEquals("the file's start", phases.get(3)[2]); assertEquals(360.0, phases.get(3)[1]);
+        assertEquals("Warm-up: 6 min before the first layer (getting the file 1 min, heating the bed 3 min, levelling the bed 2 min, the file's start 1 min). Shaded on the charts.",
+            RecordingsActivity.warmUpWords(phases));
+        assertTrue("already printing when the recording began", RecordingsActivity.warmUpPhases(new double[] {2075, 2075}, new double[] {3, 4}, new double[] {0, 30}).isEmpty());
+        assertEquals("preparing", RecordingsActivity.warmUpStep(1234));
+        assertNull("a pause is not warm-up", RecordingsActivity.warmUpStep(2502));
+    }
+
     /** The tray band merges readings into stretches and names the stretches the printer did not report. */
     @Test public void trayReadingsMergeIntoStretchesWithGapsNamed() {
         double n = Double.NaN;

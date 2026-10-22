@@ -40,6 +40,9 @@ final class ChartView extends View {
     ChartView stacked() { stacked = true; invalidate(); return this; }
     /** Marks at x values (layers): a coloured line across the plot, and their text in the readout at that point. */
     private final List<double[]> markAt = new ArrayList<>(); private final List<String> markText = new ArrayList<>();
+    /** Shaded stretches of x behind the data (a print's warm-up phases), each named in the readout when touched inside it. */
+    private final List<double[]> spanAt = new ArrayList<>(); private final List<String> spanText = new ArrayList<>();
+    ChartView span(double from, double to, String text) { spanAt.add(new double[] {from, to}); spanText.add(text); invalidate(); return this; }
     ChartView mark(double x, int colour, String text) { markAt.add(new double[] {x, colour}); markText.add(text); invalidate(); return this; }
     /** The stacked total at point i (NaN where every series is). */
     private double total(int i) { double sum = 0; boolean any = false; for (Series s : series) if (i < s.values.length && !Double.isNaN(s.values[i])) { sum += s.values[i]; any = true; } return any ? sum : Double.NaN; }
@@ -133,6 +136,18 @@ final class ChartView extends View {
             float x = (float) (left + (t - x0) / (x1 - x0) * (right - left));
             canvas.drawText(elapsed(t), x, bottom + 16 * density * f, small);
         }
+        // Spans: a faint band each, alternating shades so neighbours stay apart, the first one's name on top when it fits.
+        for (int k = 0; k < spanAt.size(); k++) {
+            double a = Math.max(x0, spanAt.get(k)[0]), b = Math.min(x1, spanAt.get(k)[1]); if (b <= a) continue;
+            float xa = (float) (left + (a - x0) / (x1 - x0) * (right - left)), xb = (float) (left + (b - x0) / (x1 - x0) * (right - left));
+            fill.setColor((muted & 0x00ffffff) | (k % 2 == 0 ? 0x22000000 : 0x14000000)); canvas.drawRect(xa, top, xb, bottom, fill);
+        }
+        if (!spanAt.isEmpty()) {
+            double a = Math.max(x0, spanAt.get(0)[0]), b = Math.min(x1, spanAt.get(spanAt.size() - 1)[1]);
+            float xa = (float) (left + (a - x0) / (x1 - x0) * (right - left)), xb = (float) (left + (b - x0) / (x1 - x0) * (right - left));
+            String name = "Warm-up"; small.setTextAlign(Paint.Align.LEFT);
+            if (xb - xa > small.measureText(name) + 8 * density) canvas.drawText(name, xa + 4 * density, top + 12 * density * f, small);
+        }
         // Stacked: each series an area on top of the ones before, a thin gap of the background between them, the total on top.
         if (stacked) {
             double[] base = new double[seconds.length];
@@ -219,6 +234,8 @@ final class ChartView extends View {
                 rows.add(s.name + "  " + format(s.values[touched]) + unit + (stacked && whole > 0 ? " · " + Math.round(100 * s.values[touched] / whole) + " %" : ""));
                 colors.add(s.color);
             }
+            for (int k = 0; k < spanAt.size(); k++)
+                if (seconds[touched] >= spanAt.get(k)[0] && seconds[touched] < spanAt.get(k)[1]) { rows.add("Warm-up: " + spanText.get(k)); colors.add(0); }
             for (int m = 0; m < markAt.size(); m++)
                 if (Math.abs(markAt.get(m)[0] - seconds[touched]) < (layerAxis ? 0.5 : 30)) { rows.add(markText.get(m)); colors.add((int) markAt.get(m)[1]); }
             if (!stacked) for (Series s : series) if (!s.dashed && touched < s.values.length && !Double.isNaN(s.values[touched])) {
