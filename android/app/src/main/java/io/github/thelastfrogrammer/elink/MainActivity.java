@@ -2638,7 +2638,15 @@ public final class MainActivity extends Activity {
                 .setNegativeButton("Cancel", null).setPositiveButton("Add", (d2, w2) -> printer.addFilamentLoad(which)).show())
             .setNegativeButton("Cancel", null).show();
     }
-    private void stopCloudVideo() { CloudVideo video = cloudVideo; cloudVideo = null; if (video != null) video.stop(); }
+    private void stopCloudVideo() {
+        CloudVideo video = cloudVideo; cloudVideo = null;
+        if (video == null) return;
+        // Which part of the screen stopped it (method and line), for a video that stops right after it started.
+        StackTraceElement[] at = new Throwable().getStackTrace(); List<String> callers = new ArrayList<>();
+        for (int i = 1; i < Math.min(at.length, 4); i++) callers.add(at[i].getMethodName() + ":" + at[i].getLineNumber());
+        Diagnostics.note(Diagnostics.CAMERA, "Print tab cloud video: stop asked by " + String.join(" < ", callers));
+        video.stop();
+    }
     /** Cloud mode: plays the printer's camera through the Elegoo cloud right here under the progress bar (after the one-time cloud agreement). */
     private void startCloudVideo() {
         if (printer == null || printer.cloudSerial.isEmpty() || cloudVideo != null) return;

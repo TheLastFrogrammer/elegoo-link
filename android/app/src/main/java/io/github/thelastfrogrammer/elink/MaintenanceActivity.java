@@ -74,8 +74,9 @@ public final class MaintenanceActivity extends PlainScreen {
         EditText every = new EditText(this); every.setHint("Every"); every.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         if (task != null) every.setText(task.every == Math.rint(task.every) ? String.valueOf((long) task.every) : String.valueOf(task.every)); body.addView(every);
         RadioGroup unit = new RadioGroup(this); String[] units = {Maintenance.HOURS, Maintenance.KG, Maintenance.DAYS};
-        for (int i = 0; i < units.length; i++) { RadioButton b = new RadioButton(this); b.setId(1000 + i); b.setText(Maintenance.unitWords(units[i])); b.setTextColor(ink); unit.addView(b); }
-        String current = task == null ? Maintenance.HOURS : task.unit; for (int i = 0; i < units.length; i++) if (units[i].equals(current)) unit.check(1000 + i);
+        int[] ids = new int[units.length];
+        for (int i = 0; i < units.length; i++) { RadioButton b = new RadioButton(this); ids[i] = android.view.View.generateViewId(); b.setId(ids[i]); b.setText(Maintenance.unitWords(units[i])); b.setTextColor(ink); unit.addView(b); }
+        String current = task == null ? Maintenance.HOURS : task.unit; for (int i = 0; i < units.length; i++) if (units[i].equals(current)) unit.check(ids[i]);
         body.addView(unit);
         // When it was last done: today for a new one; earlier when it was done before the app counted.
         long[] doneAt = {task == null ? System.currentTimeMillis() : task.doneAt};
@@ -95,7 +96,7 @@ public final class MaintenanceActivity extends PlainScreen {
                 String words = name.getText().toString().trim(); double n;
                 try { n = Double.parseDouble(every.getText().toString().trim().replace(',', '.')); } catch (NumberFormatException bad) { n = -1; }
                 if (words.isEmpty() || !(n > 0) || n > 100_000) { Toast.makeText(this, "Give it a name and an interval above 0.", Toast.LENGTH_LONG).show(); return; }
-                String u = units[Math.max(0, unit.getCheckedRadioButtonId() - 1000)];
+                String u = Maintenance.HOURS; for (int i = 0; i < ids.length; i++) if (ids[i] == unit.getCheckedRadioButtonId()) u = units[i];
                 if (task == null) tasks.add(new Maintenance.Task("custom-" + System.currentTimeMillis(), words, u, n, doneAt[0]));
                 else { task.name = words; task.every = n; task.unit = u; task.doneAt = doneAt[0]; }
                 Maintenance.save(prefs, tasks); show();
