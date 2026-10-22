@@ -1543,7 +1543,7 @@ public final class MainActivity extends Activity {
         currentSection = statsSection.body;
         LinearLayout stats = card(null);
         statsText = label(stats, "Counting…", 14, INK, false);
-        button(stats, "Filament price…", this::priceDialog);
+        button(stats, "Prices…", this::priceDialog);
         button(stats, "Make a showcase video…", this::showcaseIntro);
         currentSection = outer;
     }
@@ -1723,16 +1723,29 @@ public final class MainActivity extends Activity {
         }
         recentEmpty.setVisibility(recent.isEmpty() ? View.VISIBLE : View.GONE);
     }
+    /** A field's number (empty is 0), at most `limit`; NumberFormatException when it is not a number in range. */
+    private static double parsed(EditText field, double limit) {
+        String text = field.getText().toString().trim().replace(',', '.');
+        double value = text.isEmpty() ? 0 : Double.parseDouble(text); if (value < 0 || value > limit) throw new NumberFormatException(); return value;
+    }
+    private static double number(String text) { try { return Double.parseDouble(text); } catch (NumberFormatException none) { return 0; } }
     private double pricePerKg() { try { return Double.parseDouble(settings.getString("filamentPricePerKg", "0")); } catch (NumberFormatException none) { return 0; } }
     private void priceDialog() {
         LinearLayout body = dialogBody();
-        label(body, "What a kilogram of filament costs you, in your currency. Used for the cost on History and after slicing. Leave empty for none.", 14, INK, false);
+        label(body, "What a kilogram of filament costs you, in your currency. Used for the cost on History, after slicing and on each print's recording. Leave empty for none.", 14, INK, false);
         EditText price = input(body, "Price per kg", false); price.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
         double now = pricePerKg(); if (now > 0) price.setText(String.valueOf(now));
-        new AlertDialog.Builder(this).setTitle("Filament price").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
-            String text = price.getText().toString().trim().replace(',', '.');
-            try { double value = text.isEmpty() ? 0 : Double.parseDouble(text); if (value < 0 || value > 10_000) throw new NumberFormatException(); settings.edit().putString("filamentPricePerKg", String.valueOf(value)).apply(); refreshStats(); }
-            catch (NumberFormatException invalid) { message("Enter the price as a number, for example 22.50."); }
+        label(body, "For the energy too (optional): the printer's average power while printing, in watts (a plug-in meter tells you; around 150 W is common for a printer of this size with a heated bed), and what a kWh costs you.", 13, MUTED, false);
+        EditText watts = input(body, "Average power (W)", false); watts.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        EditText kwh = input(body, "Price per kWh", false); kwh.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        double w0 = number(settings.getString("printerWatts", "0")), k0 = number(settings.getString("electricityPerKwh", "0"));
+        if (w0 > 0) watts.setText(String.valueOf(w0)); if (k0 > 0) kwh.setText(String.valueOf(k0));
+        new AlertDialog.Builder(this).setTitle("Prices").setView(body).setNegativeButton("Cancel", null).setPositiveButton("Save", (d, w) -> {
+            try {
+                double value = parsed(price, 10_000), power = parsed(watts, 5_000), energy = parsed(kwh, 100);
+                settings.edit().putString("filamentPricePerKg", String.valueOf(value)).putString("printerWatts", String.valueOf(power)).putString("electricityPerKwh", String.valueOf(energy)).apply(); refreshStats();
+            }
+            catch (NumberFormatException invalid) { message("Enter each as a number, for example 22.50."); }
         }).show();
     }
     private TextView printerAi;

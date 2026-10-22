@@ -349,6 +349,9 @@ public final class RecordingsActivity extends Activity {
         if (!last.isEmpty()) extra.add(last + ".");
         String runout = runouts(rows, t0(rows));
         if (!runout.isEmpty()) extra.add(runout);
+        android.content.SharedPreferences prices = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        String cost = RecordingAnalysis.cost(PrintRecorder.grams(recording.extrudedMm, "PLA"), price(prices, "filamentPricePerKg"), recording.duration() / 3_600_000.0, price(prices, "printerWatts"), price(prices, "electricityPerKwh"));
+        if (!cost.isEmpty()) extra.add(cost + ".");
         String coverage = coverage(rows, recording);
         if (!coverage.isEmpty()) extra.add(coverage);
         if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
@@ -356,7 +359,26 @@ public final class RecordingsActivity extends Activity {
         warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
         chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear();
         String warm = warmUpWords(warmUp);
-        if (!warm.isEmpty()) { TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3)); }
+        if (!warm.isEmpty()) {
+            TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3));
+            // Against the earlier prints' warm-ups, read in the background (their readings are on the phone).
+            List<Object[]> mine = warmUp; File folder = directory(this);
+            new Thread(() -> {
+                Map<String, Integer> counts = new HashMap<>(); List<List<Object[]>> earlier = new ArrayList<>();
+                for (PrintRecorder.Recording other : new PrintRecorder(folder).list()) {
+                    if (other.meta.equals(recording.meta) || other.start >= recording.start || earlier.size() >= 30) continue;
+                    try {
+                        List<double[]> them = PrintRecorder.samples(other);
+                        List<Object[]> phases = warmUpPhases(column(them, "sub_status"), column(them, "layer"), column(them, "elapsed_s"));
+                        if (phases.isEmpty()) continue;
+                        earlier.add(phases); java.util.Set<String> steps = new java.util.HashSet<>(); for (Object[] p : phases) steps.add((String) p[2]);
+                        for (String step : steps) counts.merge(step, 1, Integer::sum);
+                    } catch (IOException unreadable) { }
+                }
+                String against = RecordingAnalysis.warmUpAgainstUsual(mine, RecordingAnalysis.usualWarmUp(earlier), counts);
+                if (!against.isEmpty()) runOnUiThread(() -> { if (!isDestroyed()) words.setText(warm + "\n" + against); });
+            }, "recording-warm-up").start();
+        }
         pictures(recording);   // the quickest look at how the print went, before the charts
         checks(recording);
         // One card with the print's four charts, one at a time (the tour shows them all, one after another).
@@ -413,6 +435,7 @@ public final class RecordingsActivity extends Activity {
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
     }
 
+    private static double price(android.content.SharedPreferences prefs, String key) { try { return Double.parseDouble(prefs.getString(key, "0")); } catch (RuntimeException none) { return 0; } }
     private static double[] t0(List<double[]> rows) { return column(rows, "elapsed_s"); }
     /** When the filament sensor reported no filament during the print, in words ("" when it never did or does not report). */
     static String runouts(List<double[]> rows, double[] t) {
@@ -458,8 +481,26 @@ public final class RecordingsActivity extends Activity {
                 if (file == null) note.setText("The print's G-code is not on this phone, so only the guardian's measures are shown.");
                 if (file != null && (p == null || p.layers == 0)) { note.setText("The print's file could not be read." + (guardian.any() ? " The guardian's measures are shown alone." : "")); if (!guardian.any()) return; }
                 if (p != null && p.layers > 0) note.setText(LayerCharts.note(p));
-                LayerCharts.fill(this, card, p != null && p.layers > 0 ? p : null, guardian, ink, muted, grid, surface, dark, getSharedPreferences("workshop-settings", MODE_PRIVATE),
+                boolean ended = !"printing".equals(recording.outcome);
+                LayerCharts.Measured measured = p == null || p.layers == 0 ? null : new LayerCharts.Measured(
+                    RecordingAnalysis.layerSeconds(column(rows, "elapsed_s"), column(rows, "layer"), p.layers, ended),
+                    RecordingAnalysis.layerFed(column(rows, "layer"), column(rows, "extruded_mm"), p.layers, ended));
+                LayerCharts.fill(this, card, p != null && p.layers > 0 ? p : null, guardian, measured, ink, muted, grid, surface, dark, getSharedPreferences("workshop-settings", MODE_PRIVATE),
                     (row, text, action) -> { action(row, text, action); Button b = (Button) row.getChildAt(row.getChildCount() - 1); b.setPadding(0, dp(8), 0, dp(8)); return b; });
+                // In words: layers much slower than the file said, the fed filament against the plan, and the file at flagged layers.
+                if (measured != null) {
+                    double[] estimate = p.estimatedLayerSeconds();
+                    List<String> said = new ArrayList<>();
+                    for (String line : new String[] {RecordingAnalysis.layerTimeTotals(measured.seconds, estimate), RecordingAnalysis.slowLayers(measured.seconds, estimate), RecordingAnalysis.fedTotals(measured.fed, Arrays.copyOf(p.filament, p.layers))})
+                        if (!line.isEmpty()) said.add(line);
+                    if (!said.isEmpty()) label(card, String.join("\n", said), 13, muted, false);
+                    List<String> flagged = RecordingAnalysis.flaggedLayers(guardian, p);
+                    if (!flagged.isEmpty()) {
+                        label(card, "What the file asks for at the flagged layers", 14, ink, true);
+                        label(card, String.join("\n", flagged), 13, ink, false);
+                        label(card, "Compare them with layers that came out well: a type of line, a speed or a flow that only the flagged layers share is a setting to look at.", 12, muted, false);
+                    }
+                }
                 // The pictures at the layer printing when each was taken.
                 double[] atLayer = pictureLayers(pictureTimes, column(rows, "elapsed_s"), column(rows, "layer"));
                 for (int i = 0; i < card.getChildCount(); i++) if (card.getChildAt(i) instanceof ChartView) ((ChartView) card.getChildAt(i)).pictures(atLayer, this::pictureThumb, this::openPicture);

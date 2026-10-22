@@ -23,6 +23,10 @@ final class LayerProfile {
     /** Per layer: the height (mm), and over its extrusions (weighted by length) the mean acceleration (mm/s²), mean speed (mm/s) and highest flow (mm³/s). */
     double[] height = new double[256], accel = new double[256], speed = new double[256], flowMax = new double[256], accelMax = new double[256];
     private double[] length = new double[256], volume = new double[256];
+    /** Per layer: the time its moves take at their feed rates (s, every move and dwell, without acceleration), and the filament it feeds (mm). */
+    double[] moveSeconds = new double[256], filament = new double[256];
+    /** The slicer's estimate of the whole print (s, from the file's "estimated printing time"), or 0. */
+    long estimatedSeconds;
     /** The filament's highest flow from the file's settings (mm³/s), or 0 when it does not say. */
     double maxFlow;
 
@@ -33,6 +37,7 @@ final class LayerProfile {
         BufferedReader reader = new BufferedReader(new InputStreamReader(input, StandardCharsets.UTF_8), 1 << 16);
         double x = 0, y = 0, z = 0, e = 0, feed = 0, accel = 0, lastLayerZ = -1, diameter = 1.75, layerHeight = 0.2, typedHeight = Double.NaN;
         boolean absolute = true, absoluteE = true, extrudeAbsolute = true, pendingLayer = false, sawLayerComment = false;
+        double pendingSeconds = 0;   // move time after a layer change comment, before that layer's first extrusion
         int type = GcodeToolpath.OTHER;
         String line;
         while ((line = reader.readLine()) != null) {
@@ -44,6 +49,7 @@ final class LayerProfile {
                 else if (line.startsWith("; filament_diameter =")) diameter = number(first(line), 1.75);
                 else if (line.startsWith("; filament_max_volumetric_speed =")) p.maxFlow = number(first(line), 0);
                 else if (line.startsWith("; layer_height =")) layerHeight = number(first(line), 0.2);
+                else if (p.estimatedSeconds == 0 && line.contains("estimated printing time") && line.indexOf('=') > 0) p.estimatedSeconds = LayerReach.seconds(line.substring(line.indexOf('=') + 1));
                 continue;
             }
             int comment = line.indexOf(';');
@@ -53,6 +59,7 @@ final class LayerProfile {
             // Acceleration as Klipper sets it, and as M204 does (S, or P for printing moves).
             if (upper.startsWith("SET_VELOCITY_LIMIT")) { double a = word(upper, "ACCEL="); if (!Double.isNaN(a)) accel = a; continue; }
             char kind = upper.charAt(0); int n = command(upper);
+            if (kind == 'G' && n == 4) { double ms = letter(upper, 'P'), sec = letter(upper, 'S'), wait = !Double.isNaN(ms) ? ms / 1000 : !Double.isNaN(sec) ? sec : 0; if (pendingLayer) pendingSeconds += wait; else if (p.layers > 0) p.moveSeconds[p.layers - 1] += wait; continue; }
             if (kind == 'M' && n == 204) { double a = letter(upper, 'S'); if (Double.isNaN(a)) a = letter(upper, 'P'); if (!Double.isNaN(a)) accel = a; continue; }
             if (kind == 'G' && n >= 0 && n <= 3) {
                 double nx = x, ny = y, nz = z, ne = e; boolean hasE = false;
@@ -69,20 +76,24 @@ final class LayerProfile {
                     }
                 }
                 double moved = Math.hypot(nx - x, ny - y), fed = ne - e;
+                // Every move's time at its feed rate counts to the layer it is in (travel too); after a layer change comment, to the next layer.
+                double took = 0;
+                if (feed > 0) { double path = Math.hypot(moved, nz - z); took = (path > 1e-6 ? path : Math.abs(fed)) / feed; }
                 if (hasE && fed > 1e-6 && moved > 1e-6) {
                     boolean newLayer = false;
                     if (pendingLayer) { newLayer = !(p.layers == 1 && !sawLayerComment); sawLayerComment = true; pendingLayer = false; lastLayerZ = nz; }
                     else if (p.layers == 0 || (!sawLayerComment && nz > lastLayerZ + 1e-4)) { newLayer = true; lastLayerZ = nz; }
-                    if (newLayer) p.open(Double.isNaN(typedHeight) ? layerHeight : typedHeight);
+                    if (newLayer) { p.open(Double.isNaN(typedHeight) ? layerHeight : typedHeight); p.moveSeconds[p.layers - 1] += pendingSeconds; pendingSeconds = 0; }
                     int at = p.layers - 1;
                     double cubic = fed * Math.PI * diameter * diameter / 4;   // the filament fed, as material laid down
                     p.area[at][type] += cubic;   // turned into mm² when the layer's height is known (close())
-                    p.volume[at] += cubic; p.length[at] += moved;
+                    p.volume[at] += cubic; p.length[at] += moved; p.filament[at] += fed;
                     p.accel[at] += accel * moved; p.accelMax[at] = Math.max(p.accelMax[at], accel);
                     p.speed[at] += feed * moved;
                     if (feed > 0) p.flowMax[at] = Math.max(p.flowMax[at], cubic / (moved / feed));
                     if (!Double.isNaN(typedHeight)) p.height[at] = Math.max(p.height[at], typedHeight);
                 }
+                if (pendingLayer) pendingSeconds += took; else if (p.layers > 0) { p.moveSeconds[p.layers - 1] += took + pendingSeconds; pendingSeconds = 0; }
                 x = nx; y = ny; z = nz; e = ne;
             }
             else if (kind == 'G' && n == 90) { absolute = true; absoluteE = extrudeAbsolute; }
@@ -99,6 +110,7 @@ final class LayerProfile {
         if (layers == area.length) {
             area = Arrays.copyOf(area, layers * 2); height = Arrays.copyOf(height, layers * 2); accel = Arrays.copyOf(accel, layers * 2); speed = Arrays.copyOf(speed, layers * 2);
             flowMax = Arrays.copyOf(flowMax, layers * 2); accelMax = Arrays.copyOf(accelMax, layers * 2); length = Arrays.copyOf(length, layers * 2); volume = Arrays.copyOf(volume, layers * 2);
+            moveSeconds = Arrays.copyOf(moveSeconds, layers * 2); filament = Arrays.copyOf(filament, layers * 2);
         }
         area[layers] = new double[TYPES]; height[layers] = 0; layers++;
         if (startHeight > 0) height[layers - 1] = startHeight;
@@ -112,6 +124,16 @@ final class LayerProfile {
         }
     }
 
+    /**
+     * Each layer's estimated time (s): its moves' time at their feed rates, scaled so the layers add up to the slicer's own
+     * estimate when the file gives one (which counts acceleration; the moves alone come out short).
+     */
+    double[] estimatedLayerSeconds() {
+        double sum = 0; for (int i = 0; i < layers; i++) sum += moveSeconds[i];
+        double scale = estimatedSeconds > 0 && sum > 0 ? estimatedSeconds / sum : 1;
+        double[] out = new double[layers]; for (int i = 0; i < layers; i++) out[i] = moveSeconds[i] * scale;
+        return out;
+    }
     /** The layer's whole cross section (mm²). */
     double total(int layer) { double sum = 0; for (double a : area[layer]) sum += a; return sum; }
     /** One type's cross section per layer, as a series. */

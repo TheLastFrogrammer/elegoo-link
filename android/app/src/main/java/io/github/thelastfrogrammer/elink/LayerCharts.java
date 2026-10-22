@@ -33,6 +33,12 @@ final class LayerCharts {
     }
     static final int AMBER = 0xffe0a030, RED = 0xffd64545;
 
+    /** What a recording measured per layer (index = layer - 1; NaN where unknown): seconds taken and filament fed (mm). */
+    static final class Measured {
+        final double[] seconds, fed;
+        Measured(double[] seconds, double[] fed) { this.seconds = seconds; this.fed = fed; }
+    }
+
     /**
      * The marks to lay over every chart: one per layer and measure that went over its limit (the worst picture of that
      * layer; red when it raised the alarm), and each answer. {layer, colour} with its words. Pure, for tests.
@@ -85,10 +91,15 @@ final class LayerCharts {
     }
     /** As above, with the guardian's checks and answers laid over every chart and charted on their own (`p` may be null: then only that). */
     static void fill(Context context, LinearLayout card, LayerProfile p, Guardian guardian, int ink, int muted, int grid, int surface, boolean dark, SharedPreferences prefs, Chip chip) {
+        fill(context, card, p, guardian, null, ink, muted, grid, surface, dark, prefs, chip);
+    }
+    /** As above, with what the recording measured per layer set against the file: time, and filament fed. */
+    static void fill(Context context, LinearLayout card, LayerProfile p, Guardian guardian, Measured measured, int ink, int muted, int grid, int surface, boolean dark, SharedPreferences prefs, Chip chip) {
         int[] c = colours(dark); int blue = c[0], orange = c[1], aqua = c[2];
         float density = context.getResources().getDisplayMetrics().density;
         List<View> views = new ArrayList<>(); List<String> names = new ArrayList<>();
         if (p != null) profileCharts(context, p, ink, muted, grid, surface, blue, orange, aqua, views, names);
+        if (p != null && measured != null) measuredCharts(context, p, measured, ink, muted, grid, surface, blue, orange, views, names);
         if (guardian != null && guardian.any()) {
             int layers = Math.max(p == null ? 0 : p.layers, guardian.lastLayer());
             ChartView g = guardianChart(context, guardian, layers, ink, muted, grid, surface, new int[] {orange, blue, aqua, RED});
@@ -121,6 +132,26 @@ final class LayerCharts {
         ChartView chart = new ChartView(context, ink, muted, grid, surface).layers();
         chart.set("Print guardian's measures (dashed: their limits)", " %", layer, lines, 0, Double.NaN);
         return chart;
+    }
+
+    /** Each layer's time (minutes) and filament fed (mm) as the recording measured them, against the file's (dashed). */
+    private static void measuredCharts(Context context, LayerProfile p, Measured m, int ink, int muted, int grid, int surface, int blue, int orange, List<View> views, List<String> names) {
+        int n = p.layers; double[] layer = new double[n]; for (int i = 0; i < n; i++) layer[i] = i + 1;
+        double[] estimate = p.estimatedLayerSeconds(), took = new double[n], file = new double[n];
+        boolean any = false;
+        for (int i = 0; i < n; i++) { took[i] = i < m.seconds.length ? m.seconds[i] / 60 : Double.NaN; file[i] = estimate[i] / 60; any |= !Double.isNaN(took[i]); }
+        if (any) {
+            ChartView time = new ChartView(context, ink, muted, grid, surface).layers();
+            time.set("Time per layer: measured, and the file's estimate (dashed)", " min", layer, Arrays.asList(new ChartView.Series("Measured", blue, took, false), new ChartView.Series("File's estimate", blue, file, true)), 0, Double.NaN);
+            views.add(time); names.add("Time");
+        }
+        double[] fed = new double[n], planned = new double[n]; any = false;
+        for (int i = 0; i < n; i++) { fed[i] = i < m.fed.length ? m.fed[i] : Double.NaN; planned[i] = p.filament[i]; any |= !Double.isNaN(fed[i]); }
+        if (any) {
+            ChartView feed = new ChartView(context, ink, muted, grid, surface).layers();
+            feed.set("Filament per layer: reported fed, and the file's plan (dashed)", " mm", layer, Arrays.asList(new ChartView.Series("Reported fed", orange, fed, false), new ChartView.Series("File's plan", orange, planned, true)), 0, Double.NaN);
+            views.add(feed); names.add("Fed");
+        }
     }
 
     private static void profileCharts(Context context, LayerProfile p, int ink, int muted, int grid, int surface, int blue, int orange, int aqua, List<View> views, List<String> names) {
