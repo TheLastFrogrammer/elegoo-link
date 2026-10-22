@@ -258,7 +258,11 @@ public final class PrinterService extends Service {
         cloudFiles = new CloudFileMemory(this);
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         guardian = new GuardianRun(this); recorder.pictureKept = this::guard; PrintRecorder.active = recorder;
-        recorder.printEnded = this::autoVideo;
+        recorder.printEnded = ended -> {
+            autoVideo(ended);
+            // After the video (the same worker): the storage clean-up, if set, and the maintenance reminders that fell due.
+            videoWorker.execute(() -> { try { RecordingStorage.applyPolicy(this); } catch (RuntimeException failed) { Diagnostics.note(Diagnostics.CAMERA, "storage clean-up failed: " + failed.getClass().getSimpleName()); } maintenanceDue(); });
+        };
         recorder.writeInBackground();   // statuses are handled on the screen thread: its files are written off it
         automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
@@ -1182,6 +1186,26 @@ public final class PrinterService extends Service {
             boolean both = side;
             main.post(() -> videoReady(recording, kept.get(kept.size() - 1), both));
         });
+    }
+    /** One notification for maintenance tasks that fell due with this print (each once per period). Its tap opens the reminders. */
+    private void maintenanceDue() {
+        android.content.SharedPreferences prefs = workshop();
+        if (!prefs.getBoolean(Maintenance.ENABLED, true)) return;
+        long now = System.currentTimeMillis();
+        List<Maintenance.Task> tasks = Maintenance.load(prefs, now);
+        List<Maintenance.Task> due = Maintenance.newlyDue(tasks, new PrintRecorder(RecordingsActivity.directory(this)).list(), now);
+        if (due.isEmpty()) return;
+        Maintenance.save(prefs, tasks);
+        if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;
+        NotificationManager manager = getSystemService(NotificationManager.class);
+        manager.createNotificationChannel(new NotificationChannel("maintenance", "Maintenance reminders", NotificationManager.IMPORTANCE_DEFAULT));
+        PendingIntent open = PendingIntent.getActivity(this, 7301, new Intent(this, MaintenanceActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK), PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        List<String> names = new java.util.ArrayList<>(); for (Maintenance.Task t : due) names.add(t.name);
+        String text = String.join("; ", names);
+        Notification.Builder builder = new Notification.Builder(this, "maintenance").setSmallIcon(R.drawable.ic_launcher)
+            .setContentTitle(due.size() == 1 ? "Maintenance due" : due.size() + " maintenance tasks due").setContentText(text)
+            .setStyle(new Notification.BigTextStyle().bigText(text)).setContentIntent(open).setAutoCancel(true);
+        manager.notify(7301, builder.build());
     }
     private void videoReady(PrintRecorder.Recording recording, File lastPicture, boolean side) {
         if (Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) return;

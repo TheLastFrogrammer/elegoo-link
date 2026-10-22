@@ -640,7 +640,7 @@ public final class PrintRecorder {
         if (linked == null) return;
         for (int i = KEEP; i < all.size(); i++) {
             if (linked.contains(all.get(i).meta.getName())) continue;
-            deletePictures(all.get(i)); all.get(i).csv.delete(); all.get(i).meta.delete();
+            deletePictures(all.get(i)); RecordingGcode.remove(all.get(i)); all.get(i).csv.delete(); all.get(i).meta.delete();
         }
     }
 

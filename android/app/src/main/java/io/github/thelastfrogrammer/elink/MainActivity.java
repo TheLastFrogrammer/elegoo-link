@@ -648,6 +648,7 @@ public final class MainActivity extends Activity {
         pictureDefault = pictures; showPictureDefault();
         CompoundButton autoVideo = checkbox(preferences, "Make the timelapse video when a print ends", settings.getBoolean("autoTimelapse", true));
         autoVideo.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("autoTimelapse", enabled).apply());
+        button(preferences, "Storage…", () -> startActivity(new Intent(this, StorageActivity.class)));
         CompoundButton videoWhere = checkbox(preferences, "Show the head's position on timelapse videos", settings.getBoolean("timelapsePosition", true));
         videoWhere.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("timelapsePosition", enabled).apply());
         CompoundButton visits = checkbox(preferences, "Take print pictures through the cloud", settings.getBoolean(PictureVisits.PREF, true));
@@ -1368,7 +1369,7 @@ public final class MainActivity extends Activity {
     /** One compact tappable row for a printer file: name, size and layers beneath, a chevron, and a hairline above all but the first. */
     private void fileRow(String name, String detail, boolean divider, Runnable action) { listRow(fileRows, name, detail, divider, action); }
     /** A compact list row (name, muted detail line); tappable with a chevron when there is an action, plain otherwise. */
-    private void listRow(LinearLayout list, String name, String detail, boolean divider, Runnable action) {
+    private TextView listRow(LinearLayout list, String name, String detail, boolean divider, Runnable action) {
         if (divider) { View line = new View(this); line.setBackgroundColor(TRACK); list.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
         LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); row.setGravity(Gravity.CENTER_VERTICAL); row.setPadding(0, dp(10), 0, dp(10)); row.setMinimumHeight(dp(56));
         if (action != null) row.setBackground(new RippleDrawable(ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
@@ -1380,6 +1381,7 @@ public final class MainActivity extends Activity {
         TextView second = new TextView(this); second.setText(detail); second.setTextSize(12); second.setTextColor(MUTED); text.addView(second);
         if (action != null) { TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextSize(24); chevron.setTextColor(MUTED); chevron.setPadding(dp(12), 0, 0, 0); row.addView(chevron); row.setOnClickListener(v -> action.run()); }
         row.setContentDescription(name + ", " + detail); list.addView(row, new LinearLayout.LayoutParams(-1, -2));
+        return second;
     }
     private void toggleMore() { setMore(!moreOpen); }
     private void setMore(boolean open) {
@@ -1526,6 +1528,7 @@ public final class MainActivity extends Activity {
         recentPrints = new LinearLayout(this); recentPrints.setOrientation(LinearLayout.VERTICAL); recordings.addView(recentPrints);
         recentEmpty = label(recordings, "Prints the app watched appear here, with their graphs, camera pictures and your notes.", 13, MUTED, false);
         listRow(recordings, "All print recordings…", "Search, compare and rate every print the app watched", true, () -> startActivity(new Intent(this, RecordingsActivity.class)));
+        maintenanceDetail = listRow(recordings, "Maintenance reminders…", "Nozzle, plate, belts and more, by print hours", true, () -> startActivity(new Intent(this, MaintenanceActivity.class)));
         // The printer's own records and the statistics each on their own page.
         printerHistorySection = section(HISTORY, "The printer's history", "What the printer itself lists: print again, timelapses");
         statsSection = section(HISTORY, "Statistics", "Prints, hours, filament and cost");
@@ -1735,7 +1738,7 @@ public final class MainActivity extends Activity {
         builder.show();
     }
     // ------------------------------------------------------------------ Statistics (History)
-    private TextView statsText;
+    private TextView statsText, maintenanceDetail;
     private long statsAt;
     /** Counts from the recordings and spool use, read off the main thread (up to a hundred small files). */
     private void refreshStats() {
@@ -1746,7 +1749,8 @@ public final class MainActivity extends Activity {
             List<PrintRecorder.Recording> all = new PrintRecorder(folder).list();
             List<String> lines = PrintStats.of(all, store.usage(), System.currentTimeMillis()).lines(price);
             List<PrintRecorder.Recording> recent = new ArrayList<>(all.subList(0, Math.min(5, all.size())));
-            main.post(() -> { if (isDestroyed()) return; statsText.setText(String.join("\n", lines)); showRecentPrints(recent); if (!lines.isEmpty()) statsSection.detail.setText(lines.get(0)); });
+            String upkeep = Maintenance.summary(Maintenance.load(settings, System.currentTimeMillis()), all, System.currentTimeMillis());
+            main.post(() -> { if (isDestroyed()) return; statsText.setText(String.join("\n", lines)); showRecentPrints(recent); if (!lines.isEmpty()) statsSection.detail.setText(lines.get(0)); if (maintenanceDetail != null) maintenanceDetail.setText(upkeep); });
         });
     }
     /** The latest prints the app recorded, newest first; each row opens the print's own page. */

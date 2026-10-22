@@ -65,6 +65,8 @@ final class FeatureIndex {
         new Feature("recordings", "Print recordings and charts", "recordings charts graphs log temperature progress csv pictures snapshots", HISTORY, "All print recordings…", Prepare.NONE, true),
         new Feature("stats", "Printing statistics", "statistics stats hours success rate how much filament used total summary", HISTORY, "Statistics", Prepare.NONE, false),
         new Feature("price", "Filament and energy prices, print cost", "cost price money spend filament per kg euro dollar energy electricity power watts kwh", HISTORY, "Prices", Prepare.NONE, true),
+        new Feature("maintenance", "Maintenance reminders", "maintenance reminder clean nozzle plate belts lubricate service upkeep hours", HISTORY, "Maintenance reminders…", Prepare.NONE, true),
+        new Feature("phonestorage", "Phone storage used by recordings", "phone storage space free up delete pictures videos clean up limit size recordings", SETTINGS, "Storage…", Prepare.NONE, true),
         new Feature("storage", "Printer storage space", "storage space disk capacity free full", FILES, "Refresh storage", Prepare.NONE, false),
         // Settings
         new Feature("connect", "Connect on Wi-Fi", "connect local lan wifi ip access code printer address", SETTINGS, "Printer connection", Prepare.SETTINGS_LOCAL, false),

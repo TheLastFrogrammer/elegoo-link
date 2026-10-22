@@ -173,6 +173,20 @@ public class MoreScreensRenderTest {
         RecordingsActivity detail = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
         shot(detail.getWindow().getDecorView(), 1080, 4400, new File(out(), "recording-night-" + theme + ".png"));
     }
+    /** The storage page and the maintenance reminders, over the seeded recordings. */
+    @Test public void renderStorageAndMaintenance() throws Exception {
+        setTheme(false);
+        seedRecordings();
+        for (Class<? extends android.app.Activity> page : java.util.Arrays.asList(StorageActivity.class, MaintenanceActivity.class)) {
+            android.app.Activity shown = Robolectric.buildActivity(page).setup().get();
+            for (int i = 0; i < 200 && ((android.view.ViewGroup) ((android.view.ViewGroup) shown.findViewById(android.R.id.content)).getChildAt(0)).getChildCount() > 0
+                && ((android.view.ViewGroup) ((android.widget.ScrollView) ((android.view.ViewGroup) shown.findViewById(android.R.id.content)).getChildAt(0)).getChildAt(0)).getChildCount() < 3; i++) {
+                Thread.sleep(20); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            }
+            shot(shown.getWindow().getDecorView(), 1080, 2400, new File(out(), page.getSimpleName().toLowerCase(java.util.Locale.ROOT) + "-light.png"));
+        }
+    }
+
     /** Two prints side by side, layer by layer. */
     @Test public void renderCompare() throws Exception {
         setTheme(false);
