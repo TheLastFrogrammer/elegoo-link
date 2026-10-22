@@ -71,9 +71,10 @@ final class TimelapseEncoder {
         return new int[] {w, h};
     }
 
-    static void encode(List<File> pictures, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
+    static void encode(List<File> pictures, File out, AtomicBoolean cancelled, Progress progress) throws IOException { encode(pictures, null, out, cancelled, progress); }
+    static void encode(List<File> pictures, java.util.function.Function<File, String> caption, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
         List<File[]> frames = new java.util.ArrayList<>(); for (File picture : pictures) frames.add(new File[] {picture});
-        encode(frames, null, out, cancelled, progress);
+        encode(frames, null, caption, out, cancelled, progress);
     }
 
     /**
@@ -105,7 +106,9 @@ final class TimelapseEncoder {
      * The video from frames of one picture, or of two side by side (`labels` names each side; a missing picture leaves its
      * side dark). Each panel keeps its picture's shape; the whole frame is at most 1920 wide with two.
      */
-    static void encode(List<File[]> frames, String[] labels, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
+    static void encode(List<File[]> frames, String[] labels, File out, AtomicBoolean cancelled, Progress progress) throws IOException { encode(frames, labels, null, out, cancelled, progress); }
+    /** As above, with `caption` (may be null, or answer null) adding words to a picture's lower right: the head's position. */
+    static void encode(List<File[]> frames, String[] labels, java.util.function.Function<File, String> caption, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
         if (frames.isEmpty()) throw new IOException("No pictures");
         int panels = frames.get(0).length;
         BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true; BitmapFactory.decodeFile(frames.get(0)[0].getPath(), bounds);
@@ -153,6 +156,8 @@ final class TimelapseEncoder {
                         if (labels != null && k < labels.length) label(canvas, labels[k], left + pad, pad, text, shade, pad);
                         // The time into the print: each side's own (the far picture comes later in the layer).
                         if (file != null) label(canvas, ChartView.elapsed(seconds(file)), left + pad, wh[1] - pad * 3 - text.getTextSize(), text, shade, pad);
+                        String words = file == null || caption == null ? null : caption.apply(file);
+                        if (words != null) label(canvas, words, left + panelWidth - pad - (text.measureText(words) + pad * 2), wh[1] - pad * 3 - text.getTextSize(), text, shade, pad);
                     }
                 } finally { input.unlockCanvasAndPost(canvas); }
                 drain.until(n + 1, 1000);
@@ -166,6 +171,18 @@ final class TimelapseEncoder {
             codec.release(); if (input != null) input.release();
             if (muxer != null) try { muxer.stop(); } catch (RuntimeException ignored) { } finally { muxer.release(); }
         }
+    }
+    /** The head's position at each picture, from the positions noted beside it (PrintRecorder.picturePositions); null where none was. */
+    static java.util.function.Function<File, String> positions() {
+        java.util.Map<File, java.util.Map<String, double[]>> folders = new java.util.HashMap<>();
+        return file -> {
+            double[] p = folders.computeIfAbsent(file.getParentFile(), PrintRecorder::picturePositions).get(file.getName());
+            return p == null ? null : positionWords(p);
+        };
+    }
+    /** "X 120.4  Y 30.2  Z 12.40  L 62" from {s, x, y, z, layer, age}. Pure. */
+    static String positionWords(double[] p) {
+        return String.format(java.util.Locale.ROOT, "X %.1f  Y %.1f  Z %.2f", p[1], p[2], p[3]) + (p[4] >= 1 ? "  L " + (int) p[4] : "");
     }
     /** Words on a dark band, its top left corner at x, y. */
     private static void label(Canvas canvas, String words, float x, float y, Paint text, Paint shade, float pad) {

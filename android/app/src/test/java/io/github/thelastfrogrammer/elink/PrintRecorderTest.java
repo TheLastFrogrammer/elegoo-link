@@ -112,6 +112,26 @@ public class PrintRecorderTest {
         assertEquals(1800, ChartView.niceTime(1500), 0); assertEquals("1:05", ChartView.elapsed(3900)); assertEquals("—", ChartView.format(Double.NaN));
     }
 
+    /** The head's position goes into each sample, and the last one reported is noted with each picture. */
+    @Test public void headPositionsAreKeptWithReadingsAndPictures() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir);
+        recorder.setDefaultPictureMinutes(1);
+        JSONObject first = status(2075, "h.gcode", 3, 5); first.put("gcode_move_inf", new JSONObject().put("x", 120.5).put("y", 30.25).put("z", 0.6));
+        assertTrue(recorder.update(1_000, 1_000, first, "local", "CC2"));
+        PrintRecorder.Recording now = recorder.current();
+        byte[] jpeg = new byte[200]; jpeg[0] = (byte) 0xFF; jpeg[1] = (byte) 0xD8;
+        assertTrue(recorder.savePicture(jpeg, 3_500));
+        double[] row = PrintRecorder.samples(now).get(0);
+        assertEquals(120.5, row[PrintRecorder.column("x_mm")], 1e-9); assertEquals(30.25, row[PrintRecorder.column("y_mm")], 1e-9);
+        java.util.Map<String, double[]> at = PrintRecorder.picturePositions(now.pictureFolder());
+        assertArrayEquals(new double[] {2, 120.5, 30.25, 0.6, 3, 2.5}, at.get("000002.jpg"), 1e-9);
+        assertEquals("X 120.5  Y 30.3  Z 0.60  L 3", TimelapseEncoder.positionWords(at.get("000002.jpg")));
+        assertEquals("before the first layer, no layer", "X 1.0  Y 2.0  Z 0.20", TimelapseEncoder.positionWords(new double[] {0, 1, 2, 0.2, 0, 0}));
+        assertEquals(TimelapseEncoder.positionWords(at.get("000002.jpg")), TimelapseEncoder.positions().apply(new java.io.File(now.pictureFolder(), "000002.jpg")));
+        assertNull(TimelapseEncoder.positions().apply(new java.io.File(now.pictureFolder(), "000099.jpg")));
+        assertTrue(HeadPositions3DView.describe(new double[][] {{2, 120.5, 30.25, 0.6}, {60, 10, 20, 5}}).startsWith("Head at 2 pictures: X 10.0–120.5"));
+    }
+
     /** The active tray and its colour go into each sample; pictures come at the print's own interval and are kept with it. */
     @Test public void traysAndPicturesAreRecordedWithThePrint() throws Exception {
         PrintRecorder recorder = new PrintRecorder(dir);

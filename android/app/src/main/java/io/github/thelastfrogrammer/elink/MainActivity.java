@@ -644,6 +644,8 @@ public final class MainActivity extends Activity {
         pictureDefault = pictures; showPictureDefault();
         CompoundButton autoVideo = checkbox(preferences, "Make the timelapse video when a print ends", settings.getBoolean("autoTimelapse", true));
         autoVideo.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("autoTimelapse", enabled).apply());
+        CompoundButton videoWhere = checkbox(preferences, "Show the head's position on timelapse videos", settings.getBoolean("timelapsePosition", true));
+        videoWhere.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("timelapsePosition", enabled).apply());
         CompoundButton visits = checkbox(preferences, "Take print pictures through the cloud", settings.getBoolean(PictureVisits.PREF, true));
         visits.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean(PictureVisits.PREF, enabled).apply(); if (!enabled) endVisit(); });
         label(preferences, "Through the cloud, each picture opens the printer's video for a few seconds: a little mobile data each time. They keep coming with the app closed while it watches through the cloud in the background (Settings › Printer connection).", 12, MUTED, false);

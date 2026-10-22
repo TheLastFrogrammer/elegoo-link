@@ -222,6 +222,20 @@ public class A11yRenderTest {
         shot(frame, 780, "layer-cross-section", 1.0f);
     }
 
+    /** Where the head was at each picture, in 3D over the bed: a smooth timelapse parks at the back corner every layer. */
+    @Test public void headPositionsIn3D() throws Exception {
+        int n = 40; double[][] at = new double[n][], seen = new double[300][];
+        for (int i = 0; i < n; i++) at[i] = i % 5 == 4 ? new double[] {i * 120, 128 + 40 * Math.cos(i), 128 + 40 * Math.sin(i), 0.2 + i * 0.3} : new double[] {i * 120, 250, 250, 0.2 + i * 0.3};
+        for (int i = 0; i < seen.length; i++) seen[i] = new double[] {128 + 45 * Math.cos(i * 0.7), 128 + 45 * Math.sin(i * 0.7), 0.2 + i * 0.04};
+        android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(160, 120, android.graphics.Bitmap.Config.ARGB_8888);
+        new android.graphics.Canvas(frame).drawColor(0xff40505a);
+        HeadPositions3DView view = new HeadPositions3DView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6, 0xffb7d3f5, 0xff1a4f9c).set(at, seen, 256, 256).pictures(i -> frame, i -> { });
+        android.widget.FrameLayout box = new android.widget.FrameLayout(context()); box.setBackgroundColor(0xfff2f5f6); box.addView(view);
+        box.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1020, View.MeasureSpec.EXACTLY));
+        box.layout(0, 0, 1080, 1020);
+        shot(box, 1020, "head-3d", 1.0f);
+    }
+
     /** A recording's chart with the camera pictures' ticks, one touched: its picture in the readout. */
     @Test public void picturesOnTheCharts() throws Exception {
         int n = 120; double[] t = new double[n], progress = new double[n];

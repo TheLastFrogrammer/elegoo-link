@@ -20,7 +20,8 @@ public final class PrintRecorder {
         "tray", "tray_rgb",   // the active CANVAS tray (1 = unit 0 tray 0) and its filament colour as 0xRRGGBB, when reported
         "extruded_mm",        // filament the G-code has fed so far (commanded, from the extruder position; not measured)
         "speed",              // the speed the printer reports for its current move, as it reports it
-        "filament_detected"}; // the filament sensor: 1 filament there, 0 none (runout), blank when not reported
+        "filament_detected",  // the filament sensor: 1 filament there, 0 none (runout), blank when not reported
+        "x_mm", "y_mm"};      // the head's position as the printer reports it (with z_mm)
 
     public static final class Recording {
         public final File csv, meta;
@@ -277,6 +278,10 @@ public final class PrintRecorder {
     /** The printer's own camera's id in `savePicture`; an added camera is "added:" and its id. */
     static final String PRINTER_CAMERA = "printer";
     /** As above, naming where the picture came from for the camera log (the first picture of a print, every tenth, and every failure). */
+    /** The head's last reported position {x, y, z, layer} and when it came (monotonic ms), for the pictures' positions. */
+    private double[] head; private long headMono;
+    /** Each picture's head position, in its folder: picture, s into the print, x, y, z (mm), layer, age of the position (s). */
+    static final String POSITIONS = "positions.csv";
     public synchronized boolean savePicture(byte[] jpeg, long mono, String source, String cameraId) {
         if (current == null) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: no print is being recorded"); return false; }
         if (jpeg == null || jpeg.length < 100) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: empty picture (" + (jpeg == null ? 0 : jpeg.length) + " bytes)"); return false; }
@@ -287,6 +292,10 @@ public final class PrintRecorder {
         try (OutputStream out = new FileOutputStream(new File(folder, String.format(Locale.ROOT, "%06d.jpg", elapsed)))) { out.write(jpeg); }
         catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "picture from " + source + " not kept: " + failed.getClass().getSimpleName()); return false; }
         current.checks.picture(toFar ? 1 : 0, asked == 0 ? -1 : clockMs() - askedAt);
+        if (head != null) {
+            String row = String.format(Locale.ROOT, "%06d.jpg,%d,%.2f,%.2f,%.3f,%d,%.1f\n", elapsed, elapsed, head[0], head[1], head[2], (int) head[3], Math.max(0, mono - headMono) / 1000.0);
+            try (Writer out = new OutputStreamWriter(new FileOutputStream(new File(folder, POSITIONS), true), StandardCharsets.UTF_8)) { out.write(row); } catch (IOException ignored) { }
+        }
         boolean parkedPicture = current.smooth() && (asked == ASKED_PARKED || asked == 0 && parkedArmed);
         asked = 0; picturedMono = mono;
         if (toFar) {
@@ -318,6 +327,24 @@ public final class PrintRecorder {
         list.sort(Comparator.comparing(File::getName)); return list;
     }
 
+    /**
+     * Where the head was for each picture in a folder, by picture name: {s into the print, x, y, z (mm), layer, age of the
+     * position (s)}. The position is the last the printer reported before the picture was kept. Empty when none were noted.
+     */
+    public static Map<String, double[]> picturePositions(File folder) {
+        Map<String, double[]> out = new LinkedHashMap<>();
+        File file = new File(folder, POSITIONS);
+        if (!file.isFile()) return out;
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                String[] cells = line.split(",", -1); if (cells.length < 7) continue;
+                try { double[] v = new double[6]; for (int i = 0; i < 6; i++) v[i] = Double.parseDouble(cells[i + 1]); out.put(cells[0], v); }
+                catch (NumberFormatException damaged) { }
+            }
+        } catch (IOException unreadable) { }
+        return out;
+    }
     /** A recording's second set (head far from the camera, when comparing), oldest first. */
     public static List<File> farPictures(Recording recording) {
         File[] files = recording.farFolder().listFiles((dir, name) -> name.matches("\\d+\\.jpg"));
@@ -364,7 +391,7 @@ public final class PrintRecorder {
             // Elapsed time counts on from what was recorded before (a resumed print), measured with the monotonic clock from here.
             current.monoStart = mono - current.elapsed;
             if (current.elapsed == 0 && current.lastSample > current.start) current.monoStart = mono - (current.lastSample - current.start);
-            lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2; picturedLayer = -1; farPicturedLayer = -1; asked = 0;
+            lastLayer = -1; sampledMono = Long.MIN_VALUE / 2; picturedMono = Long.MIN_VALUE / 2; picturedLayer = -1; farPicturedLayer = -1; asked = 0; head = null;
         }
         int layer = print.optInt("current_layer", -1);
         // Every status counts for the measured checks, also the ones between samples.
@@ -373,6 +400,7 @@ public final class PrintRecorder {
         current.checks.selfTest = SelfTest.is(current.file);
         current.checks.faults(StatusPresentation.faultCodes(status));
         current.checks.status(mono, layer, hx, hy, hz, "local".equals(source) && current.followsHead(), current.parkX, current.parkY, reach);
+        if (!Double.isNaN(hx) && !Double.isNaN(hy)) { head = new double[] {hx, hy, hz, layer}; headMono = mono; }
         JSONObject nozzle = status.optJSONObject("extruder"), bed = status.optJSONObject("heater_bed"), machineNow = status.optJSONObject("machine_status");
         current.checks.heat(mono, layer, nozzle == null ? Double.NaN : nozzle.optDouble("temperature", Double.NaN), nozzle == null ? -1 : nozzle.optDouble("target", -1),
             bed == null ? Double.NaN : bed.optDouble("temperature", Double.NaN), bed == null ? -1 : bed.optDouble("target", -1));
@@ -476,7 +504,7 @@ public final class PrintRecorder {
             number(status.optJSONObject("ztemperature_sensor"), "temperature"),
             fan(status, "fan"), fan(status, "aux_fan"), fan(status, "box_fan"),
             number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1], "", number(position, "speed"),
-            number(status.optJSONObject("extruder"), "filament_detected") };
+            number(status.optJSONObject("extruder"), "filament_detected"), number(position, "x"), number(position, "y") };
         // Filament fed: the extruder position's steps, skipping resets (a G92 E0 jumps back) and jumps; retractions cancel out.
         double e = Cc2Codec.extruderPosition(position);
         if (!Double.isNaN(e)) {

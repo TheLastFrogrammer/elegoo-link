@@ -400,6 +400,7 @@ public final class RecordingsActivity extends Activity {
             pick[0].run();
             label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures: drag onto one to see it, tap it to open it." : ""), 12, muted, false);
         } else if (!all) content.removeView(charts);
+        headPositions(recording, rows);
         trays(rows, t);
         gcodeCard(recording, rows);
         material(recording, rows, t);
@@ -669,7 +670,8 @@ public final class RecordingsActivity extends Activity {
         File out = new File(folder, recording.csv.getName().replaceFirst("\\.csv$", "") + suffix + "-timelapse.mp4");
         new Thread(() -> {
             String failure = null;
-            try { TimelapseEncoder.encode(files, labels, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video: " + done + " of " + total + unit))); }
+            boolean where = getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("timelapsePosition", true);
+            try { TimelapseEncoder.encode(files, labels, where ? TimelapseEncoder.positions() : null, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video: " + done + " of " + total + unit))); }
             catch (Exception error) { failure = cancelled.get() ? "" : "The video could not be made on this phone (" + error.getClass().getSimpleName() + ")."; out.delete(); }
             String problem = failure;
             runOnUiThread(() -> {
@@ -687,6 +689,61 @@ public final class RecordingsActivity extends Activity {
         android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inSampleSize = 1;
         while (bounds.outWidth / (options.inSampleSize * 2) >= width) options.inSampleSize *= 2;
         return android.graphics.BitmapFactory.decodeFile(file.getPath(), options);
+    }
+
+    /**
+     * Where the head was at each picture (the printer's last report before it was kept): X, Y and Z over the pictures'
+     * times, or in 3D over the bed with the readings' positions behind; one at a time behind chips.
+     */
+    private void headPositions(PrintRecorder.Recording recording, List<double[]> rows) {
+        Map<String, double[]> noted = PrintRecorder.picturePositions(recording.pictureFolder());
+        if (noted.isEmpty()) return;
+        List<double[]> at = new ArrayList<>(); List<Integer> index = new ArrayList<>(); List<Double> ages = new ArrayList<>();
+        for (int i = 0; i < chartPictures.size(); i++) {
+            double[] p = noted.get(chartPictures.get(i).getName()); if (p == null) continue;
+            at.add(new double[] {p[0], p[1], p[2], p[3]}); index.add(i); ages.add(p[5]);
+        }
+        if (at.isEmpty()) return;
+        LinearLayout card = card(); label(card, "Head position at each picture", 15, ink, true);
+        Collections.sort(ages); double age = ages.get(ages.size() / 2);
+        label(card, HeadPositions3DView.describe(at.toArray(new double[0][])) + String.format(Locale.getDefault(),
+            " Each is the printer's last report before the picture was kept, typically %.1f s earlier.", age), 13, muted, false);
+        double[] times = new double[at.size()], x = new double[at.size()], y = new double[at.size()], z = new double[at.size()];
+        for (int i = 0; i < times.length; i++) { times[i] = at.get(i)[0]; x[i] = at.get(i)[1]; y[i] = at.get(i)[2]; z[i] = at.get(i)[3]; }
+        java.util.function.IntFunction<android.graphics.Bitmap> thumb = k -> pictureThumb(index.get(k));
+        java.util.function.IntConsumer open = k -> openPicture(index.get(k));
+        ChartView overTime = new ChartView(this, ink, muted, grid, surface);
+        overTime.set("Head at each picture", " mm", times, Arrays.asList(new ChartView.Series("X", blue, x, false), new ChartView.Series("Y", orange, y, false), new ChartView.Series("Z", aqua, z, false)), 0, Double.NaN);
+        if (shown != null && shown.start > 0) overTime.clock(shown.start);
+        overTime.pictures(times, thumb, open);
+        List<double[]> seen = new ArrayList<>(); int cx = PrintRecorder.column("x_mm"), cy = PrintRecorder.column("y_mm"), cz = PrintRecorder.column("z_mm");
+        for (double[] row : rows) if (!Double.isNaN(row[cx]) && !Double.isNaN(row[cy])) seen.add(new double[] {row[cx], row[cy], row[cz]});
+        double bedX = 256, bedY = 256; for (double[] p : at) { bedX = Math.max(bedX, p[1]); bedY = Math.max(bedY, p[2]); }
+        HeadPositions3DView space = new HeadPositions3DView(this, ink, muted, grid, surface, dark ? 0xff9ec5f4 : 0xffb7d3f5, dark ? 0xff2a78d6 : 0xff1a4f9c)
+            .set(at.toArray(new double[0][]), seen.toArray(new double[0][]), bedX, bedY).pictures(thumb, open);
+        LinearLayout chips = new LinearLayout(this); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
+        card.addView(overTime, new LinearLayout.LayoutParams(-1, dp(240)));
+        card.addView(space, new LinearLayout.LayoutParams(-1, dp(340)));
+        android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        List<Button> buttons = new ArrayList<>(); View[] views = {overTime, space}; int accent = dark ? 0xff5fd4c4 : 0xff00796b;
+        Runnable[] pick = new Runnable[1];
+        String[] names = {"Over time", "3D"};
+        for (int i = 0; i < names.length; i++) {
+            int which = i;
+            action(chips, names[i], () -> { prefs.edit().putInt("headChart", which).apply(); pick[0].run(); });
+            Button b = (Button) chips.getChildAt(chips.getChildCount() - 1); b.setMaxLines(1); b.setTextSize(14); b.setPadding(0, dp(8), 0, dp(8)); buttons.add(b);
+        }
+        pick[0] = () -> {
+            int chosen = Math.min(prefs.getInt("headChart", 0), 1);
+            for (int i = 0; i < 2; i++) {
+                boolean on = i == chosen; views[i].setVisibility(on ? View.VISIBLE : View.GONE);
+                buttons.get(i).setTextColor(on ? (dark ? 0xff0e1417 : Color.WHITE) : accent);
+                if (buttons.get(i).getBackground() instanceof android.graphics.drawable.RippleDrawable)
+                    ((android.graphics.drawable.RippleDrawable) buttons.get(i).getBackground()).getDrawable(0).setTint(on ? accent : (dark ? 0xff21343a : 0xffe2efed));
+                A11y.state(buttons.get(i), on ? "Chosen" : "");
+            }
+        };
+        pick[0].run();
     }
 
     /**
