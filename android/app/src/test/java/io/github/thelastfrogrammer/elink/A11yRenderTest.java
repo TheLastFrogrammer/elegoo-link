@@ -222,6 +222,26 @@ public class A11yRenderTest {
         shot(frame, 780, "layer-cross-section", 1.0f);
     }
 
+    /** A recording's chart with the camera pictures' ticks, one touched: its picture in the readout. */
+    @Test public void picturesOnTheCharts() throws Exception {
+        int n = 120; double[] t = new double[n], progress = new double[n];
+        for (int i = 0; i < n; i++) { t[i] = i * 60; progress[i] = Math.min(100, i * 0.9); }
+        double[] pictures = new double[24]; for (int i = 0; i < pictures.length; i++) pictures[i] = 300 + i * 290;
+        android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(160, 120, android.graphics.Bitmap.Config.ARGB_8888);
+        new android.graphics.Canvas(frame).drawColor(0xff40505a);
+        ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6);
+        chart.set("Progress", " %", t, java.util.Collections.singletonList(new ChartView.Series("Progress", 0xff2a78d6, progress, false)), 0, 100);
+        chart.pictures(pictures, i -> frame, i -> { });
+        android.widget.FrameLayout box = new android.widget.FrameLayout(context()); box.setBackgroundColor(0xfff2f5f6); box.addView(chart);
+        box.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(780, View.MeasureSpec.EXACTLY));
+        box.layout(0, 0, 1080, 780);
+        float left = 44 * context().getResources().getDisplayMetrics().density, right = 1080 - 12 * context().getResources().getDisplayMetrics().density;
+        float x = (float) (left + (pictures[8] - t[0]) / (t[n - 1] - t[0]) * (right - left));
+        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, x, 500, 0));
+        chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, x, 500, 0));
+        shot(box, 780, "pictures-on-charts", 1.0f);
+    }
+
     /** A recording's temperatures with its warm-up phases shaded, one touched. */
     @Test public void warmUpOnTheCharts() throws Exception {
         int n = 90; double[] t = new double[n], nozzle = new double[n], bed = new double[n], nozzleTarget = new double[n], bedTarget = new double[n];

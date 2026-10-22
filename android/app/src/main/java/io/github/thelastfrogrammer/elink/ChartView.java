@@ -40,6 +40,25 @@ final class ChartView extends View {
     ChartView stacked() { stacked = true; invalidate(); return this; }
     /** Marks at x values (layers): a coloured line across the plot, and their text in the readout at that point. */
     private final List<double[]> markAt = new ArrayList<>(); private final List<String> markText = new ArrayList<>();
+    /**
+     * When the print's camera pictures were taken (x, as the chart's x): a short tick each along the bottom of the plot.
+     * Touching near one shows it in the readout; tapping it opens it.
+     */
+    private double[] pictureAt = new double[0];
+    private java.util.function.IntFunction<Bitmap> pictureThumb; private java.util.function.IntConsumer pictureOpen;
+    private int touchedPicture = -1; private float downX;
+    ChartView pictures(double[] at, java.util.function.IntFunction<Bitmap> thumb, java.util.function.IntConsumer open) {
+        pictureAt = at == null ? new double[0] : at; pictureThumb = thumb; pictureOpen = open; invalidate(); return this;
+    }
+    /** The picture nearest x (a pixel position in the plot), within `reach` pixels; -1 when none. */
+    static int nearestPicture(double[] at, double x0, double x1, float left, float right, float x, float reach) {
+        int best = -1; float bestGap = reach;
+        for (int i = 0; i < at.length; i++) {
+            float px = (float) (left + (at[i] - x0) / Math.max(1e-9, x1 - x0) * (right - left)), gap = Math.abs(px - x);
+            if (gap <= bestGap) { bestGap = gap; best = i; }
+        }
+        return best;
+    }
     /** Shaded stretches of x behind the data (a print's warm-up phases), each named in the readout when touched inside it. */
     private final List<double[]> spanAt = new ArrayList<>(); private final List<String> spanText = new ArrayList<>();
     ChartView span(double from, double to, String text) { spanAt.add(new double[] {from, to}); spanText.add(text); invalidate(); return this; }
@@ -83,9 +102,17 @@ final class ChartView extends View {
 
     @Override public boolean onTouchEvent(MotionEvent event) {
         if (seconds.length == 0) return false;
-        if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) { touched = -1; invalidate(); return true; }
-        getParent().requestDisallowInterceptTouchEvent(true);
         float left = plotLeft(), right = getWidth() - plotRight();
+        if (event.getAction() == MotionEvent.ACTION_DOWN) downX = event.getX();
+        if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) {
+            // A tap (not a drag) on a picture's tick opens the picture.
+            int open = event.getAction() == MotionEvent.ACTION_UP && Math.abs(event.getX() - downX) < 10 * density ? touchedPicture : -1;
+            touched = -1; touchedPicture = -1; invalidate();
+            if (open >= 0 && pictureOpen != null) pictureOpen.accept(open);
+            return true;
+        }
+        getParent().requestDisallowInterceptTouchEvent(true);
+        touchedPicture = nearestPicture(pictureAt, min(seconds), Math.max(min(seconds) + 1, max(seconds)), left, right, event.getX(), 14 * density);
         double t = min(seconds) + (event.getX() - left) / Math.max(1, right - left) * Math.max(1, max(seconds) - min(seconds));
         int best = 0; for (int i = 1; i < seconds.length; i++) if (Math.abs(seconds[i] - t) < Math.abs(seconds[best] - t)) best = i;
         touched = best; invalidate(); return true;
@@ -147,6 +174,16 @@ final class ChartView extends View {
             float xa = (float) (left + (a - x0) / (x1 - x0) * (right - left)), xb = (float) (left + (b - x0) / (x1 - x0) * (right - left));
             String name = "Warm-up"; small.setTextAlign(Paint.Align.LEFT);
             if (xb - xa > small.measureText(name) + 8 * density) canvas.drawText(name, xa + 4 * density, top + 12 * density * f, small);
+        }
+        // Pictures: a short tick each, rising from the bottom of the plot (the touched one taller, in ink).
+        if (pictureAt.length > 0) {
+            Paint tick = new Paint(Paint.ANTI_ALIAS_FLAG); tick.setStrokeWidth(Math.max(1, 1.5f * density));
+            for (int i = 0; i < pictureAt.length; i++) {
+                if (Double.isNaN(pictureAt[i]) || pictureAt[i] < x0 || pictureAt[i] > x1) continue;
+                float x = (float) (left + (pictureAt[i] - x0) / (x1 - x0) * (right - left));
+                boolean on = i == touchedPicture; tick.setColor(on ? ink : (muted & 0x00ffffff) | 0xb0000000);
+                canvas.drawLine(x, bottom, x, bottom - (on ? 14 : 7) * density, tick);
+            }
         }
         // Stacked: each series an area on top of the ones before, a thin gap of the background between them, the total on top.
         if (stacked) {
@@ -242,10 +279,17 @@ final class ChartView extends View {
                 float y = (float) (bottom - (s.values[touched] - lo) / (hi - lo) * (bottom - top));
                 fill.setColor(surface); canvas.drawCircle(x, y, 6 * density, fill); fill.setColor(s.color); canvas.drawCircle(x, y, 4 * density, fill);
             }
+            Bitmap thumb = null;
+            if (touchedPicture >= 0) {
+                rows.add("Picture at " + (layerAxis ? "layer " + format(pictureAt[touchedPicture]) : elapsed(pictureAt[touchedPicture])) + (pictureOpen != null ? " · tap to open" : "")); colors.add(0);
+                if (pictureThumb != null) thumb = pictureThumb.apply(touchedPicture);
+            }
             float width = 0; small.setTextAlign(Paint.Align.LEFT);
             for (String row : rows) width = Math.max(width, small.measureText(row));
-            float boxW = width + 30 * density, boxH = rows.size() * 16 * density * f + 10 * density;
-            float boxX = x + 10 * density + boxW > right ? x - 10 * density - boxW : x + 10 * density, boxY = top;
+            float thumbW = 0, thumbH = 0;
+            if (thumb != null) { thumbW = Math.min(150 * density, getWidth() * 0.45f); thumbH = thumbW * thumb.getHeight() / Math.max(1, thumb.getWidth()); width = Math.max(width, thumbW - 16 * density); }
+            float boxW = width + 30 * density, boxH = rows.size() * 16 * density * f + 10 * density + (thumb != null ? thumbH + 6 * density : 0);
+            float boxX = x + 10 * density + boxW > right ? x - 10 * density - boxW : x + 10 * density, boxY = Math.max(0, Math.min(top, getHeight() - boxH));
             boxX = Math.max(0, Math.min(boxX, getWidth() - boxW));
             fill.setColor(surface); canvas.drawRoundRect(boxX, boxY, boxX + boxW, boxY + boxH, 8 * density, 8 * density, fill);
             rule.setColor(grid); rule.setStyle(Paint.Style.STROKE); canvas.drawRoundRect(boxX, boxY, boxX + boxW, boxY + boxH, 8 * density, 8 * density, rule); rule.setStyle(Paint.Style.FILL);
@@ -253,6 +297,10 @@ final class ChartView extends View {
                 float rowY = boxY + 18 * density * f + i * 16 * density * f;
                 if (colors.get(i) != 0) { fill.setColor(colors.get(i)); canvas.drawRoundRect(boxX + 8 * density, rowY - 8 * density, boxX + 18 * density, rowY - 1 * density, 2 * density, 2 * density, fill); }
                 small.setColor(i == 0 ? muted : ink); canvas.drawText(rows.get(i), boxX + (colors.get(i) == 0 ? 8 : 22) * density, rowY, small);
+            }
+            if (thumb != null) {
+                float tx = boxX + 8 * density, ty = boxY + rows.size() * 16 * density * f + 8 * density;
+                canvas.drawBitmap(thumb, null, new RectF(tx, ty, tx + thumbW, ty + thumbH), new Paint(Paint.FILTER_BITMAP_FLAG));
             }
             small.setColor(muted);
         }

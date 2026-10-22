@@ -354,21 +354,35 @@ public final class PrinterService extends Service {
         long at = SystemClock.elapsedRealtime();
         if (reachReading || key.equals(reachFor) && (recorder.hasReach() || at - reachTriedAt < 60_000)) return;
         boolean again = key.equals(reachFor); reachFor = key; reachTriedAt = at;
-        GuardianRun.Source source = GuardianRun.source(library, fileJob(), now.file);
-        if (source.file == null) { recorder.setReach(null); if (!again) Diagnostics.note(Diagnostics.CAMERA, "no copy of this print's G-code on the phone: far pictures learn each layer's far side from the one before; layer and position checks wait for a copy"); return; }
-        reachReading = true; File file = source.file;
+        GcodeJobTracker.Job job = fileJob(); reachReading = true;
         pictureWorker.execute(() -> {
+            // Off the screen thread: finding the copy reads the archive, and the copy kept with the recording may need unpacking.
+            GuardianRun.Source source = GuardianRun.source(library, job, now, getCacheDir());
+            keepWithRecording(now, source);
             LayerReach read = null; String why = null;
-            try { read = LayerReach.read(file, camera[0], camera[1]); } catch (IOException | RuntimeException failed) { why = failed.getClass().getSimpleName(); }
-            LayerReach done = read; String problem = why;
+            if (source.file != null) try { read = LayerReach.read(source.file, camera[0], camera[1]); } catch (IOException | RuntimeException failed) { why = failed.getClass().getSimpleName(); }
+            LayerReach done = read; String problem = why; boolean none = source.file == null;
             main.post(() -> {
                 reachReading = false;
                 PrintRecorder.Recording still = recorder.current();
                 if (still == null || !still.meta.equals(now.meta)) return;
                 recorder.setReach(done);
+                if (none) { if (!again) Diagnostics.note(Diagnostics.CAMERA, "no copy of this print's G-code on the phone: far pictures learn each layer's far side from the one before; layer and position checks wait for a copy"); return; }
                 Diagnostics.note(Diagnostics.CAMERA, done != null ? "print's G-code read for far pictures and checks (" + done.layers + " layers)" : "the print's G-code could not be read (" + problem + "); far pictures learn from the layer before");
             });
         });
+    }
+    /**
+     * Keeps the print's G-code with its recording (RecordingGcode) once the app knows which copy it is: the one you chose
+     * for the print, or the only copy by its name. Then the recording has it after the phone's archive lets it go, and the
+     * choice outlasts a restart. Picture worker only.
+     */
+    private void keepWithRecording(PrintRecorder.Recording recording, GuardianRun.Source source) {
+        if (source.file == null || source.kept != null) return;
+        try {
+            RecordingGcode.Info info = RecordingGcode.pack(source.file, source.artifact != null ? source.artifact.name : recording.file, recording, source.chosen ? RecordingGcode.CHOSEN : RecordingGcode.MATCHED);
+            Diagnostics.note(Diagnostics.CAMERA, "print's G-code kept with its recording (" + info.how + ", " + info.size / 1024 + " KB)");
+        } catch (IOException failed) { Diagnostics.note(Diagnostics.CAMERA, "print's G-code could not be kept with its recording: " + failed.getClass().getSimpleName()); }
     }
     /** The picture camera's own choice of far-from-the-camera pictures (each camera keeps its own). */
     String pictureFarKey() { ExtraCameras.Camera added = ExtraCameras.forPictures(this); return GcodeViewerActivity.camKey("pictureFar", added == null ? "" : added.id); }

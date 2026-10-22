@@ -1608,7 +1608,11 @@ public final class MainActivity extends Activity {
         GcodeLibrary library = printer.library; GcodeJobTracker.Job jobNow = printer.fileJob();
         checks.execute(() -> {
             String text;
-            try { text = GuardianRun.fileSourceLine(GuardianRun.source(library, jobNow, name)); } catch (Exception unreadable) { text = ""; }
+            try {
+                PrintRecorder recorder = PrintRecorder.active; PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
+                if (recording != null && !java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(name))) recording = null;
+                text = recording != null ? GuardianRun.fileSourceLine(GuardianRun.source(library, jobNow, recording, getCacheDir())) : GuardianRun.fileSourceLine(GuardianRun.source(library, jobNow, name));
+            } catch (Exception unreadable) { text = ""; }
             String shown = text;
             main.post(() -> { if (!name.equals(fileSourceFor)) return; fileSource.setText(shown); fileSource.setVisibility(shown.isEmpty() ? View.GONE : View.VISIBLE); });
         });

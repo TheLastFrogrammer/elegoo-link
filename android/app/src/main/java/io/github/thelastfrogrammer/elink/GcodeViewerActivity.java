@@ -63,6 +63,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private String observedJob = "";
     private String resolvingJob;
     private GcodeLibrary.Artifact loadedArtifact;
+    /** The live print follows the copy kept with its recording (no archive copy chosen in this stretch of watching). */
+    private boolean keptLoaded;
     private GcodeJobTracker.Job pendingChoice;
     private long loadGeneration;
     private int layer, move, hidden, lastLocated = -1, loggedLayer = -1;
@@ -1203,9 +1205,12 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                     if (isDestroyed() || ticket != loadGeneration || job != null && !sameJob(job)) return;
                     synchronized (this) { path = read; segments = s; travels = t; meta = m; }
                     GcodeToolpath.LineCursor old = cursor; cursor = new GcodeToolpath.LineCursor(file); detailedSegment = -2; if (old != null) worker.execute(old::close);
-                    loadedName = name; loadedArtifact = artifact; layer = Math.max(0, read.layerCount - 1); move = layerSize(layer); lastLocated = -1;
+                    loadedName = name; loadedArtifact = artifact; keptLoaded = job != null && artifact == null; layer = Math.max(0, read.layerCount - 1); move = layerSize(layer); lastLocated = -1;
                     if (job != null) {
-                        fileSource.setText("Selected by you · " + artifact.origin.label + " · SHA-256 " + artifact.shortHash() + " · Change…");
+                        RecordingGcode.Info kept = keptSource; keptSource = null;
+                        fileSource.setText(artifact != null ? "Selected by you · " + artifact.origin.label + " · SHA-256 " + artifact.shortHash() + " · Change…"
+                            : "Kept with this print's recording" + (kept != null && RecordingGcode.MATCHED.equals(kept.how) ? " (the phone's copy by that name)" : " (chosen by you)")
+                                + (kept != null ? " · SHA-256 " + kept.sha256.substring(0, 12) : "") + " · Change…");
                         fileSource.setVisibility(View.VISIBLE);
                     }
                     if (job == null) web.setVisibility(View.VISIBLE);
@@ -1214,7 +1219,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                     layerBar.setMax(Math.max(0, read.layerCount - 1)); syncBars(); buildLegend(); sent = false; sendData();
                 });
             } catch (IOException | OutOfMemoryError failure) {
-                if (job != null) try { library.forgetSelection(job.printer, job.token, artifact.sha256); } catch (IOException ignored) { }
+                if (job != null && artifact != null) try { library.forgetSelection(job.printer, job.token, artifact.sha256); } catch (IOException ignored) { }
                 main.post(() -> { if (!isDestroyed() && ticket == loadGeneration && (job == null || sameJob(job))) {
                     loadingName = null;
                     if (job != null) { clearLivePath(); fileSource.setText("The selected copy could not be read. Choose another copy."); fileSource.setVisibility(View.VISIBLE); }
@@ -1691,7 +1696,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             if (following) status.setText(!printer.liveFresh() ? "Waiting for printer status…" : printing ? "Waiting to identify the current print…" : "No print is running.");
             return;
         }
-        if (loadedArtifact == null) {
+        if (loadedArtifact == null && !keptLoaded) {
             if (loadingName == null && !job.token.equals(resolvingJob)) resolveCopy(job);
             return;
         }
@@ -1755,17 +1760,28 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     private ImageView missingPreview;
+    /** Set just before loading the copy kept with the recording, for its source line. */
+    private RecordingGcode.Info keptSource;
     /** Archive operations may wait behind a large copy; never acquire its lock on the UI thread. */
     private void resolveCopy(GcodeJobTracker.Job job) {
         resolvingJob = job.token; long ticket = loadGeneration;
         worker.execute(() -> {
             GcodeLibrary.Artifact copy = library.selected(job.printer, job.token);
-            boolean evicted = copy == null && library.selectionEvicted(job.printer, job.token);
+            // No choice for this stretch of watching (the app restarted, or the printer's reports paused): the copy kept with
+            // the print's recording is the one chosen or matched earlier for this same print.
+            PrintRecorder recorder = PrintRecorder.active; PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
+            File kept = null; RecordingGcode.Info keptInfo = null;
+            if (copy == null && recording != null && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename))) {
+                keptInfo = RecordingGcode.info(recording); if (keptInfo != null) kept = RecordingGcode.open(recording, getCacheDir());
+            }
+            boolean evicted = copy == null && kept == null && library.selectionEvicted(job.printer, job.token);
+            File keptFile = kept; RecordingGcode.Info keptAs = keptInfo;
             main.post(() -> {
                 if (!job.token.equals(resolvingJob)) return;
                 resolvingJob = null;
                 if (isDestroyed() || ticket != loadGeneration || !sameJob(job)) return;
                 if (copy != null) { load(copy.file, job.filename, copy, job); return; }
+                if (keptFile != null) { keptSource = keptAs; load(keptFile, job.filename, null, job); return; }
                 JSONObject live = printer.liveStatus();
                 showMissing(job.filename, live.optJSONObject("machine_status"), live.optJSONObject("print_status"));
                 if (evicted) {
@@ -1783,7 +1799,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         return now != null && observedJob.equals(now.token);
     }
     private void clearLivePath() {
-        loadGeneration++; resolvingJob = null; loadingName = null; loadedName = null; loadedArtifact = null; lastLocated = -1; lastAttempt = false;
+        loadGeneration++; resolvingJob = null; loadingName = null; loadedName = null; loadedArtifact = null; keptLoaded = false; lastLocated = -1; lastAttempt = false;
         main.removeCallbacksAndMessages(delayToken); setPlaying(false);
         synchronized (this) { path = null; segments = null; travels = null; meta = null; }
         shownSegment = -1; detailedSegment = -2; layer = move = 0;
@@ -1887,6 +1903,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 worker.execute(() -> {
                     try {
                         library.selectForJob(artifact, job.printer, job.token);
+                        // Kept with the print's recording too, so the choice outlasts this stretch of watching.
+                        PrintRecorder recorder = PrintRecorder.active; PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
+                        if (recording != null && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename)))
+                            try { RecordingGcode.pack(artifact.file, artifact.name, recording, RecordingGcode.CHOSEN); } catch (IOException notKept) { Diagnostics.note(Diagnostics.FOLLOW, "the chosen copy could not be kept with the recording"); }
                         main.post(() -> { if (!isDestroyed() && sameJob(job)) load(artifact.file, job.filename, artifact, job); });
                     } catch (IOException error) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("The selected copy is missing or changed. Choose the file again."); }); }
                 });

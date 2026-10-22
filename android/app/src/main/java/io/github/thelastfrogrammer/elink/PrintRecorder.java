@@ -397,7 +397,7 @@ public final class PrintRecorder {
     public synchronized void delete(Recording recording) {
         flush();
         if (current != null && current.meta.equals(recording.meta)) current = null;
-        deletePictures(recording); recording.csv.delete(); recording.meta.delete();
+        deletePictures(recording); RecordingGcode.remove(recording); recording.csv.delete(); recording.meta.delete();
     }
     private static void deletePictures(Recording recording) {
         File[] far = recording.farFolder().listFiles(); if (far != null) for (File f : far) f.delete();

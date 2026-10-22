@@ -121,8 +121,26 @@ final class GuardianRun {
      */
     static final class Source {
         final File file; final GcodeLibrary.Artifact artifact; final boolean chosen; final String problem;
+        /** Set when the copy is the one kept with the print's recording. */
+        RecordingGcode.Info kept;
         Source(File file, GcodeLibrary.Artifact artifact, boolean chosen, String problem) { this.file = file; this.artifact = artifact; this.chosen = chosen; this.problem = problem; }
         String key() { return artifact != null ? artifact.sha256 : file == null ? "" : file.getPath() + ":" + file.lastModified(); }
+    }
+    /**
+     * As below, and first the copy kept with the print's recording (RecordingGcode), when the print being watched is that
+     * recording's: it outlasts the app's link between a chosen copy and the print, which a restart or a gap in the printer's
+     * reports ends. A copy chosen since still comes first. Worker only (may unpack the kept copy).
+     */
+    static Source source(GcodeLibrary library, GcodeJobTracker.Job job, PrintRecorder.Recording recording, File cacheDir) {
+        String name = recording == null ? "" : recording.file;
+        GcodeLibrary.Artifact picked = job == null ? null : library.selected(job.printer, job.token);
+        if (picked != null) return new Source(picked.file, picked, true, null);
+        if (recording != null && (job == null || java.util.Objects.equals(GcodeLibrary.baseName(job.filename), GcodeLibrary.baseName(recording.file)))) {
+            RecordingGcode.Info info = RecordingGcode.info(recording);
+            File plain = info == null ? null : RecordingGcode.open(recording, cacheDir);
+            if (plain != null) { Source kept = new Source(plain, null, !RecordingGcode.MATCHED.equals(info.how), null); kept.kept = info; return kept; }
+        }
+        return source(library, job, name);
     }
     static Source source(GcodeLibrary library, GcodeJobTracker.Job job, String recordedName) {
         String none = "No copy of this print's G-code on the phone, so there is nothing to compare with. Prints sent or sliced from this app have one.";
@@ -146,6 +164,7 @@ final class GuardianRun {
      * a copy that only matches by name, or none. A matching name is never called the exact file.
      */
     static String fileSourceLine(Source source) {
+        if (source.kept != null) return "File source: kept with this print's recording (" + (RecordingGcode.MATCHED.equals(source.kept.how) ? "the phone's copy by that name" : "the copy you chose") + ") · " + source.kept.sha256.substring(0, 8);
         if (source.chosen && source.artifact != null) return "File source: the exact copy you chose · " + source.artifact.sha256.substring(0, Math.min(8, source.artifact.sha256.length()));
         if (source.file != null) return "File source: a copy with the same name on this phone (not confirmed). Tap to choose it in Live toolpath.";
         if (source.problem != null && source.problem.startsWith("No copy")) return "File source: no copy of this print's G-code on this phone. Prints sent or sliced from this app keep one.";
@@ -157,7 +176,7 @@ final class GuardianRun {
         // Coverage learned from one camera means nothing for another: a different camera starts the comparison again.
         if (!cameraId.equals(watchedCamera)) { watchedCamera = cameraId; watch = new PrintGuardian.Watch(); alarmed = false; }
         GcodeLibrary library = new GcodeLibrary(new File(context.getFilesDir(), "gcode-library"));
-        Source source = source(library, job, recording.file);
+        Source source = source(library, job, recording, context.getCacheDir());
         if (source.problem != null) {
             if (!source.problem.equals(verdict)) Diagnostics.note(Diagnostics.GUARDIAN, "not checking: " + source.problem);
             verdict = source.problem; return;

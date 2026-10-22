@@ -112,6 +112,23 @@ public final class GcodeLibrary {
             return new ArrayList<>(unique.values());
         }
     }
+    /**
+     * Every kept copy, newest first, one per content (for picking a print's G-code by hand, e.g. for a recording); with
+     * `name`, only copies by that name. Any printer's: the caller shows where each came from.
+     */
+    public List<Artifact> copies(String name) throws IOException {
+        synchronized (lock) {
+            String base = name == null ? null : baseName(name);
+            JSONArray entries = readIndex().optJSONArray("entries"); List<Artifact> all = new ArrayList<>();
+            for (int i = 0; i < entries.length(); i++) {
+                Artifact a = artifact(entries.optJSONObject(i));
+                if (available(a) && (name == null || a.name.equals(base))) all.add(a);
+            }
+            all.sort((a, b) -> Long.compare(b.at, a.at)); Map<String, Artifact> unique = new LinkedHashMap<>();
+            for (Artifact a : all) unique.putIfAbsent(a.sha256, a);
+            return new ArrayList<>(unique.values());
+        }
+    }
     /** Compatibility lookup: only one unscoped candidate. Live following uses selected(), never this method. */
     public File find(String name) {
         try { List<Artifact> matches = candidates("", name); return matches.size() == 1 ? matches.get(0).file : null; }

@@ -20,7 +20,7 @@ import org.json.JSONObject;
 /** Recorded prints: a list, and per print a summary, charts, a data table and CSV export. */
 public final class RecordingsActivity extends Activity {
     public static final String EXTRA_META = "meta", EXTRA_JOURNAL = "journal";
-    private static final int EXPORT = 1, VIDEO = 2;
+    private static final int EXPORT = 1, VIDEO = 2, ADD_GCODE = 3;
     /** The timelapse just made, waiting for a place to save it. */
     private File madeVideo;
     private boolean dark;
@@ -31,6 +31,9 @@ public final class RecordingsActivity extends Activity {
     private PrintRecorder.Recording shown;
     /** The shown print's warm-up phases {from s, to s, name}, shaded on its time charts. */
     private List<Object[]> warmUp = new ArrayList<>();
+    /** The shown print's camera pictures (main set), their times into the print (s), and small copies decoded as touched. */
+    private List<File> chartPictures = new ArrayList<>(); private double[] pictureTimes = new double[0];
+    private final Map<Integer, android.graphics.Bitmap> pictureThumbs = new HashMap<>();
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -351,6 +354,7 @@ public final class RecordingsActivity extends Activity {
         if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
         double[] t = column(rows, "elapsed_s");
         warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
+        chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear();
         String warm = warmUpWords(warmUp);
         if (!warm.isEmpty()) { TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3)); }
         pictures(recording);   // the quickest look at how the print went, before the charts
@@ -394,9 +398,10 @@ public final class RecordingsActivity extends Activity {
         };
         if (!all && !shownCharts.isEmpty()) {
             pick[0].run();
-            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets.", 12, muted, false);
+            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures: drag onto one to see it, tap it to open it." : ""), 12, muted, false);
         } else if (!all) content.removeView(charts);
         trays(rows, t);
+        gcodeCard(recording, rows);
         material(recording, rows, t);
         layerCharts(recording, rows);
         LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
@@ -438,27 +443,138 @@ public final class RecordingsActivity extends Activity {
     }
 
     private void layerCharts(PrintRecorder.Recording recording, List<double[]> rows) {
-        File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
         LayerCharts.Guardian guardian = new LayerCharts.Guardian(recording.guardianChecks, answerLayers(recording.journal, rows));
         LinearLayout card = card(); label(card, guardian.any() ? "Each layer, with the print guardian's checks" : "Each layer, from the print's G-code", 15, ink, true);
         if (guardian.any()) label(card, "Marks: amber where a guardian measure went over its limit, red where it raised the alarm (or you said it was a real problem), teal where you said it looked fine. Touch a mark's layer to read it.", 12, muted, false);
-        if (file == null && !guardian.any()) { label(card, "The print's file is not on this phone. Download it from the Files tab, or slice it here, to see each layer's line types, speed, flow and acceleration.", 13, muted, false); return; }
-        TextView note = label(card, file == null ? "The print's file is not on this phone, so only the guardian's measures are shown." : "Reading the print's file…", 13, muted, false);
+        TextView note = label(card, "Reading the print's file…", 13, muted, false);
         new Thread(() -> {
+            File file = gcodeFor(recording);
             LayerProfile read = null; if (file != null) try { read = LayerProfile.read(file); } catch (Exception | OutOfMemoryError failed) { read = null; }
             LayerProfile p = read;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
+                if (file == null && !guardian.any()) { note.setText("The print's G-code is not on this phone. Add it to the recording (above) to see each layer's line types, speed, flow and acceleration."); return; }
+                if (file == null) note.setText("The print's G-code is not on this phone, so only the guardian's measures are shown.");
                 if (file != null && (p == null || p.layers == 0)) { note.setText("The print's file could not be read." + (guardian.any() ? " The guardian's measures are shown alone." : "")); if (!guardian.any()) return; }
                 if (p != null && p.layers > 0) note.setText(LayerCharts.note(p));
                 LayerCharts.fill(this, card, p != null && p.layers > 0 ? p : null, guardian, ink, muted, grid, surface, dark, getSharedPreferences("workshop-settings", MODE_PRIVATE),
                     (row, text, action) -> { action(row, text, action); Button b = (Button) row.getChildAt(row.getChildCount() - 1); b.setPadding(0, dp(8), 0, dp(8)); return b; });
+                // The pictures at the layer printing when each was taken.
+                double[] atLayer = pictureLayers(pictureTimes, column(rows, "elapsed_s"), column(rows, "layer"));
+                for (int i = 0; i < card.getChildCount(); i++) if (card.getChildAt(i) instanceof ChartView) ((ChartView) card.getChildAt(i)).pictures(atLayer, this::pictureThumb, this::openPicture);
             });
         }, "recording-layers").start();
     }
 
     // ---- Pictures, trays and material ----
 
+    /**
+     * The print's G-code for its charts, worker only: the copy kept with the recording; else the phone's one copy by its
+     * name (from this printer or none) that was there before the print ended, which is then kept with the recording so a
+     * newer file of the same name, or the archive's clean-up, cannot take it away.
+     */
+    private File gcodeFor(PrintRecorder.Recording recording) {
+        File kept = RecordingGcode.open(recording, getCacheDir());
+        if (kept != null) return kept;
+        try {
+            GcodeLibrary.Artifact match = matchFor(new GcodeLibrary(new File(getFilesDir(), "gcode-library")).copies(recording.file), recording);
+            if (match == null) return null;
+            try { RecordingGcode.pack(match.file, match.name, recording, RecordingGcode.MATCHED); kept = RecordingGcode.open(recording, getCacheDir()); } catch (IOException notKept) { kept = null; }
+            return kept != null ? kept : match.file;
+        } catch (IOException unreadable) { return null; }
+    }
+    /** The one copy by the recording's name from its printer (or no printer) kept before the print ended; null when none or several. Pure. */
+    static GcodeLibrary.Artifact matchFor(List<GcodeLibrary.Artifact> copies, PrintRecorder.Recording recording) {
+        long end = recording.end > 0 ? recording.end : recording.lastSample;
+        GcodeLibrary.Artifact only = null;
+        for (GcodeLibrary.Artifact a : copies) {
+            boolean printer = a.printer.isEmpty() || recording.printerId.isEmpty() || PrintRecorder.digest(a.printer).equals(recording.printerId);
+            if (!printer || end > 0 && a.at > end) continue;
+            if (only != null) return null;
+            only = a;
+        }
+        return only;
+    }
+
+    /** Whether the recording holds its print's G-code, and adding (or replacing, or removing) it by hand. */
+    private void gcodeCard(PrintRecorder.Recording recording, List<double[]> rows) {
+        LinearLayout card = card(); label(card, "The print's G-code", 15, ink, true);
+        TextView state = label(card, "Looking…", 13, muted, false);
+        LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); card.addView(buttons);
+        new Thread(() -> {
+            gcodeFor(recording);   // keeps a fitting phone copy with the recording when there is one
+            RecordingGcode.Info info = RecordingGcode.info(recording);
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                state.setText(info == null ? "Not kept with this recording. Add it to see material, line types and flow for this print; the charts use it once added."
+                    : "Kept with this recording: " + info.words() + ".");
+                action(buttons, info == null ? "Add G-code…" : "Replace…", () -> addGcode(recording, rows));
+                if (info != null) action(buttons, "Remove", () -> new AlertDialog.Builder(this).setTitle("Take the G-code out of this recording?")
+                    .setMessage("The charts that need it go blank until it is added again. The phone's own G-code files are not touched.")
+                    .setNegativeButton("Cancel", null).setPositiveButton("Remove", (d, w) -> { RecordingGcode.remove(recording); recreate(); }).show());
+            });
+        }, "recording-gcode").start();
+    }
+    private void addGcode(PrintRecorder.Recording recording, List<double[]> rows) {
+        new Thread(() -> {
+            List<GcodeLibrary.Artifact> copies;
+            try { copies = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).copies(null); } catch (IOException unreadable) { copies = new ArrayList<>(); }
+            // The print's own name first.
+            String base = GcodeLibrary.baseName(recording.file);
+            List<GcodeLibrary.Artifact> ordered = new ArrayList<>();
+            for (GcodeLibrary.Artifact a : copies) if (a.name.equals(base)) ordered.add(a);
+            for (GcodeLibrary.Artifact a : copies) if (!a.name.equals(base)) ordered.add(a);
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                String[] labels = new String[ordered.size() + 1];
+                labels[0] = "Choose a file on this phone…";
+                for (int i = 0; i < ordered.size(); i++) {
+                    GcodeLibrary.Artifact a = ordered.get(i);
+                    labels[i + 1] = a.name + "\n" + a.origin.label + " · " + new java.text.SimpleDateFormat("MMM d, HH:mm", Locale.getDefault()).format(new java.util.Date(a.at))
+                        + String.format(Locale.getDefault(), " · %.1f MB", a.size / 1048576.0);
+                }
+                new AlertDialog.Builder(this).setTitle("G-code for this recording").setNegativeButton("Cancel", null).setItems(labels, (d, which) -> {
+                    if (which == 0) {
+                        addingTo = recording; addingRows = rows;
+                        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"), ADD_GCODE);
+                    } else { GcodeLibrary.Artifact a = ordered.get(which - 1); checkAndKeep(recording, rows, a.file, a.name, false); }
+                }).show();
+            });
+        }, "recording-gcode-list").start();
+    }
+    private PrintRecorder.Recording addingTo; private List<double[]> addingRows;
+    /** Reads the file's layers, says what does not fit the print, and keeps it with the recording once confirmed. `temporary`: delete the file afterwards. */
+    private void checkAndKeep(PrintRecorder.Recording recording, List<double[]> rows, File file, String name, boolean temporary) {
+        Toast.makeText(this, "Checking the file…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            int layers = 0; boolean readable = true;
+            try { layers = LayerProfile.read(file).layers; } catch (Exception | OutOfMemoryError unreadable) { readable = false; }
+            double reached = 0; for (double v : column(rows, "layer")) if (!Double.isNaN(v)) reached = Math.max(reached, v);
+            String problem = !readable || layers == 0 ? "This file has no layers the app can read: it may not be G-code." : RecordingGcode.mismatch(recording.file, recording.layers, (int) reached, name, layers);
+            boolean ok = readable && layers > 0; int fileLayers = layers;
+            runOnUiThread(() -> {
+                if (isDestroyed()) { if (temporary) file.delete(); return; }
+                Runnable keep = () -> new Thread(() -> {
+                    String failed = null;
+                    try { RecordingGcode.pack(file, name, recording, RecordingGcode.ADDED); } catch (IOException e) { failed = e.getMessage(); }
+                    if (temporary) file.delete();
+                    String why = failed;
+                    runOnUiThread(() -> { if (isDestroyed()) return; if (why != null) Toast.makeText(this, "Could not keep it: " + why, Toast.LENGTH_LONG).show(); else recreate(); });
+                }, "recording-gcode-pack").start();
+                if (!ok) { new AlertDialog.Builder(this).setTitle("Not added").setMessage(problem).setPositiveButton("OK", null).show(); if (temporary) file.delete(); return; }
+                if (problem.isEmpty()) { keep.run(); return; }
+                new AlertDialog.Builder(this).setTitle("This may not be the print's file").setMessage(problem + "\n\nThe charts will follow this file's lines for this print. Keep it anyway?")
+                    .setNegativeButton("Cancel", (d, w) -> { if (temporary) file.delete(); }).setPositiveButton("Keep it (" + fileLayers + " layers)", (d, w) -> keep.run()).show();
+            });
+        }, "recording-gcode-check").start();
+    }
+
+    private String displayName(Uri uri) {
+        try (android.database.Cursor c = getContentResolver().query(uri, new String[] {android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (RuntimeException ignored) { }
+        return null;
+    }
     /** The print's camera pictures in a strip, each with its time into the print; tap for the full picture. */
     private void pictures(PrintRecorder.Recording recording) {
         List<File> files = PrintRecorder.pictures(recording);
@@ -683,9 +799,9 @@ public final class RecordingsActivity extends Activity {
         TextView note = label(card, "Reading the print's file…", 13, muted, false);
         LinearLayout chartBox = new LinearLayout(this); chartBox.setOrientation(LinearLayout.VERTICAL); card.addView(chartBox);
         LinearLayout byColour = new LinearLayout(this); byColour.setOrientation(LinearLayout.VERTICAL); card.addView(byColour);
-        File file = new GcodeLibrary(new File(getFilesDir(), "gcode-library")).find(recording.file);
-        if (file == null) { note.setText("The print's file is not on this phone, so material is not shown. Download the file from the Files tab, or slice it here, to see material per layer and per colour."); return; }
         new Thread(() -> {
+            File file = gcodeFor(recording);
+            if (file == null) { runOnUiThread(() -> note.setText("The print's G-code is not on this phone, so material is not shown. Add it to the recording (above) to see material per layer and per colour.")); return; }
             double[] volumes = null; double[][] laidDown = null, byType = null; double[] perTool = null; SlicedMaterials materials = null;
             double[] progress = column(rows, "progress"), fractions = new double[progress.length];
             for (int i = 0; i < progress.length; i++) fractions[i] = Double.isNaN(progress[i]) ? Double.NaN : progress[i] / 100.0;
@@ -925,6 +1041,29 @@ public final class RecordingsActivity extends Activity {
             } catch (IOException error) { Toast.makeText(this, "Saving failed. Try choosing a different place to save.", Toast.LENGTH_SHORT).show(); }
             video.delete(); return;
         }
+        if (request == ADD_GCODE) {
+            PrintRecorder.Recording recording = addingTo; List<double[]> rows = addingRows; addingTo = null; addingRows = null;
+            if (recording == null || result != RESULT_OK || data == null || data.getData() == null) return;
+            Uri uri = data.getData(); String name = displayName(uri);
+            new Thread(() -> {
+                File copy = null; String failed = null;
+                try {
+                    copy = File.createTempFile("recording-gcode-", ".gcode", getCacheDir());
+                    try (InputStream in = getContentResolver().openInputStream(uri); OutputStream out = new FileOutputStream(copy)) {
+                        if (in == null) throw new IOException("the file could not be opened");
+                        byte[] buffer = new byte[65536]; int n; long total = 0;
+                        while ((n = in.read(buffer)) != -1) { total += n; if (total > GcodeLibrary.MAX_FILE_BYTES) throw new IOException("the file is too large"); out.write(buffer, 0, n); }
+                    }
+                } catch (IOException e) { failed = e.getMessage(); if (copy != null) copy.delete(); copy = null; }
+                File got = copy; String why = failed;
+                runOnUiThread(() -> {
+                    if (got == null) { Toast.makeText(this, "Could not read it: " + why, Toast.LENGTH_LONG).show(); return; }
+                    if (isDestroyed()) { got.delete(); return; }
+                    checkAndKeep(recording, rows, got, name == null ? recording.file : name, true);
+                });
+            }, "recording-gcode-copy").start();
+            return;
+        }
         if (request != EXPORT || result != RESULT_OK || data == null || data.getData() == null || shown == null) return;
         Uri uri = data.getData();
         try (InputStream input = new FileInputStream(shown.csv); OutputStream output = getContentResolver().openOutputStream(uri)) {
@@ -949,7 +1088,36 @@ public final class RecordingsActivity extends Activity {
         return view;
     }
 
-    private void warmUp(ChartView view) { for (Object[] phase : warmUp) view.span((Double) phase[0], (Double) phase[1], (String) phase[2]); }
+    /** Warm-up shaded and the pictures' ticks, on a chart over the print's time. */
+    private void warmUp(ChartView view) {
+        for (Object[] phase : warmUp) view.span((Double) phase[0], (Double) phase[1], (String) phase[2]);
+        if (pictureTimes.length > 0) view.pictures(pictureTimes, this::pictureThumb, this::openPicture);
+    }
+    /** The time into the print (s) of each picture, from its name. Pure. */
+    static double[] pictureTimes(List<File> pictures) {
+        double[] out = new double[pictures.size()];
+        for (int i = 0; i < out.length; i++) try { out[i] = Double.parseDouble(pictures.get(i).getName().replace(".jpg", "")); } catch (NumberFormatException odd) { out[i] = Double.NaN; }
+        return out;
+    }
+    /** The layer printing when each picture was taken (the last reading at or before it), for the layer charts; NaN when unknown. Pure. */
+    static double[] pictureLayers(double[] times, double[] t, double[] layer) {
+        double[] out = new double[times.length];
+        for (int i = 0; i < times.length; i++) {
+            out[i] = Double.NaN;
+            for (int k = 0; k < t.length && t[k] <= times[i]; k++) if (!Double.isNaN(layer[k]) && layer[k] >= 1) out[i] = layer[k];
+        }
+        return out;
+    }
+    private android.graphics.Bitmap pictureThumb(int i) {
+        if (i < 0 || i >= chartPictures.size()) return null;
+        return pictureThumbs.computeIfAbsent(i, k -> decode(chartPictures.get(k), dp(150)));
+    }
+    private void openPicture(int i) {
+        if (i < 0 || i >= chartPictures.size()) return;
+        File file = chartPictures.get(i); String at = ChartView.elapsed(pictureTimes[i]);
+        ImageView big = new ImageView(this); big.setAdjustViewBounds(true); big.setImageBitmap(decode(file, getResources().getDisplayMetrics().widthPixels));
+        new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
+    }
 
     /**
      * The print's warm-up, from its first reading to the first layer: each stretch named by the printer's step (as the
