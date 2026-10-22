@@ -768,10 +768,8 @@ public final class RecordingsActivity extends Activity {
             image.setImageBitmap(decode(file, dp(160)));
             cell.addView(image, new LinearLayout.LayoutParams(dp(160), dp(120)));
             label(cell, at, 12, muted, false);
-            image.setOnClickListener(v -> {
-                ImageView big = new ImageView(this); big.setAdjustViewBounds(true); big.setImageBitmap(decode(file, getResources().getDisplayMetrics().widthPixels));
-                new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
-            });
+            int index = files.indexOf(file);
+            image.setOnClickListener(v -> PictureViewer.show(this, files, index, k -> ChartView.elapsed(pictureTimes(Collections.singletonList(files.get(k)))[0]) + " into the print"));
             strip.addView(cell);
         }
     }
@@ -1356,9 +1354,8 @@ public final class RecordingsActivity extends Activity {
     }
     private void openPicture(int i) {
         if (i < 0 || i >= chartPictures.size()) return;
-        File file = chartPictures.get(i); String at = ChartView.elapsed(pictureTimes[i]);
-        ImageView big = new ImageView(this); big.setAdjustViewBounds(true); big.setImageBitmap(decode(file, getResources().getDisplayMetrics().widthPixels));
-        new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
+        PictureViewer.show(this, chartPictures, i, k -> ChartView.elapsed(pictureTimes[k]) + " into the print"
+            + (k < pictureLayerAt.length && !Double.isNaN(pictureLayerAt[k]) ? " · layer " + (int) pictureLayerAt[k] : ""));
     }
 
     /**

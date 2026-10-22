@@ -237,6 +237,47 @@ public class A11yRenderTest {
         shot(box, 1020, "head-3d", 1.0f);
     }
 
+    /** A picture opened full screen: zoom with −/+ (and pinch), step to the next one, the zoom kept. */
+    @Test public void pictureViewerZoomsAndSteps() throws Exception {
+        File folder = java.nio.file.Files.createTempDirectory("viewer").toFile();
+        java.util.List<File> pictures = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            Bitmap frame = Bitmap.createBitmap(640, 480, Bitmap.Config.ARGB_8888); new Canvas(frame).drawColor(0xff304048 + i * 0x00101010);
+            File f = new File(folder, String.format(java.util.Locale.ROOT, "%06d.jpg", 60 + i * 600));
+            try (FileOutputStream out = new FileOutputStream(f)) { frame.compress(Bitmap.CompressFormat.JPEG, 80, out); }
+            pictures.add(f);
+        }
+        Activity host = Robolectric.buildActivity(Activity.class).setup().get();
+        PictureViewer.show(host, pictures, 1, k -> "picture " + k);
+        android.app.Dialog dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog();
+        View root = dialog.getWindow().getDecorView();
+        assertTrue(says(root, "picture 1   ·   2 of 3"));
+        ZoomImageView image = find(root, ZoomImageView.class);
+        image.layout(0, 0, 1080, 1800);
+        click(root, "Zoom in"); click(root, "Zoom in");
+        assertEquals(2.25f, image.zoom(), 1e-3f);
+        click(root, "Next picture");
+        assertTrue(says(root, "picture 2   ·   3 of 3"));
+        assertEquals("the zoom stays when stepping", 2.25f, image.zoom(), 1e-3f);
+        click(root, "Next picture");
+        assertTrue("no step past the last", says(root, "3 of 3"));
+        if (!System.getProperty("screenshots", "").isEmpty()) shot(((ViewGroup) root.findViewById(android.R.id.content)).getChildAt(0), 1800, "picture-viewer", 1.0f);
+    }
+    private static boolean says(View v, String text) {
+        if (v instanceof TextView && ((TextView) v).getText().toString().contains(text)) return true;
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) if (says(((ViewGroup) v).getChildAt(i), text)) return true;
+        return false;
+    }
+    @SuppressWarnings("unchecked") private static <T extends View> T find(View v, Class<T> type) {
+        if (type.isInstance(v)) return (T) v;
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) { T found = find(((ViewGroup) v).getChildAt(i), type); if (found != null) return found; }
+        return null;
+    }
+    private static void click(View v, String description) {
+        if (description.contentEquals(v.getContentDescription() == null ? "" : v.getContentDescription())) { v.performClick(); return; }
+        if (v instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) v).getChildCount(); i++) click(((ViewGroup) v).getChildAt(i), description);
+    }
+
     /** A recording's chart with the camera pictures' ticks, one touched: its picture in the readout. */
     @Test public void picturesOnTheCharts() throws Exception {
         int n = 120; double[] t = new double[n], progress = new double[n];

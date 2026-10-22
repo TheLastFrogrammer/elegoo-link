@@ -1625,10 +1625,8 @@ public final class MainActivity extends Activity {
                     LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setPadding(0, 0, dp(8), 0);
                     ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); image.setImageBitmap(thumbs.get(i));
                     image.setContentDescription("Picture at " + at + " into the print"); A11y.clickLabel(image, "See it larger");
-                    image.setOnClickListener(v -> {
-                        ImageView big = new ImageView(this); big.setAdjustViewBounds(true); big.setImageBitmap(RecordingsActivity.decode(file, getResources().getDisplayMetrics().widthPixels));
-                        new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
-                    });
+                    int index = all.size() - 1 - i;
+                    image.setOnClickListener(v -> PictureViewer.show(this, all, index, k -> ChartView.elapsed(Double.parseDouble(all.get(k).getName().replace(".jpg", ""))) + " into the print"));
                     cell.addView(image, new LinearLayout.LayoutParams(dp(120), dp(90)));
                     label(cell, i == 0 ? "Latest · " + at : at, 12, MUTED, false);
                     latestStrip.addView(cell);

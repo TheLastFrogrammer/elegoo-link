@@ -97,10 +97,14 @@ public final class CompareActivity extends Activity {
         SeekBar slider = new SeekBar(this); slider.setMax(Math.max(1, layers - 1)); card.addView(slider, new LinearLayout.LayoutParams(-1, dp(48)));
         slider.setContentDescription("Layer");
         int width = getResources().getDisplayMetrics().widthPixels / 2;
-        Runnable[] showLayer = new Runnable[1];
+        Runnable[] showLayer = new Runnable[1]; int[] showing = {-1, -1};
+        java.util.function.IntFunction<String> captionA = k -> "Print 1 · " + ChartView.elapsed(RecordingsActivity.pictureTimes(java.util.Collections.singletonList(pa.get(k)))[0]) + " into the print" + (Double.isNaN(la[k]) ? "" : " · layer " + (int) la[k]);
+        java.util.function.IntFunction<String> captionB = k -> "Print 2 · " + ChartView.elapsed(RecordingsActivity.pictureTimes(java.util.Collections.singletonList(pb.get(k)))[0]) + " into the print" + (Double.isNaN(lb[k]) ? "" : " · layer " + (int) lb[k]);
+        left.setOnClickListener(v -> { if (showing[0] >= 0) PictureViewer.show(this, pa, showing[0], captionA::apply); });
+        right.setOnClickListener(v -> { if (showing[1] >= 0) PictureViewer.show(this, pb, showing[1], captionB::apply); });
         showLayer[0] = () -> {
             int layer = slider.getProgress() + 1, i = RecordingAnalysis.pictureAtLayer(la, layer), k = RecordingAnalysis.pictureAtLayer(lb, layer);
-            at.setText("Layer " + layer + " of " + layers);
+            at.setText("Layer " + layer + " of " + layers + " · tap a picture to zoom in"); showing[0] = i; showing[1] = k;
             left.setImageBitmap(i < 0 ? null : RecordingsActivity.decode(pa.get(i), width)); right.setImageBitmap(k < 0 ? null : RecordingsActivity.decode(pb.get(k), width));
             left.setContentDescription(i < 0 ? "Print 1: no picture" : "Print 1 at layer " + (int) la[i]); right.setContentDescription(k < 0 ? "Print 2: no picture" : "Print 2 at layer " + (int) lb[k]);
             under.setText("Print 1: " + (i < 0 ? "—" : "layer " + (int) la[i]) + "   ·   Print 2: " + (k < 0 ? "—" : "layer " + (int) lb[k]));
