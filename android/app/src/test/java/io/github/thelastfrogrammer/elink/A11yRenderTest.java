@@ -246,7 +246,7 @@ public class A11yRenderTest {
         new android.graphics.Canvas(frame).drawColor(0xff40505a);
         ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6);
         chart.set("Progress", " %", t, java.util.Collections.singletonList(new ChartView.Series("Progress", 0xff2a78d6, progress, false)), 0, 100);
-        chart.pictures(pictures, i -> frame, i -> { });
+        int[] heard = {-1}; chart.pictures(pictures, i -> heard[0] = i);
         android.widget.FrameLayout box = new android.widget.FrameLayout(context()); box.setBackgroundColor(0xfff2f5f6); box.addView(chart);
         box.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(780, View.MeasureSpec.EXACTLY));
         box.layout(0, 0, 1080, 780);
@@ -254,6 +254,7 @@ public class A11yRenderTest {
         float x = (float) (left + (pictures[8] - t[0]) / (t[n - 1] - t[0]) * (right - left));
         chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, x, 500, 0));
         chart.onTouchEvent(android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_MOVE, x, 500, 0));
+        assertEquals("the picture of the touched moment is handed to the preview", 8, heard[0]);
         shot(box, 780, "pictures-on-charts", 1.0f);
     }
 

@@ -98,10 +98,11 @@ public class RecordingGcodeTest {
         double[] layers = RecordingsActivity.pictureLayers(new double[] {10, 60, 300}, new double[] {0, 50, 100, 290}, new double[] {n, 0, 3, 7});
         assertTrue("before the first layer", Double.isNaN(layers[0]));
         assertTrue(Double.isNaN(layers[1])); assertEquals(7, layers[2], 0);
-        // The nearest tick within reach of the finger.
-        double[] at = {0, 50, 100};
-        assertEquals(1, ChartView.nearestPicture(at, 0, 100, 0, 1000, 520, 30));
-        assertEquals(-1, ChartView.nearestPicture(at, 0, 100, 0, 1000, 300, 30));
-        assertEquals(-1, ChartView.nearestPicture(new double[0], 0, 100, 0, 1000, 0, 30));
+        // The picture of a moment: the last taken at or before it, else the first after.
+        double[] at = {0, 50, 100, Double.NaN};
+        assertEquals(1, ChartView.pictureAtOrBefore(at, 99));
+        assertEquals(2, ChartView.pictureAtOrBefore(at, 100));
+        assertEquals(0, ChartView.pictureAtOrBefore(new double[] {10, 20}, 5));
+        assertEquals(-1, ChartView.pictureAtOrBefore(new double[0], 5));
     }
 }

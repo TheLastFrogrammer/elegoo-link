@@ -161,10 +161,17 @@ public class MoreScreensRenderTest {
         PrintRecorder recorder = new PrintRecorder(RecordingsActivity.directory(org.robolectric.RuntimeEnvironment.getApplication()));
         PrintRecorder.Recording night = null;
         for (PrintRecorder.Recording r : recorder.list()) if (r.file.startsWith("Gridfinity")) night = r;
+        // A few camera pictures, so the charts carry their ticks and the preview panel shows.
+        night.pictureFolder().mkdirs();
+        for (int i = 0; i < 6; i++) {
+            android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(320, 240, android.graphics.Bitmap.Config.ARGB_8888);
+            new android.graphics.Canvas(frame).drawColor(0xff304048 + i * 0x00080808);
+            try (java.io.OutputStream out = new java.io.FileOutputStream(new File(night.pictureFolder(), String.format(java.util.Locale.ROOT, "%06d.jpg", 600 + i * 1800)))) { frame.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out); }
+        }
         android.content.Intent intent = new android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), RecordingsActivity.class)
             .putExtra(RecordingsActivity.EXTRA_META, night.meta.getAbsolutePath());
         RecordingsActivity detail = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
-        shot(detail.getWindow().getDecorView(), 1080, 3600, new File(out(), "recording-night-" + theme + ".png"));
+        shot(detail.getWindow().getDecorView(), 1080, 4400, new File(out(), "recording-night-" + theme + ".png"));
     }
     /** Two prints side by side, layer by layer. */
     @Test public void renderCompare() throws Exception {

@@ -358,7 +358,8 @@ public final class RecordingsActivity extends Activity {
         summaryLines = new ArrayList<>(extra);
         double[] t = column(rows, "elapsed_s");
         warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
-        chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear();
+        chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear(); previews.clear();
+        pictureLayerAt = pictureLayers(pictureTimes, t, column(rows, "layer"));
         String warm = warmUpWords(warmUp);
         if (!warm.isEmpty()) {
             TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3));
@@ -421,7 +422,8 @@ public final class RecordingsActivity extends Activity {
         };
         if (!all && !shownCharts.isEmpty()) {
             pick[0].run();
-            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures: drag onto one to see it, tap it to open it." : ""), 12, muted, false);
+            attachPreview(charts, pictureTimes, k -> k);
+            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures; the one from the moment you touch shows under the chart." : ""), 12, muted, false);
         } else if (!all) content.removeView(charts);
         headPositions(recording, rows);
         trays(rows, t);
@@ -507,7 +509,7 @@ public final class RecordingsActivity extends Activity {
                 }
                 // The pictures at the layer printing when each was taken.
                 double[] atLayer = pictureLayers(pictureTimes, column(rows, "elapsed_s"), column(rows, "layer"));
-                for (int i = 0; i < card.getChildCount(); i++) if (card.getChildAt(i) instanceof ChartView) ((ChartView) card.getChildAt(i)).pictures(atLayer, this::pictureThumb, this::openPicture);
+                attachPreview(card, atLayer, k -> k);
             });
         }, "recording-layers").start();
     }
@@ -847,7 +849,7 @@ public final class RecordingsActivity extends Activity {
         ChartView overTime = new ChartView(this, ink, muted, grid, surface);
         overTime.set("Head at each picture", " mm", times, Arrays.asList(new ChartView.Series("X", blue, x, false), new ChartView.Series("Y", orange, y, false), new ChartView.Series("Z", aqua, z, false)), 0, Double.NaN);
         if (shown != null && shown.start > 0) overTime.clock(shown.start);
-        overTime.pictures(times, thumb, open);
+
         List<double[]> seen = new ArrayList<>(); int cx = PrintRecorder.column("x_mm"), cy = PrintRecorder.column("y_mm"), cz = PrintRecorder.column("z_mm");
         for (double[] row : rows) if (!Double.isNaN(row[cx]) && !Double.isNaN(row[cy])) seen.add(new double[] {row[cx], row[cy], row[cz]});
         double bedX = 256, bedY = 256; for (double[] p : at) { bedX = Math.max(bedX, p[1]); bedY = Math.max(bedY, p[2]); }
@@ -855,6 +857,7 @@ public final class RecordingsActivity extends Activity {
             .set(at.toArray(new double[0][]), seen.toArray(new double[0][]), bedX, bedY).pictures(thumb, open);
         LinearLayout chips = new LinearLayout(this); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
         card.addView(overTime, new LinearLayout.LayoutParams(-1, dp(240)));
+        attachPreview(card, times, index::get);
         android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         // The 3D view with its key: what the dots and lines are, and the readings behind them, which can be hidden.
         LinearLayout spaceBox = new LinearLayout(this); spaceBox.setOrientation(LinearLayout.VERTICAL); card.addView(spaceBox);
@@ -1101,6 +1104,7 @@ public final class RecordingsActivity extends Activity {
                     if (shown != null && shown.start > 0) usedView.clock(shown.start);
                     chartBox.addView(usedView, new LinearLayout.LayoutParams(-1, dp(220)));
                     printedByType(chartBox, t, typeSoFar);
+                    attachPreview(chartBox, pictureTimes, k -> k);
                 }
                 if (used != null) for (SlicedMaterials.Entry entry : used.entries) {
                     if (entry.lengthMm == null && entry.massG == null) continue;
@@ -1292,8 +1296,45 @@ public final class RecordingsActivity extends Activity {
     /** Warm-up shaded and the pictures' ticks, on a chart over the print's time. */
     private void warmUp(ChartView view) {
         for (Object[] phase : warmUp) view.span((Double) phase[0], (Double) phase[1], (String) phase[2]);
-        if (pictureTimes.length > 0) view.pictures(pictureTimes, this::pictureThumb, this::openPicture);
+        if (pictureTimes.length > 0) view.pictures(pictureTimes, null);   // the ticks; attachPreview hooks up the card's preview
     }
+    /**
+     * A picture panel under a card's charts: while one of them is touched it shows the picture of that moment (the chart
+     * says which: `at` is each picture's x on the charts, `toPicture` maps its index to the print's picture list); before
+     * that, the latest picture. A fixed size, so nothing below moves; tap it to open the picture.
+     */
+    private void attachPreview(LinearLayout card, double[] at, java.util.function.IntUnaryOperator toPicture) {
+        if (chartPictures.isEmpty() || at.length == 0) return;
+        LinearLayout panel = new LinearLayout(this); panel.setOrientation(LinearLayout.HORIZONTAL); panel.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams panelAt = new LinearLayout.LayoutParams(-1, -2); panelAt.topMargin = dp(6); panel.setMinimumHeight(dp(124));
+        ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        GradientDrawable frame = new GradientDrawable(); frame.setColor(grid); frame.setCornerRadius(dp(10)); image.setBackground(frame); image.setClipToOutline(true);
+        panel.addView(image, new LinearLayout.LayoutParams(dp(165), dp(124)));
+        TextView words = new TextView(this); words.setTextSize(13); words.setTextColor(muted); words.setPadding(dp(12), 0, 0, 0);
+        panel.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(panel, panelAt);
+        int[] showing = {chartPictures.size() - 1};
+        java.util.function.IntConsumer show = picture -> {
+            if (picture < 0 || picture >= chartPictures.size()) return;
+            showing[0] = picture;
+            image.setImageBitmap(previewBitmap(picture));
+            double layer = picture < pictureLayerAt.length ? pictureLayerAt[picture] : Double.NaN;
+            String when = ChartView.elapsed(pictureTimes[picture]) + " into the print" + (Double.isNaN(layer) ? "" : " · layer " + (int) layer);
+            words.setText(when + "\nTap it to open"); image.setContentDescription("Picture at " + when + ". Open it");
+        };
+        show.accept(chartPictures.size() - 1);
+        words.setText("Latest: " + words.getText().toString().replace("\nTap it to open", "\nTouch a chart for another"));
+        image.setOnClickListener(v -> openPicture(showing[0]));
+        for (int i = 0; i < card.getChildCount(); i++) if (card.getChildAt(i) instanceof ChartView) ((ChartView) card.getChildAt(i)).pictures(at, k -> show.accept(toPicture.applyAsInt(k)));
+    }
+    /** The preview's copy of a picture, kept for the last few shown so dragging back and forth stays smooth. */
+    private final Map<Integer, android.graphics.Bitmap> previews = new LinkedHashMap<Integer, android.graphics.Bitmap>(32, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Integer, android.graphics.Bitmap> eldest) { return size() > 40; }
+    };
+    private android.graphics.Bitmap previewBitmap(int i) { return previews.computeIfAbsent(i, k -> decode(chartPictures.get(k), dp(165))); }
+    /** The layer printing at each picture (for the preview's words). */
+    private double[] pictureLayerAt = new double[0];
+
     /** The time into the print (s) of each picture, from its name. Pure. */
     static double[] pictureTimes(List<File> pictures) {
         double[] out = new double[pictures.size()];
