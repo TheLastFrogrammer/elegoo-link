@@ -355,6 +355,7 @@ public final class RecordingsActivity extends Activity {
         String coverage = coverage(rows, recording);
         if (!coverage.isEmpty()) extra.add(coverage);
         if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
+        summaryLines = new ArrayList<>(extra);
         double[] t = column(rows, "elapsed_s");
         warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
         chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear();
@@ -431,6 +432,9 @@ public final class RecordingsActivity extends Activity {
         action(actions, "All readings…", () -> table(recording, rows));
         action(actions, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
             .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
+        LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.HORIZONTAL); content.addView(more);
+        action(more, "Compare with…", () -> compareWith(recording));
+        action(more, "Share a report…", () -> shareReport(recording, rows));
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
     }
@@ -585,6 +589,75 @@ public final class RecordingsActivity extends Activity {
         }, "recording-gcode-list").start();
     }
     private PrintRecorder.Recording addingTo; private List<double[]> addingRows;
+    /** The shown print's summary lines (filament, estimate, cost…), for its report. */
+    private List<String> summaryLines = new ArrayList<>();
+    /**
+     * Shares the print as one web page: its facts, notes, measured checks, four charts over time and up to twelve pictures.
+     * Charts are drawn here in the light theme; the pictures are read and shrunk in the background.
+     */
+    private void shareReport(PrintRecorder.Recording recording, List<double[]> rows) {
+        Toast.makeText(this, "Making the report…", Toast.LENGTH_SHORT).show();
+        double[] t = column(rows, "elapsed_s");
+        int lInk = 0xff17252c, lMuted = 0xff5a6d76, lGrid = 0xffe1e6e6, lSurface = Color.WHITE, lBlue = 0xff2a78d6, lOrange = 0xffeb6834, lAqua = 0xff149a69;
+        Object[][] specs = {
+            {"Temperatures", " °C", Arrays.asList(new ChartView.Series("Nozzle", lBlue, column(rows, "nozzle_c"), false), new ChartView.Series("Nozzle target", lBlue, column(rows, "nozzle_target_c"), true),
+                new ChartView.Series("Bed", lOrange, column(rows, "bed_c"), false), new ChartView.Series("Bed target", lOrange, column(rows, "bed_target_c"), true), new ChartView.Series("Chamber", lAqua, column(rows, "chamber_c"), false))},
+            {"Progress", " %", Collections.singletonList(new ChartView.Series("Progress", lBlue, column(rows, "progress"), false))},
+            {"Fan speed", " %", Arrays.asList(new ChartView.Series("Part fan", lBlue, column(rows, "part_fan_pct"), false), new ChartView.Series("Aux fan", lOrange, column(rows, "aux_fan_pct"), false), new ChartView.Series("Chamber fan", lAqua, column(rows, "chamber_fan_pct"), false))},
+            {"Speed (as the printer reports it)", "", Collections.singletonList(new ChartView.Series("Speed", lBlue, column(rows, "speed"), false))}};
+        List<PrintReport.Image> charts = new ArrayList<>();
+        for (Object[] spec : specs) {
+            @SuppressWarnings("unchecked") List<ChartView.Series> all = (List<ChartView.Series>) spec[2];
+            List<ChartView.Series> present = new ArrayList<>(); for (ChartView.Series one : all) for (double v : one.values) if (!Double.isNaN(v)) { present.add(one); break; }
+            if (present.isEmpty() || t.length < 2) continue;
+            ChartView chart = new ChartView(this, lInk, lMuted, lGrid, lSurface);
+            chart.set((String) spec[0], (String) spec[1], t, present, 0, Double.NaN);
+            for (Object[] phase : warmUp) chart.span((Double) phase[0], (Double) phase[1], (String) phase[2]);
+            int w = 1200, h = 640;
+            chart.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY)); chart.layout(0, 0, w, h);
+            android.graphics.Bitmap bitmap = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888);
+            android.graphics.Canvas canvas = new android.graphics.Canvas(bitmap); canvas.drawColor(lSurface); chart.draw(canvas);
+            ByteArrayOutputStream png = new ByteArrayOutputStream(); bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, png); bitmap.recycle();
+            charts.add(new PrintReport.Image((String) spec[0] + (warmUp.isEmpty() ? "" : " (warm-up shaded)"), "image/png", png.toByteArray()));
+        }
+        List<String> facts = new ArrayList<>();
+        facts.add("Result: " + outcome(recording.outcome) + " · time " + duration(recording.duration()) + (recording.layers > 0 ? " · " + recording.layers + " layers" : ""));
+        facts.addAll(summaryLines);
+        String warm = warmUpWords(warmUp); if (!warm.isEmpty()) facts.add(warm.replace(" Shaded on the charts.", ""));
+        List<String> notes = new ArrayList<>();
+        PrintJournal j = recording.journal;
+        if (j.stars > 0) notes.add("Rating: " + j.stars + " of 5");
+        if (!j.result.isEmpty()) notes.add("Result: " + j.result);
+        if (!j.notes.isEmpty()) notes.add(j.notes);
+        List<String> checks = new ArrayList<>();
+        for (PrintChecks.Finding f : PrintChecks.of(recording)) checks.add(PrintChecks.mark(f.verdict) + " " + f.title + ": " + f.evidence);
+        List<File> pictures = PrintRecorder.pictures(recording);
+        String title = StatusPresentation.clean(recording.file.isEmpty() ? "Print" : recording.file.replaceFirst("(?i)\\.gcode$", ""));
+        String subtitle = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + (recording.printer.isEmpty() ? "" : " · " + recording.printer);
+        new Thread(() -> {
+            List<PrintReport.Image> shots = new ArrayList<>();
+            for (int i : PrintReport.spread(pictures.size(), 12)) {
+                android.graphics.Bitmap small = decode(pictures.get(i), 640); if (small == null) continue;
+                ByteArrayOutputStream jpeg = new ByteArrayOutputStream(); small.compress(android.graphics.Bitmap.CompressFormat.JPEG, 82, jpeg);
+                shots.add(new PrintReport.Image(ChartView.elapsed(pictureTimes(Collections.singletonList(pictures.get(i)))[0]) + " into the print", "image/jpeg", jpeg.toByteArray()));
+            }
+            String version = ""; try { version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception ignored) { }
+            String page = PrintReport.html(title, subtitle, facts, notes, checks, charts, shots, "Recorded with Link Workshop " + version);
+            File out = ShareProvider.fresh(this, title + " report.html");
+            String failed = null;
+            try (OutputStream o = new FileOutputStream(out)) { o.write(page.getBytes(java.nio.charset.StandardCharsets.UTF_8)); } catch (IOException e) { failed = e.getMessage(); }
+            String why = failed;
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (why != null) { Toast.makeText(this, "The report could not be made.", Toast.LENGTH_LONG).show(); return; }
+                Uri uri = ShareProvider.uriFor(this, out);
+                Intent send = new Intent(Intent.ACTION_SEND).setType("text/html").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, title + " · print report")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                send.setClipData(android.content.ClipData.newRawUri(title, uri));
+                startActivity(Intent.createChooser(send, "Share the report"));
+            });
+        }, "print-report").start();
+    }
     /** Reads the file's layers, says what does not fit the print, and keeps it with the recording once confirmed. `temporary`: delete the file afterwards. */
     private void checkAndKeep(PrintRecorder.Recording recording, List<double[]> rows, File file, String name, boolean temporary) {
         Toast.makeText(this, "Checking the file…", Toast.LENGTH_SHORT).show();
@@ -611,6 +684,24 @@ public final class RecordingsActivity extends Activity {
         }, "recording-gcode-check").start();
     }
 
+    /** Picks another recording (the same file's first) and opens the two side by side. */
+    private void compareWith(PrintRecorder.Recording recording) {
+        File folder = directory(this);
+        new Thread(() -> {
+            List<PrintRecorder.Recording> others = new ArrayList<>();
+            for (PrintRecorder.Recording r : new PrintRecorder(folder).list()) if (!r.meta.equals(recording.meta)) others.add(r);
+            String base = GcodeLibrary.baseName(recording.file);
+            others.sort((x, y) -> { boolean sx = java.util.Objects.equals(GcodeLibrary.baseName(x.file), base), sy = java.util.Objects.equals(GcodeLibrary.baseName(y.file), base); return sx == sy ? Long.compare(y.start, x.start) : sx ? -1 : 1; });
+            runOnUiThread(() -> {
+                if (isDestroyed()) return;
+                if (others.isEmpty()) { Toast.makeText(this, "No other recording to compare with yet.", Toast.LENGTH_SHORT).show(); return; }
+                String[] names = new String[others.size()];
+                for (int i = 0; i < names.length; i++) names[i] = CompareActivity.name(others.get(i)) + " · " + outcome(others.get(i).outcome);
+                new AlertDialog.Builder(this).setTitle("Compare with").setNegativeButton("Cancel", null).setItems(names, (d, which) ->
+                    startActivity(new Intent(this, CompareActivity.class).putExtra(CompareActivity.EXTRA_A, recording.meta.getAbsolutePath()).putExtra(CompareActivity.EXTRA_B, others.get(which).meta.getAbsolutePath()))).show();
+            });
+        }, "compare-list").start();
+    }
     private String displayName(Uri uri) {
         try (android.database.Cursor c = getContentResolver().query(uri, new String[] {android.provider.OpenableColumns.DISPLAY_NAME}, null, null, null)) {
             if (c != null && c.moveToFirst()) return c.getString(0);
@@ -724,7 +815,7 @@ public final class RecordingsActivity extends Activity {
             });
         }, "timelapse").start();
     }
-    private static android.graphics.Bitmap decode(File file, int width) {
+    static android.graphics.Bitmap decode(File file, int width) {
         android.graphics.BitmapFactory.Options bounds = new android.graphics.BitmapFactory.Options(); bounds.inJustDecodeBounds = true;
         android.graphics.BitmapFactory.decodeFile(file.getPath(), bounds);
         android.graphics.BitmapFactory.Options options = new android.graphics.BitmapFactory.Options(); options.inSampleSize = 1;

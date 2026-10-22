@@ -48,6 +48,7 @@
         <activity android:name=".CloudCameraActivity" android:exported="false" android:label="Cloud camera"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|uiMode" />
         <activity android:name=".RecordingsActivity" android:exported="false" android:label="Print recordings" />
+        <activity android:name=".CompareActivity" android:exported="false" android:label="Compare prints" />
         <activity android:name=".ProjectsActivity" android:exported="true" android:label="Projects">
             <!-- A shared project file (.lwproject) opened or shared from another app: imported only after the person confirms. -->
             <intent-filter>

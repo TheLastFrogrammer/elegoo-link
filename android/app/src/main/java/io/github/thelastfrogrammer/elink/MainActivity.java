@@ -396,6 +396,10 @@ public final class MainActivity extends Activity {
         fileSource = label(hero, "", 12, MUTED, false); fileSource.setVisibility(View.GONE); fileSource.setMinHeight(dp(48)); fileSource.setGravity(Gravity.CENTER_VERTICAL);
         fileSource.setOnClickListener(v -> startActivity(new Intent(this, GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)));
         A11y.clickLabel(fileSource, "Choose the file in Live toolpath");
+        // The running print's newest pictures, newest first; tap one to see it, the last cell opens the recording.
+        latestScroll = new android.widget.HorizontalScrollView(this); latestScroll.setHorizontalScrollBarEnabled(false); latestScroll.setVisibility(View.GONE);
+        latestStrip = new LinearLayout(this); latestStrip.setOrientation(LinearLayout.HORIZONTAL); latestScroll.addView(latestStrip);
+        LinearLayout.LayoutParams latestAt = new LinearLayout.LayoutParams(-1, -2); latestAt.topMargin = dp(8); hero.addView(latestScroll, latestAt);
         LinearLayout.LayoutParams cameraAt = new LinearLayout.LayoutParams(-1, -2); cameraAt.topMargin = dp(12); hero.addView(monitorCamera, cameraAt);
         // Pause / Resume and Stop sit with the job they act on; each still asks first.
         printRow = row(hero); ((LinearLayout.LayoutParams) printRow.getLayoutParams()).topMargin = dp(8);
@@ -1599,6 +1603,41 @@ public final class MainActivity extends Activity {
             String text = open == 0 ? "Plan a build: its parts, how many of each, their files and the prints that made them."
                 : open + (open == 1 ? " project" : " projects") + (ready > 0 ? " · " + ready + " with every part ready" : "");
             main.post(() -> { if (projectsLine != null) projectsLine.setText(text); });
+        });
+    }
+    private android.widget.HorizontalScrollView latestScroll; private LinearLayout latestStrip; private String latestFor = "";
+    static final int LATEST_PICTURES = 6;
+    /** The running print's newest pictures in a strip under the job, read again only when a new one was kept. */
+    private void renderLatestPictures(PrintRecorder.Recording recording) {
+        if (recording == null || recording.pictures == 0) { latestScroll.setVisibility(View.GONE); latestFor = ""; return; }
+        String key = recording.meta.getName() + ":" + recording.pictures;
+        if (key.equals(latestFor)) return;
+        latestFor = key; File meta = recording.meta; int width = dp(120);
+        checks.execute(() -> {
+            List<File> all = PrintRecorder.pictures(recording);
+            List<File> newest = new ArrayList<>(all.subList(Math.max(0, all.size() - LATEST_PICTURES), all.size())); java.util.Collections.reverse(newest);
+            List<android.graphics.Bitmap> thumbs = new ArrayList<>(); for (File f : newest) thumbs.add(RecordingsActivity.decode(f, width));
+            main.post(() -> {
+                if (isDestroyed() || !key.equals(latestFor)) return;
+                latestStrip.removeAllViews();
+                for (int i = 0; i < newest.size(); i++) {
+                    File file = newest.get(i); String at = ChartView.elapsed(Double.parseDouble(file.getName().replace(".jpg", "")));
+                    LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setPadding(0, 0, dp(8), 0);
+                    ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); image.setImageBitmap(thumbs.get(i));
+                    image.setContentDescription("Picture at " + at + " into the print"); A11y.clickLabel(image, "See it larger");
+                    image.setOnClickListener(v -> {
+                        ImageView big = new ImageView(this); big.setAdjustViewBounds(true); big.setImageBitmap(RecordingsActivity.decode(file, getResources().getDisplayMetrics().widthPixels));
+                        new AlertDialog.Builder(this).setTitle(at + " into the print").setView(big).setPositiveButton("Close", null).show();
+                    });
+                    cell.addView(image, new LinearLayout.LayoutParams(dp(120), dp(90)));
+                    label(cell, i == 0 ? "Latest · " + at : at, 12, MUTED, false);
+                    latestStrip.addView(cell);
+                }
+                TextView every = label(latestStrip, "All " + recording.pictures + " ›", 13, TEAL, true);
+                every.setMinHeight(dp(90)); every.setGravity(Gravity.CENTER_VERTICAL); every.setPadding(dp(8), 0, dp(8), 0);
+                every.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, meta.getAbsolutePath())));
+                latestScroll.setVisibility(View.VISIBLE);
+            });
         });
     }
     /** The File source line, worked out off the screen thread at most every 10 s (and at once for a new print). */
@@ -3100,6 +3139,7 @@ public final class MainActivity extends Activity {
         picturesNow.setVisibility(inJobNow && recordingNow != null ? View.VISIBLE : View.GONE);
         renderTelemetry(inJobNow ? recordingNow : null);
         renderFileSource(inJobNow, printFile);
+        renderLatestPictures(inJobNow ? recordingNow : null);
         GuardianRun guard = printer == null ? null : printer.guardian;
         boolean guardShown = inJobNow && guard != null && settings.getBoolean("guardian", true) && !guard.verdict.isEmpty();
         guardianCard.setVisibility(guardShown ? View.VISIBLE : View.GONE);

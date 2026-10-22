@@ -166,6 +166,17 @@ public class MoreScreensRenderTest {
         RecordingsActivity detail = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
         shot(detail.getWindow().getDecorView(), 1080, 3600, new File(out(), "recording-night-" + theme + ".png"));
     }
+    /** Two prints side by side, layer by layer. */
+    @Test public void renderCompare() throws Exception {
+        setTheme(false);
+        seedRecordings();
+        PrintRecorder recorder = new PrintRecorder(RecordingsActivity.directory(org.robolectric.RuntimeEnvironment.getApplication()));
+        java.util.List<PrintRecorder.Recording> all = recorder.list();
+        android.content.Intent intent = new android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), CompareActivity.class)
+            .putExtra(CompareActivity.EXTRA_A, all.get(1).meta.getAbsolutePath()).putExtra(CompareActivity.EXTRA_B, all.get(2).meta.getAbsolutePath());
+        CompareActivity compare = Robolectric.buildActivity(CompareActivity.class, intent).setup().get();
+        shot(compare.getWindow().getDecorView(), 1080, 3000, new File(out(), "compare-light.png"));
+    }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }
 }

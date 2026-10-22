@@ -29,7 +29,7 @@ final class RecordingAnalysis {
                 if (now > current) { current = now; since = t[i]; }
             }
         }
-        if (ended && current >= 1 && current <= out.length && t.length > 0) out[current - 1] = t[t.length - 1] - since;
+        if (ended && current >= 1 && current <= out.length && t.length > 0 && t[t.length - 1] > since) out[current - 1] = t[t.length - 1] - since;
         return out;
     }
 
@@ -160,6 +160,29 @@ final class RecordingAnalysis {
         if (filament) parts.add(String.format(Locale.getDefault(), "filament %s (%.0f g)", money.format(f), grams));
         if (energy) parts.add(String.format(Locale.getDefault(), "energy %s (%.2f kWh at %.0f W)", money.format(e), kwh, watts));
         return "Cost: about " + money.format(f + e) + " · " + String.join(", ", parts) + (energy ? "" : " · add the printer's power in History › Prices for energy too");
+    }
+
+    /** The mean of a column's readings on each layer (index = layer - 1), NaN where a layer had none. */
+    static double[] perLayerMean(double[] layer, double[] values, int layers) {
+        double[] sum = new double[Math.max(0, layers)], out = new double[Math.max(0, layers)]; int[] n = new int[Math.max(0, layers)];
+        for (int i = 0; i < Math.min(layer.length, values.length); i++) {
+            if (Double.isNaN(layer[i]) || Double.isNaN(values[i]) || layer[i] < 1 || layer[i] > layers) continue;
+            int k = (int) layer[i] - 1; sum[k] += values[i]; n[k]++;
+        }
+        for (int k = 0; k < out.length; k++) out[k] = n[k] == 0 ? Double.NaN : sum[k] / n[k];
+        return out;
+    }
+    /** The highest layer in the readings, or 0. */
+    static int lastLayer(double[] layer) { double top = 0; for (double v : layer) if (!Double.isNaN(v)) top = Math.max(top, v); return (int) top; }
+    /** The picture taken at a layer: the last one at or below it, else the first one above; -1 with none. `layers` from RecordingsActivity.pictureLayers. */
+    static int pictureAtLayer(double[] layers, int layer) {
+        int below = -1, above = -1;
+        for (int i = 0; i < layers.length; i++) {
+            if (Double.isNaN(layers[i])) continue;
+            if (layers[i] <= layer) { if (below < 0 || layers[i] >= layers[below]) below = i; }
+            else if (above < 0 || layers[i] < layers[above]) above = i;
+        }
+        return below >= 0 ? below : above;
     }
 
     static String clock(double seconds) { long s = Math.round(seconds); return s >= 3600 ? String.format(Locale.ROOT, "%d:%02d:%02d", s / 3600, s % 3600 / 60, s % 60) : String.format(Locale.ROOT, "%d:%02d", s / 60, s % 60); }

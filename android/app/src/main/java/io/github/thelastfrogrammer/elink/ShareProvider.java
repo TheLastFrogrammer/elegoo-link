@@ -46,7 +46,7 @@ public final class ShareProvider extends ContentProvider {
     }
     @Override public String getType(Uri uri) {
         String name = uri.getLastPathSegment() == null ? "" : uri.getLastPathSegment().toLowerCase(java.util.Locale.ROOT);
-        return name.endsWith(".png") ? "image/png" : name.endsWith(".mp4") ? "video/mp4" : name.endsWith(".pdf") ? "application/pdf" : name.endsWith(".txt") ? "text/plain" : name.endsWith(ProjectArchive.EXTENSION) ? ProjectArchive.MIME : "application/octet-stream";
+        return name.endsWith(".png") ? "image/png" : name.endsWith(".mp4") ? "video/mp4" : name.endsWith(".pdf") ? "application/pdf" : name.endsWith(".txt") ? "text/plain" : name.endsWith(".html") ? "text/html" : name.endsWith(ProjectArchive.EXTENSION) ? ProjectArchive.MIME : "application/octet-stream";
     }
     @Override public Uri insert(Uri uri, ContentValues values) { throw new UnsupportedOperationException(); }
     @Override public int delete(Uri uri, String selection, String[] args) { throw new UnsupportedOperationException(); }

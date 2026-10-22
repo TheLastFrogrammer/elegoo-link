@@ -80,6 +80,30 @@ public class RecordingAnalysisTest {
         assertEquals("too few earlier prints", "", RecordingAnalysis.warmUpAgainstUsual(normal, usual, counts));
     }
 
+    @Test public void layersLineUpForComparing() {
+        double[] layer = {N, 1, 1, 2, 3, 9}, nozzle = {150, 210, 220, 215, N, 200};
+        assertArrayEquals(new double[] {215, 215, N}, RecordingAnalysis.perLayerMean(layer, nozzle, 3), 1e-9);
+        assertEquals(9, RecordingAnalysis.lastLayer(layer));
+        double[] pictures = {N, 2, 5, 9};
+        assertEquals(1, RecordingAnalysis.pictureAtLayer(pictures, 4));
+        assertEquals(2, RecordingAnalysis.pictureAtLayer(pictures, 5));
+        assertEquals("before any: the first above", 1, RecordingAnalysis.pictureAtLayer(pictures, 1));
+        assertEquals(-1, RecordingAnalysis.pictureAtLayer(new double[] {N}, 3));
+    }
+
+    @Test public void theReportIsOneEscapedPageWithItsImagesInside() {
+        String page = PrintReport.html("Bracket <v2>", "Oct 21 · CC2", Arrays.asList("Result: complete & fine"), Arrays.asList("I'd raise the fan"),
+            new ArrayList<>(), Arrays.asList(new PrintReport.Image("Temperatures", "image/png", new byte[] {1, 2, 3})), new ArrayList<>(), "Recorded with Link Workshop");
+        assertTrue(page.contains("<title>Bracket &lt;v2&gt;</title>"));
+        assertTrue(page.contains("<li>Result: complete &amp; fine</li>") && page.contains("I&#39;d raise the fan"));
+        assertTrue(page.contains("src=\"data:image/png;base64,AQID\""));
+        assertFalse("no section without lines", page.contains("Measured during the print"));
+        assertFalse("nothing loaded from elsewhere", page.contains("http"));
+        assertArrayEquals(new int[] {0, 5, 10}, PrintReport.spread(11, 3));
+        assertArrayEquals(new int[] {0, 1}, PrintReport.spread(2, 12));
+        assertEquals(0, PrintReport.spread(0, 12).length);
+    }
+
     @Test public void costIsFilamentAndEnergyWhenPricesAreSet() {
         assertEquals("", RecordingAnalysis.cost(50, 0, 2, 0, 0));
         String filament = RecordingAnalysis.cost(50, 20, 2, 0, 0);
