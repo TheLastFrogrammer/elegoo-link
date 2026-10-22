@@ -855,9 +855,21 @@ public final class RecordingsActivity extends Activity {
             .set(at.toArray(new double[0][]), seen.toArray(new double[0][]), bedX, bedY).pictures(thumb, open);
         LinearLayout chips = new LinearLayout(this); chips.setOrientation(LinearLayout.HORIZONTAL); card.addView(chips);
         card.addView(overTime, new LinearLayout.LayoutParams(-1, dp(240)));
-        card.addView(space, new LinearLayout.LayoutParams(-1, dp(340)));
         android.content.SharedPreferences prefs = getSharedPreferences("workshop-settings", MODE_PRIVATE);
-        List<Button> buttons = new ArrayList<>(); View[] views = {overTime, space}; int accent = dark ? 0xff5fd4c4 : 0xff00796b;
+        // The 3D view with its key: what the dots and lines are, and the readings behind them, which can be hidden.
+        LinearLayout spaceBox = new LinearLayout(this); spaceBox.setOrientation(LinearLayout.VERTICAL); card.addView(spaceBox);
+        spaceBox.addView(space, new LinearLayout.LayoutParams(-1, dp(340)));
+        label(spaceBox, "Blue dots: the head at each picture, light (early) to dark (late). The thin blue line joins them in the order they were taken.", 12, muted, false);
+        boolean anyReadings = !seen.isEmpty();
+        if (anyReadings) {
+            label(spaceBox, "Grey dots: the head at every status reading (every few seconds), to show where it went between pictures.", 12, muted, false);
+            CheckBox showSeen = new CheckBox(this); showSeen.setText("Show the status readings"); showSeen.setTextColor(ink); showSeen.setChecked(prefs.getBoolean("headReadings", true));
+            space.readings(showSeen.isChecked());
+            showSeen.setOnCheckedChangeListener((v, on) -> { prefs.edit().putBoolean("headReadings", on).apply(); space.readings(on); });
+            spaceBox.addView(showSeen);
+        }
+        label(spaceBox, "Drag to turn it. Tap a dot to see its picture; tap it again to open the picture.", 12, muted, false);
+        List<Button> buttons = new ArrayList<>(); View[] views = {overTime, spaceBox}; int accent = dark ? 0xff5fd4c4 : 0xff00796b;
         Runnable[] pick = new Runnable[1];
         String[] names = {"Over time", "3D"};
         for (int i = 0; i < names.length; i++) {

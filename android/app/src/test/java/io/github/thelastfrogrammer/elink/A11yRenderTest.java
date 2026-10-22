@@ -226,7 +226,8 @@ public class A11yRenderTest {
     @Test public void headPositionsIn3D() throws Exception {
         int n = 40; double[][] at = new double[n][], seen = new double[300][];
         for (int i = 0; i < n; i++) at[i] = i % 5 == 4 ? new double[] {i * 120, 128 + 40 * Math.cos(i), 128 + 40 * Math.sin(i), 0.2 + i * 0.3} : new double[] {i * 120, 250, 250, 0.2 + i * 0.3};
-        for (int i = 0; i < seen.length; i++) seen[i] = new double[] {128 + 45 * Math.cos(i * 0.7), 128 + 45 * Math.sin(i * 0.7), 0.2 + i * 0.04};
+        java.util.Random random = new java.util.Random(7);   // readings land wherever the nozzle happened to be: over the part, now and then parked
+        for (int i = 0; i < seen.length; i++) seen[i] = i % 25 == 24 ? new double[] {250, 250, 0.2 + i * 0.04} : new double[] {98 + 60 * random.nextDouble(), 98 + 60 * random.nextDouble(), 0.2 + i * 0.04};
         android.graphics.Bitmap frame = android.graphics.Bitmap.createBitmap(160, 120, android.graphics.Bitmap.Config.ARGB_8888);
         new android.graphics.Canvas(frame).drawColor(0xff40505a);
         HeadPositions3DView view = new HeadPositions3DView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6, 0xffb7d3f5, 0xff1a4f9c).set(at, seen, 256, 256).pictures(i -> frame, i -> { });

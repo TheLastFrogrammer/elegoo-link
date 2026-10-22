@@ -46,6 +46,9 @@ final class HeadPositions3DView extends View {
         setContentDescription(describe(pictures));
         invalidate(); return this;
     }
+    private boolean showReadings = true;
+    /** Whether the status readings' positions are drawn behind the pictures' dots. */
+    HeadPositions3DView readings(boolean show) { showReadings = show; invalidate(); return this; }
     HeadPositions3DView pictures(java.util.function.IntFunction<Bitmap> thumb, java.util.function.IntConsumer open) { this.thumb = thumb; this.open = open; return this; }
 
     /** How much to stretch heights: the tallest point at least a third of the bed's width, whole steps, at most ×10. Pure. */
@@ -100,7 +103,7 @@ final class HeadPositions3DView extends View {
         canvas.drawText("0,0", c0[0], c0[1] + 14 * density, small);
         // The readings, faint.
         fill.setColor((muted & 0x00ffffff) | 0x55000000);
-        for (double[] r : readings) { if (Double.isNaN(r[0]) || Double.isNaN(r[1])) continue; float[] p = project(r[0], r[1], Double.isNaN(r[2]) ? 0 : r[2], fit); canvas.drawCircle(p[0], p[1], 1.5f * density, fill); }
+        if (showReadings) for (double[] r : readings) { if (Double.isNaN(r[0]) || Double.isNaN(r[1])) continue; float[] p = project(r[0], r[1], Double.isNaN(r[2]) ? 0 : r[2], fit); canvas.drawCircle(p[0], p[1], 1.5f * density, fill); }
         if (points.length == 0) { small.setTextAlign(Paint.Align.LEFT); canvas.drawText("No head positions noted for the pictures.", 12 * density, 20 * density, small); return; }
         // The pictures: joined in order, then the dots on top with a ring of the background.
         double t0 = points[0][0], t1 = Math.max(t0 + 1, points[points.length - 1][0]);
@@ -113,7 +116,6 @@ final class HeadPositions3DView extends View {
             fill.setColor(i == chosen ? ink : shade((points[i][0] - t0) / (t1 - t0))); canvas.drawCircle(p[0], p[1], (i == chosen ? 6 : 4) * density, fill);
         }
         small.setTextAlign(Paint.Align.LEFT);
-        canvas.drawText("Light: early · dark: late · drag to turn, tap a dot", 4 * density, getHeight() - 6 * density, small);
         if (chosen >= 0) readout(canvas, chosen);
     }
     private void readout(Canvas canvas, int i) {
