@@ -49,6 +49,8 @@ person then changes settings elsewhere and has to remember to compare. The next 
    Done: signed releases that update over development builds (signing/lineage.bin), and an update check.
 7. **Slicer.** Colour, support and seam painting; slicing speed on the phone.
 8. Other printer models (the Centauri Carbon 1 uses a different protocol).
+9. **Pinned: a helper on the printer's USB port** (a board posing as a USB drive, filled over Wi-Fi), so G-code stays
+   readable in cloud mode. First a free test with a plain USB stick.
 
 What the data cannot do, and so is not promised: the extruder position is what the printer was told to feed, not what
 reached the nozzle; through the cloud, status comes about every 30 s; positions are the last reported before a picture.
