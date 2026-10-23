@@ -1,6 +1,7 @@
 name: Android release
 
 # Validation runs in android-ci.yml. This workflow only publishes signed releases from android-vX.Y.Z tags.
+# Release APKs are signed with the release key and signing/lineage.bin (v3 only: Android 9 and later); see android/RELEASING.md.
 on:
   push:
     tags: ['android-v*']

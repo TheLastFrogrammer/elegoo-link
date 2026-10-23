@@ -708,6 +708,10 @@ public final class MainActivity extends Activity {
         LinearLayout about = card("Link Workshop " + appVersion());
         label(about, "This is a development build. Printer behaviour still needs testing on real hardware. Field check (in Help & diagnostics) walks you through it. Planned next: painting tools in the slicer and more printer models.", 13, MUTED, false);
         button(about, "About & licenses", this::showLicenses);
+        updateText = label(about, "", 13, MUTED, false); updateText.setVisibility(View.GONE);
+        button(about, "Check for updates", () -> checkForUpdate(true));
+        CompoundButton autoUpdate = checkbox(about, "Check for updates once a day (reads the project's public release list on GitHub; nothing about you or the printer is sent)", settings.getBoolean(UpdateCheck.PREF_AUTO, true));
+        autoUpdate.setOnCheckedChangeListener((view, on) -> settings.edit().putBoolean(UpdateCheck.PREF_AUTO, on).apply());
         currentSection = null;
         if (saved != null) { host.setText(saved.getString("host", host.getText().toString())); serial.setText(saved.getString("serial", "")); diagnostics.setText(saved.getString("diagnostics", diagnostics.getText().toString())); profileName.setText(saved.getString("profileName", profileName.getText().toString())); }
         // The saved access code is decrypted off the main thread (the key store reads the disk) and filled in when ready,
@@ -3497,6 +3501,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onStart() { rateCheckedAt = 0;
         super.onStart(); active = true; monitorCameraTried = false;
+        if (!"robolectric".equals(android.os.Build.FINGERPRINT) && !Showcase.running()) checkForUpdate(false);   // at most once a day, if allowed
         // Background cloud watching runs as a started foreground service; start it while the app is visible.
         if (settings.getBoolean("cloudBackground", false) && cloudBackground != null && cloudBackground.isEnabled()) try { startForegroundService(new Intent(this, PrinterService.class)); } catch (Exception ignored) { }
         if (printer != null) { printer.observe(this::render); printer.cloudVisible(true); } main.post(clock);
@@ -3697,6 +3702,40 @@ public final class MainActivity extends Activity {
             .setNegativeButton("Clear log", (d, w) -> { Diagnostics.clear(); message("Diagnostics log cleared."); })
             .setNeutralButton("Close", null)
             .setPositiveButton("Share…", (d, w) -> startActivity(Intent.createChooser(send, "Share diagnostics"))).show();
+    }
+    private TextView updateText;
+    /**
+     * Looks for a newer signed release: asked (says what it found) or by itself at most once a day (says something only for
+     * a newer version, once per version). The download opens in the browser; nothing installs by itself.
+     */
+    private void checkForUpdate(boolean asked) {
+        long now = System.currentTimeMillis();
+        if (!asked && (!settings.getBoolean(UpdateCheck.PREF_AUTO, true) || now - settings.getLong(UpdateCheck.PREF_LAST, 0) < UpdateCheck.DAY_MS)) return;
+        settings.edit().putLong(UpdateCheck.PREF_LAST, now).apply();
+        if (asked) { updateText.setText("Checking…"); updateText.setVisibility(View.VISIBLE); }
+        String current = appVersion();
+        checks.execute(() -> {
+            UpdateCheck.Release found; String problem = null;
+            try { found = UpdateCheck.fetch(); } catch (Exception failed) { found = null; problem = "Could not reach GitHub: " + Diagnostics.scrub(failed.getMessage() == null ? failed.getClass().getSimpleName() : failed.getMessage()); }
+            UpdateCheck.Release release = found; String why = problem;
+            main.post(() -> {
+                if (isDestroyed()) return;
+                boolean newer = release != null && UpdateCheck.compare(release.version, current) > 0;
+                if (asked || newer) {
+                    updateText.setText(why != null ? why : release == null ? "No signed release is published yet." : newer ? "Version " + release.version + " is available (this is " + current + ")." : "This is the newest version (" + current + ").");
+                    updateText.setVisibility(View.VISIBLE);
+                }
+                if (!newer || !asked && release.version.equals(settings.getString("updateOffered", ""))) return;
+                settings.edit().putString("updateOffered", release.version).apply();
+                boolean development = (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+                new AlertDialog.Builder(this).setTitle("Link Workshop " + release.version + " is available")
+                    .setMessage((release.notes.isEmpty() ? "" : release.notes + "\n\n") + "The download opens in your browser; open it to install. Android checks that it is signed like this app."
+                        + (development ? "\n\nThis phone has a development build, signed with a different key: Android will refuse to install over it. Make a backup first (Settings › Backup), uninstall, install the release, then restore." : ""))
+                    .setNegativeButton("Later", null)
+                    .setNeutralButton(release.page.isEmpty() ? null : "Release page", (d, w) -> startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.page))))
+                    .setPositiveButton("Download", (d, w) -> startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.apk)))).show();
+            });
+        });
     }
     private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { return "dev"; } }
     /** A card heading with a "More ›" style link on the right that opens the card's details. Returns the link. */

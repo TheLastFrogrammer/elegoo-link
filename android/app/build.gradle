@@ -1,4 +1,7 @@
 plugins { id 'com.android.application' }
+// Release signing comes from the environment (CI secrets) or ~/.gradle/gradle.properties; never from the repository.
+def signingValue = { String name -> System.getenv(name) ?: (project.findProperty(name) ?: '') }
+def keystorePath = signingValue('LINK_WORKSHOP_KEYSTORE')
 android {
     namespace 'io.github.thelastfrogrammer.elink'
     compileSdk 36
@@ -6,14 +9,11 @@ android {
         applicationId 'io.github.thelastfrogrammer.elink'
         minSdk 26
         targetSdk 36
-        versionCode 202
-        versionName '0.99.2'
+        versionCode 203
+        versionName '0.100.0'
         // Agora ships native code for four CPU types; keep only 64-bit ARM (modern phones) to limit APK size.
         ndk { abiFilters 'arm64-v8a' }
     }
-    // Release signing comes from the environment (CI secrets) or ~/.gradle/gradle.properties; never from the repository.
-    def signingValue = { String name -> System.getenv(name) ?: (project.findProperty(name) ?: '') }
-    def keystorePath = signingValue('LINK_WORKSHOP_KEYSTORE')
     signingConfigs {
         release {
             if (keystorePath) {
@@ -44,6 +44,27 @@ android {
         if (!slicerLib.isEmpty()) jvmArgs "-Djava.library.path=${slicerLib}"
     } } }
 }
+// Key rotation: release APKs are signed again with the release key and its lineage (signing/lineage.bin, public: the
+// development key's signature over the release key), so Android 9 and later install a release over a development build
+// signed with the old key, keeping the app's data. Needs only the release key; the lineage was made once. Release APKs
+// carry only the v3 signature, so they need Android 9 or later (development builds still run on Android 8).
+def signingLineage = rootProject.file('signing/lineage.bin')
+tasks.register('rotateReleaseSigning') {
+    onlyIf { keystorePath && signingLineage.isFile() }
+    doLast {
+        def apk = file('build/outputs/apk/release/app-release.apk')
+        def apksigner = new File(android.sdkDirectory, "build-tools/${android.buildToolsVersion}/apksigner")
+        def store = signingValue('LINK_WORKSHOP_KEYSTORE_PASSWORD'), key = signingValue('LINK_WORKSHOP_KEY_PASSWORD') ?: store
+        providers.exec {
+            commandLine apksigner.path, 'sign', '--ks', file(keystorePath).path, '--ks-key-alias', signingValue('LINK_WORKSHOP_KEY_ALIAS'),
+                '--ks-pass', "pass:${store}", '--key-pass', "pass:${key}", '--lineage', signingLineage.path, '--rotation-min-sdk-version', '28',
+                // Only the v3 scheme carries the lineage; v1/v2 would need the old key forever. So releases install on Android 9 and later.
+                '--v1-signing-enabled', 'false', '--v2-signing-enabled', 'false', '--min-sdk-version', '28', apk.path
+        }.result.get().assertNormalExitValue()
+        logger.lifecycle("Release APK signed with the release key and its lineage")
+    }
+}
+afterEvaluate { tasks.named('assembleRelease') { finalizedBy 'rotateReleaseSigning' } }
 // The slicer engine and its presets: built from slicer/ (slicer/scripts) and pinned in android/engine/ (pin-engine.sh), so every
 // build, CI and releases included, ships the same engine. An engine installed locally by install-into-app.sh takes precedence.
 def engineDir = rootProject.file('engine')

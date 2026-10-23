@@ -115,4 +115,4 @@ One-time setup, in the repository's **Settings → Secrets and variables → Act
 - `LINK_WORKSHOP_KEYSTORE_BASE64`: your signing keystore, base64-encoded (`base64 -w0 your-key.jks`)
 - `LINK_WORKSHOP_KEYSTORE_PASSWORD`, `LINK_WORKSHOP_KEY_ALIAS`, `LINK_WORKSHOP_KEY_PASSWORD`
 
-Use the same key as v0.2.0–v0.3.5 so releases install as updates. Local signed builds read the same four names from the environment or `~/.gradle/gradle.properties` (`LINK_WORKSHOP_KEYSTORE` is then the keystore's path). Keystores are git-ignored. New APKs are no longer committed to `android/releases/`; the older ones stay for their existing links.
+Releases are signed with the release key plus `signing/lineage.bin`, so they install over development builds on Android 9 and later (see [RELEASING.md](RELEASING.md); the v0.2–v0.3 APKs used an earlier development key and do not update in place). Local signed builds read the same four names from the environment or `~/.gradle/gradle.properties` (`LINK_WORKSHOP_KEYSTORE` is then the keystore's path). Keystores are git-ignored. New APKs are no longer committed to `android/releases/`; the older ones stay for their existing links.
