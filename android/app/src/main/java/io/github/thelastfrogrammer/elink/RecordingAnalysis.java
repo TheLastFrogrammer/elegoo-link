@@ -162,6 +162,55 @@ final class RecordingAnalysis {
         return "Cost: about " + money.format(f + e) + " · " + String.join(", ", parts) + (energy ? "" : " · add the printer's power in History › Prices for energy too");
     }
 
+    /**
+     * What the readings point to, in words: layers that cooled much longer than the ones before them with the part fan high
+     * (a weak bond or a visible line at that height is likely), long stalls, and the nozzle or bed falling well below its
+     * target while printing. Each says where (layer, height, time) and what usually causes it. Empty when nothing stands out.
+     */
+    static List<String> diagnose(double[] t, double[] layer, double[] fan, double[] z, double[] nozzle, double[] nozzleTarget, double[] bed, double[] bedTarget, double[] sub, boolean ended) {
+        List<String> out = new ArrayList<>();
+        int layers = lastLayer(layer);
+        if (layers >= 4) {
+            double[] took = layerSeconds(t, layer, layers, ended), fans = perLayerMean(layer, fan, layers), height = perLayerMin(layer, z, layers);
+            for (int i = 3; i < layers; i++) {
+                if (Double.isNaN(took[i])) continue;
+                List<Double> before = new ArrayList<>();
+                for (int k = Math.max(0, i - 10); k < i; k++) if (!Double.isNaN(took[k])) before.add(took[k]);
+                if (before.size() < 3) continue;
+                before.sort(Double::compare); double usual = before.get(before.size() / 2);
+                String at = "Layer " + (i + 1) + (Double.isNaN(height[i]) ? "" : String.format(Locale.getDefault(), " (%.1f mm up)", height[i]));
+                if (took[i] >= Math.max(300, 10 * usual)) out.add(at + " took " + ChartView.spanWords(took[i]) + " against about " + clock(usual) + " for the layers before: a pause or a stall. A line or a blob at that height usually comes from it.");
+                else if (took[i] >= Math.max(30, 2.5 * usual) && !Double.isNaN(fans[i]) && fans[i] >= 70)
+                    out.add(at + " took " + clock(took[i]) + " against about " + clock(usual) + " for the layers before, with the part fan at " + Math.round(fans[i]) + " %: the wall cooled much longer than usual, so the layer above may bond weakly there (a crack or line around the part). Less fan, a little more heat, or a minimum layer time evens it out.");
+                if (out.size() >= 4) break;
+            }
+        }
+        String nozzleDrop = drop(t, layer, nozzle, nozzleTarget, sub, 8), bedDrop = drop(t, layer, bed, bedTarget, sub, 5);
+        if (!nozzleDrop.isEmpty()) out.add("The nozzle fell " + nozzleDrop + " while printing: a draught or a fan blowing on the heater block, or the heater losing ground at high flow. Under-extruded lines are likely there.");
+        if (!bedDrop.isEmpty()) out.add("The bed fell " + bedDrop + " while printing: a draught, or the bed heater struggling. Warping or a part letting go can follow.");
+        return out;
+    }
+    /** "to 195 °C (target 210) at 1:12" for the worst reading more than `margin` below a target while printing, or "". */
+    private static String drop(double[] t, double[] layer, double[] value, double[] target, double[] sub, double margin) {
+        int worst = -1; double most = margin;
+        for (int i = 0; i < t.length; i++) {
+            if (Double.isNaN(value[i]) || Double.isNaN(target[i]) || target[i] <= 0 || Double.isNaN(layer[i]) || layer[i] < 1) continue;
+            if (!Double.isNaN(sub[i]) && (int) sub[i] != 2075) continue;   // only while printing: not warm-up, pauses or the end
+            double below = target[i] - value[i];
+            if (below > most) { most = below; worst = i; }
+        }
+        return worst < 0 ? "" : String.format(Locale.getDefault(), "to %.0f °C (target %.0f) at %s, layer %d", value[worst], target[worst], ChartView.elapsed(t[worst]), (int) layer[worst]);
+    }
+    /** The lowest of a column's readings on each layer (index = layer - 1), NaN where none. */
+    static double[] perLayerMin(double[] layer, double[] values, int layers) {
+        double[] out = new double[Math.max(0, layers)]; Arrays.fill(out, Double.NaN);
+        for (int i = 0; i < Math.min(layer.length, values.length); i++) {
+            if (Double.isNaN(layer[i]) || Double.isNaN(values[i]) || layer[i] < 1 || layer[i] > layers) continue;
+            int k = (int) layer[i] - 1; out[k] = Double.isNaN(out[k]) ? values[i] : Math.min(out[k], values[i]);
+        }
+        return out;
+    }
+
     /** The mean of a column's readings on each layer (index = layer - 1), NaN where a layer had none. */
     static double[] perLayerMean(double[] layer, double[] values, int layers) {
         double[] sum = new double[Math.max(0, layers)], out = new double[Math.max(0, layers)]; int[] n = new int[Math.max(0, layers)];

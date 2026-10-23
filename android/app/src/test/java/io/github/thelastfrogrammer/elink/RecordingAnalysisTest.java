@@ -80,6 +80,38 @@ public class RecordingAnalysisTest {
         assertEquals("too few earlier prints", "", RecordingAnalysis.warmUpAgainstUsual(normal, usual, counts));
     }
 
+    /** A layer that cooled three times longer with the fan high is named with its height; a steady print says nothing. */
+    @Test public void aLongCoolingLayerIsNamed() {
+        int n = 80; double[] t = new double[n], layer = new double[n], fan = new double[n], z = new double[n], noz = new double[n], target = new double[n], bed = new double[n], bedT = new double[n], sub = new double[n];
+        double time = 0;
+        for (int i = 0; i < n; i++) {
+            layer[i] = i + 1; t[i] = time; time += i == 67 ? 46 : 13;   // layer 68 takes 46 s, the others 13 s
+            fan[i] = 96; z[i] = 0.2 + i * 0.16; noz[i] = 210; target[i] = 210; bed[i] = 60; bedT[i] = 60; sub[i] = 2075;
+        }
+        java.util.List<String> found = RecordingAnalysis.diagnose(t, layer, fan, z, noz, target, bed, bedT, sub, true);
+        assertEquals(found.toString(), 1, found.size());
+        assertTrue(found.get(0), found.get(0).startsWith("Layer 68 (10.9 mm up) took 0:46 against about 0:13") && found.get(0).contains("part fan at 96 %"));
+        // With the fan low, a longer layer is not a cooling problem.
+        java.util.Arrays.fill(fan, 20);
+        assertTrue(RecordingAnalysis.diagnose(t, layer, fan, z, noz, target, bed, bedT, sub, true).isEmpty());
+        // A nozzle dip while printing is named; one during warm-up is not.
+        noz[40] = 196; sub[10] = 1045; noz[10] = 150;
+        java.util.List<String> dip = RecordingAnalysis.diagnose(t, layer, fan, z, noz, target, bed, bedT, sub, true);
+        assertEquals(1, dip.size()); assertTrue(dip.get(0), dip.get(0).startsWith("The nozzle fell to 196 °C (target 210)") && dip.get(0).contains("layer 41"));
+    }
+
+    /** Optional: the diagnosis of a real recording's CSV, given as -Dcsv=path (skipped otherwise). */
+    @Test public void diagnoseARealRecording() throws Exception {
+        String path = System.getProperty("csv", ""); org.junit.Assume.assumeFalse(path.isEmpty());
+        java.io.File csv = new java.io.File(path), meta = new java.io.File(csv.getParentFile(), "none.json");
+        PrintRecorder.Recording r = new PrintRecorder.Recording(csv, meta);
+        java.util.List<double[]> rows = PrintRecorder.samples(r);
+        java.util.List<String> found = RecordingAnalysis.diagnose(RecordingsActivity.column(rows, "elapsed_s"), RecordingsActivity.column(rows, "layer"), RecordingsActivity.column(rows, "part_fan_pct"),
+            RecordingsActivity.column(rows, "z_mm"), RecordingsActivity.column(rows, "nozzle_c"), RecordingsActivity.column(rows, "nozzle_target_c"), RecordingsActivity.column(rows, "bed_c"),
+            RecordingsActivity.column(rows, "bed_target_c"), RecordingsActivity.column(rows, "sub_status"), true);
+        System.out.println("DIAGNOSIS " + found);
+    }
+
     @Test public void layersLineUpForComparing() {
         double[] layer = {N, 1, 1, 2, 3, 9}, nozzle = {150, 210, 220, 215, N, 200};
         assertArrayEquals(new double[] {215, 215, N}, RecordingAnalysis.perLayerMean(layer, nozzle, 3), 1e-9);

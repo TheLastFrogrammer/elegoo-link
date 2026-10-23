@@ -390,6 +390,7 @@ public final class RecordingsActivity extends Activity {
                 if (!against.isEmpty()) runOnUiThread(() -> { if (!isDestroyed()) words.setText(warm + "\n" + against); });
             }, "recording-warm-up").start();
         }
+        diagnosis(recording, rows);
         pictures(recording);   // the quickest look at how the print went, before the charts
         checks(recording);
         // One card with the print's four charts, one at a time (the tour shows them all, one after another).
@@ -452,6 +453,15 @@ public final class RecordingsActivity extends Activity {
     }
 
     private static double price(android.content.SharedPreferences prefs, String key) { try { return Double.parseDouble(prefs.getString(key, "0")); } catch (RuntimeException none) { return 0; } }
+    /** "Things to look at": what the readings point to (RecordingAnalysis.diagnose), when anything stands out. */
+    private void diagnosis(PrintRecorder.Recording recording, List<double[]> rows) {
+        List<String> found = RecordingAnalysis.diagnose(column(rows, "elapsed_s"), column(rows, "layer"), column(rows, "part_fan_pct"), column(rows, "z_mm"),
+            column(rows, "nozzle_c"), column(rows, "nozzle_target_c"), column(rows, "bed_c"), column(rows, "bed_target_c"), column(rows, "sub_status"), !"printing".equals(recording.outcome));
+        if (found.isEmpty()) return;
+        LinearLayout card = card(); label(card, "Things to look at", 15, ink, true);
+        label(card, "From the readings: what stands out, where, and what usually causes it. The charts and pictures at that layer show more.", 12, muted, false);
+        for (String line : found) label(card, "• " + line, 13, ink, false);
+    }
     private static double[] t0(List<double[]> rows) { return column(rows, "elapsed_s"); }
     /** When the filament sensor reported no filament during the print, in words ("" when it never did or does not report). */
     static String runouts(List<double[]> rows, double[] t) {
