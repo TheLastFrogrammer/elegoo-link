@@ -112,6 +112,18 @@ public class PrintRecorderTest {
         assertEquals(1800, ChartView.niceTime(1500), 0); assertEquals("1:05", ChartView.elapsed(3900)); assertEquals("—", ChartView.format(Double.NaN));
     }
 
+    /** The extruder position reset at every layer (G92 E0) still adds up; a retraction takes back only its own length. */
+    @Test public void filamentFedSurvivesPerLayerResets() {
+        assertEquals(5, PrintRecorder.fedStep(10, 15), 1e-9);
+        assertEquals("retraction", -0.8, PrintRecorder.fedStep(15, 14.2), 1e-9);
+        assertEquals("reset, then 4 mm fed", 4, PrintRecorder.fedStep(36, 4), 1e-9);
+        // As the CC2 reported it for a real print: about 36 mm per layer, back to the start at each layer change.
+        double fed = 0, last = 0; double[] e = {10, 25, 36, 3, 20, 35, 5, 22, 36};
+        for (double v : e) { fed += PrintRecorder.fedStep(last, v); last = v; }
+        assertEquals(36 + 35 + 36 - 0, fed, 3 + 5 + 1e-9);   // only the stretch between the last reading and each reset is missed
+        assertTrue(fed > 100);
+    }
+
     /** The head's position goes into each sample, and the last one reported is noted with each picture. */
     @Test public void headPositionsAreKeptWithReadingsAndPictures() throws Exception {
         PrintRecorder recorder = new PrintRecorder(dir);
@@ -274,12 +286,12 @@ public class PrintRecorderTest {
         recorder.update(0, moving(1, 0, 0, 3600), "local", "CC2");
         recorder.update(20_000, moving(2, 1, 100, 3600), "local", "CC2");
         recorder.update(40_000, moving(3, 2, 99.2, 3600), "local", "CC2");     // a retraction
-        recorder.update(60_000, moving(4, 3, 0.5, 3600), "local", "CC2");      // G92 E0: skipped
+        recorder.update(60_000, moving(4, 3, 0.5, 3600), "local", "CC2");      // G92 E0, then 0.5 mm fed since: counted from zero
         recorder.update(80_000, moving(5, 4, 50.5, 3600), "local", "CC2");
-        assertEquals(149.2, recorder.current().extrudedMm, 0.01);
+        assertEquals(149.7, recorder.current().extrudedMm, 0.01);
         List<double[]> rows = PrintRecorder.samples(recorder.current());
-        assertEquals(149.2, rows.get(rows.size() - 1)[PrintRecorder.column("extruded_mm")], 0.01);
-        assertEquals(149.2, PrintRecorder.Recording.read(recorder.current().meta).extrudedMm, 0.01);
+        assertEquals(149.7, rows.get(rows.size() - 1)[PrintRecorder.column("extruded_mm")], 0.01);
+        assertEquals(149.7, PrintRecorder.Recording.read(recorder.current().meta).extrudedMm, 0.01);
         assertEquals(0.45, PrintRecorder.grams(149.2, "PLA"), 0.01);
     }
     @Test public void finishedPrintsTeachHowLongTheEstimateRuns() throws Exception {

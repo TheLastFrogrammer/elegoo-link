@@ -505,10 +505,11 @@ public final class PrintRecorder {
             fan(status, "fan"), fan(status, "aux_fan"), fan(status, "box_fan"),
             number(position, "speed_mode"), String.valueOf(sub), "cloud".equals(source) ? "cloud" : "local", activeTray()[0], activeTray()[1], "", number(position, "speed"),
             number(status.optJSONObject("extruder"), "filament_detected"), number(position, "x"), number(position, "y") };
-        // Filament fed: the extruder position's steps, skipping resets (a G92 E0 jumps back) and jumps; retractions cancel out.
+        // Filament fed: the extruder position's steps; retractions cancel out. A step back further than any retraction is a
+        // reset (many slicers put G92 E0 at every layer change), after which the position counts up from zero again.
         double e = Cc2Codec.extruderPosition(position);
-        if (!Double.isNaN(e)) {
-            if (!Double.isNaN(current.lastE)) { double step = e - current.lastE; if (step > -50 && step < 5000) current.extrudedMm = Math.max(0, current.extrudedMm + step); }
+        if (!Double.isNaN(e) && Math.abs(e) < 1e6) {   // a position past a kilometre of filament is a bad report: not a reference
+            if (!Double.isNaN(current.lastE)) { double step = fedStep(current.lastE, e); if (step < 5000) current.extrudedMm = Math.max(0, current.extrudedMm + step); }
             current.lastE = e;
             cells[column("extruded_mm")] = String.format(Locale.ROOT, "%.1f", current.extrudedMm);
         }
@@ -606,6 +607,10 @@ public final class PrintRecorder {
         return ran < 0 ? -1 : Math.max(0, Math.round(current.estimate * q) - ran);
     }
     /** Grams for `mm` of 1.75 mm filament of this type (density by family; PLA when unknown). */
+    /** Further back than this (mm) the extruder position was reset, not retracted. */
+    static final double RESET_MM = 10;
+    /** Filament fed between two reported extruder positions: the difference, or after a reset the new position itself. Pure. */
+    static double fedStep(double before, double now) { double step = now - before; return step < -RESET_MM ? Math.max(0, now) : step; }
     static double grams(double mm, String type) {
         String t = type == null ? "" : FilamentMatch.family(type);
         double density = t.equals("PETG") ? 1.27 : t.equals("ABS") ? 1.04 : t.equals("ASA") ? 1.07 : t.equals("TPU") ? 1.21 : t.equals("PC") ? 1.20 : t.startsWith("PA") ? 1.14 : 1.24;
