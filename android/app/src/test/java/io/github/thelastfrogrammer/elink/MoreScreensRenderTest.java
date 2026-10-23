@@ -198,6 +198,26 @@ public class MoreScreensRenderTest {
         CompareActivity compare = Robolectric.buildActivity(CompareActivity.class, intent).setup().get();
         shot(compare.getWindow().getDecorView(), 1080, 3000, new File(out(), "compare-light.png"));
     }
+    /** A print sliced again with tuning changes: what changed, whether the finding came back, and the print before. */
+    @Test public void renderTuning() throws Exception {
+        setTheme(false);
+        seedRecordings();
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        java.util.List<PrintRecorder.Recording> all = new PrintRecorder(RecordingsActivity.directory(context)).list();
+        PrintRecorder.Recording after = all.get(0), before = null;
+        for (PrintRecorder.Recording r : all) if (r.start < after.start) { before = r; break; }
+        org.junit.Assume.assumeNotNull(before);
+        java.util.Map<String, String> config = new java.util.HashMap<>(); config.put("fan_max_speed", "100"); config.put("nozzle_temperature", "210");
+        Tuning.Trial trial = Tuning.parse(Tuning.request(GcodeLibrary.baseName(after.file), before, CompareActivity.name(before),
+            Tuning.suggest(java.util.Collections.singletonList(new RecordingAnalysis.Finding(RecordingAnalysis.Finding.COOLING, 68, "")), config),
+            java.util.Collections.singletonList(RecordingAnalysis.Finding.COOLING)));
+        trial.at = after.start - 1000; Tuning.remember(context, trial);
+        android.content.Intent intent = new android.content.Intent(context, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, after.meta.getAbsolutePath());
+        RecordingsActivity detail = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
+        org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        org.junit.Assert.assertFalse("the result is kept with the try", Tuning.trialFor(Tuning.all(context), after).result.isEmpty());
+        shot(detail.getWindow().getDecorView(), 1080, 2600, new File(out(), "tuning-light.png"));
+    }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }
 }

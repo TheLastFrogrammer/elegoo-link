@@ -39,6 +39,8 @@ public final class SliceActivity extends Activity {
     static final String EXTRA_OPEN = "open";
     /** Model files kept in Projects (paths under files/projects/assets), opened from a project. */
     static final String EXTRA_MODEL_PATHS = "modelPaths";
+    /** A tuning request (Tuning.request): settings changes for a file, from a recording's findings, shown and applied before slicing. */
+    static final String EXTRA_TUNE = "tune";
     private static final int PICK_MODELS = 1, SAVE = 2, SETTINGS = 3, PLATE = 4, FILAMENT_SETTINGS = 5, OBJECT_SETTINGS = 6, FIND_MODELS = 7;
     private static final int PREVIEW_TRIANGLES = 150_000;
     private static final String DEFAULT_PRINTER = "Elegoo Centauri Carbon 2 0.4 nozzle";
@@ -187,6 +189,8 @@ public final class SliceActivity extends Activity {
             if ("find".equals(open)) startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS);
             else if ("calibration".equals(open)) getWindow().getDecorView().post(this::chooseCalibration);
             else if ("selftest".equals(open)) getWindow().getDecorView().post(this::setUpSelfTest);
+            Tuning.Trial request = Tuning.parse(getIntent().getStringExtra(EXTRA_TUNE));
+            if (request != null && !request.changes.isEmpty()) startTuning(request);
         }
         if (slicing) { busy = true; keepAwake(true); progress.setVisibility(View.VISIBLE); progress.setProgress(slicingPercent); status.setText(slicingText); updateButtons(); }
         else checkInterrupted();
@@ -332,13 +336,15 @@ public final class SliceActivity extends Activity {
         double[] changes = new double[bandChanges.size() * 2]; for (int i = 0; i < bandChanges.size(); i++) { changes[i * 2] = bandChanges.get(i)[0]; changes[i * 2 + 1] = bandChanges.get(i)[1]; }
         state.putDoubleArray("bandChanges", changes);
         if (!slicing && !busy) state.putString("status", status.getText().toString());
+        if (tune != null) try { state.putString("tune", tune.json().toString()); state.putBoolean("tuneFound", tuneFound); } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
     }
 
     /** Puts back what onSaveInstanceState kept: models, filament slots, quick settings and the last result. */
     private void restore(Bundle saved) {
         restored = saved;
         ArrayList<String> paths = saved.getStringArrayList("models");
-        if (paths != null) for (String path : paths) { File file = new File(path); if (file.isFile()) { models.add(file); ownFolders.add(file.getParentFile()); } }
+        // Only the cache's pick folders are this screen's to clean up, never the models kept with slices or projects.
+        if (paths != null) for (String path : paths) { File file = new File(path); if (file.isFile()) { models.add(file); if (file.getAbsolutePath().startsWith(getCacheDir().getAbsolutePath() + File.separator)) ownFolders.add(file.getParentFile()); } }
         int[] assigned = saved.getIntArray("modelSlots");
         if (assigned != null && assigned.length == models.size()) for (int value : assigned) modelSlots.add(value);
         try {
@@ -393,7 +399,43 @@ public final class SliceActivity extends Activity {
         }
         showModels(); showProject(); showLayout(); showSettingsSummary();
         if (saved.getString("status") != null) status.setText(saved.getString("status"));
+        Tuning.Trial kept = Tuning.parse(saved.getString("tune"));
+        if (kept != null) { tune = kept; showTune(saved.getBoolean("tuneFound", true)); }
     }
+
+    // ------------------------------------------------------------------ tuning
+    /** The tuning request being sliced (shown at the top until the slice is done), or null. */
+    private Tuning.Trial tune;
+    private LinearLayout tuneCard;
+    /**
+     * Starts from what the file was sliced from (when this phone kept it) and puts the requested changes on top of the
+     * presets, as if set by hand: the presets stay as they are, and nothing is sliced until Slice is tapped.
+     */
+    private void startTuning(Tuning.Trial request) {
+        Bundle recipe = SliceRecipe.load(this, request.file);
+        if (recipe != null) restore(recipe);
+        Map<String, String> process = new LinkedHashMap<>(customOverrides);
+        for (Tuning.Change change : request.changes) {
+            if (SliceSettingsActivity.FILAMENT_KEYS.contains(change.key)) {
+                String[] values = change.to.split(",");
+                for (int i = 0; i < slots.size(); i++) { slots.get(i).edits.put(change.key, values[Math.min(i, values.length - 1)].trim()); showSlotSettings(slots.get(i)); }
+            } else process.put(change.key, change.to);
+        }
+        takeOverrides(process);
+        tune = request; showTune(recipe != null);
+        Diagnostics.note(Diagnostics.SLICER, "tuning: " + request.changes.size() + " change(s), " + (recipe != null ? "from the kept slice" : "no kept slice"));
+    }
+    private void showTune(boolean found) {
+        if (tuneCard != null) content.removeView(tuneCard);
+        tuneCard = card("Tuning " + tune.file);
+        content.removeView(tuneCard); content.addView(tuneCard, Math.min(2, content.getChildCount()));
+        label(tuneCard, "Set from " + (tune.basedOnName.isEmpty() ? "an earlier print" : tune.basedOnName) + ": " + tune.changeWords() + ".", 14, ink, false);
+        label(tuneCard, (found ? "Everything else is as that file was sliced. " : "This phone did not keep what that file was sliced from: choose the model again (the changes stay set). ")
+            + "The changes are on top of the presets, which stay as they are; check them in the filament's Settings… and All settings, then tap Slice. "
+            + "The next print of this file is then set against the earlier one.", 12, muted, false);
+        tuneFound = found; getIntent().removeExtra(EXTRA_TUNE);
+    }
+    private boolean tuneFound;
 
     /** Back: while a slice runs, leaving would cancel it and lose it, so ask first. */
     void leave() {
@@ -887,6 +929,9 @@ public final class SliceActivity extends Activity {
             + (plate == ALL_PLATES ? " · all " + plates.size() + " project plates" : selection.plate > 0 ? " · project plate " + selection.plate : "") + (selection.placements.isEmpty() ? "" : " · " + selection.placements.size() + " placed cop(ies)")
             + (need == null ? "" : " · estimated " + need.describe());
         markRunning(setup); saveSelection(); keepAwake(true);
+        // What this slice is made from, kept with it so it can be sliced again with changes (Tuning).
+        Bundle recipe = calibration == null && !selfTest ? new Bundle() : null;
+        if (recipe != null) saveState(recipe);
         long started = System.currentTimeMillis();
         worker.execute(() -> {
             try {
@@ -919,6 +964,7 @@ public final class SliceActivity extends Activity {
                 // Grams per filament from each file's closing notes, for spool tracking in print setup.
                 List<double[]> toolGrams = new ArrayList<>(); for (File file : kept) toolGrams.add(SlicedMaterials.gramsFromTail(file));
                 main.post(() -> { slicing = false; SliceActivity screen = current; if (screen != null && !screen.isDestroyed()) screen.finished(results, kept, plates, names, elapsed, printer, process, filaments, colours, plan, toolGrams); });
+                if (recipe != null) SliceRecipe.keep(getApplicationContext(), names, recipe, input);
             } catch (IOException failure) {
                 long elapsed = System.currentTimeMillis() - started;
                 boolean cancelled = cancelRequested.get();
@@ -978,6 +1024,13 @@ public final class SliceActivity extends Activity {
         resultCard.setVisibility(View.VISIBLE);
         scroll.post(() -> scroll.smoothScrollTo(0, resultCard.getTop() - dp(12)));
         showResultPlates(0);
+        if (tune != null) {
+            Tuning.Trial trial = tune; tune = null;
+            trial.at = System.currentTimeMillis(); if (!names.contains(trial.file)) trial.file = names.get(0);
+            Tuning.remember(this, trial);
+            if (tuneCard != null) { content.removeView(tuneCard); tuneCard = null; }
+            status.append(" Kept as a tuning try for " + trial.file + ": its next recording is set against the earlier print.");
+        }
         updateButtons();
     }
 

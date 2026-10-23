@@ -168,7 +168,19 @@ final class RecordingAnalysis {
      * target while printing. Each says where (layer, height, time) and what usually causes it. Empty when nothing stands out.
      */
     static List<String> diagnose(double[] t, double[] layer, double[] fan, double[] z, double[] nozzle, double[] nozzleTarget, double[] bed, double[] bedTarget, double[] sub, boolean ended) {
-        List<String> out = new ArrayList<>();
+        List<String> words = new ArrayList<>();
+        for (Finding f : findings(t, layer, fan, z, nozzle, nozzleTarget, bed, bedTarget, sub, ended)) words.add(f.words);
+        return words;
+    }
+    /** One thing that stands out: its kind (COOLING, STALL, NOZZLE_DROP, BED_DROP), the layer it is on (0 = throughout) and the words. */
+    static final class Finding {
+        static final String COOLING = "cooling", STALL = "stall", NOZZLE_DROP = "nozzle", BED_DROP = "bed";
+        final String kind, words; final int layer;
+        Finding(String kind, int layer, String words) { this.kind = kind; this.layer = layer; this.words = words; }
+    }
+    /** As diagnose, with each finding's kind, for the settings that address it (Tuning). */
+    static List<Finding> findings(double[] t, double[] layer, double[] fan, double[] z, double[] nozzle, double[] nozzleTarget, double[] bed, double[] bedTarget, double[] sub, boolean ended) {
+        List<Finding> out = new ArrayList<>();
         int layers = lastLayer(layer);
         if (layers >= 4) {
             double[] took = layerSeconds(t, layer, layers, ended), fans = perLayerMean(layer, fan, layers), height = perLayerMin(layer, z, layers);
@@ -179,15 +191,15 @@ final class RecordingAnalysis {
                 if (before.size() < 3) continue;
                 before.sort(Double::compare); double usual = before.get(before.size() / 2);
                 String at = "Layer " + (i + 1) + (Double.isNaN(height[i]) ? "" : String.format(Locale.getDefault(), " (%.1f mm up)", height[i]));
-                if (took[i] >= Math.max(300, 10 * usual)) out.add(at + " took " + ChartView.spanWords(took[i]) + " against about " + clock(usual) + " for the layers before: a pause or a stall. A line or a blob at that height usually comes from it.");
+                if (took[i] >= Math.max(300, 10 * usual)) out.add(new Finding(Finding.STALL, i + 1, at + " took " + ChartView.spanWords(took[i]) + " against about " + clock(usual) + " for the layers before: a pause or a stall. A line or a blob at that height usually comes from it."));
                 else if (took[i] >= Math.max(30, 2.5 * usual) && !Double.isNaN(fans[i]) && fans[i] >= 70)
-                    out.add(at + " took " + clock(took[i]) + " against about " + clock(usual) + " for the layers before, with the part fan at " + Math.round(fans[i]) + " %: the wall cooled much longer than usual, so the layer above may bond weakly there (a crack or line around the part). Less fan, a little more heat, or a minimum layer time evens it out.");
+                    out.add(new Finding(Finding.COOLING, i + 1, at + " took " + clock(took[i]) + " against about " + clock(usual) + " for the layers before, with the part fan at " + Math.round(fans[i]) + " %: the wall cooled much longer than usual, so the layer above may bond weakly there (a crack or line around the part). Less fan, a little more heat, or a minimum layer time evens it out."));
                 if (out.size() >= 4) break;
             }
         }
         String nozzleDrop = drop(t, layer, nozzle, nozzleTarget, sub, 8), bedDrop = drop(t, layer, bed, bedTarget, sub, 5);
-        if (!nozzleDrop.isEmpty()) out.add("The nozzle fell " + nozzleDrop + " while printing: a draught or a fan blowing on the heater block, or the heater losing ground at high flow. Under-extruded lines are likely there.");
-        if (!bedDrop.isEmpty()) out.add("The bed fell " + bedDrop + " while printing: a draught, or the bed heater struggling. Warping or a part letting go can follow.");
+        if (!nozzleDrop.isEmpty()) out.add(new Finding(Finding.NOZZLE_DROP, 0, "The nozzle fell " + nozzleDrop + " while printing: a draught or a fan blowing on the heater block, or the heater losing ground at high flow. Under-extruded lines are likely there."));
+        if (!bedDrop.isEmpty()) out.add(new Finding(Finding.BED_DROP, 0, "The bed fell " + bedDrop + " while printing: a draught, or the bed heater struggling. Warping or a part letting go can follow."));
         return out;
     }
     /** "to 195 °C (target 210) at 1:12" for the worst reading more than `margin` below a target while printing, or "". */

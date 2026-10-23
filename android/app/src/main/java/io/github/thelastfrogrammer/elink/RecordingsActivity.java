@@ -390,7 +390,9 @@ public final class RecordingsActivity extends Activity {
                 if (!against.isEmpty()) runOnUiThread(() -> { if (!isDestroyed()) words.setText(warm + "\n" + against); });
             }, "recording-warm-up").start();
         }
-        diagnosis(recording, rows);
+        List<RecordingAnalysis.Finding> found = findings(recording, rows);
+        tuning(recording, found);
+        diagnosis(recording, found);
         pictures(recording);   // the quickest look at how the print went, before the charts
         checks(recording);
         // One card with the print's four charts, one at a time (the tour shows them all, one after another).
@@ -448,19 +450,116 @@ public final class RecordingsActivity extends Activity {
         LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.HORIZONTAL); content.addView(more);
         action(more, "Compare with…", () -> compareWith(recording));
         action(more, "Share a report…", () -> shareReport(recording, rows));
+        LinearLayout tuneRow = new LinearLayout(this); tuneRow.setOrientation(LinearLayout.HORIZONTAL); content.addView(tuneRow);
+        action(tuneRow, "Change settings and slice again…", () -> tune(recording, findings(recording, rows)));
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
     }
 
     private static double price(android.content.SharedPreferences prefs, String key) { try { return Double.parseDouble(prefs.getString(key, "0")); } catch (RuntimeException none) { return 0; } }
-    /** "Things to look at": what the readings point to (RecordingAnalysis.diagnose), when anything stands out. */
-    private void diagnosis(PrintRecorder.Recording recording, List<double[]> rows) {
-        List<String> found = RecordingAnalysis.diagnose(column(rows, "elapsed_s"), column(rows, "layer"), column(rows, "part_fan_pct"), column(rows, "z_mm"),
+    private static List<RecordingAnalysis.Finding> findings(PrintRecorder.Recording recording, List<double[]> rows) {
+        return RecordingAnalysis.findings(column(rows, "elapsed_s"), column(rows, "layer"), column(rows, "part_fan_pct"), column(rows, "z_mm"),
             column(rows, "nozzle_c"), column(rows, "nozzle_target_c"), column(rows, "bed_c"), column(rows, "bed_target_c"), column(rows, "sub_status"), !"printing".equals(recording.outcome));
+    }
+    /** "Things to look at": what the readings point to (RecordingAnalysis.findings), when anything stands out, and the settings that address it. */
+    private void diagnosis(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found) {
         if (found.isEmpty()) return;
         LinearLayout card = card(); label(card, "Things to look at", 15, ink, true);
         label(card, "From the readings: what stands out, where, and what usually causes it. The charts and pictures at that layer show more.", 12, muted, false);
-        for (String line : found) label(card, "• " + line, 13, ink, false);
+        Set<String> notes = new LinkedHashSet<>(); boolean settings = false;
+        for (RecordingAnalysis.Finding f : found) {
+            label(card, "• " + f.words, 13, ink, false);
+            String none = Tuning.noSetting(f.kind); if (none != null) notes.add(none); else settings = true;
+        }
+        for (String note : notes) label(card, note, 12, muted, false);
+        if (settings) { LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); card.addView(row); action(row, "Settings that address this…", () -> tune(recording, found)); }
+    }
+
+    /**
+     * The tuning loop's first step: the settings this print's file was sliced with (read from its G-code), what the findings
+     * suggest instead, each editable, and "Slice again with these changes", which only opens the slicer with them set.
+     */
+    private void tune(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found) {
+        new Thread(() -> {
+            File gcode = gcodeFor(recording);
+            Map<String, String> config = Tuning.config(gcode);
+            runOnUiThread(() -> { if (!isDestroyed()) tuneDialog(recording, found, gcode, config); });
+        }, "recording-tune").start();
+    }
+    private void tuneDialog(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found, File gcode, Map<String, String> config) {
+        if (gcode == null || config.isEmpty()) {
+            new AlertDialog.Builder(this).setTitle("Change settings and slice again").setPositiveButton("OK", null).setMessage(gcode == null
+                ? "This print's G-code is not on the phone, so the settings it was sliced with are not known. Add it on the G-code card above, then try again."
+                : "This G-code does not say what it was sliced with (no settings block at its end), so there is nothing to start from.").show();
+            return;
+        }
+        List<Tuning.Change> suggested = Tuning.suggest(found, config);
+        Map<String, Tuning.Change> byKey = new LinkedHashMap<>(); for (Tuning.Change c : suggested) byKey.put(c.key, c);
+        LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(dp(20), dp(8), dp(20), dp(8));
+        String sliced = (config.containsKey("print_settings_id") ? config.get("print_settings_id") : "") + (config.containsKey("filament_settings_id") ? " · " + config.get("filament_settings_id") : "");
+        label(body, (suggested.isEmpty() ? "Nothing found points to a setting; change any of these to try something yourself."
+            : "Filled in from what was found; change or clear any of them.") + " The presets stay as they are: the slicer opens with these set on top, for you to check and slice."
+            + (sliced.isEmpty() ? "" : "\nSliced with " + sliced.replaceFirst("^ · ", "") + "."), 13, muted, false);
+        Map<String, EditText> fields = new LinkedHashMap<>();
+        for (String[] s : Tuning.SETTINGS) {
+            String now = config.get(s[0]); if (now == null) continue;
+            Tuning.Change c = byKey.get(s[0]);
+            label(body, s[1] + " · now " + now + (s[2].isEmpty() ? "" : " " + s[2]), 14, ink, true);
+            if (c != null) label(body, c.why + ".", 12, muted, false);
+            EditText field = new EditText(this); field.setSingleLine(); field.setHint("Keep " + now);
+            field.setKeyListener(android.text.method.DigitsKeyListener.getInstance("0123456789.,"));
+            if (c != null) field.setText(c.to);
+            field.setContentDescription(s[1] + ", new value"); body.addView(field); fields.put(s[0], field);
+        }
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Change settings and slice again").setView(scroll).setNegativeButton("Cancel", null)
+            .setPositiveButton("Slice again with these changes", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            List<Tuning.Change> changes = new ArrayList<>();
+            for (Map.Entry<String, EditText> e : fields.entrySet()) {
+                String typed = e.getValue().getText().toString().trim(); String now = config.get(e.getKey());
+                if (typed.isEmpty() || typed.equals(now)) continue;
+                String problem = Tuning.check(e.getKey(), typed);
+                if (problem != null) { e.getValue().setError(problem); e.getValue().requestFocus(); return; }
+                Tuning.Change c = byKey.get(e.getKey());
+                changes.add(new Tuning.Change(e.getKey(), now, typed, c != null && c.to.equals(typed) ? c.why : "Set by hand"));
+            }
+            if (changes.isEmpty()) { Toast.makeText(this, "Nothing changed.", Toast.LENGTH_SHORT).show(); return; }
+            List<String> kinds = new ArrayList<>(); for (RecordingAnalysis.Finding f : found) if (Tuning.noSetting(f.kind) == null && !kinds.contains(f.kind)) kinds.add(f.kind);
+            dialog.dismiss();
+            startActivity(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_TUNE,
+                Tuning.request(GcodeLibrary.baseName(recording.file), recording, CompareActivity.name(recording), changes, kinds)));
+        }));
+        dialog.show();
+    }
+
+    /**
+     * The rest of the loop, kept with the file: on a print sliced with tuning changes, what changed, whether what was found
+     * on the print before came back, and the two side by side; on a print that changes were tried from, what came of them.
+     */
+    private void tuning(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found) {
+        List<Tuning.Trial> all = Tuning.all(this);
+        Tuning.Trial trial = Tuning.trialFor(all, recording);
+        List<Tuning.Trial> tried = Tuning.triedFrom(all, recording);
+        if (trial == null && tried.isEmpty()) return;
+        LinearLayout card = card(); label(card, "Tuning", 15, ink, true);
+        if (trial != null) {
+            label(card, "Sliced again with changes from " + (trial.basedOnName.isEmpty() ? "an earlier print" : trial.basedOnName) + ": " + trial.changeWords() + ".", 13, ink, false);
+            String outcome = Tuning.outcome(trial, found, "complete".equals(recording.outcome));
+            if (!outcome.isEmpty()) label(card, outcome, 13, ink, false);
+            label(card, "Readings only show part of it: look at the print itself too.", 12, muted, false);
+            String result = outcome.isEmpty() ? "Printed" : (Tuning.helped(trial, found) ? "Helped: " : "Not yet: ") + outcome;
+            if (!result.equals(trial.result) || !recording.meta.getAbsolutePath().equals(trial.resultFor)) Tuning.result(this, trial, result, recording);
+            File before = new File(trial.basedOn);
+            if (before.isFile()) {
+                LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); card.addView(row);
+                action(row, "Compare with the print before", () -> startActivity(new Intent(this, CompareActivity.class)
+                    .putExtra(CompareActivity.EXTRA_A, before.getAbsolutePath()).putExtra(CompareActivity.EXTRA_B, recording.meta.getAbsolutePath())));
+            }
+        }
+        for (Tuning.Trial t : tried)
+            label(card, "Tried after this print, " + new SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(new Date(t.at)) + ": " + t.changeWords() + ". "
+                + (t.result.isEmpty() ? "Not printed yet." : t.result), 13, ink, false);
     }
     private static double[] t0(List<double[]> rows) { return column(rows, "elapsed_s"); }
     /** When the filament sensor reported no filament during the print, in words ("" when it never did or does not report). */

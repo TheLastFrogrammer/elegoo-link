@@ -1,6 +1,6 @@
 # Link Workshop roadmap
 
-State as of v0.100.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
+State as of v0.101.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
 on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings › Field check gathers the manual checklist
 ([FIELD_TEST.md](FIELD_TEST.md)), the checks measured during prints, and the self-test print into one report to share
 (no codes, PINs, addresses or serials).
@@ -32,10 +32,15 @@ The work has grown into three parts that feed each other:
 What the suite lacks is the loop between them. A diagnosis today ends in words ("less fan, a little more heat"); the
 person then changes settings elsewhere and has to remember to compare. The next rounds close that loop, in order:
 
-1. **The tuning loop.** Each "Things to look at" finding names the slicer settings that address it (fan limit, nozzle
-   temperature, minimum layer time, top layers, flow); "Slice again with these changes" opens the slicer with them
-   applied to a copy of the preset, never silently. When that print is recorded, it is compared with the one before
-   (the compare screen, opened by itself), and the result is kept with the file: what changed, and whether it helped.
+1. **The tuning loop** (first version in v0.101.0). Findings name the settings that address them, starting from the
+   values in the print's own G-code (less part fan and +5 °C for a long-cooled layer; a lower flow limit and +5 °C for a
+   nozzle that could not hold its temperature; stalls and a cooling bed say no slicer setting fixes them). Any of fan,
+   nozzle temperature, minimum layer time, top layers, flow ratio and flow limit can also be set by hand. "Slice again
+   with these changes" opens the slicer with what the file was sliced from (kept with each slice, models included) and
+   the changes on top of the presets, which stay as they are; nothing is sliced until Slice is tapped. The next
+   recording of that file shows what changed, whether each finding came back, and a button to compare with the print
+   before; the result is kept with the try. Left: the compare screen does not open by itself, and files sliced before
+   v0.101.0 or elsewhere need the model chosen again.
 2. **Memory per file and per spool.** Every print of a file in one place, with its settings, spool, rating and findings:
    which settings worked for this part. Spools record when they were dried; findings that point to moisture (rough,
    pitted tops, weak layers on a thick top shell) name the spool's age since drying.
