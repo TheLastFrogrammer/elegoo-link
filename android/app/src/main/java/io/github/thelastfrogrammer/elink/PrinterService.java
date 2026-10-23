@@ -1170,12 +1170,14 @@ public final class PrinterService extends Service {
             try {
                 File made = recording.video(), part = new File(made.getPath() + ".part");
                 java.util.function.Function<File, String> where = workshop().getBoolean("timelapsePosition", true) ? TimelapseEncoder.positions() : null;
-                TimelapseEncoder.encode(kept, where, part, never, (done, total) -> { });
+                PictureToolpath toolpath = workshop().getBoolean("timelapseToolpath", true) && PictureToolpath.linedUp(this) ? PictureToolpath.of(recording, getCacheDir()) : null;
+                TimelapseEncoder.Overlay drawing = toolpath == null ? null : PictureToolpath.overlay(this, toolpath);
+                TimelapseEncoder.encode(kept, where, drawing, part, never, (done, total) -> { });
                 if (!part.renameTo(made)) throw new java.io.IOException("could not keep the video");
                 List<File> far = recording.compare && recording.smooth() ? PrintRecorder.farPictures(recording) : java.util.Collections.emptyList();
                 if (far.size() >= 2) {
                     File both = recording.sideBySide(), bothPart = new File(both.getPath() + ".part");
-                    TimelapseEncoder.encode(TimelapseEncoder.pairFiles(kept, far), new String[] {"Parked", "Head far"}, where, bothPart, never, (done, total) -> { });
+                    TimelapseEncoder.encode(TimelapseEncoder.pairFiles(kept, far), new String[] {"Parked", "Head far"}, where, drawing, bothPart, never, (done, total) -> { });
                     side = bothPart.renameTo(both);
                 }
                 Diagnostics.note(Diagnostics.CAMERA, "timelapse video made at the end of the print from " + kept.size() + " pictures (" + made.length() / 1024 + " KB)" + (side ? ", with the side-by-side one" : ""));

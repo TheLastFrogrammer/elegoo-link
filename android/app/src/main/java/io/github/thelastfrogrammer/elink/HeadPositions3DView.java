@@ -36,9 +36,32 @@ final class HeadPositions3DView extends View {
         line.setStyle(Paint.Style.STROKE); line.setStrokeJoin(Paint.Join.ROUND); line.setStrokeCap(Paint.Cap.ROUND);
         small.setColor(muted); small.setTextSize(11 * density);
         setFocusable(true);
+        pinch = new android.view.ScaleGestureDetector(context, new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override public boolean onScaleBegin(android.view.ScaleGestureDetector d) { focusX = d.getFocusX(); focusY = d.getFocusY(); return true; }
+            @Override public boolean onScale(android.view.ScaleGestureDetector d) {
+                // Zoom about the fingers, and move with them.
+                float before = zoom; zoom = Math.max(1, Math.min(8, zoom * d.getScaleFactor())); float k = zoom / before;
+                float cx = getWidth() / 2f + panX, cy = getHeight() / 2f + panY;
+                panX += (d.getFocusX() - focusX) + (cx - d.getFocusX()) * (k - 1); panY += (d.getFocusY() - focusY) + (cy - d.getFocusY()) * (k - 1);
+                if (zoom <= 1.001f) { panX = 0; panY = 0; }
+                focusX = d.getFocusX(); focusY = d.getFocusY(); invalidate(); return true;
+            }
+        });
+        taps = new android.view.GestureDetector(context, new android.view.GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onDoubleTap(MotionEvent e) { if (nearest(e.getX(), e.getY()) >= 0) return false; zoom = 1; panX = 0; panY = 0; invalidate(); return true; }
+        });
     }
+    private final android.view.ScaleGestureDetector pinch;
+    private final android.view.GestureDetector taps;
+    /** Pinch zoom (1 = the whole bed) and the move from two fingers, in pixels. */
+    private float zoom = 1, panX, panY, focusX, focusY;
+    /** Only the pictures up to this one (and the readings up to its time) are drawn: a replay of the print; -1 for all. */
+    private int upTo = -1;
+    /** Shows the print up to picture `index` (that picture chosen, its readout shown); -1 shows all again. */
+    HeadPositions3DView showUpTo(int index) { upTo = index; chosen = index; invalidate(); return this; }
+    private int last() { return upTo < 0 ? points.length - 1 : Math.min(upTo, points.length - 1); }
 
-    /** The pictures' positions {s, x, y, z}, the readings' {x, y, z} (may be empty), and the bed's size (mm). */
+    /** The pictures' positions {s, x, y, z}, the readings' {x, y, z} or {x, y, z, s} (may be empty), and the bed's size (mm). */
     HeadPositions3DView set(double[][] pictures, double[][] readings, double bedX, double bedY) {
         points = pictures; this.readings = readings; this.bedX = bedX; this.bedY = bedY;
         double z = 10; for (double[] p : pictures) z = Math.max(z, p[3]); for (double[] r : readings) if (!Double.isNaN(r[2])) z = Math.max(z, r[2]);
@@ -76,7 +99,7 @@ final class HeadPositions3DView extends View {
         float pad = 28 * density, w = getWidth() - 2 * pad, h = getHeight() - 2 * pad - 14 * density;
         float scale = (float) Math.min(w / wide, h / Math.max(1, tall));
         float cy = (float) (pad + 14 * density + h / 2 + (top * stretch * Math.cos(b)) * scale / 2);
-        return new float[] {getWidth() / 2f, cy, scale};
+        return new float[] {getWidth() / 2f + panX, cy + panY, scale * zoom};
     }
     private int shade(double f) {
         f = Math.max(0, Math.min(1, f));
@@ -103,14 +126,15 @@ final class HeadPositions3DView extends View {
         canvas.drawText("0,0", c0[0], c0[1] + 14 * density, small);
         // The readings, faint.
         fill.setColor((muted & 0x00ffffff) | 0x55000000);
-        if (showReadings) for (double[] r : readings) { if (Double.isNaN(r[0]) || Double.isNaN(r[1])) continue; float[] p = project(r[0], r[1], Double.isNaN(r[2]) ? 0 : r[2], fit); canvas.drawCircle(p[0], p[1], 1.5f * density, fill); }
+        double until = upTo >= 0 && upTo < points.length ? points[upTo][0] : Double.MAX_VALUE;
+        if (showReadings) for (double[] r : readings) { if (Double.isNaN(r[0]) || Double.isNaN(r[1]) || r.length > 3 && r[3] > until) continue; float[] p = project(r[0], r[1], Double.isNaN(r[2]) ? 0 : r[2], fit); canvas.drawCircle(p[0], p[1], 1.5f * density, fill); }
         if (points.length == 0) { small.setTextAlign(Paint.Align.LEFT); canvas.drawText("No head positions noted for the pictures.", 12 * density, 20 * density, small); return; }
         // The pictures: joined in order, then the dots on top with a ring of the background.
         double t0 = points[0][0], t1 = Math.max(t0 + 1, points[points.length - 1][0]);
         line.setStrokeWidth(1.5f * density); Path path = new Path();
-        for (int i = 0; i < points.length; i++) { float[] p = project(points[i][1], points[i][2], points[i][3], fit); if (i == 0) path.moveTo(p[0], p[1]); else path.lineTo(p[0], p[1]); }
+        for (int i = 0; i <= last(); i++) { float[] p = project(points[i][1], points[i][2], points[i][3], fit); if (i == 0) path.moveTo(p[0], p[1]); else path.lineTo(p[0], p[1]); }
         line.setColor((late & 0x00ffffff) | 0x66000000); canvas.drawPath(path, line);
-        for (int i = 0; i < points.length; i++) {
+        for (int i = 0; i <= last(); i++) {
             float[] p = project(points[i][1], points[i][2], points[i][3], fit);
             fill.setColor(surface); canvas.drawCircle(p[0], p[1], (i == chosen ? 8 : 6) * density, fill);
             fill.setColor(i == chosen ? ink : shade((points[i][0] - t0) / (t1 - t0))); canvas.drawCircle(p[0], p[1], (i == chosen ? 6 : 4) * density, fill);
@@ -134,6 +158,8 @@ final class HeadPositions3DView extends View {
     }
 
     @Override public boolean onTouchEvent(MotionEvent e) {
+        pinch.onTouchEvent(e); taps.onTouchEvent(e);
+        if (e.getPointerCount() > 1 || pinch.isInProgress()) { dragged = true; lastX = e.getX(); lastY = e.getY(); getParent().requestDisallowInterceptTouchEvent(true); return true; }
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: downX = lastX = e.getX(); downY = lastY = e.getY(); dragged = false; getParent().requestDisallowInterceptTouchEvent(true); return true;
             case MotionEvent.ACTION_MOVE:
@@ -155,7 +181,7 @@ final class HeadPositions3DView extends View {
     }
     private int nearest(float x, float y) {
         float[] fit = fit(); int best = -1; float bestGap = 24 * density;
-        for (int i = 0; i < points.length; i++) {
+        for (int i = 0; i <= last(); i++) {
             float[] p = project(points[i][1], points[i][2], points[i][3], fit); float gap = (float) Math.hypot(p[0] - x, p[1] - y);
             if (gap < bestGap) { bestGap = gap; best = i; }
         }

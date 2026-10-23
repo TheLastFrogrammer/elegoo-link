@@ -235,6 +235,29 @@ public class A11yRenderTest {
         box.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(1020, View.MeasureSpec.EXACTLY));
         box.layout(0, 0, 1080, 1020);
         shot(box, 1020, "head-3d", 1.0f);
+        view.showUpTo(12);
+        shot(box, 1020, "head-3d-replay", 1.0f);
+    }
+
+    /** A chart zoomed in on a stretch of time: the y scale follows what is shown; the data stays inside the plot. */
+    @Test public void chartZoom() throws Exception {
+        int n = 200; double[] t = new double[n], v = new double[n];
+        for (int i = 0; i < n; i++) { t[i] = i * 60; v[i] = i < 100 ? 200 + 10 * Math.sin(i / 5.0) : 60; }
+        ChartView chart = new ChartView(context(), 0xff17252c, 0xff5a6d76, 0xffdfe6e8, 0xfff2f5f6);
+        chart.set("Nozzle", " °C", t, java.util.Collections.singletonList(new ChartView.Series("Nozzle", 0xff2a78d6, v, false)), Double.NaN, Double.NaN);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(context()); frame.setBackgroundColor(0xfff2f5f6); frame.addView(chart);
+        frame.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(700, View.MeasureSpec.EXACTLY));
+        frame.layout(0, 0, 1080, 700);
+        assertTrue(!chart.zoomed());
+        chart.zoomTo(1200, 3000);
+        assertTrue(chart.zoomed()); assertEquals(1200, chart.range()[0], 1e-9); assertEquals(3000, chart.range()[1], 1e-9);
+        chart.zoomTo(-5000, -4000);
+        assertEquals("kept inside the data", 0, chart.range()[0], 1e-9);
+        chart.zoomTo(100, 110);
+        assertTrue("no narrower than a few readings", chart.range()[1] - chart.range()[0] >= 60);
+        chart.zoomTo(1200, 3000);
+        if (!System.getProperty("screenshots", "").isEmpty()) shot(frame, 700, "chart-zoomed", 1.0f);
+        chart.zoomTo(-1e9, 1e9); assertTrue("the whole range is not zoomed", !chart.zoomed());
     }
 
     /** A picture opened full screen: zoom with −/+ (and pinch), step to the next one, the zoom kept. */

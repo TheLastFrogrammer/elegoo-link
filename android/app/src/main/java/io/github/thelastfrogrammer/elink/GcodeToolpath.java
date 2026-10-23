@@ -375,6 +375,8 @@ public final class GcodeToolpath {
         return toEnd < 0.05 ? best + 1 : best;
     }
 
+    /** How far a point is from a segment's line on the bed (mm). */
+    public double distance(int segment, double px, double py) { return segment < 0 || segment >= count ? Double.MAX_VALUE : distanceToSegment(segment, px, py); }
     private double distanceToSegment(int i, double px, double py) {
         double ax = x0[i], ay = y0[i], bx = x1[i], by = y1[i], dx = bx - ax, dy = by - ay, length = dx * dx + dy * dy;
         double t = length == 0 ? 0 : Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length));

@@ -72,10 +72,13 @@ final class TimelapseEncoder {
     }
 
     static void encode(List<File> pictures, File out, AtomicBoolean cancelled, Progress progress) throws IOException { encode(pictures, null, out, cancelled, progress); }
-    static void encode(List<File> pictures, java.util.function.Function<File, String> caption, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
+    static void encode(List<File> pictures, java.util.function.Function<File, String> caption, File out, AtomicBoolean cancelled, Progress progress) throws IOException { encode(pictures, caption, null, out, cancelled, progress); }
+    static void encode(List<File> pictures, java.util.function.Function<File, String> caption, Overlay overlay, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
         List<File[]> frames = new java.util.ArrayList<>(); for (File picture : pictures) frames.add(new File[] {picture});
-        encode(frames, null, caption, out, cancelled, progress);
+        encode(frames, null, caption, overlay, out, cancelled, progress);
     }
+    /** Something drawn over a picture in its frame (the toolpath), given where the picture is drawn. */
+    interface Overlay { void draw(Canvas canvas, File picture, RectF where); }
 
     /**
      * Two sets of one print side by side, a layer per frame: each parked picture with the far picture of the same layer (the
@@ -108,7 +111,8 @@ final class TimelapseEncoder {
      */
     static void encode(List<File[]> frames, String[] labels, File out, AtomicBoolean cancelled, Progress progress) throws IOException { encode(frames, labels, null, out, cancelled, progress); }
     /** As above, with `caption` (may be null, or answer null) adding words to a picture's lower right: the head's position. */
-    static void encode(List<File[]> frames, String[] labels, java.util.function.Function<File, String> caption, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
+    static void encode(List<File[]> frames, String[] labels, java.util.function.Function<File, String> caption, File out, AtomicBoolean cancelled, Progress progress) throws IOException { encode(frames, labels, caption, null, out, cancelled, progress); }
+    static void encode(List<File[]> frames, String[] labels, java.util.function.Function<File, String> caption, Overlay overlay, File out, AtomicBoolean cancelled, Progress progress) throws IOException {
         if (frames.isEmpty()) throw new IOException("No pictures");
         int panels = frames.get(0).length;
         BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true; BitmapFactory.decodeFile(frames.get(0)[0].getPath(), bounds);
@@ -150,8 +154,10 @@ final class TimelapseEncoder {
                             new android.graphics.ColorMatrix(new float[] {g, 0, 0, 0, 0, 0, g, 0, 0, 0, 0, 0, g, 0, 0, 0, 0, 0, 1, 0})));
                         if (image != null) {
                             float s = Math.min(panelWidth / image.getWidth(), (float) wh[1] / image.getHeight()), dw = image.getWidth() * s, dh = image.getHeight() * s;
-                            canvas.drawBitmap(image, null, new RectF(left + (panelWidth - dw) / 2, (wh[1] - dh) / 2, left + (panelWidth + dw) / 2, (wh[1] + dh) / 2), picture);
+                            RectF where = new RectF(left + (panelWidth - dw) / 2, (wh[1] - dh) / 2, left + (panelWidth + dw) / 2, (wh[1] + dh) / 2);
+                            canvas.drawBitmap(image, null, where, picture);
                             image.recycle();
+                            if (overlay != null) try { overlay.draw(canvas, file, where); } catch (RuntimeException skipped) { }   // a frame without its drawing beats no video
                         }
                         if (labels != null && k < labels.length) label(canvas, labels[k], left + pad, pad, text, shade, pad);
                         // The time into the print: each side's own (the far picture comes later in the layer).

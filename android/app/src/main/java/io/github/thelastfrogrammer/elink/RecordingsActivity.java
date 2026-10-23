@@ -360,6 +360,15 @@ public final class RecordingsActivity extends Activity {
         warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
         chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear(); previews.clear();
         pictureLayerAt = pictureLayers(pictureTimes, t, column(rows, "layer"));
+        pictureLines = new HashMap<>();
+        if (!chartPictures.isEmpty()) {
+            // Where in the G-code each picture was taken, from the kept copy (read in the background; captions use it once ready).
+            List<File> pictures = chartPictures;
+            new Thread(() -> {
+                PictureToolpath toolpath = RecordingGcode.info(recording) == null ? null : PictureToolpath.of(recording, getCacheDir());
+                if (toolpath != null) { Map<String, String> found = toolpath.lines(pictures); runOnUiThread(() -> pictureLines = found); }
+            }, "picture-lines").start();
+        }
         String warm = warmUpWords(warmUp);
         if (!warm.isEmpty()) {
             TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3));
@@ -423,7 +432,8 @@ public final class RecordingsActivity extends Activity {
         if (!all && !shownCharts.isEmpty()) {
             pick[0].run();
             attachPreview(charts, pictureTimes, k -> k);
-            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures; the one from the moment you touch shows under the chart." : ""), 12, muted, false);
+            label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures; the one from the moment you touch shows under the chart." : "")
+                + " Pinch with two fingers to zoom in on a stretch of time, move along it with two fingers, double-tap to see it all.", 12, muted, false);
         } else if (!all) content.removeView(charts);
         headPositions(recording, rows);
         trays(rows, t);
@@ -803,7 +813,8 @@ public final class RecordingsActivity extends Activity {
         new Thread(() -> {
             String failure = null;
             boolean where = getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("timelapsePosition", true);
-            try { TimelapseEncoder.encode(files, labels, where ? TimelapseEncoder.positions() : null, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video: " + done + " of " + total + unit))); }
+            TimelapseEncoder.Overlay drawing = toolpathOverlay(recording);
+            try { TimelapseEncoder.encode(files, labels, where ? TimelapseEncoder.positions() : null, drawing, out, cancelled, (done, total) -> runOnUiThread(() -> state.setText("Making the video: " + done + " of " + total + unit))); }
             catch (Exception error) { failure = cancelled.get() ? "" : "The video could not be made on this phone (" + error.getClass().getSimpleName() + ")."; out.delete(); }
             String problem = failure;
             runOnUiThread(() -> {
@@ -849,7 +860,8 @@ public final class RecordingsActivity extends Activity {
         if (shown != null && shown.start > 0) overTime.clock(shown.start);
 
         List<double[]> seen = new ArrayList<>(); int cx = PrintRecorder.column("x_mm"), cy = PrintRecorder.column("y_mm"), cz = PrintRecorder.column("z_mm");
-        for (double[] row : rows) if (!Double.isNaN(row[cx]) && !Double.isNaN(row[cy])) seen.add(new double[] {row[cx], row[cy], row[cz]});
+        int ct = PrintRecorder.column("elapsed_s");
+        for (double[] row : rows) if (!Double.isNaN(row[cx]) && !Double.isNaN(row[cy])) seen.add(new double[] {row[cx], row[cy], row[cz], row[ct]});
         double bedX = 256, bedY = 256; for (double[] p : at) { bedX = Math.max(bedX, p[1]); bedY = Math.max(bedY, p[2]); }
         HeadPositions3DView space = new HeadPositions3DView(this, ink, muted, grid, surface, dark ? 0xff9ec5f4 : 0xffb7d3f5, dark ? 0xff2a78d6 : 0xff1a4f9c)
             .set(at.toArray(new double[0][]), seen.toArray(new double[0][]), bedX, bedY).pictures(thumb, open);
@@ -869,7 +881,23 @@ public final class RecordingsActivity extends Activity {
             showSeen.setOnCheckedChangeListener((v, on) -> { prefs.edit().putBoolean("headReadings", on).apply(); space.readings(on); });
             spaceBox.addView(showSeen);
         }
-        label(spaceBox, "Drag to turn it. Tap a dot to see its picture; tap it again to open the picture.", 12, muted, false);
+        // Replay: the print up to a picture, its dot chosen and its picture in the readout.
+        if (at.size() > 1) {
+            TextView replay = label(spaceBox, "", 13, ink, false);
+            SeekBar slider = new SeekBar(this); slider.setMax(at.size() - 1); slider.setProgress(at.size() - 1); slider.setContentDescription("Replay up to a picture");
+            Runnable said = () -> {
+                int k = slider.getProgress();
+                replay.setText(k == at.size() - 1 ? "All " + at.size() + " pictures · drag to replay the print" : "Up to picture " + (k + 1) + " of " + at.size() + " · " + ChartView.elapsed(times[k]) + " into the print");
+            };
+            slider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+                @Override public void onProgressChanged(SeekBar s, int k, boolean user) { if (user) space.showUpTo(k == at.size() - 1 ? -1 : k); said.run(); }
+                @Override public void onStartTrackingTouch(SeekBar s) { }
+                @Override public void onStopTrackingTouch(SeekBar s) { }
+            });
+            spaceBox.addView(slider, new LinearLayout.LayoutParams(-1, dp(48)));
+            said.run();
+        }
+        label(spaceBox, "Drag to turn it; pinch to zoom, two fingers to move it, double-tap empty space to see it all. Tap a dot to see its picture; tap it again to open the picture.", 12, muted, false);
         List<Button> buttons = new ArrayList<>(); View[] views = {overTime, spaceBox}; int accent = dark ? 0xff5fd4c4 : 0xff00796b;
         Runnable[] pick = new Runnable[1];
         String[] names = {"Over time", "3D"};
@@ -1308,7 +1336,7 @@ public final class RecordingsActivity extends Activity {
         ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP);
         GradientDrawable frame = new GradientDrawable(); frame.setColor(grid); frame.setCornerRadius(dp(10)); image.setBackground(frame); image.setClipToOutline(true);
         panel.addView(image, new LinearLayout.LayoutParams(dp(165), dp(124)));
-        TextView words = new TextView(this); words.setTextSize(13); words.setTextColor(muted); words.setPadding(dp(12), 0, 0, 0);
+        TextView words = new TextView(this); words.setTextSize(13); words.setTextColor(muted); words.setPadding(dp(12), 0, 0, 0); words.setMaxLines(4); words.setEllipsize(android.text.TextUtils.TruncateAt.END);
         panel.addView(words, new LinearLayout.LayoutParams(0, -2, 1));
         card.addView(panel, panelAt);
         int[] showing = {chartPictures.size() - 1};
@@ -1318,7 +1346,8 @@ public final class RecordingsActivity extends Activity {
             image.setImageBitmap(previewBitmap(picture));
             double layer = picture < pictureLayerAt.length ? pictureLayerAt[picture] : Double.NaN;
             String when = ChartView.elapsed(pictureTimes[picture]) + " into the print" + (Double.isNaN(layer) ? "" : " · layer " + (int) layer);
-            words.setText(when + "\nTap it to open"); image.setContentDescription("Picture at " + when + ". Open it");
+            String line = pictureLines.get(chartPictures.get(picture).getName());
+            words.setText(when + (line == null ? "" : "\n" + line) + "\nTap it to open"); image.setContentDescription("Picture at " + when + (line == null ? "" : ", " + line) + ". Open it");
         };
         show.accept(chartPictures.size() - 1);
         words.setText("Latest: " + words.getText().toString().replace("\nTap it to open", "\nTouch a chart for another"));
@@ -1330,9 +1359,17 @@ public final class RecordingsActivity extends Activity {
         @Override protected boolean removeEldestEntry(Map.Entry<Integer, android.graphics.Bitmap> eldest) { return size() > 40; }
     };
     private android.graphics.Bitmap previewBitmap(int i) { return previews.computeIfAbsent(i, k -> decode(chartPictures.get(k), dp(165))); }
+    /** Where in the print's G-code each picture was taken, by picture name ("G-code line 48,211: G1 …"), once read. */
+    private volatile Map<String, String> pictureLines = new HashMap<>();
     /** The layer printing at each picture (for the preview's words). */
     private double[] pictureLayerAt = new double[0];
 
+    /** The toolpath to draw on this recording's video frames, when asked for, its G-code is kept and the camera lined up; else null. Worker only. */
+    private TimelapseEncoder.Overlay toolpathOverlay(PrintRecorder.Recording recording) {
+        if (!getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("timelapseToolpath", true) || !PictureToolpath.linedUp(this)) return null;
+        PictureToolpath toolpath = PictureToolpath.of(recording, getCacheDir());
+        return toolpath == null ? null : PictureToolpath.overlay(this, toolpath);
+    }
     /** The time into the print (s) of each picture, from its name. Pure. */
     static double[] pictureTimes(List<File> pictures) {
         double[] out = new double[pictures.size()];
@@ -1355,7 +1392,8 @@ public final class RecordingsActivity extends Activity {
     private void openPicture(int i) {
         if (i < 0 || i >= chartPictures.size()) return;
         PictureViewer.show(this, chartPictures, i, k -> ChartView.elapsed(pictureTimes[k]) + " into the print"
-            + (k < pictureLayerAt.length && !Double.isNaN(pictureLayerAt[k]) ? " · layer " + (int) pictureLayerAt[k] : ""));
+            + (k < pictureLayerAt.length && !Double.isNaN(pictureLayerAt[k]) ? " · layer " + (int) pictureLayerAt[k] : "")
+            + (pictureLines.containsKey(chartPictures.get(k).getName()) ? "\n" + pictureLines.get(chartPictures.get(k).getName()) : ""));
     }
 
     /**

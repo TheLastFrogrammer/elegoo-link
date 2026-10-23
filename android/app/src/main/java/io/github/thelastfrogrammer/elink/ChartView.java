@@ -78,7 +78,44 @@ final class ChartView extends View {
         small.setColor(muted); small.setTextSize(11 * density * f);
         rule.setStrokeWidth(Math.max(1, density * 0.75f));
         setMinimumHeight(Math.round(220 * density * f));
+        pinch = new android.view.ScaleGestureDetector(context, new android.view.ScaleGestureDetector.SimpleOnScaleGestureListener() {
+            @Override public boolean onScaleBegin(android.view.ScaleGestureDetector d) { focusX = d.getFocusX(); return true; }
+            @Override public boolean onScale(android.view.ScaleGestureDetector d) {
+                double[] r = range(); float left = plotLeft(), right = getWidth() - plotRight(), w = Math.max(1, right - left);
+                double at = r[0] + (focusX - left) / w * (r[1] - r[0]);   // the time under the fingers stays under them
+                double span = (r[1] - r[0]) / Math.max(0.2f, d.getCurrentSpanX() > 0 && d.getPreviousSpanX() > 0 ? d.getCurrentSpanX() / d.getPreviousSpanX() : d.getScaleFactor());
+                double shift = -(d.getFocusX() - focusX) / w * span;   // two fingers moving together move the view
+                double from = at - (focusX - left) / w * span + shift;
+                zoomTo(from, from + span); focusX = d.getFocusX(); return true;
+            }
+        });
+        taps = new android.view.GestureDetector(context, new android.view.GestureDetector.SimpleOnGestureListener() {
+            @Override public boolean onDoubleTap(MotionEvent e) { if (zoomed()) { viewX0 = Double.NaN; viewX1 = Double.NaN; touched = -1; invalidate(); } return zoomed(); }
+        });
     }
+
+    // ---- Zoom: two fingers pinch the time (or layer) axis and move along it; double tap shows it all again ----
+    private final android.view.ScaleGestureDetector pinch;
+    private final android.view.GestureDetector taps;
+    private double viewX0 = Double.NaN, viewX1 = Double.NaN;
+    private float focusX; private boolean twoFingers;
+    /** The x range shown: all of the data, or the zoomed part of it. */
+    double[] range() {
+        double x0 = min(seconds), x1 = Math.max(x0 + 1, max(seconds));
+        if (Double.isNaN(viewX0)) return new double[] {x0, x1};
+        return new double[] {Math.max(x0, viewX0), Math.min(x1, viewX1)};
+    }
+    boolean zoomed() { return !Double.isNaN(viewX0); }
+    /** Shows x from..to, kept inside the data and no narrower than a few readings (or two layers). */
+    void zoomTo(double from, double to) {
+        double x0 = min(seconds), x1 = Math.max(x0 + 1, max(seconds)), full = x1 - x0;
+        double least = layerAxis ? Math.min(full, 4) : Math.min(full, Math.max(60, full / 200));
+        double span = Math.max(least, Math.min(full, to - from));
+        if (span >= full - 1e-9) { viewX0 = Double.NaN; viewX1 = Double.NaN; invalidate(); return; }
+        from = Math.max(x0, Math.min(x1 - span, from));
+        viewX0 = from; viewX1 = from + span; invalidate();
+    }
+    private boolean visible(int i, double[] r) { return i < seconds.length && seconds[i] >= r[0] && seconds[i] <= r[1]; }
 
     /** x values in seconds since the print started; NaN values leave gaps. A fixed range (e.g. 0-100 %) may be given. */
     void set(String title, String unit, double[] seconds, List<Series> series, double min, double max) {
@@ -105,11 +142,16 @@ final class ChartView extends View {
     @Override public boolean onTouchEvent(MotionEvent event) {
         if (seconds.length == 0) return false;
         float left = plotLeft(), right = getWidth() - plotRight();
+        pinch.onTouchEvent(event); taps.onTouchEvent(event);
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) twoFingers = false;
+        if (event.getPointerCount() > 1 || pinch.isInProgress()) { twoFingers = true; touched = -1; getParent().requestDisallowInterceptTouchEvent(true); invalidate(); return true; }
         if (event.getAction() == MotionEvent.ACTION_UP || event.getAction() == MotionEvent.ACTION_CANCEL) { touched = -1; invalidate(); return true; }
+        if (twoFingers) return true;   // the rest of a pinch, after one finger lifted: no readout jump
         getParent().requestDisallowInterceptTouchEvent(true);
         float across = (event.getX() - left) / Math.max(1, right - left);
         if (across > 0.6f) boxRight = false; else if (across < 0.4f) boxRight = true;
-        double t = min(seconds) + (event.getX() - left) / Math.max(1, right - left) * Math.max(1, max(seconds) - min(seconds));
+        double[] shown = range();
+        double t = shown[0] + (event.getX() - left) / Math.max(1, right - left) * Math.max(1e-9, shown[1] - shown[0]);
         int best = 0; for (int i = 1; i < seconds.length; i++) if (Math.abs(seconds[i] - t) < Math.abs(seconds[best] - t)) best = i;
         touched = best;
         int picture = pictureAtOrBefore(pictureAt, seconds[best]);
@@ -128,17 +170,19 @@ final class ChartView extends View {
         float left = plotLeft(), top = plotTop(), right = getWidth() - plotRight(), bottom = getHeight() - plotBottom();
         if (series.size() > 1) legend(canvas, 40 * density * f, getWidth());
         if (seconds.length < 2) { small.setTextAlign(Paint.Align.LEFT); canvas.drawText("Not enough samples yet.", left, (top + bottom) / 2, small); return; }
+        double[] view = range();
+        if (zoomed()) { small.setTextAlign(Paint.Align.RIGHT); canvas.drawText("Zoomed · double-tap for all", getWidth(), 16 * density * f, small); }
         double lo = fixedMin, hi = fixedMax;
         if (Double.isNaN(lo) || Double.isNaN(hi)) {
             lo = Double.POSITIVE_INFINITY; hi = Double.NEGATIVE_INFINITY;
-            if (stacked) { lo = 0; hi = 0; for (int i = 0; i < seconds.length; i++) { double v = total(i); if (!Double.isNaN(v)) hi = Math.max(hi, v); } }
-            else for (Series s : series) for (double v : s.values) if (!Double.isNaN(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+            if (stacked) { lo = 0; hi = 0; for (int i = 0; i < seconds.length; i++) { double v = visible(i, view) ? total(i) : Double.NaN; if (!Double.isNaN(v)) hi = Math.max(hi, v); } }
+            else for (Series s : series) for (int i = 0; i < s.values.length; i++) { double v = s.values[i]; if (!Double.isNaN(v) && visible(i, view)) { lo = Math.min(lo, v); hi = Math.max(hi, v); } }
             if (Double.isInfinite(lo)) { lo = 0; hi = 1; }
             if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
             double pad = (hi - lo) * 0.08; lo = lo >= 0 && lo - pad < 0 ? 0 : lo - pad; hi += pad;
         }
         double step = niceStep((hi - lo) / 4); lo = Math.floor(lo / step) * step; hi = Math.ceil(hi / step) * step;
-        double x0 = min(seconds), x1 = Math.max(x0 + 1, max(seconds));
+        double x0 = view[0], x1 = view[1];
         // Recessive grid and y ticks.
         rule.setColor(grid); small.setTextAlign(Paint.Align.RIGHT);
         for (double v = lo; v <= hi + step / 2; v += step) {
@@ -162,6 +206,8 @@ final class ChartView extends View {
             float x = (float) (left + (t - x0) / (x1 - x0) * (right - left));
             canvas.drawText(elapsed(t), x, bottom + 16 * density * f, small);
         }
+        // The data stays inside the plot when zoomed.
+        canvas.save(); canvas.clipRect(left - 2 * density, top - 2 * density, right + 2 * density, bottom + 2 * density);
         // Spans: a faint band each, alternating shades so neighbours stay apart, the first one's name on top when it fits.
         for (int k = 0; k < spanAt.size(); k++) {
             double a = Math.max(x0, spanAt.get(k)[0]), b = Math.min(x1, spanAt.get(k)[1]); if (b <= a) continue;
@@ -242,11 +288,12 @@ final class ChartView extends View {
             canvas.drawLine(x, top, x, bottom, mark);
         }
         line.setPathEffect(null);
+        canvas.restore();
         // Direct end labels for measured series, nudged apart so they never overlap; text stays in ink.
         if (series.size() > 1 && !stacked) {
             List<float[]> ends = new ArrayList<>(); List<String> names = new ArrayList<>();
             for (Series s : series) {
-                if (s.dashed) continue; double v = last(s.values); if (Double.isNaN(v)) continue;
+                if (s.dashed) continue; double v = Double.NaN; for (int i = Math.min(s.values.length, seconds.length) - 1; i >= 0 && Double.isNaN(v); i--) if (visible(i, view)) v = s.values[i]; if (Double.isNaN(v)) continue;
                 ends.add(new float[] {(float) (bottom - (v - lo) / (hi - lo) * (bottom - top))}); names.add(s.name);
             }
             Integer[] order = new Integer[ends.size()]; for (int i = 0; i < order.length; i++) order[i] = i;
