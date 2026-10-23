@@ -1,6 +1,6 @@
 # Link Workshop roadmap
 
-State as of v0.86.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
+State as of v0.100.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
 on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings › Field check gathers the manual checklist
 ([FIELD_TEST.md](FIELD_TEST.md)), the checks measured during prints, and the self-test print into one report to share
 (no codes, PINs, addresses or serials).
@@ -18,23 +18,40 @@ on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings �
 | Measured checks | Status rate; parking, lift and return; layer numbers; head position on the layer; the self-test's position probe (exact, shifted or mirrored); picture timing; heaters; filament use; slicer estimate; printer's time left; faults. Kept with each recording, in Diagnostics at the end, and in Field check | Their first answers, from the self-test print |
 | Automations and links | Rules with notify, light (once, off by default) and webhooks; Home Assistant (read only); print guardian (notify only); projects; backup and restore | — |
 
-## Next
+## Where it is heading
 
-In order. Each round ends with tests, a build, and the self-test print when there is hardware time.
+The work has grown into three parts that feed each other:
 
-1. **Answers from the printer.** Run the self-test print once; read Field check's measured section. Fix what it shows
-   (position frame, status rate, parking), then turn its numbers into defaults (camera delay, printhead mask).
-2. **Safer printing.** Done: the guardian's change check (PictureChange) compares each picture with the ones before it,
-   needing no G-code, line-up or colour, and tells of a mess spreading or a part knocked loose (notify only). Next: tune
-   it on real recordings; a clearer "is it still printing" in cloud mode, where status comes about every 30 s.
-3. **Timelapse.** Frame alignment (small camera shifts). Done: the camera clock in the self-test measures the printer's
-   camera delay from the probe's moves; Field check applies it to Live toolpath on a tap.
-4. **Slicer.** Colour painting for multi-colour prints, then support and seam painting; measure slicing on the phone.
-5. **Engineering.** UI text into string resources (translations, wording without code changes); a first-run guide;
-   a signed release build.
-6. **Pinned: a helper on the printer's USB port** (a board posing as a USB drive, filled over Wi-Fi), so G-code stays
-   readable in cloud mode. First a free test with a plain USB stick.
-7. Other printer models (the Centauri Carbon 1 uses a different protocol).
+- **Observe**: recordings of every print (status about every 10 s locally, 30 s through the cloud; camera pictures by
+  time, layer or head position, with where the head was; warm-up phases; the kept G-code; the guardian's checks).
+- **Understand**: charts with zoom and picture previews; per-layer analysis against the G-code (time, filament, line
+  types, flow, acceleration); "Things to look at"; warm-up against earlier prints; compare two prints; the 3D head view;
+  the G-code line at each picture; shareable reports; cost and maintenance.
+- **Act**: the slicer on the phone with presets, calibration prints and the self-test; sending and starting prints.
+
+What the suite lacks is the loop between them. A diagnosis today ends in words ("less fan, a little more heat"); the
+person then changes settings elsewhere and has to remember to compare. The next rounds close that loop, in order:
+
+1. **The tuning loop.** Each "Things to look at" finding names the slicer settings that address it (fan limit, nozzle
+   temperature, minimum layer time, top layers, flow); "Slice again with these changes" opens the slicer with them
+   applied to a copy of the preset, never silently. When that print is recorded, it is compared with the one before
+   (the compare screen, opened by itself), and the result is kept with the file: what changed, and whether it helped.
+2. **Memory per file and per spool.** Every print of a file in one place, with its settings, spool, rating and findings:
+   which settings worked for this part. Spools record when they were dried; findings that point to moisture (rough,
+   pitted tops, weak layers on a thick top shell) name the spool's age since drying.
+3. **Answers from the printer.** Still the largest risk: the self-test print and Field check confirm the position frame,
+   the status rate, parking, the camera delay and the toolpath overlay's line-up on real hardware.
+4. **A calmer recording page.** It now holds about fifteen cards; group them (summary, charts, layers, pictures, G-code)
+   so a print's story reads from the top.
+5. **The guardian learns from answers.** Limits per camera from the person's "looks fine" / "real problem" answers,
+   instead of fixed ones; tuned on recorded prints.
+6. **Engineering.** UI text into string resources; a first-run guide; crash notes kept on the phone for Diagnostics.
+   Done: signed releases that update over development builds (signing/lineage.bin), and an update check.
+7. **Slicer.** Colour, support and seam painting; slicing speed on the phone.
+8. Other printer models (the Centauri Carbon 1 uses a different protocol).
+
+What the data cannot do, and so is not promised: the extruder position is what the printer was told to feed, not what
+reached the nozzle; through the cloud, status comes about every 30 s; positions are the last reported before a picture.
 
 ## Rules that stay
 
