@@ -261,6 +261,14 @@ public class A11yRenderTest {
         assertEquals("the zoom stays when stepping", 2.25f, image.zoom(), 1e-3f);
         click(root, "Next picture");
         assertTrue("no step past the last", says(root, "3 of 3"));
+        // The time slider, from the first picture's time to the last's, moves with the picture and picks one when dragged.
+        assertTrue(says(root, "0:01") && says(root, "0:21"));
+        SeekBar slider = find(root, SeekBar.class);
+        assertEquals(2, slider.getMax()); assertEquals(2, slider.getProgress());
+        java.lang.reflect.Method user = android.widget.ProgressBar.class.getDeclaredMethod("setProgressInternal", int.class, boolean.class, boolean.class);
+        user.setAccessible(true); user.invoke(slider, 0, true, false);
+        assertTrue(says(root, "picture 0   ·   1 of 3"));
+        assertEquals("the zoom stays when scrubbing", 2.25f, image.zoom(), 1e-3f);
         if (!System.getProperty("screenshots", "").isEmpty()) shot(((ViewGroup) root.findViewById(android.R.id.content)).getChildAt(0), 1800, "picture-viewer", 1.0f);
     }
     private static boolean says(View v, String text) {
