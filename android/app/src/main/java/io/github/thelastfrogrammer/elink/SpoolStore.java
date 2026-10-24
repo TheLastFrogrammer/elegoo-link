@@ -23,20 +23,37 @@ final class SpoolStore {
         String id = "", type = "", name = "", colour = null, slot = "";
         double size = DEFAULT_SIZE, left = DEFAULT_SIZE;
         long updated;
+        /** When it was last dried, and when it was opened (a new full spool, taken as sealed until then); 0 = not known. */
+        long dried, opened;
         /** "PLA Matte · red". */
         String material() {
             String material = name.isEmpty() || name.equalsIgnoreCase(type) ? type : name.toUpperCase(Locale.ROOT).contains(type.toUpperCase(Locale.ROOT)) ? name : type + " " + name;
             String word = WorkshopUi.colourName(colour);
             return word == null ? material : material + " · " + word;
         }
+        /** "dried 3 days ago", "opened 12 days ago, not marked dried", or "drying not noted". */
+        String dryWords(long now) { return dryWords(dried, opened, now, "ago"); }
+        /** The same counted up to a moment: `suffix` "ago" for now, "before this print" for a print's start. */
+        static String dryWords(long dried, long opened, long at, String suffix) {
+            if (dried > 0 && dried >= opened) return "dried " + since(dried, at, suffix);
+            if (opened > 0) return "opened " + since(opened, at, suffix) + ", not marked dried";
+            return "drying not noted";
+        }
+        /** Whole days from `from` to `at`, or -1 when neither date is known: the time since it was dried, or opened. */
+        static long daysDry(long dried, long opened, long at) { long from = Math.max(dried, opened); return from <= 0 ? -1 : Math.max(0, (at - from) / 86_400_000L); }
+        private static String since(long from, long at, String suffix) {
+            long days = Math.max(0, (at - from) / 86_400_000L);
+            return days == 0 ? ("ago".equals(suffix) ? "today" : "the same day") : days + (days == 1 ? " day " : " days ") + suffix;
+        }
         boolean matches(TrayPlan.Tray tray) { return type.equalsIgnoreCase(tray.type) && Objects.equals(colour, tray.colour); }
         JSONObject json() throws Exception {
             return new JSONObject().put("id", id).put("type", type).put("name", name).put("colour", colour == null ? "" : colour).put("slot", slot)
-                .put("size", size).put("left", left).put("updated", updated);
+                .put("size", size).put("left", left).put("updated", updated).put("dried", dried).put("opened", opened);
         }
         static Spool from(JSONObject o) {
             Spool s = new Spool(); s.id = o.optString("id"); s.type = o.optString("type"); s.name = o.optString("name"); s.colour = TrayPlan.colour(o.optString("colour"));
-            s.slot = o.optString("slot"); s.size = o.optDouble("size", DEFAULT_SIZE); s.left = o.optDouble("left", s.size); s.updated = o.optLong("updated"); return s;
+            s.slot = o.optString("slot"); s.size = o.optDouble("size", DEFAULT_SIZE); s.left = o.optDouble("left", s.size); s.updated = o.optLong("updated");
+            s.dried = o.optLong("dried"); s.opened = o.optLong("opened"); return s;
         }
     }
     /** The slot key for a tray: "canvas:tray". */
@@ -94,7 +111,7 @@ final class SpoolStore {
         String key = slot(tray);
         for (Spool s : spools) if (key.equals(s.slot)) s.slot = "";
         Spool s = new Spool(); s.id = UUID.randomUUID().toString(); s.type = tray.type; s.name = tray.name; s.colour = tray.colour; s.slot = key;
-        s.size = clamp(size, 1, 10_000); s.left = clamp(left, 0, s.size); s.updated = now; spools.add(s); swapped(key, s.id); save(); return copy(s);
+        s.size = clamp(size, 1, 10_000); s.left = clamp(left, 0, s.size); s.updated = now; if (s.left >= s.size) s.opened = now; spools.add(s); swapped(key, s.id); save(); return copy(s);
     }
     /** Puts a shelf spool back into a tray. */
     synchronized void fromShelf(String id, TrayPlan.Tray tray, long now) {
@@ -104,6 +121,8 @@ final class SpoolStore {
         save();
     }
     synchronized void setLeft(String id, double left, long now) { for (Spool s : spools) if (s.id.equals(id)) { s.left = clamp(left, 0, s.size); s.updated = now; } save(); }
+    /** Notes that a spool was dried at `when`. */
+    synchronized void setDried(String id, long when, long now) { for (Spool s : spools) if (s.id.equals(id)) { s.dried = when; s.updated = now; } save(); }
     synchronized void remove(String id) { spools.removeIf(s -> s.id.equals(id)); save(); }
 
     /** Shelf spools of the same material and colour as a tray, most filament first: the likely ones to put back. */

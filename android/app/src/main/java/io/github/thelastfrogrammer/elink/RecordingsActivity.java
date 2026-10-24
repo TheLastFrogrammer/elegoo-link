@@ -452,26 +452,32 @@ public final class RecordingsActivity extends Activity {
         action(more, "Share a report…", () -> shareReport(recording, rows));
         LinearLayout tuneRow = new LinearLayout(this); tuneRow.setOrientation(LinearLayout.HORIZONTAL); content.addView(tuneRow);
         action(tuneRow, "Change settings and slice again…", () -> tune(recording, findings(recording, rows)));
+        if (GcodeLibrary.baseName(recording.file) != null) {
+            LinearLayout fileRow = new LinearLayout(this); fileRow.setOrientation(LinearLayout.HORIZONTAL); content.addView(fileRow);
+            action(fileRow, "Every print of this file…", () -> startActivity(new Intent(this, FileMemoryActivity.class).putExtra(FileMemoryActivity.EXTRA_FILE, recording.file)));
+        }
         action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
             .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
     }
 
     private static double price(android.content.SharedPreferences prefs, String key) { try { return Double.parseDouble(prefs.getString(key, "0")); } catch (RuntimeException none) { return 0; } }
-    private static List<RecordingAnalysis.Finding> findings(PrintRecorder.Recording recording, List<double[]> rows) {
+    static List<RecordingAnalysis.Finding> findings(PrintRecorder.Recording recording, List<double[]> rows) {
         return RecordingAnalysis.findings(column(rows, "elapsed_s"), column(rows, "layer"), column(rows, "part_fan_pct"), column(rows, "z_mm"),
             column(rows, "nozzle_c"), column(rows, "nozzle_target_c"), column(rows, "bed_c"), column(rows, "bed_target_c"), column(rows, "sub_status"), !"printing".equals(recording.outcome));
     }
     /** "Things to look at": what the readings point to (RecordingAnalysis.findings), when anything stands out, and the settings that address it. */
     private void diagnosis(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found) {
-        if (found.isEmpty()) return;
+        String damp = FileMemory.moisture(recording);
+        if (found.isEmpty() && damp.isEmpty()) return;
         LinearLayout card = card(); label(card, "Things to look at", 15, ink, true);
-        label(card, "From the readings: what stands out, where, and what usually causes it. The charts and pictures at that layer show more.", 12, muted, false);
+        label(card, "From the readings and the journal: what stands out, where, and what usually causes it. The charts and pictures at that layer show more.", 12, muted, false);
         Set<String> notes = new LinkedHashSet<>(); boolean settings = false;
         for (RecordingAnalysis.Finding f : found) {
             label(card, "• " + f.words, 13, ink, false);
             String none = Tuning.noSetting(f.kind); if (none != null) notes.add(none); else settings = true;
         }
         for (String note : notes) label(card, note, 12, muted, false);
+        if (!damp.isEmpty()) label(card, "• " + damp, 13, ink, false);
         if (settings) { LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); card.addView(row); action(row, "Settings that address this…", () -> tune(recording, found)); }
     }
 

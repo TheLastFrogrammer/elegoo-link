@@ -259,6 +259,8 @@ public final class PrinterService extends Service {
         recorder = new PrintRecorder(RecordingsActivity.directory(this));
         guardian = new GuardianRun(this); recorder.pictureKept = this::guard; PrintRecorder.active = recorder;
         recorder.printEnded = ended -> {
+            // The spools in the trays it printed from, noted on the recording before any tray changes (FileMemory).
+            videoWorker.execute(() -> noteSpools(ended));
             autoVideo(ended);
             // After the video (the same worker): the storage clean-up, if set, and the maintenance reminders that fell due.
             videoWorker.execute(() -> { try { RecordingStorage.applyPolicy(this); } catch (RuntimeException failed) { Diagnostics.note(Diagnostics.CAMERA, "storage clean-up failed: " + failed.getClass().getSimpleName()); } maintenanceDue(); });
@@ -1160,6 +1162,13 @@ public final class PrinterService extends Service {
      * side-by-side one too, then one notification says it is ready. Its tap only opens the recording. Called with the
      * recorder locked, so the work goes to its own thread.
      */
+    private void noteSpools(PrintRecorder.Recording recording) {
+        try {
+            List<String> slots = FileMemory.slots(RecordingsActivity.column(PrintRecorder.samples(recording), "tray"));
+            org.json.JSONArray note = FileMemory.spoolNote(slots, spools());
+            if (note.length() > 0) PrintRecorder.saveSpools(recording.meta, note);
+        } catch (Exception notNoted) { Diagnostics.note(Diagnostics.TRAYS, "spools not noted on the recording: " + notNoted.getClass().getSimpleName()); }
+    }
     private void autoVideo(PrintRecorder.Recording recording) {
         if (!workshop().getBoolean("autoTimelapse", true)) return;
         videoWorker.execute(() -> {

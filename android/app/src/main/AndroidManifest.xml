@@ -51,6 +51,7 @@
         <activity android:name=".CompareActivity" android:exported="false" android:label="Compare prints" />
         <activity android:name=".StorageActivity" android:exported="false" android:label="Storage" />
         <activity android:name=".MaintenanceActivity" android:exported="false" android:label="Maintenance" />
+        <activity android:name=".FileMemoryActivity" android:exported="false" android:label="Prints of a file" />
         <activity android:name=".ProjectsActivity" android:exported="true" android:label="Projects">
             <!-- A shared project file (.lwproject) opened or shared from another app: imported only after the person confirms. -->
             <intent-filter>

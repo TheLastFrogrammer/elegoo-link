@@ -1,6 +1,6 @@
 # Link Workshop roadmap
 
-State as of v0.101.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
+State as of v0.102.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
 on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings › Field check gathers the manual checklist
 ([FIELD_TEST.md](FIELD_TEST.md)), the checks measured during prints, and the self-test print into one report to share
 (no codes, PINs, addresses or serials).
@@ -41,9 +41,14 @@ person then changes settings elsewhere and has to remember to compare. The next 
    recording of that file shows what changed, whether each finding came back, and a button to compare with the print
    before; the result is kept with the try. Left: the compare screen does not open by itself, and files sliced before
    v0.101.0 or elsewhere need the model chosen again.
-2. **Memory per file and per spool.** Every print of a file in one place, with its settings, spool, rating and findings:
-   which settings worked for this part. Spools record when they were dried; findings that point to moisture (rough,
-   pitted tops, weak layers on a thick top shell) name the spool's age since drying.
+2. **Memory per file and per spool** (first version in v0.102.0). "Every print of this file…" on a recording lists its
+   prints newest first: rating, the spool and its drying, the settings changed since the print before (from each
+   print's kept G-code), what the readings found and how a tuning try went. "What worked" names the best-rated finished
+   print and its settings, and slices again with them when the newest print differs. Spools take a dried date (and a new
+   full spool its opened date); the spools in the trays a print used are noted on its recording when it ends. When the
+   journal names stringing, a rough surface or under-extrusion, the recording and the file page say how long it had been
+   since the spool was dried. Left: prints recorded before v0.102.0 have no spool noted; the file page is not yet
+   reachable from the Files tab.
 3. **Answers from the printer.** Still the largest risk: the self-test print and Field check confirm the position frame,
    the status rate, parking, the camera delay and the toolpath overlay's line-up on real hardware.
 4. **A calmer recording page.** It now holds about fifteen cards; group them (summary, charts, layers, pictures, G-code)

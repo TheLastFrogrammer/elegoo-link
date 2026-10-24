@@ -3262,7 +3262,7 @@ public final class MainActivity extends Activity {
         for (TrayPlan.Tray tray : loaded) {
             SpoolStore.Spool spool = store.inSlot(SpoolStore.slot(tray));
             String detail = spool == null ? "Spool not set: tap to say how much is on it" : String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size)
-                + (spool.left < 100 ? " · running low" : "");
+                + (spool.left < 100 ? " · running low" : "") + " · " + spool.dryWords(System.currentTimeMillis());
             listRow(spoolList, "Tray " + tray.trayId + (tray.canvasId > 0 ? " (CANVAS " + tray.canvasId + ")" : "") + " · " + tray.material(), detail, !first, () -> spoolDialog(tray));
             first = false;
         }
@@ -3271,7 +3271,7 @@ public final class MainActivity extends Activity {
             TextView heading = label(spoolList, "On the shelf", 14, INK, true); heading.setPadding(0, dp(10), 0, 0); A11y.heading(heading);
             first = true;
             for (SpoolStore.Spool spool : shelf) {
-                listRow(spoolList, spool.material(), String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size), !first, () -> shelfDialog(spool));
+                listRow(spoolList, spool.material(), String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size) + " · " + spool.dryWords(System.currentTimeMillis()), !first, () -> shelfDialog(spool));
                 first = false;
             }
         }
@@ -3281,6 +3281,8 @@ public final class MainActivity extends Activity {
         SpoolStore store = spools(); SpoolStore.Spool spool = store.inSlot(SpoolStore.slot(tray));
         List<String> names = new ArrayList<>(); List<Runnable> actions = new ArrayList<>();
         if (spool != null) { names.add("Set filament left…"); actions.add(() -> amountDialog("Filament left on this spool", spool.size, spool.left, false, (size, left) -> { store.setLeft(spool.id, left, System.currentTimeMillis()); render(); })); }
+        if (spool != null) { names.add("Dried it today"); actions.add(() -> { store.setDried(spool.id, System.currentTimeMillis(), System.currentTimeMillis()); render(); }); }
+        if (spool != null) { names.add("Dried it on another day…"); actions.add(() -> driedOn(spool)); }
         names.add("New full spool (" + Math.round(SpoolStore.DEFAULT_SIZE) + " g)"); actions.add(() -> { store.put(tray, SpoolStore.DEFAULT_SIZE, SpoolStore.DEFAULT_SIZE, System.currentTimeMillis()); render(); });
         names.add("New spool of another size, or part used…"); actions.add(() -> amountDialog("Spool in tray " + tray.trayId, SpoolStore.DEFAULT_SIZE, SpoolStore.DEFAULT_SIZE, true, (size, left) -> { store.put(tray, size, left, System.currentTimeMillis()); render(); }));
         for (SpoolStore.Spool back : store.candidates(tray)) {
@@ -3292,10 +3294,21 @@ public final class MainActivity extends Activity {
     }
     private void shelfDialog(SpoolStore.Spool spool) {
         SpoolStore store = spools();
-        new AlertDialog.Builder(this).setTitle(spool.material()).setItems(new String[] {"Set filament left…", "Remove (spool used up or given away)"}, (d, which) -> {
+        new AlertDialog.Builder(this).setTitle(spool.material()).setItems(new String[] {"Set filament left…", "Dried it today", "Dried it on another day…", "Remove (spool used up or given away)"}, (d, which) -> {
             if (which == 0) amountDialog("Filament left on this spool", spool.size, spool.left, false, (size, left) -> { store.setLeft(spool.id, left, System.currentTimeMillis()); render(); });
+            else if (which == 1) { store.setDried(spool.id, System.currentTimeMillis(), System.currentTimeMillis()); render(); }
+            else if (which == 2) driedOn(spool);
             else { store.remove(spool.id); render(); }
         }).setNegativeButton("Cancel", null).show();
+    }
+    /** When a spool was dried, picked on a calendar (not after today): kept so problems that point to moisture can say how long ago. */
+    private void driedOn(SpoolStore.Spool spool) {
+        java.util.Calendar today = java.util.Calendar.getInstance();
+        android.app.DatePickerDialog pick = new android.app.DatePickerDialog(this, (picker, y, m, d) -> {
+            java.util.Calendar at = java.util.Calendar.getInstance(); at.set(y, m, d, 12, 0, 0);
+            spools().setDried(spool.id, Math.min(System.currentTimeMillis(), at.getTimeInMillis()), System.currentTimeMillis()); render();
+        }, today.get(java.util.Calendar.YEAR), today.get(java.util.Calendar.MONTH), today.get(java.util.Calendar.DAY_OF_MONTH));
+        pick.getDatePicker().setMaxDate(System.currentTimeMillis()); pick.show();
     }
     private interface Amount { void set(double size, double left); }
     /** Grams on a spool (and its full size, for a new one). Weighing the spool and taking off the empty spool's weight is the most accurate. */

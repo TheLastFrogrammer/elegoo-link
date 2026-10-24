@@ -218,6 +218,33 @@ public class MoreScreensRenderTest {
         org.junit.Assert.assertFalse("the result is kept with the try", Tuning.trialFor(Tuning.all(context), after).result.isEmpty());
         shot(detail.getWindow().getDecorView(), 1080, 2600, new File(out(), "tuning-light.png"));
     }
+    /** Every print of one file: what worked, each print's spool, drying and what changed. */
+    @Test public void renderFileMemory() throws Exception {
+        setTheme(false);
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        PrintRecorder recorder = new PrintRecorder(RecordingsActivity.directory(context));
+        simulate(recorder, "2026-10-10T18:00:00Z", "Desk_mount_PLA.gcode", 30, 2077, 0);
+        simulate(recorder, "2026-10-14T18:00:00Z", "Desk_mount_PLA.gcode", 30, 2077, 0);
+        simulate(recorder, "2026-10-20T18:00:00Z", "Desk_mount_PLA.gcode", 30, 2077, 0);
+        java.util.List<PrintRecorder.Recording> mine = FileMemory.of(recorder.list(), "Desk_mount_PLA.gcode");
+        String fixture = new String(java.nio.file.Files.readAllBytes(new File("src/test/resources/gcode/tolerance-cc2.gcode").toPath()), java.nio.charset.StandardCharsets.UTF_8);
+        String[][] made = {{"100", "210", "failed", "1", "surface"}, {"70", "215", "good", "5", ""}, {"100", "210", "usable", "3", "stringing"}};   // oldest first
+        for (int i = 0; i < 3; i++) {
+            PrintRecorder.Recording r = mine.get(2 - i);
+            File g = new File(context.getCacheDir(), "mount-" + i + ".gcode");
+            java.nio.file.Files.write(g.toPath(), fixture.replace("; fan_max_speed = 100", "; fan_max_speed = " + made[i][0]).replace("; nozzle_temperature = 210", "; nozzle_temperature = " + made[i][1]).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            RecordingGcode.pack(g, "Desk_mount_PLA.gcode", r, RecordingGcode.CHOSEN);
+            PrintJournal j = new PrintJournal(); j.result = made[i][2]; j.stars = Integer.parseInt(made[i][3]); if (!made[i][4].isEmpty()) j.reasons.add(made[i][4]);
+            PrintRecorder.saveJournal(r.meta, j);
+            PrintRecorder.saveSpools(r.meta, new org.json.JSONArray().put(new org.json.JSONObject().put("slot", "0:0").put("material", "PLA · black").put("dried", 0).put("opened", r.start - (40 - i * 3) * 86_400_000L)));
+        }
+        android.content.Intent intent = new android.content.Intent(context, FileMemoryActivity.class).putExtra(FileMemoryActivity.EXTRA_FILE, "Desk_mount_PLA.gcode");
+        FileMemoryActivity page = Robolectric.buildActivity(FileMemoryActivity.class, intent).setup().get();
+        for (int i = 0; i < 300 && ((android.view.ViewGroup) ((android.widget.ScrollView) ((android.view.ViewGroup) page.findViewById(android.R.id.content)).getChildAt(0)).getChildAt(0)).getChildCount() < 4; i++) {
+            Thread.sleep(20); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        }
+        shot(page.getWindow().getDecorView(), 1080, 2800, new File(out(), "file-memory-light.png"));
+    }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }
 }

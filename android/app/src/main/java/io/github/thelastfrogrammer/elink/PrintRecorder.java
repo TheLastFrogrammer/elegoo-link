@@ -85,7 +85,7 @@ public final class PrintRecorder {
                 .put("compare", compare && smooth()).put("far_pictures", farPictures).put("checks", checks.toJson())
                 .put("guardian_checks", guardianJson())
                 .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
-                .put("journal", journal.empty() ? null : journal.toJson());
+                .put("journal", journal.empty() ? null : journal.toJson()).put("spools", spools.length() == 0 ? null : spools);
         }
         static Recording read(File meta) throws Exception {
             String base = meta.getName().replaceFirst("\\.json$", "");
@@ -108,10 +108,16 @@ public final class PrintRecorder {
             recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
             recording.printDuration = json.optLong("print_duration", -1); recording.startProgress = json.optInt("start_progress", -1); recording.estimate = json.optLong("estimate", 0);
             recording.journal = PrintJournal.fromJson(json.optJSONObject("journal"));
+            org.json.JSONArray used = json.optJSONArray("spools"); if (used != null) recording.spools = used;
             return recording;
         }
         /** The folder of this recording's camera pictures, named by elapsed seconds (e.g. 0600.jpg). */
         public File pictureFolder() { return new File(csv.getParentFile(), csv.getName().replaceFirst("\\.csv$", "") + "-pictures"); }
+        /**
+         * The spools that printed it, noted when it ended: {slot, id, material, dried, opened} per CANVAS tray it used (see
+         * SpoolStore), so drying and the spool stay with the print after the spool is used up or moved.
+         */
+        public org.json.JSONArray spools = new org.json.JSONArray();
         public long duration() { return elapsed > 0 ? elapsed : Math.max(0, (end > 0 ? end : lastSample) - start); }
     }
 
@@ -135,16 +141,19 @@ public final class PrintRecorder {
      * Saves a recording's journal. The running print's recording is changed in the recorder (which rewrites its file as it
      * samples), any other recording in its file.
      */
-    static void saveJournal(File meta, PrintJournal journal) throws Exception {
+    static void saveJournal(File meta, PrintJournal journal) throws Exception { rewrite(meta, r -> r.journal = journal, "could not save the journal"); }
+    /** Notes the spools that printed a recording (after it ended). */
+    static void saveSpools(File meta, org.json.JSONArray spools) throws Exception { rewrite(meta, r -> r.spools = spools, "could not note the spools"); }
+    private static void rewrite(File meta, java.util.function.Consumer<Recording> change, String failure) throws Exception {
         PrintRecorder recorder = active;
         if (recorder != null) synchronized (recorder) {
-            if (recorder.current != null && recorder.current.meta.equals(meta)) { recorder.current.journal = journal; recorder.save(recorder.current); return; }
+            if (recorder.current != null && recorder.current.meta.equals(meta)) { change.accept(recorder.current); recorder.save(recorder.current); return; }
         }
         synchronized (PrintRecorder.class) {
-            Recording recording = Recording.read(meta); recording.journal = journal;
+            Recording recording = Recording.read(meta); change.accept(recording);
             File temp = new File(meta.getPath() + ".tmp");
             try (Writer writer = new OutputStreamWriter(new FileOutputStream(temp), StandardCharsets.UTF_8)) { writer.write(recording.toJson().toString()); }
-            if (!temp.renameTo(meta)) throw new IOException("could not save the journal");
+            if (!temp.renameTo(meta)) throw new IOException(failure);
         }
     }
     /** Notes the guardian's alarm and the person's answer in the running print's journal. */
