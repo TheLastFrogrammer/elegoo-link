@@ -51,8 +51,9 @@ jobs:
           LINK_WORKSHOP_KEYSTORE_PASSWORD: ${{ secrets.LINK_WORKSHOP_KEYSTORE_PASSWORD }}
           LINK_WORKSHOP_KEY_ALIAS: ${{ secrets.LINK_WORKSHOP_KEY_ALIAS }}
           LINK_WORKSHOP_KEY_PASSWORD: ${{ secrets.LINK_WORKSHOP_KEY_PASSWORD }}
+        # Only the phone app is released here (signed, with rotateReleaseSigning); the TV app (android/tv) is built in validation.
         run: |
-          ./gradlew --no-daemon assembleRelease
+          ./gradlew --no-daemon :app:assembleRelease
           version="${GITHUB_REF_NAME#android-v}"
           python3 ../.github/workflows/check-engine.py app/build/outputs/apk/release/app-release.apk
           cp app/build/outputs/apk/release/app-release.apk "Link-Workshop-v$version.apk"

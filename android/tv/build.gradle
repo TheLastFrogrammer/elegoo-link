@@ -1,0 +1,28 @@
+plugins { id 'com.android.application' }
+// Printer on TV: a Fire TV / Android TV app that watches the printer through Link Workshop's local API on the phone.
+// Read only, plain Android framework, no libraries. Release builds are unsigned: sign them yourself (see README.md).
+android {
+    namespace 'io.github.thelastfrogrammer.elink.tv'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'io.github.thelastfrogrammer.elink.tv'
+        // Fire OS 6 (the older Fire TV sticks) is Android 7.1.
+        minSdk 25
+        targetSdk 36
+        versionCode 1
+        versionName '0.1.0'
+    }
+    buildTypes { release { minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
+    testOptions { unitTests { includeAndroidResources = true; all {
+        maxHeapSize = '1g'
+        // Opt-in: -Dscreenshots=<dir> writes the screens as 1920×1080 PNGs (ScreensTest).
+        systemProperty 'screenshots', System.getProperty('screenshots', '')
+    } } }
+}
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
+    // The screens rendered and driven with the remote's keys on the JVM (ScreensTest).
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+}

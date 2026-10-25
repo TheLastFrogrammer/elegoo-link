@@ -2,3 +2,5 @@ pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal()
 dependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }
 rootProject.name = 'ElegooLinkAndroid'
 include ':app'
+// The TV app (Fire TV / Android TV): watches the printer through the phone's local API. See tv/README.md.
+include ':tv'

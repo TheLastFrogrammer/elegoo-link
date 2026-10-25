@@ -48,6 +48,8 @@ public final class PrinterWatch {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final SharedPreferences prefs;
     private volatile boolean stopped;
+    /** Each start() is a new run: threads from an earlier run end instead of running on beside the new ones. */
+    private volatile int run;
     private volatile String base;
     private NsdManager.DiscoveryListener discovery;
     private Thread statusThread, cameraThread;
@@ -58,7 +60,7 @@ public final class PrinterWatch {
     }
 
     public void start() {
-        stopped = false;
+        stopped = false; run++; base = null;
         String known = prefs.getString("base", null);
         if (known != null) connect(known); else discover();
     }
@@ -77,6 +79,7 @@ public final class PrinterWatch {
             @Override public void onServiceFound(NsdServiceInfo found) {
                 nsd.resolveService(found, new NsdManager.ResolveListener() {
                     @Override public void onServiceResolved(NsdServiceInfo info) {
+                        if (base != null) return;   // the same phone found twice (IPv4 and IPv6): connect once
                         String host = info.getHost().getHostAddress();
                         String url = "http://" + (host.contains(":") ? "[" + host + "]" : host) + ":" + info.getPort();
                         prefs.edit().putString("base", url).apply();
@@ -97,13 +100,14 @@ public final class PrinterWatch {
 
     private void connect(String url) {
         base = url;
+        int mine = run;
         statusThread = new Thread(() -> {
-            while (!stopped) {
+            while (!stopped && run == mine) {
                 try {
                     String token = prefs.getString("token", null);
                     if (token == null) { token = pair(); prefs.edit().putString("token", token).apply(); }
-                    if (cameraThread == null || !cameraThread.isAlive()) { String t = token; cameraThread = new Thread(() -> camera(t), "printer-camera"); cameraThread.start(); }
-                    events(token);
+                    if (cameraThread == null || !cameraThread.isAlive()) { cameraThread = new Thread(() -> camera(mine), "printer-camera"); cameraThread.start(); }
+                    events(token, mine);
                 } catch (Unpaired e) {
                     prefs.edit().remove("token").apply();
                 } catch (Exception e) {
@@ -129,13 +133,13 @@ public final class PrinterWatch {
     }
 
     /** Server-Sent Events: "status" whenever it changes, "event" for print events, a comment every 15 s. */
-    private void events(String token) throws Exception {
+    private void events(String token, int mine) throws Exception {
         HttpURLConnection c = request("GET", "/api/v1/events", token, null);
         c.setReadTimeout(40_000);
         if (c.getResponseCode() == 401) throw new Unpaired();
         try (BufferedReader in = new BufferedReader(new InputStreamReader(c.getInputStream(), StandardCharsets.UTF_8))) {
             String line, event = null; StringBuilder data = new StringBuilder();
-            while (!stopped && (line = in.readLine()) != null) {
+            while (!stopped && run == mine && (line = in.readLine()) != null) {
                 if (line.startsWith("event: ")) event = line.substring(7);
                 else if (line.startsWith("data: ")) data.append(line.substring(6));
                 else if (line.isEmpty() && event != null) {
@@ -148,15 +152,18 @@ public final class PrinterWatch {
     }
 
     /** The camera as MJPEG: one JPEG after another; each is decoded and handed over (a TV shows them in an ImageView). */
-    private void camera(String token) {
-        while (!stopped) {
+    private void camera(int mine) {
+        while (!stopped && run == mine) {
             HttpURLConnection c = null;
             try {
+                // The token as it is now: after the TV pairs again, the old one is refused.
+                String token = prefs.getString("token", null);
+                if (token == null) { sleep(2000); continue; }
                 c = request("GET", "/api/v1/cameras/printer/stream.mjpeg?fps=5", token, null);
                 c.setReadTimeout(30_000);
                 if (c.getResponseCode() != 200) { post(() -> listener.problem("The camera is not available now.")); sleep(10_000); continue; }
                 InputStream in = new BufferedInputStream(c.getInputStream(), 65536);
-                while (!stopped) {
+                while (!stopped && run == mine) {
                     byte[] jpeg = nextJpeg(in);
                     Bitmap picture = BitmapFactory.decodeByteArray(jpeg, 0, jpeg.length);
                     if (picture != null) post(() -> listener.frame(picture));
