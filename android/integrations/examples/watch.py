@@ -10,6 +10,7 @@ import json
 import os
 import sys
 import time
+import urllib.error
 import urllib.request
 
 TOKEN_FILE = os.path.expanduser("~/.linkworkshop-token")
@@ -29,7 +30,12 @@ def pair(base):
     print("Approve on the phone (Link Workshop > Settings > Other apps). Code:", asked["code"])
     until = time.time() + asked["expires_in"]
     while time.time() < until:
-        state = json.load(call(base, asked["poll"]))
+        try:
+            state = json.load(call(base, asked["poll"]))
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                break  # the request ran out on the phone
+            raise
         if state["state"] == "approved":
             return state["token"]
         if state["state"] == "denied":
@@ -61,10 +67,20 @@ def main():
         with open(TOKEN_FILE, "w") as f:
             f.write(token)
         os.chmod(TOKEN_FILE, 0o600)
-    if "--picture" in sys.argv:
-        with open("printer.jpg", "wb") as f:
-            f.write(call(base, "/api/v1/cameras/printer/snapshot.jpg", token).read())
-        print("Saved printer.jpg")
+    try:
+        if "--picture" in sys.argv:
+            with open("printer.jpg", "wb") as f:
+                f.write(call(base, "/api/v1/cameras/printer/snapshot.jpg", token).read())
+            print("Saved printer.jpg")
+        watch(base, token)
+    except urllib.error.HTTPError as e:
+        if e.code != 401:
+            raise
+        os.remove(TOKEN_FILE)  # removed on the phone: the next run pairs again
+        sys.exit("This device was removed on the phone. Run again to pair it again.")
+
+
+def watch(base, token):
     for event, data in events(base, token):
         if event == "status":
             state, job = data.get("state", {}), data.get("print", {})

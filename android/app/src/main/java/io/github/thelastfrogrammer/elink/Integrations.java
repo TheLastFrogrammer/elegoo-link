@@ -51,7 +51,15 @@ final class Integrations {
     private IntegrationServer server;
     private boolean serverVpn;
     private NsdManager.RegistrationListener announced;
-    private volatile String statusText = "{}";
+    /** The status other apps read, and when it was built: kept together so its ages can be moved on (IntegrationStatus.aged). */
+    private static final class Built { final String text; final long at; Built(String text, long at) { this.text = text; this.at = at; } }
+    private volatile Built built = new Built("{}", 0);
+    static final long REFRESH_MS = 15_000;
+    /**
+     * Built again every REFRESH_MS while the local API or the relay is on, not only when a status arrives: a printer that
+     * goes quiet then shows as such, and a change the relay held back (too soon after the last push) still goes out.
+     */
+    private final Runnable refresh = new Runnable() { @Override public void run() { statusChanged(); main.postDelayed(this, REFRESH_MS); } };
     private long relayPictureAt;
     /** Why the local API is not running ("" when it is, or is off), for the settings screen. */
     volatile String problem = "";
@@ -76,17 +84,19 @@ final class Integrations {
         if (server != null && (!on || server.port() != port || serverVpn != vpn)) stopServer();
         if (on && server == null) {
             IntegrationServer s = new IntegrationServer(new IntegrationServer.Host() {
-                public JSONObject status() { return fresh(statusText); }
+                public JSONObject status() { Built b = built; return IntegrationStatus.aged(b.text, b.at, System.currentTimeMillis()); }
                 public JSONArray cameras() { return printer.integrationCameras(); }
                 public byte[] asset(String name) { return Integrations.this.asset(name); }
                 public String appVersion() { return version(); }
             }, auth, hub, port, vpn);
-            statusText = printer.integrationStatus(false).toString();
+            built = new Built(printer.integrationStatus(false).toString(), System.currentTimeMillis());
             try { s.start(); server = s; serverVpn = vpn; problem = ""; announce(port); Diagnostics.note(Diagnostics.INTEGRATIONS, "local API on, port " + port + (vpn ? ", home VPN allowed" : "")); }
             catch (IOException failed) { s.close(); problem = "Could not open port " + port + " (" + failed.getClass().getSimpleName() + "). Another app may use it: choose another port."; Diagnostics.note(Diagnostics.INTEGRATIONS, "local API could not start: " + failed.getClass().getSimpleName()); }
         }
         relay.configure(prefs.getBoolean(RELAY, false) ? loadSecret(context, RELAY_URL_KEY) : "", IntegrationRelay.secretBytes(loadSecret(context, RELAY_SECRET_KEY)),
             Math.max(15, prefs.getInt(RELAY_EVERY, 60)) * 1000L);
+        main.removeCallbacks(refresh);
+        if (server != null || relay.ready()) main.postDelayed(refresh, REFRESH_MS);
     }
     private void stopServer() {
         IntegrationServer s = server; server = null;
@@ -103,7 +113,7 @@ final class Integrations {
         boolean local = server != null, toRelay = relay.ready();
         if (!local && !toRelay) return;
         JSONObject status = printer.integrationStatus(false);
-        statusText = status.toString();
+        built = new Built(status.toString(), System.currentTimeMillis());
         if (local) server.statusChanged();
         if (toRelay) {
             SharedPreferences prefs = prefs(context); long now = System.currentTimeMillis();
@@ -143,7 +153,7 @@ final class Integrations {
     /** Whether an outside viewer has the hub holding the printer's camera now. */
     boolean holdsPrinterCamera() { return hub.pulling("printer"); }
 
-    void close() { stopServer(); hub.close(); relay.close(); }
+    void close() { main.removeCallbacks(refresh); stopServer(); hub.close(); relay.close(); }
 
     // ------------------------------------------------------------------ pairing on the phone
 
@@ -184,10 +194,6 @@ final class Integrations {
 
     // ------------------------------------------------------------------ helpers
 
-    private static JSONObject fresh(String text) {
-        try { JSONObject s = new JSONObject(text); s.put("updated_at", IntegrationStatus.iso(System.currentTimeMillis())); return s; }
-        catch (org.json.JSONException unreadable) { return new JSONObject(); }
-    }
     private byte[] asset(String name) {
         try (InputStream in = context.getAssets().open("integrations/" + name)) {
             java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(); byte[] b = new byte[8192]; int n;

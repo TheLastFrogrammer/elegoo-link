@@ -55,7 +55,7 @@ records `api=1` and `path=/api/v1`. On Android or Fire OS, use `NsdManager.disco
 
 ### Pairing
 
-1. `POST /api/v1/pair` with `{"name": "Living room TV"}` returns **202**:
+1. `POST /api/v1/pair` with `{"name": "Living room TV"}` (sent as `Content-Type: application/json`) returns **202**:
    `{"id": "…", "code": "4821", "poll": "/api/v1/pair/…", "expires_in": 300}`.
 2. Show the code on the device's screen. The phone shows a notification. In Other apps the person sees the same code
    and taps **Approve** or **Refuse**.
@@ -64,7 +64,12 @@ records `api=1` and `path=/api/v1`. On Android or Fire OS, use `NsdManager.disco
    the request has run out (5 minutes).
 
 At most 3 requests wait at once, and one address may ask every 2 s. The token never expires. Removing the device on
-the phone ends it, and a request with it then gets 401: pair again.
+the phone ends it: its open event and camera streams stop within 5 seconds, and a request with it then gets 401: pair
+again.
+
+Pairing answers only the phone's own page and apps, not other web pages: its answers carry no CORS header, and it takes
+only JSON. A page elsewhere that someone on your Wi-Fi opens therefore cannot ask to pair, nor read a token. A dashboard
+page served from somewhere else can use a device added by hand on the phone.
 
 ### Authentication
 
@@ -73,8 +78,8 @@ or a browser's `EventSource`. For those, `POST /api/v1/tickets` (with the bearer
 `{"ticket": "…", "expires_in": 60}`. Add `?ticket=…` to a `GET` for the next 60 seconds. A stream opened in that time
 keeps going after the ticket expires. A ticket cannot make another ticket.
 
-Every answer allows any origin (`Access-Control-Allow-Origin: *`; tokens are not cookies, so this cannot be used
-against you). Errors are JSON: `{"error": "words"}`, with 400, 401, 404, 405, 429 or 503.
+Every answer except pairing allows any origin (`Access-Control-Allow-Origin: *`; tokens are not cookies, so this cannot
+be used against you). Errors are JSON: `{"error": "words"}`, with 400, 401, 403, 404, 405, 415, 429 or 503.
 
 ### Endpoints
 
@@ -99,10 +104,12 @@ against you). Errors are JSON: `{"error": "words"}`, with 400, 401, 404, 405, 42
 - Added cameras appear as `added-<id>`. Their `rotation` (degrees clockwise) and `mirror` say how to turn the
   picture: frames are passed on exactly as the camera sent them.
 - The phone opens a camera only while someone watches, and closes it 5 s after the last viewer leaves.
+- When the app's own camera view opens, the phone hands it the printer's camera and passes its frames on. It waits up to
+  12 s for that view's first picture before opening a stream of its own again, so the camera never has two.
 - If a frame stays the same for 10 s (the camera is stuck), the stream repeats the last frame.
 
-**Limits:** 32 connections, 6 camera streams and 10 event streams at once. A client that stops reading for 20 s is
-cut off.
+**Limits:** 32 connections (12 from one address), 6 camera streams and 10 event streams at once. A request must
+arrive whole within 15 s. A client that stops reading for 20 s is cut off.
 
 ### The status: `linkworkshop.status/1`
 
@@ -122,7 +129,8 @@ cut off.
 ```
 
 - `connection.route` is `local network`, `home VPN`, `Elegoo cloud` or `not connected`. `fresh` is false when the
-  phone has no recent status. In that case `state.phase` is `offline` and the other blocks are left out.
+  phone has no recent status (none for a minute counts as none). In that case `state.phase` is `offline` and the other
+  blocks are left out. The phone checks again every 15 s, so the event stream says so too.
 - `state.phase` is one of `idle`, `preparing`, `printing`, `pausing`, `paused`, `resuming`, `stopping`, `stopped`,
   `complete`, `busy` (levelling, loading filament, other machine work) and `offline`.
   - `words` is the app's own wording.
@@ -174,7 +182,8 @@ camera as decoded bitmaps. Show the bitmaps in an `ImageView` and the status in 
 - MJPEG is not a format ExoPlayer/Media3 plays. Decode the JPEGs yourself, as `PrinterWatch` does, or show the stream in
   a `WebView` `<img>` with a ticket.
 - Reconnect calmly: the stream ends whenever the phone loses the printer or the app is closed. `PrinterWatch` retries
-  every 5 s.
+  every 5 s. After a refusal on the phone it stops asking until you start it again, and after an unanswered request it
+  waits a minute. The page at `/` waits longer after each failure, up to 30 s.
 
 **A script.** [`integrations/examples/watch.py`](integrations/examples/watch.py) pairs, prints each status change
 and event, and can save a picture. It uses only Python's standard library.
@@ -193,8 +202,8 @@ and event, and can save a picture. It uses only Python's standard library.
 5. Deploy with `npx wrangler deploy`. Enter the address it prints (`https://printer-relay.<you>.workers.dev`) in
    **Relay address…**, turn **Push to my relay** on, and tap **Send a test now**.
 
-`node test.mjs` in that folder checks the relay with a fake store (signatures, stale and unsigned pushes refused, reads
-needing the key).
+`node test.mjs` in that folder checks the relay with a fake store (signatures, stale, unsigned, older and oversized pushes
+refused, events kept once, reads needing the key).
 
 **Costs and limits.** Cloudflare's free plan allows 1,000 KV writes a day. With the status at most every minute and a
 picture every 5 minutes, an 8-hour print uses about 600. Choose "status at most every 5 min" for longer days, or use a
@@ -214,12 +223,15 @@ out" keeps the file name off the relay.
 
 Every push carries `X-LW-Timestamp` (Unix seconds) and `X-LW-Signature: v1=<hex>`, where the hex is
 HMAC-SHA256(secret, `timestamp + "\n" + "POST" + "\n" + path + "\n" + hex(SHA-256(body))`), keyed with the secret's
-UTF-8 text. A relay should refuse timestamps more than 5 minutes off and compare signatures in constant time.
+UTF-8 text. `path` is the request's path as sent (`/v1/status`, or `/relay/v1/status` for an address ending in
+`/relay`). A relay should refuse timestamps more than 5 minutes off and compare signatures in constant time. The ready
+relay also refuses a status older than the one it keeps (409), so a push sent again cannot turn it back, keeps an event
+it already has only once, and stops reading a body as soon as it passes the size limit.
 To write your own relay, both the app's tests and `test.mjs` check the vector `9baea680…a076`:
 secret `test-secret-0123456789abcdef`, timestamp `1700000000`, path `/v1/status`, body `{"a":1}`.
 
-If a push fails, the phone waits a minute before trying again. Events still go out at once. The phone pushes only
-while it follows the printer.
+If a push fails, the phone waits a minute, then sends the status again, changed or not. Events still go out at once.
+The phone pushes only while it follows the printer.
 
 ### Reading from the relay
 

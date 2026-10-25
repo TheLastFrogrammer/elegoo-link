@@ -83,7 +83,8 @@ final class Tuning {
                 String why = "Layer " + f.layer + " cooled much longer than the layers before it with the fan high";
                 double[] fanMax = numbers(config.get("fan_max_speed"));
                 if (fanMax.length > 0 && max(fanMax) > 60) {
-                    double[] to = new double[fanMax.length]; for (int i = 0; i < to.length; i++) to[i] = Math.max(40, Math.round(fanMax[i] * 0.7 / 5) * 5.0);
+                    // Each filament's fan lowered, never below 40 %, and never raised: one already at 30 % stays at 30 %.
+                    double[] to = new double[fanMax.length]; for (int i = 0; i < to.length; i++) to[i] = Math.min(fanMax[i], Math.max(40, Math.round(fanMax[i] * 0.7 / 5) * 5.0));
                     put(out, new Change("fan_max_speed", config.get("fan_max_speed"), join(to, 0), why));
                     double[] fanMin = numbers(config.get("fan_min_speed"));
                     if (fanMin.length == to.length) {
@@ -97,7 +98,8 @@ final class Tuning {
                 String why = "The nozzle could not hold its temperature while printing";
                 double[] flow = numbers(config.get("filament_max_volumetric_speed"));
                 if (flow.length > 0) {
-                    double[] to = new double[flow.length]; for (int i = 0; i < to.length; i++) to[i] = Math.max(1, Math.round(flow[i] * 0.8 * 2) / 2.0);
+                    // Lowered, never raised; a filament with no limit set (0) is left as it is rather than given 1 mm³/s.
+                    double[] to = new double[flow.length]; for (int i = 0; i < to.length; i++) to[i] = flow[i] <= 0 ? flow[i] : Math.min(flow[i], Math.max(1, Math.round(flow[i] * 0.8 * 2) / 2.0));
                     put(out, new Change("filament_max_volumetric_speed", config.get("filament_max_volumetric_speed"), join(to, 1), why));
                 }
                 warmer(out, config, why);

@@ -102,10 +102,17 @@ public final class PrinterWatch {
                 try {
                     String token = prefs.getString("token", null);
                     if (token == null) { token = pair(); prefs.edit().putString("token", token).apply(); }
-                    if (cameraThread == null || !cameraThread.isAlive()) { String t = token; cameraThread = new Thread(() -> camera(t), "printer-camera"); cameraThread.start(); }
+                    if (cameraThread == null || !cameraThread.isAlive()) { cameraThread = new Thread(this::camera, "printer-camera"); cameraThread.start(); }
                     events(token);
                 } catch (Unpaired e) {
                     prefs.edit().remove("token").apply();
+                } catch (Refused e) {
+                    // The person said no on the phone: do not ask again by ourselves (start() again, from a button, asks).
+                    post(() -> listener.problem("Refused on the phone."));
+                    stopped = true;
+                } catch (NotInTime e) {
+                    post(() -> listener.problem("Not approved in time. Asking again in a minute."));
+                    sleep(60_000);
                 } catch (Exception e) {
                     post(() -> listener.problem("Lost the phone (" + e.getClass().getSimpleName() + "). Trying again…"));
                     sleep(5000);
@@ -116,16 +123,18 @@ public final class PrinterWatch {
     }
 
     private String pair() throws Exception {
-        JSONObject asked = new JSONObject(read(request("POST", "/api/v1/pair", null, "{\"name\":\"" + android.os.Build.MODEL.replace("\"", "") + "\"}")));
+        JSONObject asked = new JSONObject(read(request("POST", "/api/v1/pair", null, new JSONObject().put("name", android.os.Build.MODEL).toString())));
+        if (!asked.has("poll")) throw new IOException(asked.optString("error", "the phone did not take the request"));   // e.g. too many waiting
         post(() -> listener.pairingCode(asked.optString("code")));
         long until = System.currentTimeMillis() + asked.optLong("expires_in", 300) * 1000;
         while (!stopped && System.currentTimeMillis() < until) {
             JSONObject state = new JSONObject(read(request("GET", asked.getString("poll"), null, null)));
             if ("approved".equals(state.optString("state"))) return state.getString("token");
-            if ("denied".equals(state.optString("state"))) throw new IOException("refused on the phone");
+            if ("denied".equals(state.optString("state"))) throw new Refused();
+            if (!state.has("state")) break;   // 404: the request ran out on the phone
             sleep(2000);
         }
-        throw new IOException("not approved in time");
+        throw new NotInTime();
     }
 
     /** Server-Sent Events: "status" whenever it changes, "event" for print events, a comment every 15 s. */
@@ -148,10 +157,13 @@ public final class PrinterWatch {
     }
 
     /** The camera as MJPEG: one JPEG after another; each is decoded and handed over (a TV shows them in an ImageView). */
-    private void camera(String token) {
+    private void camera() {
         while (!stopped) {
             HttpURLConnection c = null;
             try {
+                // The token as kept now: after pairing again, the camera uses the new one.
+                String token = prefs.getString("token", null);
+                if (token == null) { sleep(2000); continue; }
                 c = request("GET", "/api/v1/cameras/printer/stream.mjpeg?fps=5", token, null);
                 c.setReadTimeout(30_000);
                 if (c.getResponseCode() != 200) { post(() -> listener.problem("The camera is not available now.")); sleep(10_000); continue; }
@@ -191,6 +203,8 @@ public final class PrinterWatch {
         } finally { c.disconnect(); }
     }
     private static final class Unpaired extends IOException { }
+    private static final class Refused extends IOException { }
+    private static final class NotInTime extends IOException { }
     private void post(Runnable r) { if (!stopped) main.post(r); }
     private static void sleep(long ms) { try { Thread.sleep(ms); } catch (InterruptedException e) { Thread.currentThread().interrupt(); } }
 }

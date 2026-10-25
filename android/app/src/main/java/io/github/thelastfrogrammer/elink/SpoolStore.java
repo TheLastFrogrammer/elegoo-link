@@ -34,15 +34,22 @@ final class SpoolStore {
         /** "dried 3 days ago", "opened 12 days ago, not marked dried", or "drying not noted". */
         String dryWords(long now) { return dryWords(dried, opened, now, "ago"); }
         /** The same counted up to a moment: `suffix` "ago" for now, "before this print" for a print's start. */
-        static String dryWords(long dried, long opened, long at, String suffix) {
-            if (dried > 0 && dried >= opened) return "dried " + since(dried, at, suffix);
-            if (opened > 0) return "opened " + since(opened, at, suffix) + ", not marked dried";
+        static String dryWords(long dried, long opened, long at, String suffix) { return dryWords(dried, opened, at, suffix, TimeZone.getDefault()); }
+        static String dryWords(long dried, long opened, long at, String suffix, TimeZone zone) {
+            if (dried > 0 && dried >= opened) return "dried " + since(dried, at, suffix, zone);
+            if (opened > 0) return "opened " + since(opened, at, suffix, zone) + ", not marked dried";
             return "drying not noted";
         }
-        /** Whole days from `from` to `at`, or -1 when neither date is known: the time since it was dried, or opened. */
-        static long daysDry(long dried, long opened, long at) { long from = Math.max(dried, opened); return from <= 0 ? -1 : Math.max(0, (at - from) / 86_400_000L); }
-        private static String since(long from, long at, String suffix) {
-            long days = Math.max(0, (at - from) / 86_400_000L);
+        /** Calendar days from `from` to `at` (as dryWords counts them), or -1 when neither date is known: since it was dried, or opened. */
+        static long daysDry(long dried, long opened, long at) { return daysDry(dried, opened, at, TimeZone.getDefault()); }
+        static long daysDry(long dried, long opened, long at, TimeZone zone) { long from = Math.max(dried, opened); return from <= 0 ? -1 : Math.max(0, calendarDays(from, at, zone)); }
+        /**
+         * Days between the two dates on the calendar where the phone is, not whole 24-hour spans: dried late yesterday
+         * is "1 day ago" this morning, not "today" (the dried-on calendar keeps noon of the chosen day).
+         */
+        static long calendarDays(long from, long at, TimeZone zone) { return Math.floorDiv(at + zone.getOffset(at), 86_400_000L) - Math.floorDiv(from + zone.getOffset(from), 86_400_000L); }
+        private static String since(long from, long at, String suffix, TimeZone zone) {
+            long days = Math.max(0, calendarDays(from, at, zone));
             return days == 0 ? ("ago".equals(suffix) ? "today" : "the same day") : days + (days == 1 ? " day " : " days ") + suffix;
         }
         boolean matches(TrayPlan.Tray tray) { return type.equalsIgnoreCase(tray.type) && Objects.equals(colour, tray.colour); }

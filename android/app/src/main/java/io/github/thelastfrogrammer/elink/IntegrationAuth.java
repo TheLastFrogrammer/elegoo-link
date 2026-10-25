@@ -66,6 +66,8 @@ final class IntegrationAuth {
         return token;
     }
     synchronized void revoke(String id) { devices.removeIf(d -> d.id.equals(id)); tickets.values().removeIf(t -> t.deviceId.equals(id)); save(); }
+    /** Whether a device is still paired: the streams of one removed on the phone are cut (IntegrationServer). */
+    synchronized boolean known(String id) { for (Device d : devices) if (d.id.equals(id)) return true; return false; }
 
     /** The device a token belongs to, or null. */
     synchronized Device check(String token, long now) {
