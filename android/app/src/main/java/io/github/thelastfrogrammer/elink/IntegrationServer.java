@@ -114,7 +114,7 @@ final class IntegrationServer implements AutoCloseable {
             try { socket = server.accept(); }
             catch (IOException failed) { if (closed) return; try { Thread.sleep(200); } catch (InterruptedException stop) { return; } continue; }   // never a busy loop
             String from = socket.getInetAddress() == null ? "" : socket.getInetAddress().getHostAddress();
-            if (!allowed(socket.getInetAddress(), allowVpn) || connections.get() >= MAX_CONNECTIONS || !take(from)) { close(socket); continue; }
+            if (!allowed(socket.getInetAddress(), allowVpn) || !homeInterface(socket.getLocalAddress(), allowVpn) || connections.get() >= MAX_CONNECTIONS || !take(from)) { close(socket); continue; }
             connections.incrementAndGet();
             try { pool.execute(() -> { try { handle(socket); } finally { connections.decrementAndGet(); give(from); } }); }
             catch (RuntimeException full) { connections.decrementAndGet(); give(from); close(socket); }
@@ -129,6 +129,24 @@ final class IntegrationServer implements AutoCloseable {
     }
 
     /** Only the home network: loopback, private and link-local addresses (and the home VPN's 100.64.0.0/10, when allowed). */
+    /**
+     * Whether a connection arrived on the home network's own link: Wi-Fi, Ethernet, the phone's hotspot or loopback (and a
+     * VPN's, when allowed). Mobile data is refused even when the carrier hands out private addresses (10/8, 100.64/10),
+     * as are other links nobody chose; an interface that cannot be named is refused too.
+     */
+    static boolean homeInterface(InetAddress local, boolean allowVpn) {
+        try {
+            java.net.NetworkInterface link = local == null ? null : java.net.NetworkInterface.getByInetAddress(local);
+            return link != null && homeLink(link.getName(), link.isLoopback(), allowVpn);
+        } catch (java.net.SocketException unknown) { return false; }
+    }
+    /** By the interface's name, as Android and Linux name them (wlan0, eth0, ap0, swlan0; tun0, wg0, tailscale0). */
+    static boolean homeLink(String name, boolean loopback, boolean allowVpn) {
+        if (loopback) return true;
+        String n = name == null ? "" : name.toLowerCase(Locale.ROOT);
+        if (n.startsWith("wlan") || n.startsWith("swlan") || n.startsWith("eth") || n.startsWith("ap") || n.startsWith("en") || n.startsWith("wl")) return true;
+        return allowVpn && (n.startsWith("tun") || n.startsWith("wg") || n.startsWith("tailscale") || n.startsWith("ppp"));
+    }
     static boolean allowed(InetAddress a, boolean allowVpn) {
         if (a == null) return false;
         if (a.isLoopbackAddress() || a.isSiteLocalAddress() || a.isLinkLocalAddress()) return true;

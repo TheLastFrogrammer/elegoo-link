@@ -32,7 +32,8 @@ Both are off until turned on in **Settings › Automations & integrations › Ot
   SHA-256 hash of each token, and you can remove a device at any time.
 - **Home network only.** The local API refuses every address outside loopback, private (10/8, 172.16/12,
   192.168/16), link-local and IPv6 unique-local (fc00::/7) ranges. The home VPN's 100.64.0.0/10 is refused too,
-  unless you allow it.
+  unless you allow it. It also answers only connections that arrive on Wi-Fi, Ethernet or the phone's own hotspot
+  (and a VPN's link, when allowed), never mobile data, because carriers hand out private addresses too.
 - **Only while the phone follows the printer.** The app's printer service runs the local API and the relay pushes.
   When the app is not connected (locally or through the cloud), the status says so (`"phase": "offline"`).
 - **Stable formats.** `linkworkshop.status/1` and `linkworkshop.event/1` only grow: fields may be added, and none

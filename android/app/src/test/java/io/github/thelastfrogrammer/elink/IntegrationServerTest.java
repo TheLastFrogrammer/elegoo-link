@@ -101,6 +101,12 @@ public class IntegrationServerTest {
         assertFalse(IntegrationServer.allowed(InetAddress.getByName("2001:4860::8888"), false));
         assertFalse(IntegrationServer.allowed(InetAddress.getByName("100.101.102.103"), false));
         assertTrue("the home VPN, when allowed", IntegrationServer.allowed(InetAddress.getByName("100.101.102.103"), true));
+        // The link it arrived on: Wi-Fi, Ethernet, hotspot; never mobile data, even with a private carrier address.
+        assertTrue(IntegrationServer.homeLink("wlan0", false, false)); assertTrue(IntegrationServer.homeLink("eth0", false, false)); assertTrue(IntegrationServer.homeLink("swlan0", false, false));
+        assertTrue(IntegrationServer.homeLink("lo", true, false));
+        assertFalse(IntegrationServer.homeLink("rmnet_data0", false, false)); assertFalse(IntegrationServer.homeLink("ccmni0", false, false)); assertFalse(IntegrationServer.homeLink("v4-rmnet0", false, false));
+        assertFalse(IntegrationServer.homeLink("tun0", false, false)); assertTrue("a VPN only when allowed", IntegrationServer.homeLink("tun0", false, true));
+        assertFalse(IntegrationServer.homeLink(null, false, true));
         assertEquals(5, IntegrationServer.fps(null)); assertEquals(10, IntegrationServer.fps("99")); assertEquals(1, IntegrationServer.fps("0"));
     }
 
