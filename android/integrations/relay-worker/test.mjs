@@ -37,4 +37,27 @@ assert.equal(events[0].type, "print_finished");
 const picture = new Uint8Array(await (await worker.fetch(new Request(base + "/v1/snapshot.jpg?key=reader-key"), env)).arrayBuffer());
 assert.deepEqual([...picture], [...jpeg]);
 assert.equal((await worker.fetch(new Request(base + "/v1/status"), { ...env, PUBLIC_READ: "true" })).status, 200, "public when chosen");
+
+// A push sent again later (replayed), or out of order, cannot put back an older status; an event already kept is kept once.
+const now = Math.floor(Date.now() / 1000);
+assert.equal((await signed("/v1/status", '{"state":{"phase":"complete"}}', "application/json", now)).status, 200);
+assert.equal((await signed("/v1/status", '{"state":{"phase":"printing"}}', "application/json", now - 60)).status, 409, "older than the status kept");
+assert.equal((await (await worker.fetch(new Request(base + "/v1/status?key=reader-key"), env)).json()).state.phase, "complete");
+assert.equal((await signed("/v1/status", '{"state":{"phase":"idle"}}', "application/json", now)).status, 200, "the same second is fine");
+const finished = '{"type":"print_finished","at":"2026-10-25T02:47:10Z"}';
+assert.equal((await signed("/v1/event", finished, "application/json")).status, 200);
+assert.equal((await (await signed("/v1/event", finished, "application/json")).json()).duplicate, true);
+assert.equal((await (await worker.fetch(new Request(base + "/v1/events?key=reader-key"), env)).json()).filter((e) => e.at === "2026-10-25T02:47:10Z").length, 1);
+
+// A signed body that is not a JSON object is refused, not a crash.
+assert.equal((await signed("/v1/status", "not json", "application/json")).status, 400);
+assert.equal((await signed("/v1/event", "[1,2]", "application/json")).status, 400);
+
+// A body without a length is read only up to the limit: an endless one is cut off, never held whole.
+let pulled = 0;
+const endless = new ReadableStream({ pull(c) { pulled++; if (pulled > 640) c.close(); else c.enqueue(new Uint8Array(65536)); } });
+const big = await worker.fetch(new Request(base + "/v1/snapshot", { method: "POST", body: endless, duplex: "half",
+  headers: { "X-LW-Timestamp": String(now), "X-LW-Signature": "v1=00" } }), env);
+assert.equal(big.status, 413);
+assert.ok(pulled < 100, "stopped reading at the limit (read " + pulled + " pieces of 64 KiB)");
 console.log("relay worker: all checks passed");

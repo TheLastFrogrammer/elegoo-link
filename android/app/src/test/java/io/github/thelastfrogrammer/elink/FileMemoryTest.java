@@ -74,6 +74,27 @@ public class FileMemoryTest {
         assertEquals("dried today", SpoolStore.Spool.dryWords(now, 0, now + 3600_000, "ago"));
     }
 
+    /** Drying ages count calendar days where the phone is, as the person reads them, the same for words and the 30-day check. */
+    @Test public void dryingAgesAreCalendarDays() {
+        java.util.TimeZone berlin = java.util.TimeZone.getTimeZone("Europe/Berlin"), la = java.util.TimeZone.getTimeZone("America/Los_Angeles");
+        // Dried on 24 October as the calendar keeps it (noon, Berlin); read at 10:00 on the 25th: 22 hours, but yesterday.
+        long dried = java.time.ZonedDateTime.of(2026, 10, 24, 12, 0, 0, 0, berlin.toZoneId()).toInstant().toEpochMilli();
+        long morning = java.time.ZonedDateTime.of(2026, 10, 25, 10, 0, 0, 0, berlin.toZoneId()).toInstant().toEpochMilli();
+        assertEquals("dried 1 day ago", SpoolStore.Spool.dryWords(dried, 0, morning, "ago", berlin));
+        assertEquals("dried today", SpoolStore.Spool.dryWords(morning - 3600_000, 0, morning, "ago", berlin));
+        // Late on one day and early the next, across the clock change (25 October in Europe).
+        long late = java.time.ZonedDateTime.of(2026, 10, 24, 23, 30, 0, 0, berlin.toZoneId()).toInstant().toEpochMilli();
+        long early = morning - 3 * 3600_000L;   // 07:00 on the 25th in Berlin
+        assertEquals(1, SpoolStore.Spool.daysDry(late, 0, early, berlin));
+        // The same two moments fall on one day in Los Angeles (14:30 and 23:00 on the 24th).
+        assertEquals(0, SpoolStore.Spool.daysDry(late, 0, early, la));
+        // 30 calendar days before a print counts as 30, even when it is a few hours short of 30 whole days.
+        long start = java.time.ZonedDateTime.of(2026, 10, 25, 8, 0, 0, 0, berlin.toZoneId()).toInstant().toEpochMilli();
+        long monthAgo = java.time.ZonedDateTime.of(2026, 9, 25, 12, 0, 0, 0, berlin.toZoneId()).toInstant().toEpochMilli();
+        assertEquals(30, SpoolStore.Spool.daysDry(monthAgo, 0, start, berlin));
+        assertEquals("dried 30 days before this print", SpoolStore.Spool.dryWords(monthAgo, 0, start, "before this print", berlin));
+    }
+
     @Test public void spoolsNotedOnARecordingAreKept() throws Exception {
         dir = Files.createTempDirectory("file-memory-meta").toFile();
         PrintRecorder.Recording r = print("mount.gcode", 1000, "complete", "", 0);

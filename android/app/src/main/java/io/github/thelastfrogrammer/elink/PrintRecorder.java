@@ -146,8 +146,11 @@ public final class PrintRecorder {
     static void saveSpools(File meta, org.json.JSONArray spools) throws Exception { rewrite(meta, r -> r.spools = spools, "could not note the spools"); }
     private static void rewrite(File meta, java.util.function.Consumer<Recording> change, String failure) throws Exception {
         PrintRecorder recorder = active;
-        if (recorder != null) synchronized (recorder) {
-            if (recorder.current != null && recorder.current.meta.equals(meta)) { change.accept(recorder.current); recorder.save(recorder.current); return; }
+        if (recorder != null) {
+            synchronized (recorder) { if (recorder.current != null && recorder.current.meta.equals(meta)) { change.accept(recorder.current); recorder.save(recorder.current); return; } }
+            // A print that just ended still has its last write queued: it lands first, so it is neither read half-written
+            // here nor written over this change afterwards (the spools are noted the moment a print ends).
+            recorder.flush();
         }
         synchronized (PrintRecorder.class) {
             Recording recording = Recording.read(meta); change.accept(recording);

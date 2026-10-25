@@ -57,6 +57,17 @@ public class TuningTest {
         assertNotNull(Tuning.noSetting(RecordingAnalysis.Finding.BED_DROP)); assertNull(Tuning.noSetting(RecordingAnalysis.Finding.COOLING));
     }
 
+    /** Per filament: lowering one filament's fan or flow never raises another's (a 30 % fan stays 30 %, no limit stays none). */
+    @Test public void aSuggestionNeverRaisesAnotherFilament() {
+        Map<String, String> c = new java.util.HashMap<>();
+        c.put("fan_max_speed", "100,30"); c.put("fan_min_speed", "100,20"); c.put("filament_max_volumetric_speed", "21,0");
+        List<Tuning.Change> cool = Tuning.suggest(Collections.singletonList(cooling(10)), c);
+        assertEquals("70,30", cool.get(0).to);
+        assertEquals("70,20", cool.get(1).to);
+        List<Tuning.Change> drop = Tuning.suggest(Collections.singletonList(new RecordingAnalysis.Finding(RecordingAnalysis.Finding.NOZZLE_DROP, 0, "drop")), c);
+        assertEquals("17,0", drop.get(0).to);
+    }
+
     @Test public void typedValuesAreChecked() {
         assertNull(Tuning.check("fan_max_speed", "70")); assertNull(Tuning.check("nozzle_temperature", "215,220"));
         assertNotNull(Tuning.check("fan_max_speed", "120")); assertNotNull(Tuning.check("fan_max_speed", "7a"));

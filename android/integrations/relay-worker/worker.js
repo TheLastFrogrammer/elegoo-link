@@ -3,8 +3,10 @@
 //
 // Writes come only from the phone: each push is signed with LW_SECRET (HMAC-SHA256 over
 // "timestamp\nPOST\npath\nhex sha256(body)", sent as X-LW-Timestamp and X-LW-Signature: v1=<hex>), and pushes more than
-// five minutes off the relay's clock are refused. Reads need READ_KEY (Authorization: Bearer <key>, or ?key=<key>),
-// unless PUBLIC_READ is "true". Nothing here can reach the printer: the relay only keeps what the phone sends.
+// five minutes off the relay's clock are refused. Within those five minutes a status older than the one kept is refused
+// and an event already kept is not kept twice, so a push sent again (replayed) cannot turn the clock back. Reads need
+// READ_KEY (Authorization: Bearer <key>, or ?key=<key>), unless PUBLIC_READ is "true". Nothing here can reach the
+// printer: the relay only keeps what the phone sends.
 //
 // Bindings (wrangler.toml): a KV namespace bound as LW; secrets LW_SECRET and READ_KEY (wrangler secret put ...);
 // an optional plain variable PUBLIC_READ.
@@ -40,18 +42,27 @@ async function push(request, env, path) {
   if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > MAX_SKEW_S) return json({ error: "Missing or stale timestamp" }, 401);
   const length = parseInt(request.headers.get("Content-Length") || "0", 10);
   if (length > LIMITS[path]) return json({ error: "Too large" }, 413);
-  const body = new Uint8Array(await request.arrayBuffer());
-  if (body.length > LIMITS[path]) return json({ error: "Too large" }, 413);
+  // Read only up to the limit: anyone can send a body (the signature is checked over it), so a large or endless one is
+  // cut off instead of being held in memory whole.
+  const body = await readLimited(request, LIMITS[path]);
+  if (body === null) return json({ error: "Too large" }, 413);
   const expected = await sign(env.LW_SECRET, ts, "POST", path, body);
   if (!same(expected, signature)) return json({ error: "Bad signature" }, 401);
   const at = new Date(ts * 1000).toISOString();
   if (path === "/v1/status") {
-    const status = JSON.parse(new TextDecoder().decode(body));
+    const status = object(new TextDecoder().decode(body));
+    if (!status) return json({ error: "Send the status as a JSON object" }, 400);
+    const kept = object((await env.LW.get("status")) || "");
+    if (kept && typeof kept.relay_received_at === "string" && kept.relay_received_at > at) return json({ error: "Older than the status kept (is the phone's clock right?)" }, 409);
     status.relay_received_at = at;
     await env.LW.put("status", JSON.stringify(status));
   } else if (path === "/v1/event") {
-    const event = JSON.parse(new TextDecoder().decode(body));
-    const events = JSON.parse((await env.LW.get("events")) || "[]");
+    const event = object(new TextDecoder().decode(body));
+    if (!event) return json({ error: "Send the event as a JSON object" }, 400);
+    let events = []; try { events = JSON.parse((await env.LW.get("events")) || "[]"); } catch (unreadable) { }
+    if (!Array.isArray(events)) events = [];
+    const text = JSON.stringify(event);
+    if (events.some((e) => JSON.stringify(e) === text)) return json({ ok: true, at, duplicate: true });
     events.unshift(event);
     await env.LW.put("events", JSON.stringify(events.slice(0, KEEP_EVENTS)));
   } else {
@@ -65,6 +76,25 @@ export async function sign(secret, ts, method, path, body) {
   const digest = hex(await crypto.subtle.digest("SHA-256", body));
   const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret.trim()), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
   return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${ts}\n${method}\n${path}\n${digest}`)));
+}
+/** The request's body, or null as soon as it passes `limit` bytes (the rest is never read). */
+async function readLimited(request, limit) {
+  if (!request.body) return new Uint8Array(0);
+  const reader = request.body.getReader(), parts = []; let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.length;
+    if (size > limit) { await reader.cancel().catch(() => {}); return null; }
+    parts.push(value);
+  }
+  const out = new Uint8Array(size); let at = 0;
+  for (const part of parts) { out.set(part, at); at += part.length; }
+  return out;
+}
+/** A JSON object from text, or null when it is not one. */
+function object(text) {
+  try { const v = JSON.parse(text); return v && typeof v === "object" && !Array.isArray(v) ? v : null; } catch (notJson) { return null; }
 }
 function hex(buffer) { return [...new Uint8Array(buffer)].map((b) => b.toString(16).padStart(2, "0")).join(""); }
 function same(a, b) { if (a.length !== b.length) return false; let d = 0; for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i); return d === 0; }

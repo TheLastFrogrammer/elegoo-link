@@ -38,9 +38,9 @@
     <div id="waiting" hidden>
       <p>On the phone, open Link Workshop › Settings › Other apps and approve this screen. The phone shows the same code:</p>
       <div class="code" id="code"></div>
-      <p class="muted" id="pairNote"></p>
+      <p class="muted" id="pairNote" aria-live="polite"></p>
     </div>
-    <p class="error" id="pairError"></p>
+    <p class="error" id="pairError" role="alert"></p>
   </div>
 </main>
 <main id="watch" hidden>
@@ -54,7 +54,7 @@
       <div class="muted" id="times"></div>
     </div>
     <div class="card grid" id="numbers"></div>
-    <div class="card muted" id="connection"></div>
+    <div class="card muted" id="connection" aria-live="polite"></div>
   </div>
 </main>
 <script>
@@ -62,6 +62,12 @@
 const TOKEN = "linkWorkshopToken";
 let token = null; try { token = localStorage.getItem(TOKEN); } catch (e) { }
 const $ = (id) => document.getElementById(id);
+// Each start of watching has its own number: the timers and streams of an earlier one stop by themselves, so retries
+// never pile up on the phone. Waits double up to 30 s (60 s for the camera) and start again once things work.
+let run = 0, events = null, picture = null, camera = "printer", wait = 3000, videoWait = 5000;
+const longer = (ms, most) => Math.min(most, ms * 2);
+const num = (x) => typeof x === "number" && isFinite(x);
+function note(words) { const p = document.createElement("p"); p.textContent = words; return p; }
 
 async function api(path, options = {}) {
   const headers = Object.assign({}, options.headers || {}, token ? { Authorization: "Bearer " + token } : {});
@@ -69,70 +75,103 @@ async function api(path, options = {}) {
   if (response.status === 401 && token) { forget(); throw new Error("not paired"); }
   return response;
 }
-function forget() { token = null; try { localStorage.removeItem(TOKEN); } catch (e) { } showPairing(); }
+function stopStreams() {
+  if (events) { events.close(); events = null; }
+  if (picture) { picture.onload = picture.onerror = null; picture.removeAttribute("src"); picture = null; }   // ends its stream
+}
+function forget() { token = null; run++; stopStreams(); try { localStorage.removeItem(TOKEN); } catch (e) { } showPairing(); }
 
-function showPairing() { $("watch").hidden = true; $("pairing").hidden = false; $("pair").focus(); }
+function showPairing() { $("watch").hidden = true; $("pairing").hidden = false; $("pair").hidden = false; $("pair").disabled = false; $("pair").focus(); }
+function pairFailed(words) { $("pairError").textContent = words; $("waiting").hidden = true; showPairing(); }
 $("pair").addEventListener("click", async () => {
-  $("pairError").textContent = "";
+  $("pairError").textContent = ""; $("pair").disabled = true;
   try {
     const r = await fetch("/api/v1/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "TV browser" }) });
-    const p = await r.json();
-    if (!r.ok) { $("pairError").textContent = p.error || "Could not ask the phone."; return; }
-    $("code").textContent = p.code; $("waiting").hidden = false; $("pair").hidden = true;
-    const until = Date.now() + p.expires_in * 1000;
+    const p = await r.json().catch(() => ({}));
+    if (!r.ok || typeof p.poll !== "string") { pairFailed(typeof p.error === "string" ? p.error : "Could not ask the phone."); return; }
+    $("code").textContent = String(p.code); $("waiting").hidden = false; $("pair").hidden = true;
+    const until = Date.now() + (num(p.expires_in) ? p.expires_in : 300) * 1000;
     const poll = async () => {
-      if (Date.now() > until) { $("pairError").textContent = "Not approved in time. Try again."; $("waiting").hidden = true; $("pair").hidden = false; return; }
+      if (Date.now() > until) { pairFailed("Not approved in time. Try again."); return; }
       $("pairNote").textContent = "Waiting for the phone… " + Math.round((until - Date.now()) / 1000) + " s left";
-      const s = await (await fetch(p.poll)).json().catch(() => ({}));
-      if (s.state === "approved") { token = s.token; try { localStorage.setItem(TOKEN, token); } catch (e) { } watch(); return; }
-      if (s.state === "denied" || s.error) { $("pairError").textContent = "The phone said no."; $("waiting").hidden = true; $("pair").hidden = false; return; }
+      let r2, s;
+      try { r2 = await fetch(p.poll); s = await r2.json(); } catch (e) { setTimeout(poll, 4000); return; }   // the phone out of reach a moment
+      if (s.state === "approved" && typeof s.token === "string") { token = s.token; try { localStorage.setItem(TOKEN, token); } catch (e) { } $("waiting").hidden = true; watch(); return; }
+      if (s.state === "denied") { pairFailed("Refused on the phone."); return; }
+      if (r2.status === 404) { pairFailed("The request ran out. Try again."); return; }
       setTimeout(poll, 2000);
     };
     poll();
-  } catch (e) { $("pairError").textContent = "Could not reach the phone."; }
+  } catch (e) { pairFailed("Could not reach the phone."); }
 });
 
-let events = null, camera = "printer";
 async function ticket() { const r = await api("/api/v1/tickets", { method: "POST" }); if (!r.ok) throw new Error("no ticket"); return (await r.json()).ticket; }
+/** Starts (or starts again) watching: the camera list, the camera and the event stream, as one run. */
 async function watch() {
-  $("pairing").hidden = true; $("watch").hidden = false;
+  if (!token) { showPairing(); return; }
+  const mine = ++run; stopStreams();
+  $("pairing").hidden = true; $("watch").hidden = false; $("video").replaceChildren(note("Opening the camera…"));
   try {
-    const cams = (await (await api("/api/v1/cameras")).json()).cameras || [];
-    if (cams.length) camera = cams[0].id;
-    await openVideo(); await openEvents();
-  } catch (e) { if (token) setTimeout(watch, 5000); }
+    const r = await api("/api/v1/cameras");
+    const cams = r.ok ? ((await r.json()).cameras || []) : [];
+    if (mine !== run) return;
+    if (cams.length && typeof cams[0].id === "string") camera = cams[0].id;
+    openVideo(mine); openEvents(mine);
+  } catch (e) { again(mine); }
 }
-async function openVideo() {
-  const t = await ticket();
-  const img = new Image(); img.alt = "The printer's camera";
-  img.onload = () => { $("video").replaceChildren(img); };
-  img.onerror = () => { $("video").innerHTML = '<p>The camera is not available right now. Trying again…</p>'; setTimeout(openVideo, 10000); };
+/** The phone could not be reached: everything starts again after a wait that grows. */
+function again(mine) {
+  if (mine !== run || !token) return;
+  $("connection").textContent = "Can't reach the phone. Trying again…";
+  setTimeout(() => { if (mine === run) watch(); }, wait); wait = longer(wait, 30000);
+}
+async function openVideo(mine) {
+  let t; try { t = await ticket(); } catch (e) { if (mine === run && token) { setTimeout(() => { if (mine === run) openVideo(mine); }, videoWait); videoWait = longer(videoWait, 60000); } return; }
+  if (mine !== run) return;
+  const img = new Image(); img.alt = "The printer's camera"; picture = img;
+  img.onload = () => { if (mine !== run) return; videoWait = 5000; if (img.parentNode !== $("video")) $("video").replaceChildren(img); };
+  img.onerror = () => {
+    if (mine !== run || picture !== img) return;
+    img.removeAttribute("src"); picture = null;
+    $("video").replaceChildren(note("The camera is not available right now. Trying again…"));
+    setTimeout(() => { if (mine === run) openVideo(mine); }, videoWait); videoWait = longer(videoWait, 60000);
+  };
   img.src = "/api/v1/cameras/" + encodeURIComponent(camera) + "/stream.mjpeg?fps=5&ticket=" + encodeURIComponent(t);
 }
-async function openEvents() {
-  if (events) events.close();
-  events = new EventSource("/api/v1/events?ticket=" + encodeURIComponent(await ticket()));
-  events.addEventListener("status", (e) => show(JSON.parse(e.data)));
-  events.onerror = () => { events.close(); events = null; setTimeout(() => openEvents().catch(() => setTimeout(watch, 5000)), 3000); };
+async function openEvents(mine) {
+  let t; try { t = await ticket(); } catch (e) { again(mine); return; }
+  if (mine !== run) return;
+  const source = new EventSource("/api/v1/events?ticket=" + encodeURIComponent(t)); events = source;
+  source.addEventListener("status", (e) => { if (mine !== run) return; wait = 3000; try { show(JSON.parse(e.data)); } catch (bad) { } });
+  // Lost (the phone closed the app or lost the printer): the camera may have stopped too, so both start again.
+  source.onerror = () => { source.close(); if (events === source) events = null; again(mine); };
 }
 function clock(seconds) { const h = Math.floor(seconds / 3600), m = Math.round(seconds % 3600 / 60); return h ? h + " h " + m + " min" : m + " min"; }
+/** Shows a status. Everything from the phone is set as text, never as markup. */
 function show(s) {
-  const p = s.print || {}, t = s.temperatures || {}, f = s.fans || {};
-  $("state").textContent = s.state ? s.state.words : "…";
-  $("file").textContent = p.file || "";
-  const progress = typeof p.progress === "number" ? p.progress : null;
+  const obj = (x) => x && typeof x === "object" ? x : {};
+  const p = obj(s.print), t = obj(s.temperatures), f = obj(s.fans), state = obj(s.state), c = obj(s.connection);
+  $("state").textContent = typeof state.words === "string" ? state.words : "…";
+  $("file").textContent = typeof p.file === "string" ? p.file : "";
+  const progress = num(p.progress) ? Math.max(0, Math.min(100, p.progress)) : null;
   $("progressBar").style.width = (progress || 0) + "%";
   $("progress").textContent = progress === null ? "" : progress + " %";
   const parts = [];
-  if (p.layer !== undefined && p.total_layers) parts.push("Layer " + p.layer + " of " + p.total_layers);
-  if (p.remaining_s !== undefined) parts.push(clock(p.remaining_s) + " left");
-  if (p.done_at) parts.push("done about " + new Date(p.done_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+  if (num(p.layer) && num(p.total_layers) && p.total_layers > 0) parts.push("Layer " + p.layer + " of " + p.total_layers);
+  if (num(p.remaining_s)) parts.push(clock(p.remaining_s) + " left");
+  const done = typeof p.done_at === "string" ? new Date(p.done_at) : null;
+  if (done && !isNaN(done)) parts.push("done about " + done.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
   $("times").textContent = parts.join(" · ");
-  const cell = (label, value) => value === undefined ? "" : '<div><span class="muted">' + label + "</span><b>" + value + "</b></div>";
-  const temp = (x) => x ? Math.round(x.now) + (x.target ? " / " + Math.round(x.target) : "") + " °C" : undefined;
-  $("numbers").innerHTML = cell("Nozzle", temp(t.nozzle)) + cell("Bed", temp(t.bed)) + cell("Chamber", temp(t.chamber)) + cell("Part fan", f.part === undefined ? undefined : f.part + " %");
-  const c = s.connection || {};
-  $("connection").textContent = (c.fresh ? "Live" : "No fresh status") + " · " + (c.route || "") + (s.state && s.state.faults && s.state.faults.length ? " · faults " + s.state.faults.join(", ") : "");
+  const numbers = $("numbers"); numbers.replaceChildren();
+  const cell = (label, value) => {
+    if (value === undefined) return;
+    const d = document.createElement("div"), l = document.createElement("span"), b = document.createElement("b");
+    l.className = "muted"; l.textContent = label; b.textContent = value; d.append(l, b); numbers.append(d);
+  };
+  const temp = (x) => x && num(x.now) ? Math.round(x.now) + (num(x.target) && x.target > 0 ? " / " + Math.round(x.target) : "") + " °C" : undefined;
+  cell("Nozzle", temp(t.nozzle)); cell("Bed", temp(t.bed)); cell("Chamber", temp(t.chamber)); cell("Part fan", num(f.part) ? Math.round(f.part) + " %" : undefined);
+  const faults = Array.isArray(state.faults) ? state.faults.filter((x) => typeof x === "string" || num(x)) : [];
+  $("connection").textContent = (c.fresh === true ? "Live" : "No fresh status") + (typeof c.route === "string" ? " · " + c.route : "") + (faults.length ? " · faults " + faults.join(", ") : "");
 }
 if (token) watch(); else showPairing();
 </script>

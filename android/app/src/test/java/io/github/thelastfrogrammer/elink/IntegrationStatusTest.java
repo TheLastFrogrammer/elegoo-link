@@ -47,6 +47,31 @@ public class IntegrationStatusTest {
     }
     private static IntegrationStatus.Context hidden() { IntegrationStatus.Context c = context(true); c.hideFile = true; return c; }
 
+    /** A status kept between rebuilds: its ages move on with the clock, and it goes offline once nothing has come for a minute. */
+    @Test public void aKeptStatusAgesAndGoesStale() throws Exception {
+        String built = IntegrationStatus.build(printing(), context(true), 10_000_000).toString();   // the status arrived just now
+        JSONObject soon = IntegrationStatus.aged(built, 10_000_000, 10_030_000);
+        assertEquals(30, soon.getJSONObject("connection").getLong("age_s"));
+        assertEquals(1830, soon.getJSONObject("print").getLong("elapsed_s"));
+        assertEquals(IntegrationStatus.iso(10_030_000), soon.getString("updated_at"));
+        assertTrue(soon.getJSONObject("connection").getBoolean("fresh")); assertEquals("printing", soon.getJSONObject("state").getString("phase"));
+        JSONObject stale = IntegrationStatus.aged(built, 10_000_000, 10_000_000 + IntegrationStatus.STALE_MS + 1_000);
+        assertFalse("nothing for a minute: not fresh", stale.getJSONObject("connection").getBoolean("fresh"));
+        assertEquals("offline", stale.getJSONObject("state").getString("phase"));
+        assertFalse(stale.has("print")); assertFalse(stale.has("temperatures"));
+    }
+
+    /** A reading the printer sends as null is left out, never shown as 0. */
+    @Test public void readingsNotReportedAreLeftOut() throws Exception {
+        JSONObject status = printing();
+        status.put("extruder", new JSONObject().put("temperature", JSONObject.NULL).put("target", 215)).put("heater_bed", new JSONObject().put("temperature", 60).put("target", JSONObject.NULL))
+            .put("fans", new JSONObject().put("fan", new JSONObject().put("speed", JSONObject.NULL)));
+        JSONObject s = IntegrationStatus.build(status, context(true), 10_000_000);
+        assertFalse(s.getJSONObject("temperatures").has("nozzle"));
+        assertFalse(s.getJSONObject("temperatures").getJSONObject("bed").has("target"));
+        assertFalse(s.has("fans"));
+    }
+
     @Test public void phasesAndNoStatus() throws Exception {
         assertEquals("paused", IntegrationStatus.phase(2, 2502)); assertEquals("complete", IntegrationStatus.phase(2, 2077)); assertEquals("idle", IntegrationStatus.phase(1, 0));
         assertEquals("preparing", IntegrationStatus.phase(2, 1045)); assertEquals("busy", IntegrationStatus.phase(5, 0));

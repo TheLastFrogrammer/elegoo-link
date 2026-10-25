@@ -103,7 +103,17 @@ public final class IntegrationsActivity extends PlainScreen {
             label(ask, "Approve only if the device shows the same code:", 13, muted, false);
             label(ask, p.code, 32, accent, true).setContentDescription("Code " + String.join(" ", p.code.split("")));
             LinearLayout choice = row(ask);
-            button(choice, "Approve", () -> { in.auth.approve(p.id, System.currentTimeMillis()); Diagnostics.note(Diagnostics.INTEGRATIONS, "a device was approved"); cancelNotification(); render(true); });
+            button(choice, "Approve", () -> {
+                // Approving can fail (the request ran out, or the phone has as many devices as it keeps): say so, never "approved".
+                boolean full = in.auth.devices().size() >= IntegrationAuth.MAX_DEVICES;
+                if (in.auth.approve(p.id, System.currentTimeMillis())) Diagnostics.note(Diagnostics.INTEGRATIONS, "a device was approved");
+                else {
+                    Diagnostics.note(Diagnostics.INTEGRATIONS, "a device could not be approved (" + (full ? "device limit" : "request ran out") + ")");
+                    Toast.makeText(this, full ? "There are already " + IntegrationAuth.MAX_DEVICES + " paired devices: remove one, then ask again from the device."
+                        : "That request ran out. Ask again from the device.", Toast.LENGTH_LONG).show();
+                }
+                cancelNotification(); render(true);
+            });
             button(choice, "Refuse", () -> { in.auth.deny(p.id); cancelNotification(); render(true); });
         }
         // Paired devices.
@@ -120,7 +130,7 @@ public final class IntegrationsActivity extends PlainScreen {
         LinearLayout actions = row(card);
         button(actions, "Add a device by hand…", () -> addByHand(in));
         button(actions, "Port " + prefs.getInt(Integrations.PORT, IntegrationServer.DEFAULT_PORT) + "…", () -> port(in));
-        CheckBox vpn = new CheckBox(this); vpn.setText("Also answer through the home VPN (100.64.x.x addresses)"); vpn.setTextColor(ink); vpn.setChecked(prefs.getBoolean(Integrations.VPN, false));
+        CheckBox vpn = new CheckBox(this); vpn.setText("Also answer through the home VPN (100.64.x.x addresses)"); vpn.setTextColor(ink); vpn.setChecked(prefs.getBoolean(Integrations.VPN, false)); vpn.setMinHeight(dp(48));
         vpn.setOnCheckedChangeListener((v, checked) -> { prefs.edit().putBoolean(Integrations.VPN, checked).apply(); in.apply(); render(true); });
         card.addView(vpn);
     }
@@ -174,8 +184,9 @@ public final class IntegrationsActivity extends PlainScreen {
         check(card, "Leave the file name out", Integrations.RELAY_HIDE_FILE);
         check(card, "Send the timelapse when a print ends (up to 24 MB)", Integrations.RELAY_TIMELAPSE);
         button(card, "Send a test now", () -> {
-            if (!in.relay.ready()) { Toast.makeText(this, "Turn the relay on with an address and secret first.", Toast.LENGTH_LONG).show(); return; }
-            in.relay.test(printer.integrationStatus(prefs.getBoolean(Integrations.RELAY_HIDE_FILE, false))); Toast.makeText(this, "Sending…", Toast.LENGTH_SHORT).show();
+            PrinterService service = printer;
+            if (!in.relay.ready() || service == null) { Toast.makeText(this, "Turn the relay on with an address and secret first.", Toast.LENGTH_LONG).show(); return; }
+            in.relay.test(service.integrationStatus(prefs.getBoolean(Integrations.RELAY_HIDE_FILE, false))); Toast.makeText(this, "Sending…", Toast.LENGTH_SHORT).show();
         });
         label(card, in.relay.lastResult, 13, muted, false);
     }

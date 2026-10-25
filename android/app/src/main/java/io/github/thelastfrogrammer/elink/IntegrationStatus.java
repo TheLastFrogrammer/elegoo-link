@@ -19,6 +19,8 @@ final class IntegrationStatus {
     /** A machine-readable phase, so a client need not know the printer's numbers. */
     static final String IDLE = "idle", PREPARING = "preparing", PRINTING = "printing", PAUSING = "pausing", PAUSED = "paused", RESUMING = "resuming",
         STOPPING = "stopping", STOPPED = "stopped", COMPLETE = "complete", BUSY = "busy", OFFLINE = "offline";
+    /** A status no newer than this counts as not fresh any more (the cloud's own limit; a local status comes every 15 s). */
+    static final long STALE_MS = 60_000;
 
     /** What the service knows beyond the printer's own status. */
     static final class Context {
@@ -70,7 +72,7 @@ final class IntegrationStatus {
             temperature(temps, "nozzle", status.optJSONObject("extruder"));
             temperature(temps, "bed", status.optJSONObject("heater_bed"));
             JSONObject chamber = status.optJSONObject("ztemperature_sensor");
-            if (chamber != null && chamber.has("temperature")) temps.put("chamber", new JSONObject().put("now", round(chamber.optDouble("temperature"))));
+            if (chamber != null && finite(chamber.optDouble("temperature"))) temps.put("chamber", new JSONObject().put("now", round(chamber.optDouble("temperature"))));
             if (temps.length() > 0) out.put("temperatures", temps);
             JSONObject fans = new JSONObject(), reported = status.optJSONObject("fans");
             fan(fans, "part", reported, "fan"); fan(fans, "aux", reported, "aux_fan"); fan(fans, "chamber", reported, "box_fan");
@@ -109,21 +111,45 @@ final class IntegrationStatus {
         } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
     }
 
+    /**
+     * A status built earlier (`builtAt`), as it stands now: its times moved on, and offline, as build makes it, once no
+     * status has come for STALE_MS (the phone stopped hearing from the printer without anything saying so). Pure.
+     */
+    static JSONObject aged(String built, long builtAt, long nowMs) {
+        try {
+            JSONObject s = new JSONObject(built == null || built.isEmpty() ? "{}" : built);
+            s.put("updated_at", iso(nowMs));
+            long moved = builtAt > 0 ? Math.max(0, nowMs - builtAt) / 1000 : 0;
+            JSONObject c = s.optJSONObject("connection"), p = s.optJSONObject("print");
+            if (c != null && c.has("age_s")) c.put("age_s", c.optLong("age_s") + moved);
+            if (p != null && p.has("elapsed_s")) p.put("elapsed_s", p.optLong("elapsed_s") + moved);
+            long age = c != null && c.has("age_s") ? c.optLong("age_s") : moved;
+            if (c != null && c.optBoolean("fresh") && age * 1000 > STALE_MS) {
+                c.put("fresh", false);
+                s.put("state", new JSONObject().put("phase", OFFLINE).put("words", "No status").put("printing", false));
+                s.remove("print"); s.remove("temperatures"); s.remove("fans"); s.remove("light");
+            }
+            return s;
+        } catch (JSONException unreadable) { return new JSONObject(); }
+    }
+
     static String iso(long ms) {
         SimpleDateFormat f = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.ROOT); f.setTimeZone(TimeZone.getTimeZone("UTC"));
         return f.format(new Date(ms));
     }
     private static double round(double v) { return Math.round(v * 10) / 10.0; }
     private static void temperature(JSONObject out, String key, JSONObject value) throws JSONException {
-        if (value == null || !value.has("temperature")) return;
+        // A reading the printer sent as null or text is left out, never shown as 0.
+        if (value == null || !finite(value.optDouble("temperature"))) return;
         JSONObject t = new JSONObject().put("now", round(value.optDouble("temperature")));
-        if (value.has("target")) t.put("target", round(value.optDouble("target")));
+        if (finite(value.optDouble("target"))) t.put("target", round(value.optDouble("target")));
         out.put(key, t);
     }
     private static void fan(JSONObject out, String key, JSONObject fans, String name) throws JSONException {
         JSONObject fan = fans == null ? null : fans.optJSONObject(name);
-        if (fan != null && fan.has("speed")) out.put(key, Math.round(fan.optDouble("speed") * 100 / 255));
+        if (fan != null && finite(fan.optDouble("speed"))) out.put(key, Math.round(fan.optDouble("speed") * 100 / 255));
     }
+    private static boolean finite(double v) { return !Double.isNaN(v) && !Double.isInfinite(v); }
 
     private IntegrationStatus() { }
 }

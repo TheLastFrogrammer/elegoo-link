@@ -34,6 +34,8 @@ final class IntegrationRelay {
     private final ExecutorService worker = Executors.newSingleThreadExecutor(r -> { Thread t = new Thread(r, "integration-relay"); t.setDaemon(true); return t; });
     private String url = ""; private byte[] secret = new byte[0]; private long statusEveryMs = 60_000;
     private String lastStatusKey = ""; private long lastStatusAt, quietUntil;
+    /** How long to wait after a failed push (shorter in tests). */
+    volatile long backoffMs = BACKOFF_MS;
     /** What happened last, in words (no address), for the settings screen. */
     volatile String lastResult = "Nothing sent yet.";
 
@@ -86,26 +88,32 @@ final class IntegrationRelay {
     private void send(String path, String type, byte[] body) {
         String base; byte[] key;
         synchronized (this) { base = url; key = secret.clone(); }
-        if (base.isEmpty()) return;
+        // Checked here too, not only by the callers: nothing goes anywhere but a plain https address, with a real secret.
+        if (base.isEmpty() || !problem(base).isEmpty() || key.length < 16) return;
         HttpURLConnection c = null;
         try {
             long ts = System.currentTimeMillis() / 1000;
-            c = opener.open(new URL(base + path));
+            URL to = new URL(base + path);
+            // Signed over the path as sent (with the address's own path in front, if it has one), which is what a relay checks.
+            String signed = to.getPath();
+            c = opener.open(to);
             c.setInstanceFollowRedirects(false); c.setConnectTimeout(10_000); c.setReadTimeout(20_000); c.setDoOutput(true); c.setRequestMethod("POST");
             c.setRequestProperty("Content-Type", type); c.setRequestProperty("User-Agent", "LinkWorkshop");
-            c.setRequestProperty("X-LW-Timestamp", String.valueOf(ts)); c.setRequestProperty("X-LW-Signature", "v1=" + sign(key, ts, "POST", path, body));
+            c.setRequestProperty("X-LW-Timestamp", String.valueOf(ts)); c.setRequestProperty("X-LW-Signature", "v1=" + sign(key, ts, "POST", signed, body));
             c.setFixedLengthStreamingMode(body.length);
             try (OutputStream out = c.getOutputStream()) { out.write(body); }
             int code = c.getResponseCode();
             drain(c);
             String what = path.substring(path.lastIndexOf('/') + 1);
             if (code / 100 == 2) lastResult = "Sent the " + what + " at " + new java.text.SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(new java.util.Date()) + ".";
-            else { lastResult = "The relay answered " + code + (code == 401 ? ": the secret on the relay and here differ, or the phone's clock is off" : "") + "."; quiet(); }
+            else { lastResult = "The relay answered " + code + (code == 401 ? ": the secret on the relay and here differ, or the phone's clock is off"
+                : code == 409 ? ": it already holds a newer status. Is the phone's clock right?" : "") + "."; quiet(); }
         } catch (IOException | RuntimeException failed) {
             lastResult = "Could not reach the relay (" + failed.getClass().getSimpleName() + ")."; quiet();
         } finally { if (c != null) c.disconnect(); }
     }
-    private synchronized void quiet() { quietUntil = System.currentTimeMillis() + BACKOFF_MS; }
+    /** A push failed: wait before the next, and then send the status even if it has not changed (the relay may not have it). */
+    private synchronized void quiet() { quietUntil = System.currentTimeMillis() + backoffMs; lastStatusKey = ""; lastStatusAt = 0; }
     private static void drain(HttpURLConnection c) {
         try (InputStream in = c.getResponseCode() / 100 == 2 ? c.getInputStream() : c.getErrorStream()) { if (in != null) { byte[] b = new byte[4096]; int total = 0, n; while (total < 65536 && (n = in.read(b)) > 0) total += n; } }
         catch (IOException ignored) { }

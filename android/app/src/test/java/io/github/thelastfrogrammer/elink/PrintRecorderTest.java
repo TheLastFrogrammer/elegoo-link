@@ -74,6 +74,32 @@ public class PrintRecorderTest {
         assertNotNull(recorder.lastFinished());
     }
 
+    /**
+     * The spools are noted the moment a print ends, while the recorder's own last write of the file may still be queued:
+     * neither may lose the other (the outcome, or the spools).
+     */
+    @Test public void spoolsNotedAsAPrintEndsSurviveItsLastWrite() throws Exception {
+        PrintRecorder recorder = new PrintRecorder(dir); recorder.writeInBackground();
+        PrintRecorder.active = recorder;
+        try {
+            recorder.update(1_000, status(2075, "a.gcode", 1, 1), "local", "CC2");
+            File meta = recorder.current().meta;
+            recorder.lastFinished();   // waits for the writes so far
+            // Hold the writer, as a slow disk would, and end the print: its last write waits in the queue.
+            java.lang.reflect.Field field = PrintRecorder.class.getDeclaredField("writer"); field.setAccessible(true);
+            java.util.concurrent.CountDownLatch go = new java.util.concurrent.CountDownLatch(1);
+            ((java.util.concurrent.ExecutorService) field.get(recorder)).execute(() -> { try { go.await(); } catch (InterruptedException e) { } });
+            recorder.update(20_000, status(2077, "a.gcode", 100, 100), "local", "CC2");
+            Thread noting = new Thread(() -> { try { PrintRecorder.saveSpools(meta, new org.json.JSONArray().put(new JSONObject().put("slot", "0:0").put("material", "PLA"))); } catch (Exception e) { throw new IllegalStateException(e); } });
+            noting.start();
+            Thread.sleep(300); go.countDown(); noting.join(5000);
+            recorder.lastFinished();
+            PrintRecorder.Recording back = PrintRecorder.Recording.read(meta);
+            assertEquals("the outcome is kept", "complete", back.outcome);
+            assertEquals("the spools are kept", 1, back.spools.length());
+        } finally { PrintRecorder.active = null; }
+    }
+
     /** The end of a print is told once (for its video), but not a print only interrupted by another one starting. */
     @Test public void theEndOfAPrintIsToldButNotAnInterruption() throws Exception {
         PrintRecorder recorder = new PrintRecorder(dir);
