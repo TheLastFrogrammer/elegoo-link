@@ -151,6 +151,8 @@ public class MoreScreensRenderTest {
     private static void recordingsList(String theme) throws Exception {
         setTheme(theme.equals("dark"));
         seedRecordings();
+        // A file printed twice: its cards lead to every print of it.
+        simulate(new PrintRecorder(RecordingsActivity.directory(org.robolectric.RuntimeEnvironment.getApplication())), "2026-10-09T09:00:00Z", "Benchy_PLA_0.2mm.gcode", 150, 2077, 0);
         RecordingsActivity list = Robolectric.buildActivity(RecordingsActivity.class).setup().get();
         show(list, "recordings-list-" + theme + ".png", 2340);
     }
@@ -172,8 +174,22 @@ public class MoreScreensRenderTest {
         }
         android.content.Intent intent = new android.content.Intent(org.robolectric.RuntimeEnvironment.getApplication(), RecordingsActivity.class)
             .putExtra(RecordingsActivity.EXTRA_META, night.meta.getAbsolutePath());
+        // As it first opens (the heavy parts closed), then with every part open.
         RecordingsActivity detail = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
-        shot(detail.getWindow().getDecorView(), 1080, 4400, new File(out(), "recording-night-" + theme + ".png"));
+        waitForWorker();
+        whole(detail, new File(out(), "recording-night-" + theme + ".png"));
+        android.content.SharedPreferences prefs = org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("workshop-settings", 0);
+        for (String part : new String[] {"glance", "happened", "pictures", "charts", "layers", "tools"}) prefs.edit().putBoolean(PageSection.KEY + "recording." + part, true).commit();
+        RecordingsActivity open = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
+        waitForWorker(); waitForWorker();
+        whole(open, new File(out(), "recording-night-open-" + theme + ".png"));
+    }
+    /** The whole page, however long (up to 12000 px), at the phone's width. */
+    private static void whole(Activity activity, File file) throws Exception {
+        View page = ((android.view.ViewGroup) activity.findViewById(android.R.id.content)).getChildAt(0);
+        View inside = ((android.view.ViewGroup) page).getChildAt(0);
+        inside.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY), View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        shot(activity.getWindow().getDecorView(), 1080, Math.min(12000, inside.getMeasuredHeight() + 200), file);
     }
     /** The storage page and the maintenance reminders, over the seeded recordings. */
     @Test public void renderStorageAndMaintenance() throws Exception {
@@ -221,8 +237,10 @@ public class MoreScreensRenderTest {
         shot(detail.getWindow().getDecorView(), 1080, 2600, new File(out(), "tuning-light.png"));
     }
     /** Every print of one file: what worked, each print's spool, drying and what changed. */
-    @Test public void renderFileMemory() throws Exception {
-        setTheme(false);
+    @Test public void renderFileMemoryLight() throws Exception { fileMemory("light"); }
+    @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderFileMemoryDark() throws Exception { fileMemory("dark"); }
+    private static void fileMemory(String theme) throws Exception {
+        setTheme(theme.equals("dark"));
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         PrintRecorder recorder = new PrintRecorder(RecordingsActivity.directory(context));
         simulate(recorder, "2026-10-10T18:00:00Z", "Desk_mount_PLA.gcode", 30, 2077, 0);
@@ -245,7 +263,7 @@ public class MoreScreensRenderTest {
         for (int i = 0; i < 300 && ((android.view.ViewGroup) ((android.widget.ScrollView) ((android.view.ViewGroup) page.findViewById(android.R.id.content)).getChildAt(0)).getChildAt(0)).getChildCount() < 4; i++) {
             Thread.sleep(20); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         }
-        shot(page.getWindow().getDecorView(), 1080, 2800, new File(out(), "file-memory-light.png"));
+        whole(page, new File(out(), "file-memory-" + theme + ".png"));
     }
     /** Settings › Other apps: the local API running, a device asking to pair, one paired, and the relay set up. */
     @Test public void renderIntegrations() throws Exception {

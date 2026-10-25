@@ -28,6 +28,10 @@ public final class RecordingsActivity extends Activity {
     /** Validated categorical slots 1-3 (blue, orange, aqua), stepped per mode; see the dataviz reference palette. */
     private int blue, orange, aqua;
     private LinearLayout content;
+    /** Where card() and label() add: the page itself, or the body of the part being built. */
+    private LinearLayout target;
+    /** The shown print's parts, top to bottom. */
+    private final List<PageSection> sections = new ArrayList<>();
     private PrintRecorder.Recording shown;
     /** The shown print's warm-up phases {from s, to s, name}, shaded on its time charts. */
     private List<Object[]> warmUp = new ArrayList<>();
@@ -44,7 +48,7 @@ public final class RecordingsActivity extends Activity {
         surface = dark ? 0xff182227 : Color.WHITE; grid = dark ? 0xff2a3a40 : 0xffe1e6e6;
         blue = dark ? 0xff3987e5 : 0xff2a78d6; orange = dark ? 0xffd95926 : 0xffeb6834; aqua = dark ? 0xff199e70 : 0xff149a69;
         ScrollView scroll = new ScrollView(this); scroll.setBackgroundColor(background); scroll.setFitsSystemWindows(true);
-        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
+        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content); target = content;
         setContentView(scroll);
         String meta = getIntent().getStringExtra(EXTRA_META);
         if (meta == null) showList(); else showRecording(new File(meta));
@@ -58,10 +62,10 @@ public final class RecordingsActivity extends Activity {
         script.then(700, () -> Showcase.caption(this, "Every print the app watches is recorded"))
             .until(8000, () -> Showcase.find(content, "Filament used by") != null || Showcase.find(content, "The print's file") != null || charts().size() >= 6)
             .then(2600, () -> { View pictures = Showcase.find(content, "Camera pictures"); if (pictures != null) { Showcase.glideTo(scroll, pictures, 1800); Showcase.caption(this, "Camera pictures through the print, made into a timelapse on the phone"); } })
-            .then(4600, () -> { View chart = chart(2); if (chart != null) { Showcase.glideTo(scroll, chart, 2000); Showcase.caption(this, "Temperatures, fans, progress and layers over time"); } })
+            .then(4600, () -> { View chart = chart("Temperatures"); if (chart != null) { Showcase.glideTo(scroll, chart, 2000); Showcase.caption(this, "Temperatures, fans, progress and layers over time"); } })
             .then(4800, () -> { View trays = Showcase.find(content, "Filament over time"); if (trays != null) { Showcase.glideTo(scroll, trays, 1800); Showcase.caption(this, "Which filament was loaded, and when"); } })
-            .then(4400, () -> { View rate = chart(4); if (rate != null) { Showcase.glideTo(scroll, rate, 1800); Showcase.caption(this, "How fast each filament was laid down"); } })
-            .then(4600, () -> { View used = chart(5); if (used != null) { Showcase.glideTo(scroll, used, 1800); Showcase.caption(this, "How much of each filament was used"); } })
+            .then(4400, () -> { View rate = chart("Laying down"); if (rate != null) { Showcase.glideTo(scroll, rate, 1800); Showcase.caption(this, "How fast each filament was laid down"); } })
+            .then(4600, () -> { View used = chart("Used so far"); if (used != null) { Showcase.glideTo(scroll, used, 1800); Showcase.caption(this, "How much of each filament was used"); } })
             .then(5000, () -> Showcase.caption(this, null))
             .then(500, () -> { Showcase.stage = Showcase.END; finish(); overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out); });
         script.run(null);
@@ -71,8 +75,11 @@ public final class RecordingsActivity extends Activity {
         if (view instanceof ChartView && view.getVisibility() == View.VISIBLE) out.add(view);
         else if (view instanceof ViewGroup) for (int i = 0; i < ((ViewGroup) view).getChildCount(); i++) collectCharts(((ViewGroup) view).getChildAt(i), out);
     }
-    /** The nth graph on the page (progress, layer, temperatures, fans, laying down, used so far), or null. */
-    private View chart(int n) { List<View> all = charts(); return n < all.size() ? all.get(n) : null; }
+    /** The graph on the page with this title (its spoken description starts with it), or null. */
+    private View chart(String title) {
+        for (View chart : charts()) if (chart.getContentDescription() != null && chart.getContentDescription().toString().startsWith(title + " chart")) return chart;
+        return null;
+    }
     @Override protected void onDestroy() { if (showcaseScript != null) showcaseScript.cancel(); super.onDestroy(); }
 
     static File directory(android.content.Context context) { return new File(context.getFilesDir(), "recordings"); }
@@ -214,7 +221,7 @@ public final class RecordingsActivity extends Activity {
         for (JSONObject g : editing.guardian)
             label(card, "Print guardian, " + new java.text.SimpleDateFormat("HH:mm", Locale.getDefault()).format(new java.util.Date(g.optLong("at"))) + ": "
                 + (g.optBoolean("fine") ? "you said it looked fine" : "you said it was a real problem") + (g.optString("said").isEmpty() ? "" : " (" + StatusPresentation.clean(g.optString("said")) + ")"), 12, muted, false);
-        if (getIntent().getBooleanExtra(EXTRA_JOURNAL, false)) outer.post(() -> { android.view.View scroll = (android.view.View) content.getParent(); if (scroll instanceof ScrollView) ((ScrollView) scroll).smoothScrollTo(0, outer.getTop() - dp(12)); });
+        if (getIntent().getBooleanExtra(EXTRA_JOURNAL, false)) outer.post(() -> { android.view.View scroll = (android.view.View) content.getParent(); if (scroll instanceof ScrollView) ((ScrollView) scroll).smoothScrollTo(0, topIn(outer) - dp(12)); });
     }
     /** The folded journal's line: "★★★★☆ · Success · 2 problems · notes", or a prompt when nothing is noted. */
     static String journalSummary(PrintJournal j) {
@@ -241,7 +248,7 @@ public final class RecordingsActivity extends Activity {
     // ---- Screens ----
 
     private void showList() {
-        content.removeAllViews();
+        content.removeAllViews(); target = content; sections.clear();
         heading("Print recordings");
         List<PrintRecorder.Recording> recordings = new PrintRecorder(directory(this)).list();
         if (recordings.isEmpty()) {
@@ -268,12 +275,15 @@ public final class RecordingsActivity extends Activity {
         search.setTextColor(ink); search.setHintTextColor(muted); search.setText(listQuery); WorkshopUi.searchField(search, surface, muted);
         LinearLayout.LayoutParams searchAt = new LinearLayout.LayoutParams(-1, -2); searchAt.topMargin = dp(8); content.addView(search, searchAt);
         LinearLayout results = new LinearLayout(this); results.setOrientation(LinearLayout.VERTICAL); content.addView(results);
+        // How many prints each file has: a card whose file was printed more than once leads to that file's page.
+        Map<String, Integer> perFile = printsPerFile(recordings);
         Runnable fill = () -> {
             results.removeAllViews(); int shownCount = 0;
             for (PrintRecorder.Recording recording : recordings) {
                 if (!PrintJournal.matches(recording.file, recording.journal, listQuery)) continue;
                 shownCount++;
-                WorkshopUi.addToGrid(results, recordingCard(recording), dp(12));
+                String base = GcodeLibrary.baseName(recording.file);
+                WorkshopUi.addToGrid(results, recordingCard(recording, base == null ? 0 : perFile.getOrDefault(base, 0)), dp(12));
             }
             if (shownCount == 0) label(results, "No recording matches “" + listQuery.trim() + "”.", 14, muted, false);
         };
@@ -286,8 +296,17 @@ public final class RecordingsActivity extends Activity {
     private String listQuery = "";
     /** Pictures for the list's cards, decoded off the main thread. */
     private static final java.util.concurrent.ExecutorService PICTURES = java.util.concurrent.Executors.newSingleThreadExecutor();
-    /** A recording as a card: its last camera picture on top (or its result, without pictures), the name, when and how long, and the journal. */
-    private View recordingCard(PrintRecorder.Recording recording) {
+    /** How many recordings each file (by its name, as the file's page groups them) has. Pure. */
+    static Map<String, Integer> printsPerFile(List<PrintRecorder.Recording> recordings) {
+        Map<String, Integer> out = new HashMap<>();
+        for (PrintRecorder.Recording r : recordings) { String base = GcodeLibrary.baseName(r.file); if (base != null) out.merge(base, 1, Integer::sum); }
+        return out;
+    }
+    /**
+     * A recording as a card: its last camera picture on top (or its result, without pictures), the name, when and how long,
+     * and the journal; when its file has `prints` recordings in all (two or more), a link along the bottom to every print of it.
+     */
+    private View recordingCard(PrintRecorder.Recording recording, int prints) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20));
         card.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
@@ -314,11 +333,26 @@ public final class RecordingsActivity extends Activity {
         card.setClickable(true); card.setFocusable(true);
         card.setContentDescription(name.getText() + ". " + rowSummary(recording, Locale.getDefault(), TimeZone.getDefault()) + (recording.journal.rated() ? ". " + journal : ""));
         card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(EXTRA_META, recording.meta.getAbsolutePath())));
+        if (prints > 1) {
+            // Kept at the card's foot (cards in a row share a height), below a hairline, as its own button.
+            card.addView(new View(this), new LinearLayout.LayoutParams(-1, 0, 1));
+            View hairline = new View(this); hairline.setBackgroundColor(dark ? 0xff2c3b41 : 0xffe1e6e6); card.addView(hairline, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1))));
+            TextView file = new TextView(this); file.setText("All " + prints + " prints of this file"); file.setTextSize(13); file.setTextColor(dark ? 0xff5fd4c4 : 0xff00796b); file.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+            file.setMinHeight(dp(48)); file.setGravity(android.view.Gravity.CENTER_VERTICAL); file.setPadding(dp(14), dp(6), dp(14), dp(6));
+            file.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), null, new android.graphics.drawable.ColorDrawable(Color.WHITE)));
+            file.setContentDescription("All " + prints + " prints of " + name.getText()); A11y.button(file);
+            file.setOnClickListener(v -> startActivity(new Intent(this, FileMemoryActivity.class).putExtra(FileMemoryActivity.EXTRA_FILE, recording.file)));
+            card.addView(file, new LinearLayout.LayoutParams(-1, -2));
+        }
         return card;
     }
 
+    /**
+     * One print, told from the top in parts that open and close (PageSection): at a glance, what happened, pictures and
+     * video, charts, layers and G-code, then the tools. The heavy parts are built only when opened; the tour opens them all.
+     */
     private void showRecording(File meta) {
-        content.removeAllViews();
+        content.removeAllViews(); target = content; sections.clear();
         PrintRecorder.Recording recording; List<double[]> rows;
         try { recording = PrintRecorder.Recording.read(meta); rows = PrintRecorder.samples(recording); }
         catch (Exception error) { heading("Recording"); label("This recording could not be opened. It may have been deleted or damaged. Go back and choose another one.", 15, ink, false); return; }
@@ -333,45 +367,187 @@ public final class RecordingsActivity extends Activity {
         String details = when(recording.start, Locale.getDefault(), TimeZone.getDefault()) + (Showcase.running() ? "" : " · " + StatusPresentation.clean(recording.printer));
         if (recording.layers > 0) details += " · " + recording.layers + " layers";
         label(details, 13, muted, false);
-        // Summary tiles: how long, how it ended, and when it ended on the clock.
-        long ended = recording.end > 0 ? recording.end : recording.lastSample;
-        LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL); content.addView(tiles);
-        tile(tiles, "Duration", duration(recording.duration()), 0);
-        tile(tiles, "Result", outcome(recording.outcome), dp(8));
-        tile(tiles, "Ended", ended > 0 ? when(ended, Locale.getDefault(), TimeZone.getDefault()) : "—", dp(8));
-        journalCard(recording);
-        // Filament fed (from the extruder position) and how the printer's estimate at 10 % compared with the real time.
-        List<String> extra = new ArrayList<>();
-        if (recording.extrudedMm > 1) extra.add(String.format(Locale.getDefault(), "Filament fed: %.2f m (≈ %.0f g of PLA-like filament)", recording.extrudedMm / 1000, PrintRecorder.grams(recording.extrudedMm, "PLA")));
+        // Filament fed (from the extruder position), how the printer's estimate at 10 % compared with the real time, and the cost.
+        List<String> facts = new ArrayList<>();
+        if (recording.extrudedMm > 1) facts.add(String.format(Locale.getDefault(), "Filament fed: %.2f m (≈ %.0f g of PLA-like filament)", recording.extrudedMm / 1000, PrintRecorder.grams(recording.extrudedMm, "PLA")));
         double q = PrintRecorder.ratio(recording);
-        if (!Double.isNaN(q)) extra.add(String.format(Locale.getDefault(), "The printer estimated %s at 10 %%; it took %s (%+.0f %%).", duration(recording.estimate * 1000), duration(Math.round(recording.estimate * q) * 1000), (q - 1) * 100));
-        String last = lastReading(rows);
-        if (!last.isEmpty()) extra.add(last + ".");
-        String runout = runouts(rows, t0(rows));
-        if (!runout.isEmpty()) extra.add(runout);
+        if (!Double.isNaN(q)) facts.add(String.format(Locale.getDefault(), "The printer estimated %s at 10 %%; it took %s (%+.0f %%).", duration(recording.estimate * 1000), duration(Math.round(recording.estimate * q) * 1000), (q - 1) * 100));
         android.content.SharedPreferences prices = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         String cost = RecordingAnalysis.cost(PrintRecorder.grams(recording.extrudedMm, "PLA"), price(prices, "filamentPricePerKg"), recording.duration() / 3_600_000.0, price(prices, "printerWatts"), price(prices, "electricityPerKwh"));
-        if (!cost.isEmpty()) extra.add(cost + ".");
-        String coverage = coverage(rows, recording);
-        if (!coverage.isEmpty()) extra.add(coverage);
-        if (!extra.isEmpty()) { TextView notes = label(String.join("\n", extra), 13, muted, false); notes.setPadding(0, dp(10), 0, dp(3)); }
-        summaryLines = new ArrayList<>(extra);
+        if (!cost.isEmpty()) facts.add(cost + ".");
+        String last = lastReading(rows), runout = runouts(rows, t0(rows)), coverage = coverage(rows, recording);
+        // The report keeps every line, in the order it always had.
+        summaryLines = new ArrayList<>(facts.subList(0, facts.size() - (cost.isEmpty() ? 0 : 1)));
+        if (!last.isEmpty()) summaryLines.add(last + ".");
+        if (!runout.isEmpty()) summaryLines.add(runout);
+        if (!cost.isEmpty()) summaryLines.add(cost + ".");
+        if (!coverage.isEmpty()) summaryLines.add(coverage);
         double[] t = column(rows, "elapsed_s");
         warmUp = warmUpPhases(column(rows, "sub_status"), column(rows, "layer"), t);
         chartPictures = PrintRecorder.pictures(recording); pictureTimes = pictureTimes(chartPictures); pictureThumbs.clear(); previews.clear();
         pictureLayerAt = pictureLayers(pictureTimes, t, column(rows, "layer"));
-        pictureLines = new HashMap<>();
-        if (!chartPictures.isEmpty()) {
-            // Where in the G-code each picture was taken, from the kept copy (read in the background; captions use it once ready).
-            List<File> pictures = chartPictures;
-            new Thread(() -> {
-                PictureToolpath toolpath = RecordingGcode.info(recording) == null ? null : PictureToolpath.of(recording, getCacheDir());
-                if (toolpath != null) { Map<String, String> found = toolpath.lines(pictures); runOnUiThread(() -> pictureLines = found); }
-            }, "picture-lines").start();
+        pictureLines = new HashMap<>(); linesAsked = false;
+        List<RecordingAnalysis.Finding> found = findings(recording, rows);
+        String damp = FileMemory.moisture(recording);
+        List<PrintChecks.Finding> measured = PrintChecks.of(recording);
+        int problems = 0; for (PrintChecks.Finding f : measured) if (f.verdict == PrintChecks.Verdict.PROBLEM) problems++;
+        List<Tuning.Trial> trials = Tuning.all(this);
+        Tuning.Trial trial = Tuning.trialFor(trials, recording); List<Tuning.Trial> tried = Tuning.triedFrom(trials, recording);
+        String tuned = trial == null ? "" : keepTuningResult(recording, trial, found);   // kept with the try whether or not its card is opened
+
+        boolean tour = Showcase.running();
+        section("glance", "At a glance", true, tour || getIntent().getBooleanExtra(EXTRA_JOURNAL, false), () -> glanceLine(recording),
+            () -> glance(recording, rows, found, runout, facts, trial == null || tuned.isEmpty() ? "" : "Tuning try: " + tuned));
+        List<String> notes = new ArrayList<>(); for (String line : new String[] {runout, last.isEmpty() ? "" : last + ".", coverage}) if (!line.isEmpty()) notes.add(line);
+        if (!warmUp.isEmpty() || !notes.isEmpty() || !found.isEmpty() || !damp.isEmpty() || trial != null || !tried.isEmpty() || !measured.isEmpty()) {
+            int lookAt = found.size() + (damp.isEmpty() ? 0 : 1); boolean tuning = trial != null || !tried.isEmpty(); int checks = measured.size(), bad = problems;
+            section("happened", "What happened", true, tour, () -> happenedLine(lookAt, tuning, checks, bad), () -> {
+                happenedNotes(recording, notes);
+                diagnosis(recording, found);
+                tuning(recording, trial, tried, tuned);
+                checks(recording, measured);
+            });
         }
+        if (!chartPictures.isEmpty() || recording.pictureMinutes > 0 || recording.pictureLayers > 0) {
+            int far = recording.compare && recording.smooth() ? PrintRecorder.farPictures(recording).size() : 0;
+            boolean positions = !chartPictures.isEmpty() && !PrintRecorder.picturePositions(recording.pictureFolder()).isEmpty();
+            section("pictures", "Pictures and video", false, tour, () -> picturesLine(chartPictures.size(), far, recording.video().isFile() || recording.sideBySide().isFile(), positions),
+                () -> { askPictureLines(recording); pictures(recording); headPositions(recording, rows); });
+        }
+        List<String> drawn = new ArrayList<>(); String[] kinds = {"progress", "layer", "temperatures", "fans", "speed"};
+        String[][] columns = {{"progress"}, {"layer"}, {"nozzle_c", "nozzle_target_c", "bed_c", "bed_target_c", "chamber_c"}, {"part_fan_pct", "aux_fan_pct", "chamber_fan_pct"}, {"speed"}};
+        for (int i = 0; i < kinds.length; i++) if (t.length > 1 && anyValue(rows, columns[i])) drawn.add(kinds[i]);
+        boolean trayChanges = !trayChanges(column(rows, "tray"), column(rows, "tray_rgb"), t).isEmpty();
+        if (!drawn.isEmpty() || trayChanges)
+            section("charts", "Charts", false, tour, () -> chartsLine(drawn, trayChanges), () -> { askPictureLines(recording); readingCharts(rows, t); trays(rows, t); });
+        layersWords = "Looking for the print's G-code…"; gcodeKept = null;
+        PageSection layers = section("layers", "Layers and G-code", false, tour, () -> layersWords,
+            () -> { askPictureLines(recording); gcodeCard(recording, rows); material(recording, rows, t); layerCharts(recording, rows); });
+        new Thread(() -> {
+            if (RecordingGcode.info(recording) == null) gcodeFor(recording);   // keeps a fitting phone copy with the recording, as the G-code card does
+            boolean kept = RecordingGcode.info(recording) != null;
+            runOnUiThread(() -> { if (isDestroyed()) return; gcodeKept = kept; layersWords = layersLine(kept); layers.refresh(); });
+        }, "recording-gcode-keep").start();
+        section("tools", "Tools", true, tour, () -> "All readings, CSV export, compare, report, slice again" + (GcodeLibrary.baseName(recording.file) != null ? ", every print of the file" : "") + ", delete",
+            () -> tools(recording, rows));
+    }
+    /** The Layers and G-code part's line while closed, once the G-code has been looked for. */
+    private String layersWords = "";
+    /** Whether the print's G-code is kept with the recording: null until looked for when the page opened. */
+    private Boolean gcodeKept;
+    /** Adds a part to the page; `fill` builds its body through card() and label(), as the rest of the page. */
+    private PageSection section(String key, String name, boolean openFirst, boolean forced, java.util.function.Supplier<String> line, Runnable fill) {
+        PageSection part = new PageSection(this, content, getSharedPreferences("workshop-settings", MODE_PRIVATE), "recording." + key, name, openFirst, forced, ink, muted, PageSection.rule(dark), PageSection.ripple(dark), line,
+            body -> { LinearLayout was = target; target = body; try { fill.run(); } finally { target = was; } });
+        sections.add(part); return part;
+    }
+    private static boolean anyValue(List<double[]> rows, String[] names) {
+        for (String name : names) { int index = PrintRecorder.column(name); for (double[] row : rows) if (!Double.isNaN(row[index])) return true; }
+        return false;
+    }
+
+    // ---- The parts' lines while closed (pure, tested on the JVM) ----
+
+    /** At a glance, closed: "Stopped · 3 h 20 min · ★★★★☆ · Came out well". */
+    static String glanceLine(PrintRecorder.Recording r) {
+        return outcome(r.outcome) + " · " + duration(r.duration()) + (r.journal.rated() ? " · " + journalSummary(r.journal) : "");
+    }
+    /** When a print ended: the clock time when that was the day it started (the date is in the line above), else the date too. Pure. */
+    static String endedWords(long start, long end, Locale locale, TimeZone zone) {
+        SimpleDateFormat day = new SimpleDateFormat("yyyyMMdd", locale); day.setTimeZone(zone);
+        if (!day.format(new Date(start)).equals(day.format(new Date(end)))) return when(end, locale, zone);
+        SimpleDateFormat clock = new SimpleDateFormat("HH:mm", locale); clock.setTimeZone(zone);
+        return clock.format(new Date(end));
+    }
+    /** What happened, closed: what to look at, a tuning try and what was measured; "Nothing stood out…" when the readings found nothing. */
+    static String happenedLine(int lookAt, boolean tuning, int checks, int problems) {
+        List<String> parts = new ArrayList<>();
+        parts.add(lookAt == 0 ? "Nothing stood out in the readings" : lookAt == 1 ? "1 thing to look at" : lookAt + " things to look at");
+        if (tuning) parts.add("a tuning try");
+        if (problems > 0) parts.add(problems + (problems == 1 ? " problem measured" : " problems measured"));
+        else if (checks > 0) parts.add(checks + (checks == 1 ? " check measured" : " checks measured") + ", no problems");
+        return String.join(" · ", parts);
+    }
+    /** Pictures and video, closed: "24 pictures · a timelapse video · where the head was". */
+    static String picturesLine(int pictures, int far, boolean video, boolean positions) {
+        List<String> parts = new ArrayList<>();
+        parts.add(pictures == 0 ? "No pictures yet" : pictures == 1 ? "1 picture" : pictures + " pictures");
+        if (far > 0) parts.add(far + " more with the head far");
+        if (video) parts.add("a timelapse video"); else if (pictures >= 2) parts.add("a timelapse can be made");
+        if (positions) parts.add("where the head was");
+        return String.join(" · ", parts);
+    }
+    /** Charts, closed: "Progress, layer, temperatures and fans over time · which tray fed it". */
+    static String chartsLine(List<String> drawn, boolean trays) {
+        String what = "";
+        for (int i = 0; i < drawn.size(); i++) what += (i == 0 ? "" : i == drawn.size() - 1 ? " and " : ", ") + drawn.get(i);
+        if (!what.isEmpty()) what = Character.toUpperCase(what.charAt(0)) + what.substring(1) + " over time";
+        return trays ? (what.isEmpty() ? "Which tray fed the print" : what + " · which tray fed it") : what;
+    }
+    /** Layers and G-code, closed: whether the print's file is here, which the material and layer charts need. */
+    static String layersLine(boolean kept) {
+        return kept ? "Material used and each layer, from the print's G-code" : "The print's G-code is not on this phone: add it here for material and each layer";
+    }
+    /** At a glance: what the readings found, one short line per kind with its layers, after a filament run-out. Pure. */
+    static List<String> highlights(List<RecordingAnalysis.Finding> found, String runout) {
+        List<String> out = new ArrayList<>();
+        if (!runout.isEmpty()) out.add(runout.replaceFirst("\\.$", ""));
+        Map<String, List<Integer>> layers = new LinkedHashMap<>();
+        for (RecordingAnalysis.Finding f : found) { List<Integer> at = layers.computeIfAbsent(f.kind, k -> new ArrayList<>()); if (f.layer > 0) at.add(f.layer); }
+        for (Map.Entry<String, List<Integer>> e : layers.entrySet()) {
+            List<Integer> at = e.getValue(); StringBuilder where = new StringBuilder();
+            for (int i = 0; i < Math.min(3, at.size()); i++) where.append(i == 0 ? (at.size() == 1 ? " (layer " : " (layers ") : ", ").append(at.get(i));
+            if (at.size() > 3) where.append(" and more");
+            if (!at.isEmpty()) where.append(')');
+            out.add(Tuning.what(e.getKey()) + where);
+        }
+        return out;
+    }
+
+    // ---- The parts ----
+
+    /** The print in a few lines: its latest picture, how long and how it ended, what stands out, the facts and the journal. */
+    private void glance(PrintRecorder.Recording recording, List<double[]> rows, List<RecordingAnalysis.Finding> found, String runout, List<String> facts, String tried) {
+        hero();
+        long ended = recording.end > 0 ? recording.end : recording.lastSample;
+        LinearLayout tiles = new LinearLayout(this); tiles.setOrientation(LinearLayout.HORIZONTAL); target.addView(tiles);
+        tile(tiles, "Duration", duration(recording.duration()), 0);
+        tile(tiles, "Result", outcome(recording.outcome), dp(8));
+        tile(tiles, "Ended", ended > 0 ? endedWords(recording.start, ended, Locale.getDefault(), TimeZone.getDefault()) : "—", dp(8));
+        List<String> worth = highlights(found, runout), said = new ArrayList<>(facts);
+        if (!worth.isEmpty()) {
+            // The one or two things most worth a look; the rest, and why, are under What happened.
+            LinearLayout card = card(); A11y.heading(label(card, "Worth a look", 15, ink, true));
+            for (int i = 0; i < Math.min(2, worth.size()); i++) label(card, "• " + worth.get(i), 14, ink, false);
+            label(card, (worth.size() > 2 ? (worth.size() - 2) + " more, and why, under What happened." : "Why, and what usually helps, under What happened."), 12, muted, false);
+        } else if (!rows.isEmpty()) said.add(0, "Nothing stood out in the readings.");
+        if (!tried.isEmpty()) said.add(0, tried);
+        if (!said.isEmpty()) { TextView lines = label(String.join("\n", said), 13, muted, false); lines.setPadding(0, dp(10), 0, dp(3)); }
+        journalCard(recording);
+    }
+    /** The latest camera picture across the page, as the list shows it; tap to open the pictures. Decoded off the main thread. */
+    private void hero() {
+        if (chartPictures.isEmpty()) return;
+        int last = chartPictures.size() - 1; String at = ChartView.elapsed(pictureTimes[last]);
+        android.widget.FrameLayout frame = new android.widget.FrameLayout(this);
+        GradientDrawable shape = new GradientDrawable(); shape.setColor(dark ? 0xff21343a : 0xffe2efed); shape.setCornerRadius(dp(20)); frame.setBackground(shape); frame.setClipToOutline(true);
+        ImageView picture = new ImageView(this); picture.setScaleType(ImageView.ScaleType.CENTER_CROP); picture.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        frame.addView(picture, new android.widget.FrameLayout.LayoutParams(-1, -1));
+        TextView badge = new TextView(this); badge.setText("Latest picture · " + at + " into the print"); badge.setTextSize(12); badge.setTextColor(Color.WHITE); badge.setPadding(dp(10), dp(4), dp(10), dp(4));
+        GradientDrawable pill = new GradientDrawable(); pill.setCornerRadius(dp(12)); pill.setColor(0x99000000); badge.setBackground(pill); badge.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        android.widget.FrameLayout.LayoutParams badgeAt = new android.widget.FrameLayout.LayoutParams(-2, -2, android.view.Gravity.BOTTOM | android.view.Gravity.START); badgeAt.setMargins(dp(10), dp(10), dp(10), dp(10));
+        frame.addView(badge, badgeAt);
+        frame.setContentDescription("Latest camera picture, " + at + " into the print"); A11y.clickLabel(frame, "Open the pictures");
+        frame.setOnClickListener(v -> { askPictureLines(shown); openPicture(last); });
+        LinearLayout.LayoutParams size = new LinearLayout.LayoutParams(-1, dp(196)); size.topMargin = dp(4); target.addView(frame, size);
+        File file = chartPictures.get(last); int width = getResources().getDisplayMetrics().widthPixels;
+        PICTURES.execute(() -> { android.graphics.Bitmap bitmap = decode(file, width / 2); if (bitmap != null) runOnUiThread(() -> { if (!isDestroyed()) picture.setImageBitmap(bitmap); }); });
+    }
+    /** What happened, in words: the warm-up (against the earlier prints' once read), a filament run-out, the last reading and gaps in watching. */
+    private void happenedNotes(PrintRecorder.Recording recording, List<String> notes) {
         String warm = warmUpWords(warmUp);
         if (!warm.isEmpty()) {
-            TextView words = label(warm, 13, muted, false); words.setPadding(0, 0, 0, dp(3));
+            TextView words = label(warm, 13, muted, false); words.setPadding(0, dp(8), 0, dp(3));
             // Against the earlier prints' warm-ups, read in the background (their readings are on the phone).
             List<Object[]> mine = warmUp; File folder = directory(this);
             new Thread(() -> {
@@ -390,14 +566,37 @@ public final class RecordingsActivity extends Activity {
                 if (!against.isEmpty()) runOnUiThread(() -> { if (!isDestroyed()) words.setText(warm + "\n" + against); });
             }, "recording-warm-up").start();
         }
-        List<RecordingAnalysis.Finding> found = findings(recording, rows);
-        tuning(recording, found);
-        diagnosis(recording, found);
-        pictures(recording);   // the quickest look at how the print went, before the charts
-        checks(recording);
-        // One card with the print's four charts, one at a time (the tour shows them all, one after another).
+        if (!notes.isEmpty()) { TextView said = label(String.join("\n", notes), 13, muted, false); said.setPadding(0, warm.isEmpty() ? dp(8) : 0, 0, dp(3)); }
+    }
+    /** Every action on the print, with deleting set apart below a line. */
+    private void tools(PrintRecorder.Recording recording, List<double[]> rows) {
+        LinearLayout look = row();
+        action(look, "All readings…", () -> table(recording, rows));
+        action(look, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
+            .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
+        LinearLayout more = row();
+        action(more, "Compare with…", () -> compareWith(recording));
+        action(more, "Share a report…", () -> shareReport(recording, rows));
+        action(row(), "Change settings and slice again…", () -> tune(recording, findings(recording, rows)));
+        if (GcodeLibrary.baseName(recording.file) != null)
+            action(row(), "Every print of this file…", () -> startActivity(new Intent(this, FileMemoryActivity.class).putExtra(FileMemoryActivity.EXTRA_FILE, recording.file)));
+        View hairline = new View(this); hairline.setBackgroundColor(PageSection.rule(dark));
+        LinearLayout.LayoutParams lineAt = new LinearLayout.LayoutParams(-1, Math.max(1, dp(1))); lineAt.topMargin = dp(20); target.addView(hairline, lineAt);
+        Button delete = action(row(), "Delete this recording…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?")
+            .setMessage("Its readings, pictures, videos and kept G-code are removed from this phone. This cannot be undone.").setNegativeButton("Cancel", null)
+            .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
+        // Deleting looks unlike the other actions: the warning colour, outlined rather than filled.
+        int danger = dark ? 0xffffb4ab : 0xffba1a1a; delete.setTextColor(danger);
+        GradientDrawable outline = new GradientDrawable(); outline.setColor(Color.TRANSPARENT); outline.setStroke(Math.max(1, dp(1)), danger); outline.setCornerRadius(dp(24));
+        delete.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf((danger & 0x00ffffff) | 0x33000000), outline, null));
+        ((LinearLayout.LayoutParams) delete.getLayoutParams()).topMargin = dp(16);
+    }
+    private LinearLayout row() { LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); target.addView(row); return row; }
+    /** The print's readings over time: one card, one chart at a time behind chips (the tour shows them all, one after another). */
+    private void readingCharts(List<double[]> rows, double[] t) {
         boolean all = Showcase.running();
-        LinearLayout charts = all ? content : card();
+        LinearLayout charts = all ? target : card();
+        if (!all) A11y.heading(label(charts, "Readings over time", 15, ink, true));
         LinearLayout choices = new LinearLayout(this); choices.setOrientation(LinearLayout.HORIZONTAL); if (!all) charts.addView(choices);
         List<View> shownCharts = new ArrayList<>(); List<Button> chips = new ArrayList<>();
         String[][] names = {{"Progress", "Progress"}, {"Layer", "Layer number"}, {"Temps", "Temperatures"}, {"Fans", "Fan speed"}, {"Speed", "Speed (as the printer reports it)"}};
@@ -437,27 +636,7 @@ public final class RecordingsActivity extends Activity {
             attachPreview(charts, pictureTimes, k -> k);
             label(charts, "Touch and drag to read values. Times are clock times on this phone; dashed lines are targets." + (pictureTimes.length > 0 ? " Ticks along the bottom are the camera pictures; the one from the moment you touch shows under the chart." : "")
                 + " Pinch with two fingers to zoom in on a stretch of time, move along it with two fingers, double-tap to see it all.", 12, muted, false);
-        } else if (!all) content.removeView(charts);
-        headPositions(recording, rows);
-        trays(rows, t);
-        gcodeCard(recording, rows);
-        material(recording, rows, t);
-        layerCharts(recording, rows);
-        LinearLayout actions = new LinearLayout(this); actions.setOrientation(LinearLayout.HORIZONTAL); content.addView(actions);
-        action(actions, "All readings…", () -> table(recording, rows));
-        action(actions, "Export CSV…", () -> startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("text/csv").addCategory(Intent.CATEGORY_OPENABLE)
-            .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
-        LinearLayout more = new LinearLayout(this); more.setOrientation(LinearLayout.HORIZONTAL); content.addView(more);
-        action(more, "Compare with…", () -> compareWith(recording));
-        action(more, "Share a report…", () -> shareReport(recording, rows));
-        LinearLayout tuneRow = new LinearLayout(this); tuneRow.setOrientation(LinearLayout.HORIZONTAL); content.addView(tuneRow);
-        action(tuneRow, "Change settings and slice again…", () -> tune(recording, findings(recording, rows)));
-        if (GcodeLibrary.baseName(recording.file) != null) {
-            LinearLayout fileRow = new LinearLayout(this); fileRow.setOrientation(LinearLayout.HORIZONTAL); content.addView(fileRow);
-            action(fileRow, "Every print of this file…", () -> startActivity(new Intent(this, FileMemoryActivity.class).putExtra(FileMemoryActivity.EXTRA_FILE, recording.file)));
-        }
-        action(actions, "Delete…", () -> new AlertDialog.Builder(this).setTitle("Delete this recording?").setNegativeButton("Cancel", null)
-            .setPositiveButton("Delete", (d, w) -> { new PrintRecorder(directory(this)).delete(recording); finish(); }).show());
+        } else if (!all) target.removeView(charts);
     }
 
     private static double price(android.content.SharedPreferences prefs, String key) { try { return Double.parseDouble(prefs.getString(key, "0")); } catch (RuntimeException none) { return 0; } }
@@ -469,7 +648,7 @@ public final class RecordingsActivity extends Activity {
     private void diagnosis(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found) {
         String damp = FileMemory.moisture(recording);
         if (found.isEmpty() && damp.isEmpty()) return;
-        LinearLayout card = card(); label(card, "Things to look at", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, "Things to look at", 15, ink, true));
         label(card, "From the readings and the journal: what stands out, where, and what usually causes it. The charts and pictures at that layer show more.", 12, muted, false);
         Set<String> notes = new LinkedHashSet<>(); boolean settings = false;
         for (RecordingAnalysis.Finding f : found) {
@@ -495,7 +674,7 @@ public final class RecordingsActivity extends Activity {
     private void tuneDialog(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found, File gcode, Map<String, String> config) {
         if (gcode == null || config.isEmpty()) {
             new AlertDialog.Builder(this).setTitle("Change settings and slice again").setPositiveButton("OK", null).setMessage(gcode == null
-                ? "This print's G-code is not on the phone, so the settings it was sliced with are not known. Add it on the G-code card above, then try again."
+                ? "This print's G-code is not on the phone, so the settings it was sliced with are not known. Add it under Layers and G-code on this page, then try again."
                 : "This G-code does not say what it was sliced with (no settings block at its end), so there is nothing to start from.").show();
             return;
         }
@@ -540,22 +719,26 @@ public final class RecordingsActivity extends Activity {
     }
 
     /**
-     * The rest of the loop, kept with the file: on a print sliced with tuning changes, what changed, whether what was found
-     * on the print before came back, and the two side by side; on a print that changes were tried from, what came of them.
+     * On a print sliced with tuning changes: whether what was found on the print before came back, in words, kept with the try
+     * (shown on the print before and on the file's page) whether or not this page's card is opened; "" when it was only printed.
      */
-    private void tuning(PrintRecorder.Recording recording, List<RecordingAnalysis.Finding> found) {
-        List<Tuning.Trial> all = Tuning.all(this);
-        Tuning.Trial trial = Tuning.trialFor(all, recording);
-        List<Tuning.Trial> tried = Tuning.triedFrom(all, recording);
+    private String keepTuningResult(PrintRecorder.Recording recording, Tuning.Trial trial, List<RecordingAnalysis.Finding> found) {
+        String outcome = Tuning.outcome(trial, found, "complete".equals(recording.outcome));
+        String result = outcome.isEmpty() ? "Printed" : (Tuning.helped(trial, found) ? "Helped: " : "Not yet: ") + outcome;
+        if (!result.equals(trial.result) || !recording.meta.getAbsolutePath().equals(trial.resultFor)) Tuning.result(this, trial, result, recording);
+        return outcome;
+    }
+    /**
+     * The rest of the loop, kept with the file: on a print sliced with tuning changes, what changed, whether what was found
+     * on the print before came back (`outcome`), and the two side by side; on a print that changes were tried from, what came of them.
+     */
+    private void tuning(PrintRecorder.Recording recording, Tuning.Trial trial, List<Tuning.Trial> tried, String outcome) {
         if (trial == null && tried.isEmpty()) return;
-        LinearLayout card = card(); label(card, "Tuning", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, "Tuning", 15, ink, true));
         if (trial != null) {
             label(card, "Sliced again with changes from " + (trial.basedOnName.isEmpty() ? "an earlier print" : trial.basedOnName) + ": " + trial.changeWords() + ".", 13, ink, false);
-            String outcome = Tuning.outcome(trial, found, "complete".equals(recording.outcome));
             if (!outcome.isEmpty()) label(card, outcome, 13, ink, false);
             label(card, "Readings only show part of it: look at the print itself too.", 12, muted, false);
-            String result = outcome.isEmpty() ? "Printed" : (Tuning.helped(trial, found) ? "Helped: " : "Not yet: ") + outcome;
-            if (!result.equals(trial.result) || !recording.meta.getAbsolutePath().equals(trial.resultFor)) Tuning.result(this, trial, result, recording);
             File before = new File(trial.basedOn);
             if (before.isFile()) {
                 LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); card.addView(row);
@@ -599,7 +782,8 @@ public final class RecordingsActivity extends Activity {
 
     private void layerCharts(PrintRecorder.Recording recording, List<double[]> rows) {
         LayerCharts.Guardian guardian = new LayerCharts.Guardian(recording.guardianChecks, answerLayers(recording.journal, rows));
-        LinearLayout card = card(); label(card, guardian.any() ? "Each layer, with the print guardian's checks" : "Each layer, from the print's G-code", 15, ink, true);
+        if (Boolean.FALSE.equals(gcodeKept) && !guardian.any()) return;   // the G-code card above says what is missing
+        LinearLayout card = card(); A11y.heading(label(card, guardian.any() ? "Each layer, with the print guardian's checks" : "Each layer, from the print's G-code", 15, ink, true));
         if (guardian.any()) label(card, "Marks: amber where a guardian measure went over its limit, red where it raised the alarm (or you said it was a real problem), teal where you said it looked fine. Touch a mark's layer to read it.", 12, muted, false);
         TextView note = label(card, "Reading the print's file…", 13, muted, false);
         new Thread(() -> {
@@ -608,7 +792,7 @@ public final class RecordingsActivity extends Activity {
             LayerProfile p = read;
             runOnUiThread(() -> {
                 if (isDestroyed()) return;
-                if (file == null && !guardian.any()) { note.setText("The print's G-code is not on this phone. Add it to the recording (above) to see each layer's line types, speed, flow and acceleration."); return; }
+                if (file == null && !guardian.any()) { card.setVisibility(View.GONE); return; }   // the G-code card above says what is missing
                 if (file == null) note.setText("The print's G-code is not on this phone, so only the guardian's measures are shown.");
                 if (file != null && (p == null || p.layers == 0)) { note.setText("The print's file could not be read." + (guardian.any() ? " The guardian's measures are shown alone." : "")); if (!guardian.any()) return; }
                 if (p != null && p.layers > 0) note.setText(LayerCharts.note(p));
@@ -671,7 +855,7 @@ public final class RecordingsActivity extends Activity {
 
     /** Whether the recording holds its print's G-code, and adding (or replacing, or removing) it by hand. */
     private void gcodeCard(PrintRecorder.Recording recording, List<double[]> rows) {
-        LinearLayout card = card(); label(card, "The print's G-code", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, "The print's G-code", 15, ink, true));
         TextView state = label(card, "Looking…", 13, muted, false);
         LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL); card.addView(buttons);
         new Thread(() -> {
@@ -840,7 +1024,7 @@ public final class RecordingsActivity extends Activity {
         List<File> files = PrintRecorder.pictures(recording);
         if (files.isEmpty() && recording.pictureMinutes == 0 && recording.pictureLayers == 0) return;
         boolean comparing = recording.compare && recording.smooth();
-        LinearLayout card = card(); label(card, comparing ? "Camera pictures · head parked" : "Camera pictures", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, comparing ? "Camera pictures · head parked" : "Camera pictures", 15, ink, true));
         if (files.isEmpty()) label(card, "No pictures yet. " + recording.pictureWords() + ", from the printer's camera on this network, or through the cloud.", 13, muted, false);
         else {
             label(card, files.size() + (files.size() == 1 ? " picture" : " pictures") + (comparing ? "" : recording.pictureMinutes > 0 || recording.pictureLayers > 0 ? " · " + recording.pictureWords().toLowerCase(Locale.ROOT) : "") + ". Tap one to see it larger.", 13, muted, false);
@@ -849,7 +1033,7 @@ public final class RecordingsActivity extends Activity {
         if (!comparing) return;
         // The second set, to compare: the same layers, with the head at the far side of each instead of parked.
         List<File> far = PrintRecorder.farPictures(recording);
-        LinearLayout farCard = card(); label(farCard, "Camera pictures · head far from the camera", 15, ink, true);
+        LinearLayout farCard = card(); A11y.heading(label(farCard, "Camera pictures · head far from the camera", 15, ink, true));
         label(farCard, far.isEmpty() ? "No pictures in this set yet. They are taken while each layer prints, when the head reaches the side away from the camera."
             : far.size() + (far.size() == 1 ? " picture" : " pictures") + ", taken while each layer printed. Compare with the parked set above.", 13, muted, false);
         madeAlready(farCard, recording.sideBySide(), "Side-by-side video, made when the print ended");
@@ -899,10 +1083,9 @@ public final class RecordingsActivity extends Activity {
         }
     }
     /** What the app measured during the print (PrintChecks): shown only when there is something to say. */
-    private void checks(PrintRecorder.Recording recording) {
-        List<PrintChecks.Finding> found = PrintChecks.of(recording);
+    private void checks(PrintRecorder.Recording recording, List<PrintChecks.Finding> found) {
         if (found.isEmpty()) return;
-        LinearLayout card = card(); label(card, "Measured during this print", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, "Measured during this print", 15, ink, true));
         label(card, "From the statuses the app received; nothing was sent to the printer for these. They also fill in Settings › Field check.", 12, muted, false);
         for (PrintChecks.Finding f : found) {
             TextView title = label(card, PrintChecks.mark(f.verdict) + "  " + f.title, 14, f.verdict == PrintChecks.Verdict.PROBLEM ? orange : ink, true);
@@ -962,7 +1145,7 @@ public final class RecordingsActivity extends Activity {
             at.add(new double[] {p[0], p[1], p[2], p[3]}); index.add(i); ages.add(p[5]);
         }
         if (at.isEmpty()) return;
-        LinearLayout card = card(); label(card, "Head position at each picture", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, "Head position at each picture", 15, ink, true));
         Collections.sort(ages); double age = ages.get(ages.size() / 2);
         label(card, HeadPositions3DView.describe(at.toArray(new double[0][])) + String.format(Locale.getDefault(),
             " Each is the printer's last report before the picture was kept, typically %.1f s earlier.", age), 13, muted, false);
@@ -1044,7 +1227,7 @@ public final class RecordingsActivity extends Activity {
         List<double[]> stretches = traySegments(tray, rgb, t);
         List<String> changes = trayChanges(tray, rgb, t);
         if (changes.isEmpty()) return;
-        LinearLayout card = card(); label(card, "Filament over time", 15, ink, true);
+        LinearLayout card = card(); A11y.heading(label(card, "Filament over time", 15, ink, true));
         String gaps = trayGaps(stretches);
         if (changes.size() == 1) {
             double[] only = null; for (double[] s : stretches) if (!Double.isNaN(s[2])) { only = s; break; }
@@ -1140,13 +1323,14 @@ public final class RecordingsActivity extends Activity {
         return out;
     }
     private void material(PrintRecorder.Recording recording, List<double[]> rows, double[] t) {
-        LinearLayout card = card(); label(card, "Material used", 15, ink, true);
+        if (Boolean.FALSE.equals(gcodeKept)) return;   // the G-code card above says what is missing
+        LinearLayout card = card(); A11y.heading(label(card, "Material used", 15, ink, true));
         TextView note = label(card, "Reading the print's file…", 13, muted, false);
         LinearLayout chartBox = new LinearLayout(this); chartBox.setOrientation(LinearLayout.VERTICAL); card.addView(chartBox);
         LinearLayout byColour = new LinearLayout(this); byColour.setOrientation(LinearLayout.VERTICAL); card.addView(byColour);
         new Thread(() -> {
             File file = gcodeFor(recording);
-            if (file == null) { runOnUiThread(() -> note.setText("The print's G-code is not on this phone, so material is not shown. Add it to the recording (above) to see material per layer and per colour.")); return; }
+            if (file == null) { runOnUiThread(() -> card.setVisibility(View.GONE)); return; }   // as above
             double[] volumes = null; double[][] laidDown = null, byType = null; double[] perTool = null; SlicedMaterials materials = null;
             double[] progress = column(rows, "progress"), fractions = new double[progress.length];
             for (int i = 0; i < progress.length; i++) fractions[i] = Double.isNaN(progress[i]) ? Double.NaN : progress[i] / 100.0;
@@ -1476,6 +1660,16 @@ public final class RecordingsActivity extends Activity {
     private android.graphics.Bitmap previewBitmap(int i) { return previews.computeIfAbsent(i, k -> decode(chartPictures.get(k), dp(165))); }
     /** Where in the print's G-code each picture was taken, by picture name ("G-code line 48,211: G1 …"), once read. */
     private volatile Map<String, String> pictureLines = new HashMap<>();
+    private boolean linesAsked;
+    /** Reads where each picture was taken in the kept G-code, in the background, the first time a part showing pictures opens. */
+    private void askPictureLines(PrintRecorder.Recording recording) {
+        if (linesAsked || recording == null || chartPictures.isEmpty()) return;
+        linesAsked = true; List<File> pictures = chartPictures;
+        new Thread(() -> {
+            PictureToolpath toolpath = RecordingGcode.info(recording) == null ? null : PictureToolpath.of(recording, getCacheDir());
+            if (toolpath != null) { Map<String, String> found = toolpath.lines(pictures); runOnUiThread(() -> { if (chartPictures == pictures) pictureLines = found; }); }
+        }, "picture-lines").start();
+    }
     /** The layer printing at each picture (for the preview's words). */
     private double[] pictureLayerAt = new double[0];
 
@@ -1560,13 +1754,18 @@ public final class RecordingsActivity extends Activity {
         return values;
     }
 
-    private void heading(String text) { TextView view = label(text, 22, ink, true); view.setPadding(0, 0, 0, dp(4)); }
-    private TextView label(String text, int size, int color, boolean bold) { return label(content, text, size, color, bold); }
+    private void heading(String text) { TextView view = A11y.heading(label(text, 22, ink, true)); view.setPadding(0, 0, 0, dp(4)); }
+    private TextView label(String text, int size, int color, boolean bold) { return label(target, text, size, color, bold); }
     private TextView label(LinearLayout parent, String text, int size, int color, boolean bold) {
         TextView view = new TextView(this); view.setText(text); view.setTextSize(size); view.setTextColor(color); if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         view.setPadding(0, dp(3), 0, dp(3)); parent.addView(view); return view;
     }
-    private LinearLayout card() { return card(content); }
+    private LinearLayout card() { return card(target); }
+    /** A view's top on the page, though it may sit inside a part's body. */
+    private int topIn(View view) {
+        int y = 0; for (View at = view; at != null && at != content; at = at.getParent() instanceof View ? (View) at.getParent() : null) y += at.getTop();
+        return y;
+    }
     private LinearLayout card(LinearLayout parent) {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL); card.setPadding(dp(16), dp(12), dp(16), dp(12));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(20)); card.setBackground(shape);
@@ -1575,7 +1774,7 @@ public final class RecordingsActivity extends Activity {
     private void tile(LinearLayout row, String caption, String value, int gap) {
         LinearLayout tile = new LinearLayout(this); tile.setOrientation(LinearLayout.VERTICAL); tile.setPadding(dp(12), dp(10), dp(12), dp(10));
         GradientDrawable shape = new GradientDrawable(); shape.setColor(surface); shape.setCornerRadius(dp(16)); tile.setBackground(shape);
-        label(tile, caption, 12, muted, false); TextView text = label(tile, value, 16, ink, true); text.setMaxLines(2);
+        label(tile, caption, 12, muted, false); label(tile, value, 16, ink, true);   // wraps at large font sizes; the row takes the tallest tile
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -1, 1); layout.leftMargin = gap; layout.topMargin = dp(8); row.addView(tile, layout);
     }
     /** "Last reading 10:53 · progress 100 % · …" as one capitalised reading a line, each unit kept with its number. */
@@ -1589,12 +1788,13 @@ public final class RecordingsActivity extends Activity {
         return out.toString();
     }
     /** A button in the app's style: accent text on a soft rounded tile, equal width in its row. */
-    private void action(LinearLayout row, String text, Runnable run) {
+    private Button action(LinearLayout row, String text, Runnable run) {
         Button button = new A11y.DimButton(this); button.setText(text); button.setAllCaps(false); button.setMinHeight(dp(48)); button.setOnClickListener(v -> run.run());
         int accent = dark ? 0xff5fd4c4 : 0xff00796b; button.setTextColor(accent); button.setPadding(dp(10), dp(8), dp(10), dp(8));
         android.graphics.drawable.GradientDrawable shape = new android.graphics.drawable.GradientDrawable(); shape.setColor(dark ? 0xff21343a : 0xffe2efed); shape.setCornerRadius(dp(24));
         button.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(dark ? 0x4463d5c7 : 0x33006b65), shape, null));
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(0, -2, 1); layout.topMargin = dp(8); if (row.getChildCount() > 0) layout.leftMargin = dp(8); row.addView(button, layout);
+        return button;
     }
     private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
 }

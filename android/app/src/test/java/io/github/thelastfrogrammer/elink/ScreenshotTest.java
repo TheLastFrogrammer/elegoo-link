@@ -36,7 +36,8 @@ public class ScreenshotTest {
         Assume.assumeFalse("Screenshots are opt-in", out.isEmpty());
         android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
         for (String theme : new String[] {"light", "dark"}) {
-            context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).commit();
+            // The Charts part open (it is closed until opened once), for the finger on the temperature chart below.
+            context.getSharedPreferences("workshop-settings", 0).edit().putInt("theme", theme.equals("dark") ? 2 : 1).putBoolean(PageSection.KEY + "recording.charts", true).commit();
             File dir = new File(context.getFilesDir(), "recordings-" + theme);
             PrintRecorder recorder = new PrintRecorder(dir);
             long start = 1_760_000_000_000L;

@@ -371,6 +371,35 @@ public class A11yRenderTest {
         shot(frame, 780, "volume-over-time", 1.0f);
     }
 
+    /** A print's recording page with every part open, then as it first opens, and the list with a file printed twice. */
+    @Test public void recordingPage() throws Exception {
+        out();
+        PrintRecorder recorder = new PrintRecorder(RecordingsActivity.directory(context()));
+        for (long begin : new long[] {1_760_000_000_000L, 1_760_100_000_000L})
+            for (int m = 0; m <= 60; m++) recorder.update(begin + m * 60_000L, new JSONObject()
+                .put("machine_status", new JSONObject().put("status", 2).put("sub_status", m == 60 ? 2077 : 2075).put("progress", m * 100 / 60))
+                .put("print_status", new JSONObject().put("filename", "Benchy_PLA_0.2mm.gcode").put("uuid", "u" + begin).put("current_layer", m / 2).put("total_layer", 30).put("remaining_time_sec", (60 - m) * 60))
+                .put("extruder", new JSONObject().put("temperature", m < 40 ? 220 : 150).put("target", 220)).put("heater_bed", new JSONObject().put("temperature", 60).put("target", 60))
+                .put("fans", new JSONObject().put("fan", new JSONObject().put("speed", 255))), "local", "Bedroom");
+        PrintRecorder.Recording newest = recorder.list().get(0);
+        for (float scale : SCALES) {
+            RuntimeEnvironment.setFontScale(scale);
+            theme(false);
+            android.content.Intent intent = new android.content.Intent(context(), RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, newest.meta.getAbsolutePath());
+            RecordingsActivity first = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
+            shot(first.getWindow().getDecorView(), 7000, "recording-first", scale);
+            first.finish();
+            for (String part : new String[] {"pictures", "charts", "layers"}) context().getSharedPreferences("workshop-settings", 0).edit().putBoolean(PageSection.KEY + "recording." + part, true).commit();
+            RecordingsActivity open = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
+            Thread.sleep(300); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            shot(open.getWindow().getDecorView(), 9000, "recording-open", scale);
+            open.finish();
+            RecordingsActivity list = Robolectric.buildActivity(RecordingsActivity.class).setup().get();
+            shot(list.getWindow().getDecorView(), 2340, "recordings-list", scale);
+            list.finish();
+        }
+    }
+
     @Test public void fieldCheck() throws Exception {
         out();
         for (float scale : SCALES) {

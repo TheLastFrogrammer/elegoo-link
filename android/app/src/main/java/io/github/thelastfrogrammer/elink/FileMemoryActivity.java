@@ -28,7 +28,8 @@ public final class FileMemoryActivity extends PlainScreen {
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         file = GcodeLibrary.baseName(getIntent().getStringExtra(EXTRA_FILE));
-        label(content, file == null ? "Prints of a file" : file, 22, ink, true);
+        // Named as the recording page names its print: without ".gcode".
+        A11y.heading(label(content, file == null ? "Prints of a file" : StatusPresentation.clean(file.replaceFirst("(?i)\\.gcode$", "")), 22, ink, true)).setPadding(0, 0, 0, dp(4));
         if (file == null) { label(content, "No file name.", 14, muted, false); return; }
         TextView waiting = label(content, "Reading its prints…", 14, muted, false);
         File cache = getCacheDir();
@@ -55,7 +56,7 @@ public final class FileMemoryActivity extends PlainScreen {
             + (total > prints.size() ? " · the newest " + prints.size() + " shown" : ""), 14, muted, false);
 
         // What worked: the best-rated print and its settings, against the newest print's.
-        LinearLayout worked = card(); label(worked, "What worked", 15, ink, true);
+        LinearLayout worked = card(); A11y.heading(label(worked, "What worked", 15, ink, true));
         FileMemory.Print best = FileMemory.best(prints), newest = prints.get(0);
         if (best == null) label(worked, "No print of this file is rated as having come out well yet. Rate prints in their Journal (on each recording) and the settings that worked show here.", 13, muted, false);
         else {
@@ -75,7 +76,8 @@ public final class FileMemoryActivity extends PlainScreen {
             }
         }
 
-        // Each print, newest first.
+        // Each print, newest first, under a title in the recording page's section look.
+        PageSection.heading(this, content, prints.size() == 1 ? "The print" : "Each print, newest first", ink, PageSection.rule(dark));
         for (int i = 0; i < prints.size(); i++) {
             FileMemory.Print p = prints.get(i), before = i + 1 < prints.size() ? prints.get(i + 1) : null;
             LinearLayout card = card();
@@ -100,7 +102,9 @@ public final class FileMemoryActivity extends PlainScreen {
             if (trial != null) label(card, "Tuning try: " + trial.changeWords() + (trial.result.isEmpty() ? "" : " · " + trial.result), 12, muted, false);
             PrintRecorder.Recording r = p.recording;
             card.setOnClickListener(v -> startActivity(new Intent(this, RecordingsActivity.class).putExtra(RecordingsActivity.EXTRA_META, r.meta.getAbsolutePath())));
-            card.setContentDescription(when(r) + ", open the recording");
+            // Pressing shows; TalkBack reads the whole card and says a tap opens the recording.
+            card.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(PageSection.ripple(dark)), card.getBackground(), null));
+            A11y.clickLabel(card, "Open the recording");
         }
     }
 
