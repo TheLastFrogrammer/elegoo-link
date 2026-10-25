@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Printer</title>
+<style>
+  :root { --bg: #0e1417; --card: #182227; --ink: #e6eef1; --muted: #9fb3bb; --accent: #5fd4c4; --warn: #ffb4ab; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 18px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { display: grid; grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr); gap: 24px; padding: 24px; min-height: 100vh; }
+  @media (max-width: 800px) { main { grid-template-columns: 1fr; padding: 16px; } }
+  .video { background: #000; border-radius: 20px; overflow: hidden; display: flex; align-items: center; justify-content: center; min-height: 240px; }
+  .video img { width: 100%; height: 100%; object-fit: contain; display: block; }
+  .video p { color: var(--muted); padding: 24px; text-align: center; }
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  .card { background: var(--card); border-radius: 20px; padding: 20px; }
+  h1 { font-size: 30px; margin: 0 0 4px; }
+  .muted { color: var(--muted); }
+  .bar { height: 14px; background: #2a3a40; border-radius: 7px; overflow: hidden; margin: 12px 0 6px; }
+  .bar div { height: 100%; background: var(--accent); width: 0; transition: width .6s; }
+  .big { font-size: 44px; font-weight: 700; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; }
+  .grid b { display: block; font-size: 24px; }
+  button { font: inherit; background: #21343a; color: var(--accent); border: 0; border-radius: 24px; padding: 14px 24px; cursor: pointer; }
+  button:focus { outline: 3px solid var(--accent); outline-offset: 2px; }
+  .code { font-size: 64px; letter-spacing: 12px; font-weight: 700; margin: 8px 0; }
+  .error { color: var(--warn); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main id="pairing" hidden>
+  <div class="card" style="grid-column: 1 / -1; max-width: 720px; margin: auto;">
+    <h1>Watch the printer here</h1>
+    <p class="muted">This screen reads the printer through the Link Workshop app on your phone. It can watch, never control.</p>
+    <button id="pair" autofocus>Pair this screen</button>
+    <div id="waiting" hidden>
+      <p>On the phone, open Link Workshop › Settings › Other apps and approve this screen. The phone shows the same code:</p>
+      <div class="code" id="code"></div>
+      <p class="muted" id="pairNote"></p>
+    </div>
+    <p class="error" id="pairError"></p>
+  </div>
+</main>
+<main id="watch" hidden>
+  <div class="video" id="video"><p id="videoNote">Opening the camera…</p></div>
+  <div class="side">
+    <div class="card">
+      <h1 id="state">…</h1>
+      <div class="muted" id="file"></div>
+      <div class="bar"><div id="progressBar"></div></div>
+      <div class="big" id="progress"></div>
+      <div class="muted" id="times"></div>
+    </div>
+    <div class="card grid" id="numbers"></div>
+    <div class="card muted" id="connection"></div>
+  </div>
+</main>
+<script>
+"use strict";
+const TOKEN = "linkWorkshopToken";
+let token = null; try { token = localStorage.getItem(TOKEN); } catch (e) { }
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options = {}) {
+  const headers = Object.assign({}, options.headers || {}, token ? { Authorization: "Bearer " + token } : {});
+  const response = await fetch(path, Object.assign({}, options, { headers }));
+  if (response.status === 401 && token) { forget(); throw new Error("not paired"); }
+  return response;
+}
+function forget() { token = null; try { localStorage.removeItem(TOKEN); } catch (e) { } showPairing(); }
+
+function showPairing() { $("watch").hidden = true; $("pairing").hidden = false; $("pair").focus(); }
+$("pair").addEventListener("click", async () => {
+  $("pairError").textContent = "";
+  try {
+    const r = await fetch("/api/v1/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: "TV browser" }) });
+    const p = await r.json();
+    if (!r.ok) { $("pairError").textContent = p.error || "Could not ask the phone."; return; }
+    $("code").textContent = p.code; $("waiting").hidden = false; $("pair").hidden = true;
+    const until = Date.now() + p.expires_in * 1000;
+    const poll = async () => {
+      if (Date.now() > until) { $("pairError").textContent = "Not approved in time. Try again."; $("waiting").hidden = true; $("pair").hidden = false; return; }
+      $("pairNote").textContent = "Waiting for the phone… " + Math.round((until - Date.now()) / 1000) + " s left";
+      const s = await (await fetch(p.poll)).json().catch(() => ({}));
+      if (s.state === "approved") { token = s.token; try { localStorage.setItem(TOKEN, token); } catch (e) { } watch(); return; }
+      if (s.state === "denied" || s.error) { $("pairError").textContent = "The phone said no."; $("waiting").hidden = true; $("pair").hidden = false; return; }
+      setTimeout(poll, 2000);
+    };
+    poll();
+  } catch (e) { $("pairError").textContent = "Could not reach the phone."; }
+});
+
+let events = null, camera = "printer";
+async function ticket() { const r = await api("/api/v1/tickets", { method: "POST" }); if (!r.ok) throw new Error("no ticket"); return (await r.json()).ticket; }
+async function watch() {
+  $("pairing").hidden = true; $("watch").hidden = false;
+  try {
+    const cams = (await (await api("/api/v1/cameras")).json()).cameras || [];
+    if (cams.length) camera = cams[0].id;
+    await openVideo(); await openEvents();
+  } catch (e) { if (token) setTimeout(watch, 5000); }
+}
+async function openVideo() {
+  const t = await ticket();
+  const img = new Image(); img.alt = "The printer's camera";
+  img.onload = () => { $("video").replaceChildren(img); };
+  img.onerror = () => { $("video").innerHTML = '<p>The camera is not available right now. Trying again…</p>'; setTimeout(openVideo, 10000); };
+  img.src = "/api/v1/cameras/" + encodeURIComponent(camera) + "/stream.mjpeg?fps=5&ticket=" + encodeURIComponent(t);
+}
+async function openEvents() {
+  if (events) events.close();
+  events = new EventSource("/api/v1/events?ticket=" + encodeURIComponent(await ticket()));
+  events.addEventListener("status", (e) => show(JSON.parse(e.data)));
+  events.onerror = () => { events.close(); events = null; setTimeout(() => openEvents().catch(() => setTimeout(watch, 5000)), 3000); };
+}
+function clock(seconds) { const h = Math.floor(seconds / 3600), m = Math.round(seconds % 3600 / 60); return h ? h + " h " + m + " min" : m + " min"; }
+function show(s) {
+  const p = s.print || {}, t = s.temperatures || {}, f = s.fans || {};
+  $("state").textContent = s.state ? s.state.words : "…";
+  $("file").textContent = p.file || "";
+  const progress = typeof p.progress === "number" ? p.progress : null;
+  $("progressBar").style.width = (progress || 0) + "%";
+  $("progress").textContent = progress === null ? "" : progress + " %";
+  const parts = [];
+  if (p.layer !== undefined && p.total_layers) parts.push("Layer " + p.layer + " of " + p.total_layers);
+  if (p.remaining_s !== undefined) parts.push(clock(p.remaining_s) + " left");
+  if (p.done_at) parts.push("done about " + new Date(p.done_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }));
+  $("times").textContent = parts.join(" · ");
+  const cell = (label, value) => value === undefined ? "" : '<div><span class="muted">' + label + "</span><b>" + value + "</b></div>";
+  const temp = (x) => x ? Math.round(x.now) + (x.target ? " / " + Math.round(x.target) : "") + " °C" : undefined;
+  $("numbers").innerHTML = cell("Nozzle", temp(t.nozzle)) + cell("Bed", temp(t.bed)) + cell("Chamber", temp(t.chamber)) + cell("Part fan", f.part === undefined ? undefined : f.part + " %");
+  const c = s.connection || {};
+  $("connection").textContent = (c.fresh ? "Live" : "No fresh status") + " · " + (c.route || "") + (s.state && s.state.faults && s.state.faults.length ? " · faults " + s.state.faults.join(", ") : "");
+}
+if (token) watch(); else showPairing();
+</script>
+</body>
+</html>

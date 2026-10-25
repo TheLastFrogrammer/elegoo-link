@@ -1,5 +1,7 @@
 package io.github.thelastfrogrammer.elink;
 
+import static org.junit.Assert.assertTrue;
+
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
@@ -244,6 +246,24 @@ public class MoreScreensRenderTest {
             Thread.sleep(20); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         }
         shot(page.getWindow().getDecorView(), 1080, 2800, new File(out(), "file-memory-light.png"));
+    }
+    /** Settings › Other apps: the local API running, a device asking to pair, one paired, and the relay set up. */
+    @Test public void renderIntegrations() throws Exception {
+        setTheme(false);
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        Integrations.prefs(context).edit().putBoolean(Integrations.LOCAL, true).putInt(Integrations.PORT, 0).putInt(Integrations.RELAY_PICTURES, 5).commit();
+        // (The relay's address and secret need Android's key store, which tests do not have: the card shows them unset.)
+        PrinterService service = Robolectric.setupService(PrinterService.class);
+        try {
+            ((org.robolectric.shadows.ShadowApplication) org.robolectric.shadow.api.Shadow.extract(context)).setComponentNameAndServiceForBindService(
+                new android.content.ComponentName(context, PrinterService.class), service.onBind(null));
+            assertTrue("the local API runs when turned on", service.integrations.running());
+            service.integrations.auth.add("Living room TV", System.currentTimeMillis() - 3_600_000L);
+            service.integrations.auth.request("Fire TV", System.currentTimeMillis());
+            IntegrationsActivity page = Robolectric.buildActivity(IntegrationsActivity.class).setup().get();
+            org.robolectric.shadows.ShadowLooper.idleMainLooper();
+            shot(page.getWindow().getDecorView(), 1080, 3000, new File(out(), "integrations-light.png"));
+        } finally { service.onDestroy(); }
     }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }

@@ -160,6 +160,15 @@ public final class PrinterService extends Service {
             return;
         }
         boolean viaLocal = ready();
+        // An outside viewer has the hub watching the printer's camera: its newest frame, not a second connection.
+        byte[] held = integrations == null ? null : integrations.freshPrinterFrame(3_000);
+        android.graphics.Bitmap heldImage = held == null ? null : android.graphics.BitmapFactory.decodeByteArray(held, 0, held.length);
+        if (heldImage != null) {
+            offerFrame(heldImage, PrintRecorder.PRINTER_CAMERA, "the printer's camera as other apps watch it");
+            List<Frame> waiting; synchronized (grabWaiting) { waiting = new ArrayList<>(grabWaiting); grabWaiting.clear(); }
+            for (Frame f : waiting) f.take(heldImage);
+            return;
+        }
         if (grabbing || !(viaLocal ? route != null : localCamera()) || now < grabRetryAt) {
             String why = grabbing ? "" : !(viaLocal ? route != null : localCamera()) ? (viaLocal ? "no network route to the printer" : "no local camera in cloud mode") : "waiting " + (grabRetryAt - now) / 1000 + " s after a failure";
             if (!why.isEmpty() && !why.startsWith("waiting") && !why.equals(grabSkipNoted)) { grabSkipNoted = why; Diagnostics.note(Diagnostics.CAMERA, "single picture skipped: " + why); }
@@ -266,6 +275,7 @@ public final class PrinterService extends Service {
             videoWorker.execute(() -> { try { RecordingStorage.applyPolicy(this); } catch (RuntimeException failed) { Diagnostics.note(Diagnostics.CAMERA, "storage clean-up failed: " + failed.getClass().getSimpleName()); } maintenanceDue(); });
         };
         recorder.writeInBackground();   // statuses are handled on the screen thread: its files are written off it
+        integrations = new Integrations(this, integrationPrinter); integrations.apply();
         automations = new AutomationRun(this, automationHost);
         if (cloudBackground()) main.post(cloudPoll);
         main.postDelayed(followTick, 20_000);
@@ -434,7 +444,8 @@ public final class PrinterService extends Service {
     private void startCameraClock(PrintRecorder.Recording now) {
         clockFor = now.meta.getName();
         String why = ExtraCameras.forPictures(this) != null ? "print pictures come from an added camera; the clock measures the printer's own"
-            : !ready() || route == null ? "the printer's camera is not reachable on this network" : grabbing ? "the camera was busy with a picture" : null;
+            : !ready() || route == null ? "the printer's camera is not reachable on this network" : grabbing ? "the camera was busy with a picture"
+            : integrations != null && integrations.holdsPrinterCamera() ? "another app is watching the printer's camera through this phone" : null;
         if (why != null) { recorder.setCameraDelay(now.meta, null, why); Diagnostics.note(Diagnostics.CAMERA, "camera clock not run: " + why); return; }
         String url; PrinterHttp.ConnectionFactory http;
         try { url = FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl); http = route.http(); }
@@ -1190,6 +1201,7 @@ public final class PrinterService extends Service {
                     side = bothPart.renameTo(both);
                 }
                 Diagnostics.note(Diagnostics.CAMERA, "timelapse video made at the end of the print from " + kept.size() + " pictures (" + made.length() / 1024 + " KB)" + (side ? ", with the side-by-side one" : ""));
+                if (integrations != null) integrations.timelapseMade(made);
             } catch (Exception | OutOfMemoryError failed) {
                 Diagnostics.note(Diagnostics.CAMERA, "timelapse video at the end of the print not made: " + failed.getClass().getSimpleName());
                 return;
@@ -1679,6 +1691,7 @@ public final class PrinterService extends Service {
         if (observer != null) observer.changed();
         for (Observer watcher : new ArrayList<>(watchers)) watcher.changed();
         homeAssistant();
+        if (integrations != null) integrations.statusChanged();
         // Home-screen widget: the status shown here, locally or through the cloud (throttled inside).
         try {
             JSONObject shownNow = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
@@ -2254,6 +2267,7 @@ public final class PrinterService extends Service {
             if (picture != null) builder.setLargeIcon(scaled(picture, 128)).setStyle(new Notification.BigPictureStyle().bigPicture(scaled(picture, 720)).setSummaryText(text));
             manager.notify(id, builder.build());
         }
+        public void integrationEvent(Automation.Event event) { if (integrations != null) integrations.event(event); }
         public String homeAssistantEvent(JSONObject event, byte[] chart) {
             if (!workshop().getBoolean("haEnabled", false)) return "link is off; skipped";
             String node = haNode; if (node == null) return "not connected yet; event not sent";
@@ -2261,7 +2275,65 @@ public final class PrinterService extends Service {
             return "event handed to the Home Assistant link";
         }
     };
+    // ------------------------------------------------------------------ other apps (Settings › Other apps)
+    /** The local API, its camera hub and the relay (Integrations); null until the service has started. */
+    volatile Integrations integrations;
+    private final Integrations.Printer integrationPrinter = new Integrations.Printer() {
+        public JSONObject integrationStatus(boolean hideFile) {
+            IntegrationStatus.Context c = new IntegrationStatus.Context();
+            JSONObject shownNow = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
+            c.route = wanted ? (ready() ? (remote ? "home VPN" : "local network") : "not connected") : cloudFresh() ? "Elegoo cloud" : "not connected";
+            c.fresh = shownNow != null; c.statusAt = wanted ? statusAt : cloudCheckedAt;
+            c.printerName = wanted || cloudName.isEmpty() ? "Centauri Carbon 2" : StatusPresentation.clean(cloudName);
+            PrintRecorder.Recording r = recorder == null ? null : recorder.current(); c.printStartedAt = r == null ? 0 : r.start;
+            c.hideFile = hideFile;
+            return IntegrationStatus.build(shownNow, c, System.currentTimeMillis());
+        }
+        public JSONArray integrationCameras() {
+            JSONArray out = new JSONArray();
+            try {
+                boolean live = ready() && route != null || localCamera();
+                out.put(new JSONObject().put("id", "printer").put("name", "Printer camera").put("live", live).put("source", live ? "camera" : "pictures").put("rotation", 0).put("mirror", false));
+                for (ExtraCameras.Camera c : ExtraCameras.list(PrinterService.this))
+                    out.put(new JSONObject().put("id", "added-" + c.id).put("name", c.name).put("live", true).put("source", ExtraCameras.SNAPSHOT.equals(c.kind) ? "snapshots" : "camera")
+                        .put("rotation", c.rotation).put("mirror", c.mirror));
+            } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
+            return out;
+        }
+        public CameraHub.Source integrationCamera(String id, CameraHub.Sink sink) {
+            try {
+                if ("printer".equals(id)) {
+                    if (grabbing) return null;   // the service's own picture or camera clock has it; the hub asks again shortly
+                    if (ready() && route != null) return CameraHub.mjpeg(FeatureData.cameraUrl(host, cameraUrl.isEmpty() ? "http://" + host + ":8080/?action=stream" : cameraUrl), route.http(), sink);
+                    if (localCamera()) return CameraHub.mjpeg(localCameraUrl(), NetworkRoute.local(getApplicationContext()).http(), sink);
+                    return CameraHub.pictures(this::latestPictureJpeg, 5_000, sink);   // cloud mode: the print's newest picture, no camera traffic
+                }
+                if (id.startsWith("added-")) {
+                    ExtraCameras.Camera c = ExtraCameras.find(PrinterService.this, id.substring(6)); if (c == null) return null;
+                    String url = ExtraCameras.url(PrinterService.this, c); if (url.isEmpty() || !ExtraCameras.problem(url).isEmpty()) return null;
+                    PrinterHttp.ConnectionFactory factory = ExtraCameras.connections(c.user, ExtraCameras.password(PrinterService.this, c));
+                    return ExtraCameras.SNAPSHOT.equals(c.kind) ? CameraHub.snapshots(url, factory, 1_000, sink) : CameraHub.mjpeg(url, factory, sink);
+                }
+            } catch (Exception unusable) { sink.failed(CameraHub.words(unusable)); }
+            return null;
+        }
+        public byte[] latestPictureJpeg() {
+            PrintRecorder.Recording current = recorder == null ? null : recorder.current();
+            List<java.io.File> pictures = current == null ? null : PrintRecorder.pictures(current);
+            if (pictures != null && !pictures.isEmpty()) try { return java.nio.file.Files.readAllBytes(pictures.get(pictures.size() - 1).toPath()); } catch (java.io.IOException unreadable) { }
+            android.graphics.Bitmap shown = progressPicture; if (shown == null) return null;
+            java.io.ByteArrayOutputStream jpeg = new java.io.ByteArrayOutputStream(); shown.compress(android.graphics.Bitmap.CompressFormat.JPEG, 85, jpeg); return jpeg.toByteArray();
+        }
+    };
+    /** The status as other apps see it (IntegrationStatus). Main thread. */
+    public JSONObject integrationStatus(boolean hideFile) { return integrationPrinter.integrationStatus(hideFile); }
+    /** The app's own camera view is about to open the printer's camera (other apps' viewers then see its frames). */
+    public void cameraViewOpening() { Integrations i = integrations; if (i != null) i.appCameraOpening(); }
+    /** One frame of the app's own camera view, as the camera sent it (any thread). */
+    public void cameraViewFrame(byte[] jpeg) { Integrations i = integrations; if (i != null) i.appCameraFrame(jpeg); }
+
     @Override public void onDestroy() {
+        if (integrations != null) integrations.close();
         if (pictureVisits != null) pictureVisits.pause();
         CloudFrameGrab.leave(); pictureWorker.shutdownNow();
         getApplication().unregisterActivityLifecycleCallbacks(screens);

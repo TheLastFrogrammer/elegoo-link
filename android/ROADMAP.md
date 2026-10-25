@@ -1,6 +1,6 @@
 # Link Workshop roadmap
 
-State as of v0.102.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
+State as of v0.103.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
 on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings › Field check gathers the manual checklist
 ([FIELD_TEST.md](FIELD_TEST.md)), the checks measured during prints, and the self-test print into one report to share
 (no codes, PINs, addresses or serials).
@@ -17,6 +17,7 @@ on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings �
 | Slicer | ElegooSlicer's engine on the phone; presets; multi-filament with CANVAS trays; plate view; full settings editor; 3MF projects; per-object settings; support blockers and enforcers; calibration prints; smooth timelapse (park at a chosen corner or the one farthest from the camera, with a comparison set); the self-test print; upload and print from the result; the reason Slice is off, with a tap to fix it | Speed and memory on a real phone; colour, support and seam painting |
 | Measured checks | Status rate; parking, lift and return; layer numbers; head position on the layer; the self-test's position probe (exact, shifted or mirrored); picture timing; heaters; filament use; slicer estimate; printer's time left; faults. Kept with each recording, in Diagnostics at the end, and in Field check | Their first answers, from the self-test print |
 | Automations and links | Rules with notify, light (once, off by default) and webhooks; Home Assistant (read only); print guardian (notify only); projects; backup and restore | — |
+| Other apps | Read-only local API on the home network ([INTEGRATIONS.md](INTEGRATIONS.md)): status (`linkworkshop.status/1`), Server-Sent Events, print events, the printer's and added cameras as snapshots and MJPEG through one shared connection, pairing approved on the phone with a matching code, hashed tokens, tickets, DNS-SD discovery, a TV dashboard page; signed pushes to the person's own relay (ready Cloudflare Worker) for a Reddit app; Python and Android/Fire TV examples | A TV and the relay with the real printer; a native Fire TV app; HTTPS on the home network |
 
 ## Where it is heading
 

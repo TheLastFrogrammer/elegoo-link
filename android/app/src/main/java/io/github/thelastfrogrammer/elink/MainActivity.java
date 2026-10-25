@@ -264,7 +264,7 @@ public final class MainActivity extends Activity {
         connectionSection = section(SETTINGS, "Printer connection", "");
         // App preferences, by what they are about: recording and alerts, automations and other apps, appearance, storage and backup.
         preferencesSection = section(SETTINGS, "Recording & alerts", "Print recordings, camera pictures, notifications, print watch and guardian");
-        haSection = section(SETTINGS, "Automations & integrations", "Rules for print events, Home Assistant (read only)");
+        haSection = section(SETTINGS, "Automations & integrations", "Rules for print events, Home Assistant, other apps (read only)");
         appearanceSection = section(SETTINGS, "Appearance", "Theme: light, dark or follow the system");
         storageSection = section(SETTINGS, "Storage & backup", "Back up and restore settings, recordings and project files");
         helpSection = section(SETTINGS, "Help & diagnostics", "Connection help, Field check, printer probe and diagnostics");
@@ -2421,7 +2421,10 @@ public final class MainActivity extends Activity {
             cameraRouteWatch = route.watch(() -> main.post(() -> { if (cameraRoute == route && cameraPlayer != null) { stopCamera(); cameraInfo.setText("Home VPN route changed. Enable the VPN and restart the camera."); } }));
             long openedAt = android.os.SystemClock.elapsedRealtime(); boolean[] first = {true};
             Diagnostics.note(Diagnostics.CAMERA, "camera stream opening " + (alongsideCloud ? "on Wi-Fi alongside the cloud" : remoteMode() ? "through the home VPN" : "on the local network"));
+            // Other apps watching through this phone: the hub lets go of the printer's camera and sees this view's frames.
+            PrinterService feeding = printer; if (feeding != null) feeding.cameraViewOpening();
             cameraPlayer = new MjpegPlayer(url, route.http(), new MjpegPlayer.Listener() {
+                public void jpeg(byte[] bytes) { if (feeding != null) feeding.cameraViewFrame(bytes); }
                 public void frame(Bitmap image) { if (isDestroyed()) return; lastFrame = image;
                     if (first[0]) { first[0] = false; Diagnostics.note(Diagnostics.CAMERA, "camera stream: first picture after " + (android.os.SystemClock.elapsedRealtime() - openedAt) + " ms, " + image.getWidth() + "x" + image.getHeight()); } cameraImage.setVisibility(View.VISIBLE); cameraImage.setImageBitmap(image); cameraInfo.setText("Live · up to 5 pictures a second"); cameraSnapshot.setEnabled(true);
                     monitorImage.setVisibility(View.VISIBLE); monitorImage.setImageBitmap(image); monitorCameraInfo.setText(""); monitorCameraInfo.setVisibility(View.GONE);
@@ -2577,6 +2580,9 @@ public final class MainActivity extends Activity {
     private Button monitorHide; private LinearLayout printNav; private NavRow navToolpath, navSlice, navOptions, navRecording, navAgain, navCanvas, navRefresh; private long fileSourceAt; private String fileSourceFor = ""; private String feedbackTarget = "";
     private void buildHomeAssistant() {
         currentSection = haSection.body;
+        LinearLayout others = card("Other apps");
+        label(others, "A TV or tablet on your Wi-Fi, a dashboard, a script, or your own server on the internet (for a Reddit app, say) can watch the printer and its camera through this phone. Read only.", 13, MUTED, false);
+        button(others, "Other apps…", () -> startActivity(new Intent(this, IntegrationsActivity.class)));
         LinearLayout card = card("Home Assistant");
         label(card, "Progress, temperatures, state and the latest picture to your MQTT broker; the sensors appear in Home Assistant by themselves. Read only: Home Assistant cannot control the printer through this.", 13, MUTED, false);
         CompoundButton on = checkbox(card, "Send to Home Assistant", settings.getBoolean("haEnabled", false));

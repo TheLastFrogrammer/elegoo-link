@@ -8,7 +8,11 @@ import java.util.concurrent.*;
 
 /** One bounded JPEG at a time, no WebView scripts or background camera traffic. */
 public final class MjpegPlayer implements AutoCloseable {
-    public interface Listener { void frame(Bitmap image); void error(String message); }
+    public interface Listener {
+        void frame(Bitmap image); void error(String message);
+        /** Each frame as the camera sent it, before it is decoded (worker thread). */
+        default void jpeg(byte[] bytes) { }
+    }
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler main = new Handler(Looper.getMainLooper());
     private volatile boolean closed;
@@ -25,6 +29,7 @@ public final class MjpegPlayer implements AutoCloseable {
                 try (InputStream input = new BufferedInputStream(stream.getInputStream(), 32768)) {
                     while (!closed) {
                         byte[] bytes = JpegFrames.next(input);
+                        listener.jpeg(bytes);
                         BitmapFactory.Options bounds = new BitmapFactory.Options(); bounds.inJustDecodeBounds = true; BitmapFactory.decodeByteArray(bytes, 0, bytes.length, bounds);
                         if (bounds.outWidth <= 0 || bounds.outHeight <= 0 || bounds.outWidth > 4096 || bounds.outHeight > 4096) throw new IOException("Invalid camera frame");
                         BitmapFactory.Options options = new BitmapFactory.Options(); options.inSampleSize = 1;

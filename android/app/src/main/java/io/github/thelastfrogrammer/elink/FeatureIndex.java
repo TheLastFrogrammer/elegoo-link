@@ -85,6 +85,7 @@ final class FeatureIndex {
         new Feature("fieldcheck", "Field check", "field test check hardware checklist report problems try verify", SETTINGS, "Field check", Prepare.NONE, true),
         new Feature("companion", "Printer companion", "companion raspberry pi uart console helper root shell firmware hook exact file journal timelapse logs", SETTINGS, "Printer companion (not set up)…", Prepare.NONE, true),
         new Feature("print-options", "Print options", "print options pictures interval layer alert automations this print preview toolpath instead of camera", PRINT, "Print options…", Prepare.NONE, true).or("Controls"),
+        new Feature("integrations", "Other apps: TV, dashboards, relay", "tv fire tv television tablet dashboard api other apps integration stream camera relay reddit server webhook watch remote browser", SETTINGS, "Other apps…", Prepare.NONE, true),
         new Feature("homeassistant", "Home Assistant", "home assistant mqtt broker dashboard sensors automation smart home", SETTINGS, "Send to Home Assistant", Prepare.NONE, false),
         new Feature("logs", "View logs", "logs log events history debug errors camera connection commands messages", SETTINGS, "View logs", Prepare.NONE, true),
         new Feature("cameracheck", "Camera check", "camera check test video not working diagnose stream cloud", PRINT, "Camera check", Prepare.NONE, false),

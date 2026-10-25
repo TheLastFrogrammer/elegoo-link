@@ -1,0 +1,6 @@
+{
+  "name": "link-workshop-relay",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node test.mjs" }
+}

@@ -41,6 +41,8 @@ final class AutomationRun {
         void notifyPerson(int id, String title, String text, android.graphics.Bitmap picture);
         /** Tells Home Assistant (no-op when the link is off), with a chart PNG for its chart camera when given; returns what happened for the log. */
         String homeAssistantEvent(JSONObject event, byte[] chart);
+        /** Tells other apps (the local API's event stream, the relay); no-op when they are off. */
+        void integrationEvent(Automation.Event event);
         /** The print being recorded now, or null. Main thread; reads nothing from disk. */
         PrintRecorder.Recording recordingNow();
         /** Which printer over which connection events come from now ("" when none): a delayed action checks it is still the same. */
@@ -120,6 +122,7 @@ final class AutomationRun {
         fire(detector.outside(type, detail, status, printer)); }
 
     void fire(Automation.Event event) {
+        host.integrationEvent(event);
         if (!event.type.equals(Automation.LAYER)) Diagnostics.note(Diagnostics.AUTOMATIONS, "event: " + event.type + (event.layer >= 0 ? " at layer " + event.layer : ""));
         java.util.Calendar now = java.util.Calendar.getInstance();
         int minute = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE);
