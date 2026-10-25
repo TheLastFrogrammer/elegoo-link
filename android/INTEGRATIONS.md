@@ -173,6 +173,10 @@ Per-layer and value events are not sent here: follow `status` for those.
 choose **Pair this screen**. The page shows the code, you approve it on the phone, and it then shows the camera, the
 progress, the times and the temperatures. It remembers the pairing.
 
+**Native TV app.** [`tv/`](tv) is a ready Fire TV / Android TV app, "Printer on TV" (Fire OS 6 / Android 7.1 and
+later, sideloaded). It finds the phone, pairs with the code, and shows the camera full screen with the status over it
+and print events as banners. Its [README](tv/README.md) says how to install it.
+
 **A native app.** [`integrations/examples/PrinterWatch.java`](integrations/examples/PrinterWatch.java) is a
 copy-in client with no libraries. It does discovery, pairing (it hands you the code to show), the event stream and the
 camera as decoded bitmaps. Show the bitmaps in an `ImageView` and the status in your layout. Things to know:

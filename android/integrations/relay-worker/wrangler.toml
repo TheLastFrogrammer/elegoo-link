@@ -9,7 +9,7 @@ binding = "LW"
 id = "PASTE_THE_NAMESPACE_ID"
 
 # Secrets (never in this file):
-#   npx wrangler secret put LW_SECRET   # the relay secret shown in the app (Settings › Other apps › Relay)
+#   npx wrangler secret put LW_SECRET   # the relay secret shown in the app (Settings › Automations & integrations › Other apps › Relay)
 #   npx wrangler secret put READ_KEY    # any long random text your readers send
 # To let anyone read without a key, set PUBLIC_READ = "true" under [vars] instead.
 [vars]

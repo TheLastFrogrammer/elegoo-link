@@ -1,0 +1,19 @@
+<!-- The home screen banner (320×180 px at xhdpi): a TV showing a print, and the app's name in plain stroked capitals. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="160dp" android:height="90dp" android:viewportWidth="320" android:viewportHeight="180">
+    <path android:fillColor="#0E1417" android:pathData="M0,0h320v180h-320z" />
+    <group android:scaleX="0.86" android:scaleY="0.86" android:pivotX="160" android:pivotY="90">
+    <path android:fillColor="#182227" android:pathData="M22,46h84a8,8 0 0 1 8,8v54a8,8 0 0 1 -8,8h-84a8,8 0 0 1 -8,-8v-54a8,8 0 0 1 8,-8z" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="5" android:strokeLineJoin="round" android:pathData="M22,46h84a8,8 0 0 1 8,8v54a8,8 0 0 1 -8,8h-84a8,8 0 0 1 -8,-8v-54a8,8 0 0 1 8,-8z" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="5" android:strokeLineCap="round" android:pathData="M64,116 L64,130 M50,132 L78,132" />
+    <path android:strokeColor="#9FB3BB" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M30,60 L98,60" />
+    <path android:fillColor="#E6EEF1" android:pathData="M57,61 L71,61 L64,71 Z" />
+    <path android:fillColor="#E6EEF1" android:pathData="M54,78 L74,78 L74,94 L54,94 Z" />
+    <path android:strokeColor="#9FB3BB" android:strokeWidth="3" android:strokeLineCap="round" android:pathData="M30,96 L98,96" />
+    <path android:strokeColor="#2A3A40" android:strokeWidth="4" android:strokeLineCap="round" android:pathData="M30,106 L98,106" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="4" android:strokeLineCap="round" android:pathData="M30,106 L72,106" />
+    <path android:strokeColor="#E6EEF1" android:strokeWidth="5.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M128,82 L128,52 L139,52 A8,8 0 0 1 139,68 L128,68 M156,82 L156,52 L167,52 A8,8 0 0 1 167,68 L156,68 M166,68 L175,82 M184,52 L184,82 M193,82 L193,52 L213,82 L213,52 M222,52 L242,52 M232,52 L232,82 M268,52 L251,52 L251,82 L268,82 M251,67 L264,67 M277,82 L277,52 L288,52 A8,8 0 0 1 288,68 L277,68 M287,68 L296,82" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="5.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M128,113 A13,15 0 1 1 154,113 A13,15 0 1 1 128,113 M163,128 L163,98 L183,128 L183,98 M207,98 L227,98 M217,98 L217,128 M236,98 L247,128 L258,98" />
+    </group>
+</vector>

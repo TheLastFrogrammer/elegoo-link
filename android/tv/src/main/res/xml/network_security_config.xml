@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Why cleartext: Link Workshop on the phone answers plain http on the home network (it has no certificate a TV could
+  check), at an address the TV only learns at run time, from discovery or typed by the person. A config cannot list
+  such addresses (it matches host names, not address ranges), so cleartext is allowed in general. The app talks to
+  nothing but that phone, and the phone itself refuses every address outside the home network.
+-->
+<network-security-config xmlns:tools="http://schemas.android.com/tools">
+    <base-config cleartextTrafficPermitted="true" tools:ignore="InsecureBaseConfiguration" />
+</network-security-config>

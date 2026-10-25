@@ -1,0 +1,9 @@
+<!-- The app icon: a TV showing a print, on the app's dark background. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:fillColor="#0E1417" android:pathData="M0,0h48v48h-48z" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="2.5" android:strokeLineJoin="round" android:pathData="M10,11h28a3,3 0 0 1 3,3v18a3,3 0 0 1 -3,3h-28a3,3 0 0 1 -3,-3v-18a3,3 0 0 1 3,-3z" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="2.5" android:strokeLineCap="round" android:pathData="M24,35 L24,39 M18,40 L30,40" />
+    <path android:strokeColor="#9FB3BB" android:strokeWidth="1.5" android:strokeLineCap="round" android:pathData="M12,16 L36,16 M12,28 L36,28" />
+    <path android:fillColor="#E6EEF1" android:pathData="M21.5,16.5 L26.5,16.5 L24,20 Z M20,22 L28,22 L28,27.5 L20,27.5 Z" />
+    <path android:strokeColor="#5FD4C4" android:strokeWidth="2" android:strokeLineCap="round" android:pathData="M12,31.5 L28,31.5" />
+</vector>

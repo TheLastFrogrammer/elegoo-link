@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Printer on TV</string>
+    <style name="Tv" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#5FD4C4</item>
+        <item name="android:colorBackground">#0E1417</item>
+        <item name="android:windowBackground">#0E1417</item>
+        <item name="android:navigationBarColor">#0E1417</item>
+        <item name="android:statusBarColor">#0E1417</item>
+        <item name="android:textColorPrimary">#E6EEF1</item>
+        <item name="android:textColorSecondary">#9FB3BB</item>
+    </style>
+</resources>

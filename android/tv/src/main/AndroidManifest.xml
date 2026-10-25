@@ -1,0 +1,30 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <uses-permission android:name="android.permission.INTERNET" />
+    <!-- To try the phone again at once when the TV's network comes back. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- A TV app: no touchscreen needed, the remote's D-pad drives every screen. Not limited to TVs (it runs on a tablet too). -->
+    <uses-feature android:name="android.software.leanback" android:required="false" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <!-- The phone answers plain http on the home network: network_security_config allows it (and says why). -->
+    <application android:label="@string/app_name" android:theme="@style/Tv"
+        android:icon="@drawable/ic_launcher" android:banner="@drawable/banner"
+        android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config" android:supportsRtl="true" tools:targetApi="31">
+        <activity android:name=".FindActivity" android:exported="true"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity android:name=".AddressActivity" android:exported="false" android:label="Enter the phone's address"
+            android:windowSoftInputMode="adjustPan"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
+        <activity android:name=".PairActivity" android:exported="false" android:label="Pair with the phone"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
+        <!-- Not recreated on a configuration change: that would drop and reopen the camera stream. -->
+        <activity android:name=".WatchActivity" android:exported="false" android:label="Printer"
+            android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|screenLayout|smallestScreenSize|uiMode" />
+    </application>
+</manifest>

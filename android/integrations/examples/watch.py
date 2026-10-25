@@ -27,7 +27,7 @@ def call(base, path, token=None, method="GET", body=None):
 
 def pair(base):
     asked = json.load(call(base, "/api/v1/pair", method="POST", body={"name": "watch.py on " + os.uname().nodename}))
-    print("Approve on the phone (Link Workshop > Settings > Other apps). Code:", asked["code"])
+    print("Approve on the phone (Link Workshop > Settings > Automations & integrations > Other apps). Code:", asked["code"])
     until = time.time() + asked["expires_in"]
     while time.time() < until:
         try:

@@ -311,7 +311,7 @@ final class IntegrationServer implements AutoCloseable {
         IntegrationAuth.Pairing pairing = auth.request(name, now);
         if (pairing == null) { send(out, 429, "Too many devices are waiting to be approved on the phone", false); return; }
         json(out, 202, new JSONObject().put("id", pairing.id).put("code", pairing.code).put("poll", "/api/v1/pair/" + pairing.id)
-            .put("expires_in", IntegrationAuth.PAIRING_MS / 1000).put("message", "Approve this device on the phone: Link Workshop › Settings › Other apps. The phone shows the same code."), false);
+            .put("expires_in", IntegrationAuth.PAIRING_MS / 1000).put("message", "Approve this device on the phone: Link Workshop › Settings › Automations & integrations › Other apps. The phone shows the same code."), false);
     }
 
     private boolean known(String camera) {
