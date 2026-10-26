@@ -114,23 +114,31 @@ final class PrintGuardian {
     /**
      * One print's run of checks. The first three set what is normal for this camera, light and bed; an alarm needs three bad
      * checks in a row: much more filament-coloured area off the print than normal, or most of the print's area gone after it
-     * was clearly there. "Looks fine" from the person raises the bar for the rest of the print.
+     * was clearly there. It starts from what was learned from earlier answers on this camera (GuardianMemory, 1 = the fixed
+     * rule); "Looks fine" from the person raises the bar further for the rest of the print.
      */
     static final class Watch {
         private final List<Double> start = new ArrayList<>();
-        private double baseline = -1, bestCoverage, tolerance = 1;
+        private double baseline = -1, bestCoverage;
+        /** How many times the fixed rule's limit is allowed, for filament off the print and for the print's area. */
+        double outsideAllowance = 1, coverageAllowance = 1;
+        /** Whether the last check was judged (not learning, enough in view), so its limits belong to it. */
+        boolean judged;
+        Watch() { }
+        Watch(double outsideStart, double coverageStart) { outsideAllowance = Math.max(1, outsideStart); coverageAllowance = Math.max(1, coverageStart); }
         private int badOutside, badCoverage; boolean alarmed;
         /** The last check's limits and whether it was over them (NaN: not judged yet), for the recording's guardian chart. */
         double outsideLimit = Double.NaN, coverageLimit = Double.NaN; boolean outsideBad, coverageBad;
         String reason = "";
         /** Feeds one check; true the moment it becomes an alarm (once per run of bad checks). */
         boolean add(Result r, int layer) {
+            judged = false;
             if (r.expectedPixels < 30 || r.bedPixels < 100) { reason = "too little of the print or bed in view to judge"; return false; }
             if (baseline < 0) { start.add(r.outside); if (start.size() < 3) { reason = "learning what is normal (" + start.size() + " of 3)"; return false; }
                 List<Double> sorted = new ArrayList<>(start); Collections.sort(sorted); baseline = Math.max(0.002, sorted.get(1)); }
-            bestCoverage = Math.max(bestCoverage, r.coverage);
-            outsideLimit = Math.max(0.03, 3 * baseline) * tolerance;
-            coverageLimit = layer >= 5 && bestCoverage > 0.25 ? bestCoverage * 0.4 / tolerance : Double.NaN;
+            bestCoverage = Math.max(bestCoverage, r.coverage); judged = true;
+            outsideLimit = Math.max(0.03, 3 * baseline) * outsideAllowance;
+            coverageLimit = layer >= 5 && bestCoverage > 0.25 ? bestCoverage * 0.4 / coverageAllowance : Double.NaN;
             outsideBad = r.outside > outsideLimit;
             coverageBad = !Double.isNaN(coverageLimit) && r.coverage < coverageLimit;
             badOutside = outsideBad ? badOutside + 1 : 0; badCoverage = coverageBad ? badCoverage + 1 : 0;
@@ -142,7 +150,7 @@ final class PrintGuardian {
             return false;
         }
         /** The person said the last alarm was not a problem: allow 50 % more before the next. */
-        void looksFine() { tolerance *= 1.5; badOutside = 0; badCoverage = 0; alarmed = false; }
+        void looksFine() { outsideAllowance *= 1.5; coverageAllowance *= 1.5; badOutside = 0; badCoverage = 0; alarmed = false; }
         private static String percent(double v) { return Math.round(v * 1000) / 10.0 + " %"; }
     }
 

@@ -56,7 +56,11 @@ final class PictureChange {
         private int[] previous, beforeJump, reference;
         private final boolean[] region = new boolean[N];
         private final List<Double> learning = new ArrayList<>();
-        private double noise = -1, tolerance = 1, jumpShare;
+        private double noise = -1, jumpShare;
+        /** How many times the fixed rule's limit is allowed, for change away from the print and for a sudden change (GuardianMemory). */
+        double spreadAllowance = 1, jumpAllowance = 1;
+        Watch() { }
+        Watch(double spreadStart, double jumpStart) { spreadAllowance = Math.max(1, spreadStart); jumpAllowance = Math.max(1, jumpStart); }
         private int spreadRun, jumpRun;
         boolean alarmed;
         String reason = "";
@@ -81,7 +85,9 @@ final class PictureChange {
                 reference = now;
                 reason = "looks as expected"; return false;
             }
-            double big = Math.max(0.12, 6 * noise) * tolerance;
+            double big = Math.max(0.12, 6 * noise) * jumpAllowance;
+            // Spread is judged only with no large change pending: otherwise this picture has no spread of its own to show.
+            spreadNow = Double.NaN; spreadLimit = Double.NaN; spreadOver = false;
             jumpNow = share; jumpLimit = big; jumpOver = share > big;
             // A large change waits for the next picture: if the picture goes back, it was the light or a passing shadow.
             if (beforeJump != null) {
@@ -99,8 +105,9 @@ final class PictureChange {
             boolean[] since = changed(reference, now, ignore);
             int away = 0; for (int i = 0; i < N; i++) if (since[i] && !near[i]) away++;
             double spread = away / (double) N;
-            boolean spreadBad = beforeJump == null && spread > Math.max(0.015, 4 * noise) * tolerance;
-            spreadNow = spread; spreadLimit = Math.max(0.015, 4 * noise) * tolerance; spreadOver = spreadBad;
+            double spreadMax = Math.max(0.015, 4 * noise) * spreadAllowance;
+            boolean spreadBad = beforeJump == null && spread > spreadMax;
+            if (beforeJump == null) { spreadNow = spread; spreadLimit = spreadMax; spreadOver = spreadBad; }
             spreadRun = spreadBad ? spreadRun + 1 : 0;
             boolean spreading = spreadRun >= 3;
             boolean[] beside = PrintGuardian.grow(region, 1);
@@ -116,7 +123,7 @@ final class PictureChange {
             return false;
         }
         /** The person said the last alarm was not a problem: allow 50 % more before the next, and learn what is there now. */
-        void looksFine() { tolerance *= 1.5; spreadRun = 0; jumpRun = 0; beforeJump = null; alarmed = false; if (previous != null) reference = previous; }
+        void looksFine() { spreadAllowance *= 1.5; jumpAllowance *= 1.5; spreadRun = 0; jumpRun = 0; beforeJump = null; alarmed = false; if (previous != null) reference = previous; }
         private static void or(boolean[] into, boolean[] add) { for (int i = 0; i < N; i++) into[i] |= add[i]; }
         private static String percent(double v) { return Math.round(v * 1000) / 10.0 + " %"; }
     }

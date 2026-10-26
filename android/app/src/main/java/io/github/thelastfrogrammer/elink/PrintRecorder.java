@@ -49,8 +49,11 @@ public final class PrintRecorder {
         /**
          * The print guardian's checks, one entry per measure per picture: {printer layer, measure (GUARDIAN_*), value, limit,
          * over the limit 0/1, raised an alarm 0/1}; values and limits as shares (0-1). For the recording's guardian chart.
+         * Newer entries add a seventh: the allowance in effect (how many times the fixed rule's limit), for GuardianMemory's replay.
          */
         public final List<double[]> guardianChecks = new ArrayList<>();
+        /** Which camera and line-up the guardian's checks came from (GuardianMemory's opaque key), "" unknown, "mixed" when it changed. */
+        public String guardianCamera = "";
         /** Measured while the print ran: status rate, parking, layer numbers, head position, picture timing (PrintChecks). */
         public PrintChecks checks = new PrintChecks();
         /** The timelapse video made when the print ended (in its picture folder), and the side-by-side one for comparing. */
@@ -83,7 +86,7 @@ public final class PrintRecorder {
                 .put("picture_minutes", pictureMinutes).put("picture_layers", pictureLayers).put("pictures", pictures)
                 .put("park_x", smooth() ? parkX : null).put("park_y", smooth() ? parkY : null).put("picture_far", pictureFar)
                 .put("compare", compare && smooth()).put("far_pictures", farPictures).put("checks", checks.toJson())
-                .put("guardian_checks", guardianJson())
+                .put("guardian_checks", guardianJson()).put("guardian_camera", guardianCamera.isEmpty() ? null : guardianCamera)
                 .put("extruded_mm", extrudedMm).put("last_e", Double.isNaN(lastE) ? null : lastE).put("print_duration", printDuration).put("start_progress", startProgress).put("estimate", estimate)
                 .put("journal", journal.empty() ? null : journal.toJson()).put("spools", spools.length() == 0 ? null : spools);
         }
@@ -98,11 +101,11 @@ public final class PrintRecorder {
             recording.pictureMinutes = json.optInt("picture_minutes"); recording.pictureLayers = json.optInt("picture_layers"); recording.pictures = json.optInt("pictures");
             recording.parkX = json.optDouble("park_x", Double.NaN); recording.parkY = json.optDouble("park_y", Double.NaN); recording.pictureFar = json.optBoolean("picture_far");
             recording.compare = json.optBoolean("compare"); recording.farPictures = json.optInt("far_pictures");
-            recording.checks = PrintChecks.fromJson(json.optJSONObject("checks"));
+            recording.checks = PrintChecks.fromJson(json.optJSONObject("checks")); recording.guardianCamera = json.optString("guardian_camera", "");
             org.json.JSONArray g = json.optJSONArray("guardian_checks");
             for (int i = 0; g != null && i < g.length(); i++) {
                 org.json.JSONArray one = g.optJSONArray(i); if (one == null || one.length() < 6) continue;
-                double[] entry = new double[6]; for (int k = 0; k < 6; k++) entry[k] = one.optDouble(k, Double.NaN);
+                double[] entry = new double[Math.min(7, one.length())]; for (int k = 0; k < entry.length; k++) entry[k] = one.optDouble(k, Double.NaN);
                 recording.guardianChecks.add(entry);
             }
             recording.extrudedMm = json.optDouble("extruded_mm", 0); recording.lastE = json.optDouble("last_e", Double.NaN);
@@ -159,10 +162,10 @@ public final class PrintRecorder {
             if (!temp.renameTo(meta)) throw new IOException(failure);
         }
     }
-    /** Notes the guardian's alarm and the person's answer in the running print's journal. */
+    /** Notes the guardian's alarm and the person's answer in the running print's journal, with how many checks were kept by then (which alarms it answers). */
     public synchronized void noteGuardian(boolean fine, String said, long now) {
         if (current == null) return;
-        try { if (current.journal.guardian.size() < 50) current.journal.guardian.add(new JSONObject().put("at", now).put("fine", fine).put("said", Automation.cap(said, 300))); save(current); }
+        try { if (current.journal.guardian.size() < 50) current.journal.guardian.add(new JSONObject().put("at", now).put("fine", fine).put("said", Automation.cap(said, 300)).put("check", current.guardianChecks.size())); save(current); }
         catch (Exception ignored) { }
     }
     /** The recording of the print that ended last (complete or stopped), or null; kept across app restarts. */
@@ -235,6 +238,13 @@ public final class PrintRecorder {
     public synchronized void noteGuardianCheck(File meta, int layer, int measure, double value, double limit, boolean over, boolean alarm) {
         if (current == null || !current.meta.equals(meta) || Double.isNaN(value) || current.guardianChecks.size() >= 4000) return;
         current.guardianChecks.add(new double[] {layer, measure, value, limit, over ? 1 : 0, alarm ? 1 : 0});
+        save(current);
+    }
+    /** As above, with the allowance in effect (times the fixed rule's limit) and the camera and line-up it was made with (GuardianMemory.key). */
+    public synchronized void noteGuardianCheck(File meta, int layer, int measure, double value, double limit, boolean over, boolean alarm, double allowance, String camera) {
+        if (current == null || !current.meta.equals(meta) || Double.isNaN(value) || current.guardianChecks.size() >= 4000) return;
+        current.guardianChecks.add(new double[] {layer, measure, value, limit, over ? 1 : 0, alarm ? 1 : 0, allowance});
+        current.guardianCamera = current.guardianCamera.isEmpty() || current.guardianCamera.equals(camera) ? camera : "mixed";
         save(current);
     }
     /** The running print's moves reported after a stop, between two times (monotonic ms), for the camera clock. */

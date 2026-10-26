@@ -40,6 +40,14 @@ final class GuardianRun {
                 int[] rgb = grid(jpeg, aspect);
                 if (rgb == null) verdict = "Could not read the picture.";
                 else {
+                    String key = memoryKey(context, cameraId);
+                    // A new print, camera or line-up starts from what was learned for that camera and line-up.
+                    if (!recording.id.equals(notedPrint) || !key.equals(memoryKey)) {
+                        notedPrint = recording.id; memoryKey = key; memoryWhose = cameraId.startsWith("added:") ? "an added camera" : "the printer's camera"; noted.clear(); answeredUpTo = 0;
+                        learned = memory(context).allowances(key);
+                        boolean any = false; for (double m : learned) any |= m > 1;
+                        if (any) Diagnostics.note(Diagnostics.GUARDIAN, "memory: starts this print on " + memoryWhose + " with what it learned: " + allowances(learned));
+                    }
                     // The change check first: it needs no G-code, line-up or colour, so it runs where the colour check cannot.
                     changeCheck(recording, rgb, aspect[0], layer, head, cameraId, parked, alarm);
                     run(recording, rgb, aspect[0], layer, total, head, trayRgb, cameraId, job, alarm);
@@ -49,6 +57,40 @@ final class GuardianRun {
             catch (Throwable failed) { verdict = "Could not check this picture."; Diagnostics.note(Diagnostics.GUARDIAN, "check failed: " + failed.getClass().getSimpleName()); }
             changed.run();
         });
+    }
+
+    /**
+     * What was learned from answers (GuardianMemory), per camera and line-up: the checks of this print with this camera as
+     * they were kept (for the answer to learn from), how many were answered already, and the allowances it started with.
+     */
+    private final java.util.List<double[]> noted = new java.util.ArrayList<>();
+    private String notedPrint = "", memoryKey = "", memoryWhose = "";
+    private int answeredUpTo;
+    private double[] learned = {1, 1, 1, 1};
+    static final String MEMORY = "guardian-memory";
+    /** The memory, kept in its own settings file (so backups carry it). */
+    static synchronized GuardianMemory memory(Context context) { return GuardianMemory.fromJson(context.getSharedPreferences(MEMORY, Context.MODE_PRIVATE).getString("answers", "")); }
+    private static synchronized GuardianMemory edit(Context context, java.util.function.Consumer<GuardianMemory> edit) {
+        GuardianMemory memory = memory(context); edit.accept(memory);
+        context.getSharedPreferences(MEMORY, Context.MODE_PRIVATE).edit().putString("answers", memory.toJson()).apply();
+        return memory;
+    }
+    /** Forgets everything learned (the settings' "Forget what it learned"). */
+    static void forget(Context context) { edit(context, GuardianMemory::forget); Diagnostics.note(Diagnostics.GUARDIAN, "memory: forgot what it learned from answers"); }
+    /** The memory key of a camera ("printer" or "added:" and its id) as it is lined up now in Live toolpath. */
+    static String memoryKey(Context context, String cameraId) {
+        String id = cameraId.startsWith("added:") ? cameraId.substring(6) : "";
+        android.content.SharedPreferences hints = context.getSharedPreferences("viewer-hints", Context.MODE_PRIVATE);
+        int spot = hints.getInt(GcodeViewerActivity.camKey("cameraSpot", id), GcodeViewerActivity.defaultSpot(id));
+        String lineUp = GuardianMemory.lineUp(GcodeViewerActivity.linedUp(hints, id), spot, GcodeViewerActivity.savedPoints(hints, id));
+        return GuardianMemory.key(id.isEmpty() ? PrintRecorder.PRINTER_CAMERA : "added:" + id, lineUp);
+    }
+    /** Keeps one check with the print's recording and here, with the allowance in effect and the camera it was made with. */
+    private void note(PrintRecorder.Recording recording, int layer, int measure, double value, double limit, boolean over, boolean alarm, double allowance) {
+        if (Double.isNaN(value)) return;
+        if (noted.size() < 4000) noted.add(new double[] {layer, measure, value, limit, over ? 1 : 0, alarm ? 1 : 0, allowance});
+        PrintRecorder recorder = PrintRecorder.active;
+        if (recorder != null) recorder.noteGuardianCheck(recording.meta, layer, measure, value, limit, over, alarm, allowance, memoryKey);
     }
 
     /** The picture on the guardian's grid (RGB), and its width over height; null when unreadable. */
@@ -77,7 +119,10 @@ final class GuardianRun {
      * the head moves about the picture, so it is masked out with the lined-up camera, or the check waits.
      */
     private void changeCheck(PrintRecorder.Recording recording, int[] rgb, double aspect, int layer, double[] head, String cameraId, boolean parked, Alarm alarm) {
-        if (!recording.id.equals(changePrint) || !cameraId.equals(changeCamera)) { changePrint = recording.id; changeCamera = cameraId; change = new PictureChange.Watch(); changeVerdict = ""; changeChecks = 0; }
+        if (!recording.id.equals(changePrint) || !memoryKey.equals(changeCamera)) {
+            changePrint = recording.id; changeCamera = memoryKey; changeVerdict = ""; changeChecks = 0;
+            change = new PictureChange.Watch(learned[PrintRecorder.GUARDIAN_SPREAD], learned[PrintRecorder.GUARDIAN_SUDDEN]);
+        }
         boolean[] ignore = null;
         // A smooth print's picture taken when the park was missed shows the head: it is left out rather than compared.
         if (recording.smooth() && !parked) return;
@@ -92,11 +137,8 @@ final class GuardianRun {
         }
         boolean raise = change.add(PictureChange.luminance(rgb), ignore);
         changeChecks++;
-        PrintRecorder recorder = PrintRecorder.active;
-        if (recorder != null) {
-            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_SPREAD, change.spreadNow, change.spreadLimit, change.spreadOver, raise && change.reason.startsWith("changes spreading"));
-            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_SUDDEN, change.jumpNow, change.jumpLimit, change.jumpOver, raise && change.reason.contains("come loose"));
-        }
+        note(recording, layer, PrintRecorder.GUARDIAN_SPREAD, change.spreadNow, change.spreadLimit, change.spreadOver, raise && change.reason.startsWith("changes spreading"), change.spreadAllowance);
+        note(recording, layer, PrintRecorder.GUARDIAN_SUDDEN, change.jumpNow, change.jumpLimit, change.jumpOver, raise && change.reason.contains("come loose"), change.jumpAllowance);
         changeVerdict = change.alarmed ? "something looks wrong: " + change.reason : change.reason;
         if (changeChecks == 1 || changeChecks % 10 == 0 || raise) Diagnostics.note(Diagnostics.GUARDIAN, "change check " + changeChecks + ": " + change.reason + (raise ? "; ALARM" : ""));
         if (raise) { alarmed = true; overlay = changeOverlay(rgb, change); alarm.raise(change.reason, overlay); }
@@ -172,9 +214,9 @@ final class GuardianRun {
     }
 
     private void run(PrintRecorder.Recording recording, int[] rgb, double aspect, int layer, int total, double[] head, int trayRgb, String cameraId, GcodeJobTracker.Job job, Alarm alarm) throws Exception {
-        if (!recording.id.equals(printId)) { printId = recording.id; watch = new PrintGuardian.Watch(); overlay = null; alarmed = false; checks = 0; verdict = ""; watchedCamera = cameraId; printedColours.clear(); }
-        // Coverage learned from one camera means nothing for another: a different camera starts the comparison again.
-        if (!cameraId.equals(watchedCamera)) { watchedCamera = cameraId; watch = new PrintGuardian.Watch(); alarmed = false; }
+        if (!recording.id.equals(printId)) { printId = recording.id; watch = freshWatch(); overlay = null; alarmed = false; checks = 0; verdict = ""; watchedCamera = memoryKey; printedColours.clear(); }
+        // Coverage learned from one camera (or line-up) means nothing for another: a different one starts the comparison again.
+        if (!memoryKey.equals(watchedCamera)) { watchedCamera = memoryKey; watch = freshWatch(); alarmed = false; }
         GcodeLibrary library = new GcodeLibrary(new File(context.getFilesDir(), "gcode-library"));
         Source source = source(library, job, recording, context.getCacheDir());
         if (source.problem != null) {
@@ -185,7 +227,7 @@ final class GuardianRun {
         String key = source.key();
         if (!key.equals(pathFor)) {
             // A different copy than before: what was learned against the old one does not carry over.
-            if (!pathFor.isEmpty()) { watch = new PrintGuardian.Watch(); alarmed = false; }
+            if (!pathFor.isEmpty()) { watch = freshWatch(); alarmed = false; }
             if (source.artifact != null && !library.verify(source.artifact)) { verdict = "The phone copy of this print's G-code changed or is damaged, so it is not checked."; path = null; pathFor = ""; return; }
             path = null; pathFor = "";
             // The toolpath takes about three times the file's size in memory while the print runs: skip files that would crowd the app.
@@ -226,10 +268,10 @@ final class GuardianRun {
         PrintGuardian.Result result = PrintGuardian.analyse(rgb, colours, expected, bed, headMask);
         if (result.undecided) { verdict = "The filament looks too much like the bed in this picture, so it is not checked."; overlay = null; return; }
         boolean raise = watch.add(result, at + 1);
-        PrintRecorder recorder = PrintRecorder.active;
-        if (recorder != null && !Double.isNaN(watch.outsideLimit)) {
-            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_OFF_PRINT, result.outside, watch.outsideLimit, watch.outsideBad, raise && watch.outsideBad);
-            recorder.noteGuardianCheck(recording.meta, layer, PrintRecorder.GUARDIAN_COVERAGE, result.coverage, watch.coverageLimit, watch.coverageBad, raise && watch.coverageBad);
+        // Only judged checks: one with too little in view keeps the last limits, which are not its own.
+        if (watch.judged) {
+            note(recording, layer, PrintRecorder.GUARDIAN_OFF_PRINT, result.outside, watch.outsideLimit, watch.outsideBad, raise && watch.outsideBad, watch.outsideAllowance);
+            note(recording, layer, PrintRecorder.GUARDIAN_COVERAGE, result.coverage, watch.coverageLimit, watch.coverageBad, raise && watch.coverageBad, watch.coverageAllowance);
         }
         checks++; alarmed = watch.alarmed || change.alarmed;
         verdict = (watch.alarmed ? "Something looks wrong: " : "Layer " + layer + ": ") + watch.reason + (linedUp ? "" : ". The camera is not lined up in Live toolpath, so this is rough.") + (added == null ? "" : " (camera: " + added.name + ")")
@@ -241,13 +283,33 @@ final class GuardianRun {
         if (raise) alarm.raise(watch.reason, overlay);
     }
 
-    /** The person's answer to the last alarm, for tuning (logged): "looks fine" also allows more before the next. */
+    private PrintGuardian.Watch freshWatch() { return new PrintGuardian.Watch(learned[PrintRecorder.GUARDIAN_OFF_PRINT], learned[PrintRecorder.GUARDIAN_COVERAGE]); }
+
+    /**
+     * The person's answer to the alarms since the last answer: remembered for this camera and line-up (GuardianMemory, used
+     * from the next print on), and logged; "looks fine" also allows more before the next alarm of this print.
+     */
     void feedback(boolean fine) {
         worker.execute(() -> {
             Diagnostics.note(Diagnostics.GUARDIAN, (fine ? "person says it looks fine" : "person says it is a real problem") + " after " + checks + " checks: " + watch.reason + "; changes: " + change.reason);
-            if (fine) { watch.looksFine(); change.looksFine(); alarmed = false; verdict = "Thanks. The guardian allows more before the next alarm for this print."; }
-            else verdict = "Noted as a real problem. The guardian keeps watching; what to do with the print is up to you.";
+            java.util.List<GuardianMemory.Answer> answers = GuardianMemory.answered(noted, answeredUpTo, noted.size(), fine, System.currentTimeMillis());
+            answeredUpTo = noted.size();
+            boolean remembered = !answers.isEmpty() && !memoryKey.isEmpty();
+            if (remembered) {
+                String key = memoryKey;
+                GuardianMemory memory = edit(context, m -> m.learn(key, answers));
+                Diagnostics.note(Diagnostics.GUARDIAN, "memory: learned from " + answers.size() + " alarm(s) on " + memoryWhose + " (memory " + key.substring(0, 6) + "); from the next print it allows " + allowances(memory.allowances(key)));
+            }
+            if (fine) { watch.looksFine(); change.looksFine(); alarmed = false; verdict = "Thanks. The guardian allows more before the next alarm for this print." + (remembered ? " It remembers this for this camera from the next print on." : ""); }
+            else verdict = "Noted as a real problem. The guardian keeps watching; what to do with the print is up to you." + (remembered ? " It remembers this, so it never learns to let such a problem through on this camera." : "");
         });
+    }
+
+    /** "filament off the print 1.80×, print area 1.00×, …" for the log. */
+    static String allowances(double[] m) {
+        StringBuilder s = new StringBuilder();
+        for (int k = 0; k < m.length && k < PrintRecorder.GUARDIAN_NAMES.length; k++) s.append(k == 0 ? "" : ", ").append(PrintRecorder.GUARDIAN_NAMES[k].toLowerCase(java.util.Locale.ROOT)).append(String.format(java.util.Locale.ROOT, " %.2f×", m[k]));
+        return s.toString();
     }
 
     /** Pictures come from a camera the person added: the line-up (and so the guardian) is for the printer's own camera. */
