@@ -153,6 +153,7 @@ public final class MainActivity extends Activity {
     private LinearLayout statsRow;
     private Button printLight;
     /** "This print so far": the running print's temperatures from its recording, redrawn at most once a minute. */
+    private TextView guardianLearned; private Button guardianForget;
     private LinearLayout guardianCard, guardianButtons; private ImageView guardianImage; private TextView guardianText; private android.graphics.Bitmap guardianShown;
     private LinearLayout telemetryCard; private ChartView telemetryChart; private long telemetryAt; private String telemetryFor = "";
     private boolean monitorCameraTried, traysOpen;
@@ -670,6 +671,12 @@ public final class MainActivity extends Activity {
         watchBox.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("printWatch", enabled).apply());
         CompoundButton guardianBox = checkbox(notices, "Print guardian (beta): pictures don't match the toolpath", settings.getBoolean("guardian", true));
         guardianBox.setOnCheckedChangeListener((view, enabled) -> { settings.edit().putBoolean("guardian", enabled).apply(); Diagnostics.note(Diagnostics.GUARDIAN, enabled ? "turned on" : "turned off"); });
+        // What the guardian learned from answers (GuardianMemory), checked on recorded prints; filled off the screen thread.
+        guardianLearned = A11y.polite(label(notices, "", 12, MUTED, false));
+        guardianForget = button(notices, "Forget what it learned…", () -> new AlertDialog.Builder(this).setTitle("Forget what the guardian learned?")
+            .setMessage("The guardian goes back to its first limits on every camera. Your answers stay in the print recordings.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Forget", (dialog, which) -> checks.execute(() -> { GuardianRun.forget(this); main.post(this::refreshGuardianMemory); })).show());
+        refreshGuardianMemory();
         CompoundButton alertPictures = checkbox(notices, "Add camera pictures to notifications", settings.getBoolean("alertPictures", true));
         alertPictures.setOnCheckedChangeListener((view, enabled) -> settings.edit().putBoolean("alertPictures", enabled).apply());
         label(notices, "Only notifications: nothing here pauses or stops a print.", 12, MUTED, false);
@@ -1250,6 +1257,7 @@ public final class MainActivity extends Activity {
         if (section == null) return;
         int tab = section.tab; opened[tab] = section;
         if (section == phoneSection) refreshRecentGrid();
+        if (section == preferencesSection) refreshGuardianMemory();
         fronts[tab].setVisibility(View.GONE); backBars[tab].setVisibility(View.VISIBLE); backBars[tab].setText(section.title); A11y.heading(backBars[tab]);
         for (Section other : sections) if (other.tab == tab) other.body.setVisibility(other == section ? View.VISIBLE : View.GONE);
         if (tab == page) { mainScroll.scrollTo(0, 0); main.post(() -> backBars[tab].sendAccessibilityEvent(android.view.accessibility.AccessibilityEvent.TYPE_VIEW_FOCUSED)); }
@@ -1590,6 +1598,33 @@ public final class MainActivity extends Activity {
             if (printer.recorder != null) { PrintRecorder recorder = printer.recorder; checks.execute(() -> recorder.noteGuardian(fine, said, System.currentTimeMillis())); }
         }
         guardianButtons.setVisibility(View.GONE);
+        main.postDelayed(this::refreshGuardianMemory, 1500);   // after the guardian has kept the answer
+    }
+    /**
+     * The guardian's settings line: per camera, what it learned from answers on its current line-up and how that would have
+     * done on the recorded prints made with it. Reads the recordings off the screen thread.
+     */
+    private void refreshGuardianMemory() {
+        if (guardianLearned == null) return;
+        checks.execute(() -> {
+            GuardianMemory memory = GuardianRun.memory(this);
+            List<String> lines = new ArrayList<>(); java.util.Set<String> used = new java.util.HashSet<>();
+            List<PrintRecorder.Recording> recordings = memory.empty() ? new ArrayList<>() : new PrintRecorder(RecordingsActivity.directory(this)).list();
+            List<String[]> cameras = new ArrayList<>(); cameras.add(new String[] {PrintRecorder.PRINTER_CAMERA, "the printer's camera"});
+            for (ExtraCameras.Camera c : ExtraCameras.list(this)) cameras.add(new String[] {"added:" + c.id, "“" + c.name + "”"});
+            for (String[] camera : cameras) {
+                String key = GuardianRun.memoryKey(this, camera[0]); List<GuardianMemory.Answer> answers = memory.answers(key);
+                if (answers.isEmpty()) continue;
+                used.add(key); double[] m = memory.allowances(key);
+                lines.add(GuardianMemory.describe(camera[1], answers, m, GuardianMemory.replay(recordings, key, m, 20)));
+            }
+            int other = 0; for (String key : memory.keys()) if (!used.contains(key)) other++;
+            if (other > 0) lines.add("Also kept: what it learned on " + (other == 1 ? "an earlier line-up or a removed camera" : other + " earlier line-ups or removed cameras") + ", not used now.");
+            String text = lines.isEmpty() ? "The guardian learns from your answers to its alarms (Looks fine or Real problem on the Print tab), for each camera and line-up. It has nothing to go on yet, so it uses its first limits."
+                : String.join("\n\n", lines) + "\n\nIt allows just enough more to keep the alarms you called fine quiet, at most 3×, and never so much that an alarm you called real would have stayed quiet. Lining a camera up again starts afresh.";
+            boolean any = !memory.empty();
+            main.post(() -> { guardianLearned.setText(text); guardianForget.setVisibility(any ? View.VISIBLE : View.GONE); });
+        });
     }
     /** "How did … come out?": the print that ended last, until it is rated (for two days), read off the main thread. */
     private File rateMeta; private PrintRecorder.Recording rateRecording; private long rateCheckedAt;
