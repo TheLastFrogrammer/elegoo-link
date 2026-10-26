@@ -1,5 +1,7 @@
 # Link Workshop for Android
 
+**v0.104.0:** a calmer recording page (six parts that open and close, heavy parts built when opened); the print guardian learns from your answers per camera, never enough to hide a problem you called real; a native Fire TV / Android TV app ([tv/](tv/README.md)); and an audit of the integration API, tuning and spool memory with 22 fixes.
+
 **v0.103.0:** other apps can watch the printer through the phone, read only. A TV or tablet opens the phone's address in its browser, pairs with a code you approve on the phone, and shows the camera and the print. Apps and scripts use a small HTTP API with Server-Sent Events, MJPEG and network discovery. A Reddit app or any page reads from your own relay, which the phone pushes signed updates to. See [INTEGRATIONS.md](INTEGRATIONS.md).
 
 **v0.65.0:** retained G-code uses content hashes, preserves different versions under the same name and separates printer associations. Live toolpath asks which copy was used for the current observed print, shows **Selected by you** with its source/hash, and clears stale scenes when the job changes. Existing copies migrate as candidates. See [file identity and device acceptance](GCODE_IDENTITY.md) and [validation](VALIDATION.md).
