@@ -1248,7 +1248,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             bedMeshKept = !kept.isEmpty();
             String script = "viewer.setBedMesh(null)", words = on ? "No bed mesh is kept yet." : "The bed mesh is hidden.";
             if (on && !kept.isEmpty()) try {
-                BedMesh.Mesh m = kept.get(0); double[] s = BedMesh.scale(m, false);
+                // Filled in between probe points as chosen on the Bed mesh screen, so the plate shows the same surface.
+                android.content.SharedPreferences ws = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+                BedMesh.Mesh m = BedMesh.interpolate(kept.get(0), ws.getString(BedMeshActivity.BETWEEN, BedMesh.PROBED), ws.getInt(BedMeshActivity.DETAIL, 4));
+                double[] s = BedMesh.scale(m, false);
                 JSONArray colours = new JSONArray();
                 for (double[] row : m.z) for (double v : row) {
                     int c = BedMesh.colour(Double.isNaN(v) ? 0 : (v - s[0]) / s[1], dark);

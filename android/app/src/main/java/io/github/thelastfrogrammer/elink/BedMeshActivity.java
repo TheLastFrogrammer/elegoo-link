@@ -66,9 +66,10 @@ public final class BedMeshActivity extends PlainScreen {
         LinearLayout card = card();
         A11y.heading(label(card, shown == 0 ? "Latest: " + when(m.at) : when(m.at), 15, ink, true));
         String ctx = context(m); if (!ctx.isEmpty()) label(card, ctx, 13, muted, false);
-        List<String> words = BedMesh.describe(m);
+        List<String> words = BedMesh.describe(m);   // always from the probe points themselves, never the filled-in surface
+        between(card);
         BedMeshView view = new BedMeshView(this, dark, ink, muted);
-        view.set(m, false, "Bed mesh map. " + String.join(" ", words));
+        view.set(filled(m, 8), false, "Bed mesh map, " + betweenWords() + ". " + String.join(" ", words));
         card.addView(view, new LinearLayout.LayoutParams(-1, -2));
         TextView readout = label(card, "Tap a point to read it.", 13, muted, false); A11y.polite(readout);
         view.onReadout(readout::setText);
@@ -83,13 +84,13 @@ public final class BedMeshActivity extends PlainScreen {
         A11y.heading(label(solid, "In 3D", 15, ink, true));
         if (exaggeration <= 0) exaggeration = BedMesh.autoExaggeration(m);
         BedMesh3DView model = new BedMesh3DView(this, dark, ink, muted);
-        model.set(m, exaggeration);
+        model.set(filled(m, 4), exaggeration);   // at most 4 steps here, so turning it stays smooth
         solid.addView(model, new LinearLayout.LayoutParams(-1, -2));
         label(solid, "Drag to turn it, pinch to zoom, double tap to start again. Heights are shown " + exaggeration + " times taller than they are.", 12, muted, false);
         LinearLayout heights = row(solid);
         button(heights, "Flatter", () -> { exaggeration = step(exaggeration, -1); render(); }).setContentDescription("Show the heights less exaggerated");
         button(heights, "Taller", () -> { exaggeration = step(exaggeration, 1); render(); }).setContentDescription("Show the heights more exaggerated");
-        button(solid, "Save as a 3D model (STL)…", () -> shareModel(m));
+        button(solid, "Save as a 3D model (STL)…", () -> shareModel(filled(m, 8)));
 
         // Comparing with an earlier capture on the same grid.
         List<Integer> comparable = new ArrayList<>();
@@ -104,7 +105,7 @@ public final class BedMeshActivity extends PlainScreen {
             String change = BedMesh.changeWords(older, diff);
             label(compare, when(older.at) + " → " + when(newer.at), 13, muted, false);
             BedMeshView map = new BedMeshView(this, dark, ink, muted);
-            map.set(diff, true, "Difference map. " + change);
+            map.set(filled(diff, 8), true, "Difference map, " + betweenWords() + ". " + change);
             compare.addView(map, new LinearLayout.LayoutParams(-1, -2));
             TextView point = label(compare, "Tap a point to read its change.", 13, muted, false); A11y.polite(point);
             map.onReadout(point::setText);
@@ -129,6 +130,38 @@ public final class BedMeshActivity extends PlainScreen {
             rowText.setOnClickListener(v -> { shown = index; against = -1; exaggeration = 0; render(); });
             rowText.setContentDescription("Show the levelling of " + when(c.at));
         }
+    }
+
+    // ------------------------------------------------------------------ between the probe points
+
+    static final String BETWEEN = "bedMeshBetween", DETAIL = "bedMeshDetail";
+    private android.content.SharedPreferences prefs() { return getSharedPreferences("workshop-settings", MODE_PRIVATE); }
+    private String how() { String h = prefs().getString(BETWEEN, BedMesh.PROBED); return BedMesh.LINEAR.equals(h) || BedMesh.SMOOTH.equals(h) ? h : BedMesh.PROBED; }
+    private int detail() { int d = prefs().getInt(DETAIL, 4); return d == 2 || d == 8 ? d : 4; }
+    /** The mesh as chosen between its points, with at most `cap` steps between two of them. */
+    private BedMesh.Mesh filled(BedMesh.Mesh m, int cap) { return BedMesh.interpolate(m, how(), Math.min(cap, detail())); }
+    private String betweenWords() { return BedMesh.PROBED.equals(how()) ? "as probed" : (BedMesh.LINEAR.equals(how()) ? "filled in in straight lines" : "filled in smoothly") + ", " + detail() + " steps between points"; }
+    /** The choice of how to fill in between probe points, and how finely. */
+    private void between(LinearLayout card) {
+        label(card, "Between the probe points", 13, muted, false);
+        LinearLayout ways = row(card);
+        String[][] choices = {{BedMesh.PROBED, "As probed"}, {BedMesh.LINEAR, "Linear"}, {BedMesh.SMOOTH, "Smooth"}};
+        for (String[] c : choices) {
+            boolean on = c[0].equals(how());
+            android.widget.Button b = button(ways, (on ? "✓ " : "") + c[1], () -> { prefs().edit().putString(BETWEEN, c[0]).apply(); render(); });
+            b.setContentDescription(c[1] + (on ? ", selected" : ""));
+        }
+        if (!BedMesh.PROBED.equals(how())) {
+            LinearLayout steps = row(card);
+            for (int d : BedMesh.DETAILS) {
+                boolean on = d == detail();
+                button(steps, (on ? "✓ " : "") + d + " steps", () -> { prefs().edit().putInt(DETAIL, d).apply(); render(); }).setContentDescription(d + " steps between probe points" + (on ? ", selected" : ""));
+            }
+        }
+        label(card, BedMesh.PROBED.equals(how()) ? "Each tile is one probe point, as measured."
+            : BedMesh.LINEAR.equals(how()) ? "Straight lines between neighbouring points: it never goes past the measured heights. Dots mark the probe points."
+            : "A smooth surface through every point (bicubic, as Klipper offers): between points it can dip or bulge a little past the measured heights. Dots mark the probe points.",
+            12, muted, false);
     }
 
     /** The next exaggeration up or down the 1-2-5 steps. */

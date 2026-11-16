@@ -52,17 +52,23 @@ final class BedMeshView extends View {
         int nx = mesh.xs.length, ny = mesh.ys.length; float cw = size / nx, ch = size / ny;
         double[] s = scale();
         text.setTextAlign(Paint.Align.CENTER); text.setTextSize(Math.min(cw, ch) * 0.26f);
-        boolean labels = cw > 26 * d;
+        boolean labels = cw > 26 * d && mesh.probed == null, dense = mesh.probed != null;
         for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
             double v = mesh.z[j][i];
             float x0 = plot.left + i * cw, y0 = plot.bottom - (j + 1) * ch;   // Y grows upwards, as on the printer's axes
             fill.setColor(Double.isNaN(v) ? (dark ? 0xff182227 : 0xffffffff) : colour((v - s[0]) / s[1]));
-            canvas.drawRect(x0 + 1, y0 + 1, x0 + cw - 1, y0 + ch - 1, fill);
+            // As probed, each point is a tile with a gap around it; filled in, the samples join into one surface.
+            if (dense) canvas.drawRect(x0, y0, x0 + cw + 0.5f, y0 + ch + 0.5f, fill); else canvas.drawRect(x0 + 1, y0 + 1, x0 + cw - 1, y0 + ch - 1, fill);
             if (labels && !Double.isNaN(v)) {
                 double t = Math.abs((v - s[0]) / s[1]);
                 text.setColor(t > 0.6 ? 0xffffffff : ink);
                 canvas.drawText(String.format(Locale.getDefault(), "%.2f", v).replace("-0.00", "0.00"), x0 + cw / 2, y0 + ch / 2 + text.getTextSize() / 3, text);
             }
+        }
+        // Filled in: the probe points themselves as small dots, so it stays clear what was measured.
+        if (dense) {
+            fill.setColor(dark ? 0xccffffff : 0xcc17252c); float r = Math.max(1.5f * d, Math.min(cw, ch) * 0.35f);
+            for (int j = 0; j < ny; j += mesh.detail) for (int i = 0; i < nx; i += mesh.detail) canvas.drawCircle(plot.left + (i + 0.5f) * cw, plot.bottom - (j + 0.5f) * ch, r, fill);
         }
         if (chosenI >= 0) { line.setColor(ink); line.setStrokeWidth(2.5f * d); canvas.drawRect(plot.left + chosenI * cw + 1, plot.bottom - (chosenJ + 1) * ch + 1, plot.left + (chosenI + 1) * cw - 1, plot.bottom - chosenJ * ch - 1, line); }
         // Axes: the first and last X and Y, in mm.
@@ -87,7 +93,7 @@ final class BedMeshView extends View {
         chosenI = i; chosenJ = j; invalidate();
         double v = mesh.z[j][i];
         if (readout != null) readout.accept(String.format(Locale.getDefault(), "X %.0f, Y %.0f mm: %s", mesh.xs[i], mesh.ys[j],
-            Double.isNaN(v) ? "not probed" : BedMesh.signed(v) + " mm" + (difference ? " change" : "")));
+            Double.isNaN(v) ? "not probed" : BedMesh.signed(v) + " mm" + (difference ? " change" : "") + (BedMesh.probePoint(mesh, i, j) ? "" : ", estimated between probe points")));
         performClick();
         return true;
     }

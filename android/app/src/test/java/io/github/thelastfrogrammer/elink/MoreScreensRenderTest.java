@@ -298,6 +298,10 @@ public class MoreScreensRenderTest {
         }
         BedMeshActivity page = Robolectric.buildActivity(BedMeshActivity.class).setup().get();
         shot(page.getWindow().getDecorView(), 1080, 3600, new File(out(), "bed-mesh-" + theme + ".png"));
+        // Filled in smoothly between the probe points.
+        context.getSharedPreferences("workshop-settings", 0).edit().putString(BedMeshActivity.BETWEEN, BedMesh.SMOOTH).putInt(BedMeshActivity.DETAIL, 8).commit();
+        BedMeshActivity smooth = Robolectric.buildActivity(BedMeshActivity.class).setup().get();
+        shot(smooth.getWindow().getDecorView(), 1080, 3800, new File(out(), "bed-mesh-smooth-" + theme + ".png"));
     }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }

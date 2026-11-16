@@ -124,4 +124,48 @@ public class BedMeshTest {
         assertEquals(500, BedMeshActivity.step(200, 1)); assertEquals(100, BedMeshActivity.step(200, -1)); assertEquals(10, BedMeshActivity.step(10, -1)); assertEquals(1000, BedMeshActivity.step(1000, 1));
     }
     private static String key(float[] p) { return Math.round(p[0] * 100) + "," + Math.round(p[1] * 100) + "," + Math.round(p[2] * 100); }
+
+    private static BedMesh.Mesh probed() throws Exception {
+        BedMesh.Capture c = new BedMesh.Capture();
+        for (JSONObject s : levelling(5, 121)) c.feed(s, 0, "local network", 0);
+        return c.feed(status(1, 0, 0, 0, 0), 1, "local network", 0);
+    }
+
+    @Test public void fillingInKeepsTheProbePointsAndEachWayKeepsItsPromise() throws Exception {
+        BedMesh.Mesh m = probed();
+        assertSame("as probed is the mesh itself", m, BedMesh.interpolate(m, BedMesh.PROBED, 4));
+        for (String how : new String[] {BedMesh.LINEAR, BedMesh.SMOOTH}) for (int detail : BedMesh.DETAILS) {
+            BedMesh.Mesh f = BedMesh.interpolate(m, how, detail);
+            assertEquals(10 * detail + 1, f.xs.length); assertEquals(10 * detail + 1, f.ys.length);
+            assertSame(m, f.probed); assertEquals(detail, f.detail);
+            for (int j = 0; j < 11; j++) for (int i = 0; i < 11; i++) {
+                assertEquals(how + " keeps the measured value at each probe point", m.z[j][i], f.z[j * detail][i * detail], 1e-9);
+                assertTrue(BedMesh.probePoint(f, i * detail, j * detail));
+            }
+            assertEquals(m.xs[3] + (m.xs[4] - m.xs[3]) / 2, f.xs[3 * detail + detail / 2], 1e-9);
+        }
+        // Linear: halfway between two points is their mean, and nothing goes past the measured heights.
+        BedMesh.Mesh linear = BedMesh.interpolate(m, BedMesh.LINEAR, 4);
+        assertEquals((m.z[0][0] + m.z[0][1]) / 2, linear.z[0][2], 1e-9);
+        assertTrue(linear.min() >= m.min() - 1e-9 && linear.max() <= m.max() + 1e-9);
+        assertFalse(BedMesh.probePoint(linear, 1, 0));
+        // Smooth: a tilted plane stays exactly that plane (edges included), and it may go a little past the measured heights.
+        BedMesh.Mesh plane = new BedMesh.Mesh(); plane.xs = m.xs.clone(); plane.ys = m.ys.clone(); plane.z = new double[11][11];
+        for (int j = 0; j < 11; j++) for (int i = 0; i < 11; i++) plane.z[j][i] = 0.001 * m.xs[i] - 0.0005 * m.ys[j] + 0.02;
+        BedMesh.Mesh smooth = BedMesh.interpolate(plane, BedMesh.SMOOTH, 8);
+        for (int j = 0; j < smooth.ys.length; j++) for (int i = 0; i < smooth.xs.length; i++)
+            // Exact although the probe positions are 23 or 24 mm apart: the curve's slopes use the real positions.
+            assertEquals(0.001 * smooth.xs[i] - 0.0005 * smooth.ys[j] + 0.02, smooth.z[j][i], 1e-12);
+        BedMesh.Mesh bumpy = BedMesh.interpolate(m, BedMesh.SMOOTH, 8);
+        assertTrue("the bump's edge overshoots a little", bumpy.max() > m.max() && bumpy.max() < m.max() + 0.03);
+        // Evenly spaced points: the curve is the classic Catmull-Rom one.
+        assertEquals(0.5 * (2 * 2 + (-1 + 3) * 0.3 + (2 * 1 - 5 * 2 + 4 * 3 - 5) * 0.09 + (-1 + 3 * 2 - 3 * 3 + 5) * 0.027), BedMesh.curve(1, 2, 3, 5, 0, 1, 2, 3, 0.3), 1e-12);
+        // A mesh with a point missing is not filled in (there is nothing honest to fill it with).
+        BedMesh.Mesh holed = probed(); holed.z[5][5] = Double.NaN;
+        assertSame(holed, BedMesh.interpolate(holed, BedMesh.SMOOTH, 4));
+        // The model from a filled-in mesh is still a closed solid.
+        byte[] stl = BedMesh.stl(BedMesh.interpolate(m, BedMesh.SMOOTH, 4), 100, 2);
+        int n = java.nio.ByteBuffer.wrap(stl).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(80);
+        assertEquals(2 * 40 * 40 * 2 + 4 * 40 * 2, n);
+    }
 }

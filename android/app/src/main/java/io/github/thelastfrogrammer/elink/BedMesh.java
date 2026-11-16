@@ -39,6 +39,8 @@ final class BedMesh {
         long at; String source = ""; double bed = Double.NaN, bedTarget = Double.NaN; String file = ""; String printer = "";
         int phase; int expected;
         String name = "";   // the file it is kept in
+        /** For a filled-in mesh (interpolate): the mesh as probed, and how many steps lie between two probe points; null and 1 otherwise. */
+        Mesh probed; int detail = 1;
 
         int count() { int n = 0; for (double[] row : z) for (double v : row) if (!Double.isNaN(v)) n++; return n; }
         double min() { double m = Double.POSITIVE_INFINITY; for (double[] r : z) for (double v : r) if (!Double.isNaN(v)) m = Math.min(m, v); return m; }
@@ -117,6 +119,68 @@ final class BedMesh {
         return String.format(Locale.getDefault(), "Changed by up to %.2f mm since %s (on average %s mm). Small changes of a few hundredths are normal from one levelling to the next.",
             big, new SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(new Date(older.at)), signed(difference.mean()));
     }
+
+    // ------------------------------------------------------------------ between the probe points
+
+    /** How the surface is filled in between probe points: one flat tile per point, straight lines, or a smooth curve. */
+    static final String PROBED = "probed", LINEAR = "linear", SMOOTH = "smooth";
+    static final int[] DETAILS = {2, 4, 8};
+    /**
+     * The mesh filled in between its probe points, `detail` steps from one point to the next: LINEAR is bilinear (it never
+     * goes past the measured heights); SMOOTH is a bicubic (Catmull-Rom) surface through every point (it can bulge a little
+     * past them between points, as Klipper's bicubic mesh can). PROBED, or a mesh with a missing point, is returned as it is.
+     * Values at the probe points are the measured ones. Pure.
+     */
+    static Mesh interpolate(Mesh m, String how, int detail) {
+        if (m == null || PROBED.equals(how) || detail < 2 || m.xs.length < 2 || m.ys.length < 2 || m.count() != m.xs.length * m.ys.length) return m;
+        boolean smooth = SMOOTH.equals(how);
+        int nx = (m.xs.length - 1) * detail + 1, ny = (m.ys.length - 1) * detail + 1;
+        Mesh out = new Mesh();
+        out.xs = new double[nx]; out.ys = new double[ny]; out.z = new double[ny][nx];
+        for (int i = 0; i < nx; i++) { int a = Math.min(i / detail, m.xs.length - 2); double t = (i - a * detail) / (double) detail; out.xs[i] = m.xs[a] + (m.xs[a + 1] - m.xs[a]) * t; }
+        for (int j = 0; j < ny; j++) { int a = Math.min(j / detail, m.ys.length - 2); double t = (j - a * detail) / (double) detail; out.ys[j] = m.ys[a] + (m.ys[a + 1] - m.ys[a]) * t; }
+        for (int j = 0; j < ny; j++) {
+            int b = Math.min(j / detail, m.ys.length - 2); double v = (j - b * detail) / (double) detail;
+            for (int i = 0; i < nx; i++) {
+                int a = Math.min(i / detail, m.xs.length - 2); double u = (i - a * detail) / (double) detail;
+                if (!smooth) {
+                    double top = m.z[b][a] + (m.z[b][a + 1] - m.z[b][a]) * u, bottom = m.z[b + 1][a] + (m.z[b + 1][a + 1] - m.z[b + 1][a]) * u;
+                    out.z[j][i] = top + (bottom - top) * v;
+                } else {
+                    double[] rows = new double[4];
+                    for (int r = 0; r < 4; r++) rows[r] = curve(at(m, b - 1 + r, a - 1), at(m, b - 1 + r, a), at(m, b - 1 + r, a + 1), at(m, b - 1 + r, a + 2),
+                        pos(m.xs, a - 1), pos(m.xs, a), pos(m.xs, a + 1), pos(m.xs, a + 2), u);
+                    out.z[j][i] = curve(rows[0], rows[1], rows[2], rows[3], pos(m.ys, b - 1), pos(m.ys, b), pos(m.ys, b + 1), pos(m.ys, b + 2), v);
+                }
+            }
+        }
+        out.at = m.at; out.source = m.source; out.bed = m.bed; out.bedTarget = m.bedTarget; out.file = m.file; out.printer = m.printer; out.phase = m.phase;
+        out.expected = nx * ny; out.name = m.name; out.probed = m; out.detail = detail;
+        return out;
+    }
+    /** A grid value; past an edge, carried on in a straight line from the last two points, so the edge gets no false flattening. */
+    private static double at(Mesh m, int j, int i) {
+        int nx = m.xs.length, ny = m.ys.length;
+        if (i < 0) return 2 * at(m, j, 0) - at(m, j, 1);
+        if (i >= nx) return 2 * at(m, j, nx - 1) - at(m, j, nx - 2);
+        if (j < 0) return 2 * at(m, 0, i) - at(m, 1, i);
+        if (j >= ny) return 2 * at(m, ny - 1, i) - at(m, ny - 2, i);
+        return m.z[j][i];
+    }
+    /** A probe line's position, carried on evenly past either end (for the extra points `at` makes up there). */
+    private static double pos(double[] v, int k) { return k < 0 ? 2 * v[0] - v[1] : k >= v.length ? 2 * v[v.length - 1] - v[v.length - 2] : v[k]; }
+    /**
+     * The curve through p1 (at x1) and p2 (at x2), its slopes there from the points either side (p0, p3) at their real
+     * positions, at t from 0 (p1) to 1 (p2): Catmull-Rom when the points are evenly spaced, and exact for a tilted plane when
+     * they are not (the probe positions are whole millimetres, 23 or 24 mm apart).
+     */
+    static double curve(double p0, double p1, double p2, double p3, double x0, double x1, double x2, double x3, double t) {
+        double h = x2 - x1, m1 = h * (p2 - p0) / (x2 - x0), m2 = h * (p3 - p1) / (x3 - x1);
+        double t2 = t * t, t3 = t2 * t;
+        return (2 * t3 - 3 * t2 + 1) * p1 + (t3 - 2 * t2 + t) * m1 + (-2 * t3 + 3 * t2) * p2 + (t3 - t2) * m2;
+    }
+    /** Whether a filled-in mesh's sample (i, j) is one of the probe points. */
+    static boolean probePoint(Mesh m, int i, int j) { return m.probed == null || i % m.detail == 0 && j % m.detail == 0; }
 
     // ------------------------------------------------------------------ colours and 3D
 

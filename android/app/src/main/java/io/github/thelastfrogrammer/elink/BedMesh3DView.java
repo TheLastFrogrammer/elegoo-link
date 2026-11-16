@@ -23,7 +23,7 @@ final class BedMesh3DView extends View {
     private final int ink, muted;
     private int exaggeration = 50;
     private double yaw = -35, elevation = 32, zoom = 1;
-    private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), edge = new Paint(Paint.ANTI_ALIAS_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG), edge = new Paint(Paint.ANTI_ALIAS_FLAG), text = new Paint(Paint.ANTI_ALIAS_FLAG), seam = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final ScaleGestureDetector pinch;
     private final GestureDetector taps;
     private float lastX, lastY; private boolean dragging;
@@ -31,6 +31,7 @@ final class BedMesh3DView extends View {
     BedMesh3DView(Context context, boolean dark, int ink, int muted) {
         super(context); this.dark = dark; this.ink = ink; this.muted = muted;
         edge.setStyle(Paint.Style.STROKE); edge.setStrokeWidth(Math.max(1, context.getResources().getDisplayMetrics().density * 0.6f));
+        seam.setStyle(Paint.Style.STROKE); seam.setStrokeWidth(1.2f);
         pinch = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
             @Override public boolean onScale(ScaleGestureDetector d) { zoom = Math.max(0.6, Math.min(3, zoom * d.getScaleFactor())); invalidate(); return true; }
         });
@@ -81,7 +82,9 @@ final class BedMesh3DView extends View {
         for (int j = 0; j + 1 < ny; j++) for (int i = 0; i + 1 < nx; i++)
             tiles.add(new double[] {(p[j][i][2] + p[j][i + 1][2] + p[j + 1][i][2] + p[j + 1][i + 1][2]) / 4, i, j});
         tiles.sort((a, b) -> Double.compare(b[0], a[0]));
+        // Filled in, the tiles' edges would be a dense mesh of lines: only the lines between probe points are kept.
         edge.setColor(dark ? 0x40ffffff : 0x30000000);
+        boolean dense = mesh.probed != null;
         for (double[] t : tiles) {
             int i = (int) t[1], j = (int) t[2];
             double z00 = val(j, i, mean), z10 = val(j, i + 1, mean), z01 = val(j + 1, i, mean), z11 = val(j + 1, i + 1, mean), avg = (z00 + z10 + z01 + z11) / 4;
@@ -93,7 +96,14 @@ final class BedMesh3DView extends View {
             Path tile = new Path();
             tile.moveTo((float) p[j][i][0], (float) p[j][i][1]); tile.lineTo((float) p[j][i + 1][0], (float) p[j][i + 1][1]);
             tile.lineTo((float) p[j + 1][i + 1][0], (float) p[j + 1][i + 1][1]); tile.lineTo((float) p[j + 1][i][0], (float) p[j + 1][i][1]); tile.close();
-            fill.setColor(colour); canvas.drawPath(tile, fill); canvas.drawPath(tile, edge);
+            fill.setColor(colour); canvas.drawPath(tile, fill);
+            // Small tiles drawn smooth-edged leave hairline gaps between them: an outline in the tile's own colour closes them.
+            if (dense) { seam.setColor(colour); canvas.drawPath(tile, seam); }
+            if (!dense) canvas.drawPath(tile, edge);
+            else {
+                if (j % mesh.detail == 0) canvas.drawLine((float) p[j][i][0], (float) p[j][i][1], (float) p[j][i + 1][0], (float) p[j][i + 1][1], edge);
+                if (i % mesh.detail == 0) canvas.drawLine((float) p[j][i][0], (float) p[j][i][1], (float) p[j + 1][i][0], (float) p[j + 1][i][1], edge);
+            }
         }
         // Which way is which: the first X and Y probe corner, and the exaggeration.
         double[] origin = project(mesh.xs[0] - mx, mesh.ys[0] - my, (val(0, 0, mean) - mean) * exaggeration, cx, cy, scale);
