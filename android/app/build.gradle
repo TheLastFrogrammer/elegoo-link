@@ -25,6 +25,10 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // Keep this troubleshooting build in its own app data sandbox.
+            applicationIdSuffix '.preview'
+        }
         release {
             minifyEnabled false
             if (keystorePath) signingConfig signingConfigs.release
