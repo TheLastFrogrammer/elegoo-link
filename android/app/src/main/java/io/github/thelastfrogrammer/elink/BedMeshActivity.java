@@ -26,14 +26,16 @@ import java.util.Locale;
 public final class BedMeshActivity extends PlainScreen {
     private List<BedMesh.Mesh> all = new ArrayList<>();
     private int shown, against = -1;
+    /** Heights × this in the 3D view and the model (0: chosen for the mesh shown). */
+    private int exaggeration;
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
-        if (saved != null) { shown = saved.getInt("shown", 0); against = saved.getInt("against", -1); }
+        if (saved != null) { shown = saved.getInt("shown", 0); against = saved.getInt("against", -1); exaggeration = saved.getInt("exaggeration", 0); }
         all = BedMesh.list(BedMesh.directory(getFilesDir()));
         render();
     }
-    @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); state.putInt("shown", shown); state.putInt("against", against); }
+    @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); state.putInt("shown", shown); state.putInt("against", against); state.putInt("exaggeration", exaggeration); }
 
     private static String when(long at) { return new SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault()).format(new Date(at)); }
     private static String context(BedMesh.Mesh m) {
@@ -76,6 +78,19 @@ public final class BedMeshActivity extends PlainScreen {
         button(actions, "Share as JSON", () -> share(m));
         button(actions, "Delete…", () -> delete(m));
 
+        // The same shape in 3D, heights exaggerated so tenths of a millimetre show; and as a 3D model file.
+        LinearLayout solid = card();
+        A11y.heading(label(solid, "In 3D", 15, ink, true));
+        if (exaggeration <= 0) exaggeration = BedMesh.autoExaggeration(m);
+        BedMesh3DView model = new BedMesh3DView(this, dark, ink, muted);
+        model.set(m, exaggeration);
+        solid.addView(model, new LinearLayout.LayoutParams(-1, -2));
+        label(solid, "Drag to turn it, pinch to zoom, double tap to start again. Heights are shown " + exaggeration + " times taller than they are.", 12, muted, false);
+        LinearLayout heights = row(solid);
+        button(heights, "Flatter", () -> { exaggeration = step(exaggeration, -1); render(); }).setContentDescription("Show the heights less exaggerated");
+        button(heights, "Taller", () -> { exaggeration = step(exaggeration, 1); render(); }).setContentDescription("Show the heights more exaggerated");
+        button(solid, "Save as a 3D model (STL)…", () -> shareModel(m));
+
         // Comparing with an earlier capture on the same grid.
         List<Integer> comparable = new ArrayList<>();
         for (int k = 0; k < all.size(); k++) if (k != shown && all.get(k).sameGrid(m)) comparable.add(k);
@@ -111,11 +126,29 @@ public final class BedMeshActivity extends PlainScreen {
             TextView rowText = label(history, (k == shown ? "▸ " : "") + when(c.at) + String.format(Locale.getDefault(), " · range %.2f mm", c.range())
                 + (context(c).isEmpty() ? "" : " · " + context(c)), 14, k == shown ? accent : ink, k == shown);
             rowText.setMinHeight(dp(48)); rowText.setGravity(android.view.Gravity.CENTER_VERTICAL);
-            rowText.setOnClickListener(v -> { shown = index; against = -1; render(); });
+            rowText.setOnClickListener(v -> { shown = index; against = -1; exaggeration = 0; render(); });
             rowText.setContentDescription("Show the levelling of " + when(c.at));
         }
     }
 
+    /** The next exaggeration up or down the 1-2-5 steps. */
+    static int step(int now, int direction) {
+        int[] all = BedMesh.EXAGGERATIONS; int at = 0;
+        for (int k = 0; k < all.length; k++) if (all[k] <= now) at = k;
+        return all[Math.max(0, Math.min(all.length - 1, at + direction))];
+    }
+    /** The surface as a solid (STL) at the bed's real size, heights × the exaggeration shown, on a 2 mm base. */
+    private void shareModel(BedMesh.Mesh m) {
+        String name = (m.name.isEmpty() ? "bed-mesh" : m.name.replaceFirst("\\.json$", "")) + "-heights-x" + exaggeration + ".stl";
+        File out = ShareProvider.fresh(this, name);
+        try (OutputStream o = new FileOutputStream(out)) { o.write(BedMesh.stl(m, exaggeration, 2)); }
+        catch (IOException failed) { Toast.makeText(this, "The model could not be made.", Toast.LENGTH_LONG).show(); return; }
+        Uri uri = ShareProvider.uriFor(this, out);
+        Intent send = new Intent(Intent.ACTION_SEND).setType("model/stl").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, "Bed mesh " + when(m.at) + " (heights × " + exaggeration + ")")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        send.setClipData(android.content.ClipData.newRawUri("Bed mesh model", uri));
+        startActivity(Intent.createChooser(send, "Save or share the 3D model"));
+    }
     private void share(BedMesh.Mesh m) {
         File out = ShareProvider.fresh(this, m.name.isEmpty() ? "bed-mesh.json" : m.name);
         try (OutputStream o = new FileOutputStream(out)) { o.write(BedMesh.json(m).toString(1).getBytes(StandardCharsets.UTF_8)); }

@@ -92,4 +92,36 @@ public class BedMeshTest {
         assertEquals(121, file.getJSONObject("capture").getInt("point_count"));
         assertFalse("no serial or address in the file", file.toString().matches(".*(\\d{1,3}\\.){3}\\d{1,3}.*"));
     }
+
+    @Test public void theModelIsAClosedSolidFacingOut() throws Exception {
+        BedMesh.Capture c = new BedMesh.Capture();
+        for (JSONObject s : levelling(5, 121)) c.feed(s, 0, "local network", 0);
+        BedMesh.Mesh m = c.feed(status(1, 0, 0, 0, 0), 1, "local network", 0);
+        int ex = BedMesh.autoExaggeration(m);
+        assertEquals("a 0.18 mm range shown about 40 mm tall", 200, ex);
+        byte[] stl = BedMesh.stl(m, ex, 2);
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(stl).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        int n = b.getInt(80);
+        assertEquals("top 2×100, walls 4×10×2, bottom 2×100", 200 + 80 + 200, n);
+        assertEquals(84 + n * 50, stl.length);
+        // Closed: every edge is shared by exactly two triangles, once in each direction (so all faces point the same way).
+        java.util.Map<String, Integer> edges = new java.util.HashMap<>(); double volume = 0, top = 0;
+        for (int t = 0; t < n; t++) {
+            float[][] p = new float[3][3];
+            for (int k = 0; k < 3; k++) for (int a = 0; a < 3; a++) p[k][a] = b.getFloat(84 + t * 50 + 12 + k * 12 + a * 4);
+            for (int k = 0; k < 3; k++) { float[] u = p[k], v = p[(k + 1) % 3]; edges.merge(key(u) + ">" + key(v), 1, Integer::sum); }
+            // Signed volume of the tetrahedron with the origin: positive in total only when the faces point out.
+            volume += (p[0][0] * (p[1][1] * p[2][2] - p[1][2] * p[2][1]) - p[0][1] * (p[1][0] * p[2][2] - p[1][2] * p[2][0]) + p[0][2] * (p[1][0] * p[2][1] - p[1][1] * p[2][0])) / 6;
+            for (float[] q : p) top = Math.max(top, q[2]);
+        }
+        for (java.util.Map.Entry<String, Integer> e : edges.entrySet()) {
+            String[] ends = e.getKey().split(">");
+            assertEquals("edge " + e.getKey() + " once each way", 1, (int) e.getValue());
+            assertEquals("its twin", Integer.valueOf(1), edges.get(ends[1] + ">" + ends[0]));
+        }
+        assertTrue("faces point out: " + volume, volume > 236 * 236 * 2);
+        assertEquals("the highest point is the base plus the range × the exaggeration", 2 + m.range() * ex, top, 0.01);
+        assertEquals(500, BedMeshActivity.step(200, 1)); assertEquals(100, BedMeshActivity.step(200, -1)); assertEquals(10, BedMeshActivity.step(10, -1)); assertEquals(1000, BedMeshActivity.step(1000, 1));
+    }
+    private static String key(float[] p) { return Math.round(p[0] * 100) + "," + Math.round(p[1] * 100) + "," + Math.round(p[2] * 100); }
 }

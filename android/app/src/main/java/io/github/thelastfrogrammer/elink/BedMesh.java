@@ -118,6 +118,78 @@ final class BedMesh {
             big, new SimpleDateFormat("d MMM HH:mm", Locale.getDefault()).format(new Date(older.at)), signed(difference.mean()));
     }
 
+    // ------------------------------------------------------------------ colours and 3D
+
+    /** Half the colour scale's width (mm) at least, so a nearly flat bed is not painted as dramatic. */
+    static final double MIN_SPAN = 0.05;
+    /** The colour scale: its centre (the mean, or no change for a difference) and half-width (the farthest point from it). */
+    static double[] scale(Mesh m, boolean difference) {
+        double centre = difference ? 0 : m.mean(), span = MIN_SPAN;
+        for (double[] r : m.z) for (double v : r) if (!Double.isNaN(v)) span = Math.max(span, Math.abs(v - centre));
+        return new double[] {centre, span};
+    }
+    /** Blue below the centre, orange above, a quiet grey at it (darker in dark mode); `t` from −1 to 1. The 2D map, the 3D view and the toolpath viewer share it. */
+    static int colour(double t, boolean dark) {
+        t = Math.max(-1, Math.min(1, t));
+        int mid = dark ? 0xff2a3438 : 0xffeef1f2, low = dark ? 0xff3987e5 : 0xff2a78d6, high = dark ? 0xffd95926 : 0xffeb6834;
+        int end = t < 0 ? low : high; double a = Math.abs(t);
+        int r = (int) Math.round(((mid >> 16) & 255) * (1 - a) + ((end >> 16) & 255) * a), g = (int) Math.round(((mid >> 8) & 255) * (1 - a) + ((end >> 8) & 255) * a),
+            b = (int) Math.round((mid & 255) * (1 - a) + (end & 255) * a);
+        return 0xff000000 | (r << 16) | (g << 8) | b;
+    }
+    static final int[] EXAGGERATIONS = {10, 20, 50, 100, 200, 500, 1000};
+    /** A height exaggeration that makes the mesh's range about 40 mm tall (on a 256 mm bed), as a round 1-2-5 number from 10 to 1000. */
+    static int autoExaggeration(Mesh m) {
+        double want = 40 / Math.max(0.01, m.range());
+        int best = 10;
+        for (int v : EXAGGERATIONS) if (Math.abs(Math.log(v / want)) < Math.abs(Math.log(best / want))) best = v;
+        return best;
+    }
+
+    /**
+     * The mesh as a solid for a 3D program or a slicer (binary STL): the surface over the probed area at the bed's real X and Y
+     * (mm, from the first probe point), heights × `exaggeration` above a `base` mm thick slab, closed by walls and a bottom.
+     */
+    static byte[] stl(Mesh m, double exaggeration, double base) {
+        int nx = m.xs.length, ny = m.ys.length; double low = m.min();
+        double[][][] top = new double[ny][nx][];
+        for (int j = 0; j < ny; j++) for (int i = 0; i < nx; i++) {
+            double v = Double.isNaN(m.z[j][i]) ? low : m.z[j][i];
+            top[j][i] = new double[] {m.xs[i] - m.xs[0], m.ys[j] - m.ys[0], base + (v - low) * exaggeration};
+        }
+        List<double[][]> tris = new ArrayList<>();
+        for (int j = 0; j + 1 < ny; j++) for (int i = 0; i + 1 < nx; i++) {
+            double[] a = top[j][i], b = top[j][i + 1], c = top[j + 1][i + 1], d = top[j + 1][i];
+            tris.add(new double[][] {a, b, c}); tris.add(new double[][] {a, c, d});
+        }
+        // The walls: each edge of the surface down to the bottom, facing out.
+        // Walked anticlockwise seen from above (front +X, right +Y, back −X, left −Y), so every wall faces out.
+        for (int i = 0; i + 1 < nx; i++) { wall(tris, top[0][i], top[0][i + 1]); wall(tris, top[ny - 1][i + 1], top[ny - 1][i]); }
+        for (int j = 0; j + 1 < ny; j++) { wall(tris, top[j][nx - 1], top[j + 1][nx - 1]); wall(tris, top[j + 1][0], top[j][0]); }
+        // The bottom on the same grid as the walls' feet, facing down: every edge meets its neighbour exactly (watertight).
+        for (int j = 0; j + 1 < ny; j++) for (int i = 0; i + 1 < nx; i++) {
+            double[] a = foot(top[j][i]), b = foot(top[j][i + 1]), c = foot(top[j + 1][i + 1]), d = foot(top[j + 1][i]);
+            tris.add(new double[][] {a, c, b}); tris.add(new double[][] {a, d, c});
+        }
+        java.nio.ByteBuffer out = java.nio.ByteBuffer.allocate(84 + tris.size() * 50).order(java.nio.ByteOrder.LITTLE_ENDIAN);
+        byte[] header = ("Link Workshop bed mesh, heights x" + Math.round(exaggeration)).getBytes(StandardCharsets.US_ASCII);
+        out.put(header, 0, Math.min(80, header.length)); out.position(80); out.putInt(tris.size());
+        for (double[][] t : tris) {
+            double[] u = {t[1][0] - t[0][0], t[1][1] - t[0][1], t[1][2] - t[0][2]}, v = {t[2][0] - t[0][0], t[2][1] - t[0][1], t[2][2] - t[0][2]};
+            double nx3 = u[1] * v[2] - u[2] * v[1], ny3 = u[2] * v[0] - u[0] * v[2], nz3 = u[0] * v[1] - u[1] * v[0], len = Math.max(1e-12, Math.sqrt(nx3 * nx3 + ny3 * ny3 + nz3 * nz3));
+            out.putFloat((float) (nx3 / len)); out.putFloat((float) (ny3 / len)); out.putFloat((float) (nz3 / len));
+            for (double[] p : t) { out.putFloat((float) p[0]); out.putFloat((float) p[1]); out.putFloat((float) p[2]); }
+            out.putShort((short) 0);
+        }
+        return out.array();
+    }
+    private static double[] foot(double[] p) { return new double[] {p[0], p[1], 0}; }
+    /** Two triangles from a top edge (a → b, walked anticlockwise seen from above) down to the bottom. */
+    private static void wall(List<double[][]> tris, double[] a, double[] b) {
+        double[] a0 = {a[0], a[1], 0}, b0 = {b[0], b[1], 0};
+        tris.add(new double[][] {a, a0, b0}); tris.add(new double[][] {a, b0, b});
+    }
+
     // ------------------------------------------------------------------ rebuilding the grid from the status stream
 
     /** A position the printer reported while probing: {step, x, y, z}. */

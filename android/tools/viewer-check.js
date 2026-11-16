@@ -50,6 +50,22 @@ const server = http.createServer((q, r) => {
     if (!(differ(solid, edges) > 200)) fail('edges only did not change the drawing (' + differ(solid, edges) + ')');
     if (!(differ(solid, faded) > 50)) fail('see-through infill did not change the drawing (' + differ(solid, faded) + ')');
     await page.evaluate(() => viewer.update({ edgeMask: 0, typeAlpha: null }));
+    // The bed mesh painted on the plate: an 11 × 11 grid from blue (front left) to orange (back right) must change the
+    // plate's colour, and taking it away must bring the plain plate back.
+    const bedView = { start: 0, end: 0, layerStart: 0 };
+    const plain = await draw(bedView);
+    await page.evaluate(() => {
+      const xs = [], ys = [], colours = [];
+      for (let k = 0; k < 11; k++) { xs.push(10 + k * 23.6); ys.push(10 + k * 23.6); }
+      for (let j = 0; j < 11; j++) for (let i = 0; i < 11; i++) { const t = (i + j) / 20; colours.push(0.16 + 0.76 * t, 0.47 + 0.0 * t, 0.84 - 0.64 * t); }
+      viewer.setBedMesh({ xs, ys, colours });
+    });
+    const painted = await draw(bedView);
+    if (process.env.SHOTS) { await draw(full); await page.screenshot({ path: process.env.SHOTS + '/viewer-bed-mesh.png' }); }
+    await page.evaluate(() => viewer.setBedMesh(null));
+    const again = await draw(bedView);
+    if (!(differ(plain, painted) > 200)) fail('the bed mesh did not colour the plate (' + differ(plain, painted) + ')');
+    if (differ(plain, again) > 5) fail('taking the bed mesh away did not bring the plain plate back (' + differ(plain, again) + ')');
     // A previous job's asynchronous data fetches must not repopulate the scene after it was cleared.
     const cleared = await page.evaluate(async () => {
       const original = window.fetch, release = [], before = window.__loadCount;
@@ -71,6 +87,6 @@ const server = http.createServer((q, r) => {
     const c = r.view && r.view.camera;
     if (!c || c.yaw !== 12 || c.pitch !== 34 || c.distance !== 222 || c.target.join() !== '10,20,3') fail('the view did not survive a save and restore: ' + JSON.stringify(r.view));
     if (!(Math.abs(r.orbit - 90) < 0.01)) fail('the showcase orbit did not turn the view by 90 degrees: ' + r.orbit);
-    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit, view state, edges, opacity, job clearing and stale-load cancellation work`);
+    if (!process.exitCode) console.log(`viewer check passed: ${r.loaded} segments loaded, lockstep, orbit, view state, edges, opacity, job clearing, stale-load cancellation and the bed mesh on the plate work`);
   } catch (e) { fail(e.message); } finally { await browser.close(); server.close(); }
 });

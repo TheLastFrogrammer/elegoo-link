@@ -23,8 +23,6 @@ final class BedMeshView extends View {
     private final RectF plot = new RectF();
     private int chosenI = -1, chosenJ = -1;
     private Consumer<String> readout;
-    /** Half the colour scale's width (mm); at least this, so a nearly flat bed is not painted as dramatic. */
-    static final double MIN_SPAN = 0.05;
 
     BedMeshView(Context context, boolean dark, int ink, int muted) {
         super(context); this.dark = dark; this.ink = ink; this.muted = muted;
@@ -43,21 +41,8 @@ final class BedMeshView extends View {
         setMeasuredDimension(width, Math.round(width - 40 * d + 70 * d));   // a square plot, its labels and the legend
     }
 
-    /** The scale's centre and half-width: the mean (or no change, for a difference) and the farthest point from it. */
-    double[] scale() {
-        double centre = difference ? 0 : mesh.mean(), span = MIN_SPAN;
-        for (double[] r : mesh.z) for (double v : r) if (!Double.isNaN(v)) span = Math.max(span, Math.abs(v - centre));
-        return new double[] {centre, span};
-    }
-    /** Blue below the centre, orange above, a quiet grey at it (darker in dark mode); `t` from −1 to 1. */
-    int colour(double t) {
-        t = Math.max(-1, Math.min(1, t));
-        int mid = dark ? 0xff2a3438 : 0xffeef1f2, low = dark ? 0xff3987e5 : 0xff2a78d6, high = dark ? 0xffd95926 : 0xffeb6834;
-        int end = t < 0 ? low : high; double a = Math.abs(t);
-        int r = (int) Math.round(((mid >> 16) & 255) * (1 - a) + ((end >> 16) & 255) * a), g = (int) Math.round(((mid >> 8) & 255) * (1 - a) + ((end >> 8) & 255) * a),
-            b = (int) Math.round((mid & 255) * (1 - a) + (end & 255) * a);
-        return 0xff000000 | (r << 16) | (g << 8) | b;
-    }
+    double[] scale() { return BedMesh.scale(mesh, difference); }
+    int colour(double t) { return BedMesh.colour(t, dark); }
 
     @Override protected void onDraw(Canvas canvas) {
         if (mesh == null || mesh.xs.length == 0) return;

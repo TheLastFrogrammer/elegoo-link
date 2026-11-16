@@ -125,6 +125,33 @@
     uniform vec4 uColor; out vec4 fragment;
     void main() { fragment = uColor; }`);
 
+  // The bed mesh painted on the plate: a surface with a colour at each probe point, blended across each cell.
+  const surface = program(`#version 300 es
+    layout(location=0) in vec3 aPosition;
+    layout(location=1) in vec3 aColor;
+    uniform mat4 uViewProj;
+    out vec3 vColor;
+    void main() { vColor = aColor; gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
+    precision mediump float;
+    in vec3 vColor; uniform float uAlpha; out vec4 fragment;
+    void main() { fragment = vec4(vColor, uAlpha); }`);
+  let bedMeshVao = null, bedMeshCount = 0;
+  // m: {xs, ys (mm), colours: [r, g, b] 0..1 per point, rows by Y}, or null to take it away. Flat on the plate, under the print.
+  function setBedMesh(m) {
+    bedMeshCount = 0;
+    if (!m || !Array.isArray(m.xs) || !Array.isArray(m.ys) || m.xs.length < 2 || m.ys.length < 2 || !Array.isArray(m.colours) || m.colours.length !== m.xs.length * m.ys.length * 3) { redraw(); return; }
+    const nx = m.xs.length, ny = m.ys.length, v = [], z = -0.01;
+    const at = (i, j) => { const k = (j * nx + i) * 3; v.push(m.xs[i], m.ys[j], z, m.colours[k], m.colours[k + 1], m.colours[k + 2]); };
+    for (let j = 0; j + 1 < ny; j++) for (let i = 0; i + 1 < nx; i++) { at(i, j); at(i + 1, j); at(i + 1, j + 1); at(i, j); at(i + 1, j + 1); at(i, j + 1); }
+    if (!bedMeshVao) { bedMeshVao = gl.createVertexArray(); gl.bindVertexArray(bedMeshVao); bedMeshVao.buffer = gl.createBuffer(); }
+    gl.bindVertexArray(bedMeshVao); gl.bindBuffer(gl.ARRAY_BUFFER, bedMeshVao.buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+    gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+    gl.bindVertexArray(null);
+    bedMeshCount = v.length / 6;
+    redraw();
+  }
+
   const marker = program(`#version 300 es
     layout(location=0) in vec3 aPosition;
     uniform mat4 uViewProj; uniform float uSize;
@@ -580,6 +607,11 @@
     // Plate and grid (over the camera picture, the grid only).
     gl.useProgram(lines.p); gl.uniformMatrix4fv(lines.u.uViewProj, false, viewProj);
     if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
+    if (!overlay && bedMeshCount) {
+      gl.useProgram(surface.p); gl.uniformMatrix4fv(surface.u.uViewProj, false, viewProj); gl.uniform1f(surface.u.uAlpha, 0.85);
+      gl.bindVertexArray(bedMeshVao); gl.drawArrays(gl.TRIANGLES, 0, bedMeshCount);
+      gl.useProgram(lines.p);
+    }
     gl.bindVertexArray(bedVao);
     if (!overlay) { gl.uniform4fv(lines.u.uColor, theme.grid); gl.drawArrays(gl.LINES, 0, bedLineCount); }
     else {
@@ -993,6 +1025,6 @@
   }
   // Read-only: what is drawn up to and where the nozzle dot is (for checks; changes nothing).
   function probe() { return { end: view.end, count: data.count, nozzle: view.nozzle ? Array.from(view.nozzle) : null, along: glide.on ? glide.pos : null }; }
-  window.viewer = { probe, orbit, load, clearToolpath, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
+  window.viewer = { setBedMesh, probe, orbit, load, clearToolpath, update, setLockstep, getViewState, setViewState, snapshot, setTheme, resetCamera: fit, setView, redraw, camera, showPrinterCamera, alignPrinterCamera, movePrinterCamera, setMarking, setAlignStyle, setRotationLock, resetZoom, zoomPicture, cameraFrame, cameraCloud, cameraStop };
   if (android && android.onReady) android.onReady(); else if (location.search.indexOf("autoload") >= 0) load();
 })();

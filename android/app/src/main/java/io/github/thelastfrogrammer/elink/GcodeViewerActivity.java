@@ -1111,7 +1111,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     }
 
     private final class Bridge {
-        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); if (alignOnly) startAligning(); }); }
+        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; sendTheme(); sendData(); sendLock(); sendAlignStyle(); sendBedMesh(false); if (alignOnly) startAligning(); }); }
         @JavascriptInterface public void onLoaded(int count, long ticket) { main.post(() -> {
             if (ticket != loadGeneration || path == null || followMode && !alignOnly && !sameObservedJob()) return;
             web.setVisibility(View.VISIBLE); loadedOnce = true; setControlsEnabled(true); sendLockstep(); restoreView(); pushView(); syncOverlay();
@@ -1232,6 +1232,36 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void sendData() {
         if (!pageReady || path == null || sent || web == null) return;
         sent = true; web.evaluateJavascript("viewer.load(" + loadGeneration + ")", null);
+    }
+
+    /** Whether any bed mesh is kept (the More dialog offers it only then). */
+    private volatile boolean bedMeshKept;
+    /**
+     * The newest bed mesh's colours painted on the plate (as on Printer › Bed mesh), or taken away when turned off. `say`: tell
+     * the person which levelling it is and what the colours mean.
+     */
+    private void sendBedMesh(boolean say) {
+        boolean on = viewerPrefs().getBoolean("bedMeshOnBed", false);
+        java.io.File dir = BedMesh.directory(getFilesDir());
+        new Thread(() -> {
+            List<BedMesh.Mesh> kept = BedMesh.list(dir);
+            bedMeshKept = !kept.isEmpty();
+            String script = "viewer.setBedMesh(null)", words = on ? "No bed mesh is kept yet." : "The bed mesh is hidden.";
+            if (on && !kept.isEmpty()) try {
+                BedMesh.Mesh m = kept.get(0); double[] s = BedMesh.scale(m, false);
+                JSONArray colours = new JSONArray();
+                for (double[] row : m.z) for (double v : row) {
+                    int c = BedMesh.colour(Double.isNaN(v) ? 0 : (v - s[0]) / s[1], dark);
+                    colours.put(((c >> 16) & 255) / 255.0).put(((c >> 8) & 255) / 255.0).put((c & 255) / 255.0);
+                }
+                JSONArray xs = new JSONArray(), ys = new JSONArray(); for (double x : m.xs) xs.put(x); for (double y : m.ys) ys.put(y);
+                script = "viewer.setBedMesh(" + new JSONObject().put("xs", xs).put("ys", ys).put("colours", colours) + ")";
+                words = String.format(java.util.Locale.getDefault(), "Bed mesh of %s on the bed: blue lower, orange higher, %s to %s mm.",
+                    new java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(new java.util.Date(m.at)), BedMesh.signed(s[0] - s[1]), BedMesh.signed(s[0] + s[1]));
+            } catch (org.json.JSONException impossible) { return; }
+            String run = script, said = words;
+            main.post(() -> { if (isDestroyed()) return; js(run); if (say) Toast.makeText(this, said, Toast.LENGTH_LONG).show(); });
+        }, "viewer-bed-mesh").start();
     }
 
     private void sendTheme() {
@@ -1393,6 +1423,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         moreButton(body, dialog, moveBar.getVisibility() == View.VISIBLE ? "Hide the step-through bar" : "Step through this layer…",
             () -> { int v = moveBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE; moveBar.setVisibility(v); moveLabel.setVisibility(v); });
         moreButton(body, dialog, "Layers, transparency and nozzle dot…", this::nozzleDialog);
+        if (bedMeshKept) moreButton(body, dialog, viewerPrefs().getBoolean("bedMeshOnBed", false) ? "Hide the bed mesh on the bed" : "Show the bed mesh on the bed (blue lower, orange higher)",
+            () -> { viewerPrefs().edit().putBoolean("bedMeshOnBed", !viewerPrefs().getBoolean("bedMeshOnBed", false)).apply(); sendBedMesh(true); });
         if (followMode) {
             boolean on = cameraWanted();
             groupHeading(body, "Camera");
