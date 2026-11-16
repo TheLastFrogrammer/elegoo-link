@@ -182,6 +182,103 @@ final class BedMesh {
     /** Whether a filled-in mesh's sample (i, j) is one of the probe points. */
     static boolean probePoint(Mesh m, int i, int j) { return m.probed == null || i % m.detail == 0 && j % m.detail == 0; }
 
+    // ------------------------------------------------------------------ the bed under a part
+
+    /** The bed's height at a spot (mm), straight-lined between the four probe points around it; past the probed area, the edge's. Pure. */
+    static double heightAt(Mesh m, double x, double y) {
+        int nx = m.xs.length, ny = m.ys.length;
+        x = Math.max(m.xs[0], Math.min(m.xs[nx - 1], x)); y = Math.max(m.ys[0], Math.min(m.ys[ny - 1], y));
+        int a = 0; while (a < nx - 2 && x > m.xs[a + 1]) a++;
+        int b = 0; while (b < ny - 2 && y > m.ys[b + 1]) b++;
+        double u = (x - m.xs[a]) / (m.xs[a + 1] - m.xs[a]), v = (y - m.ys[b]) / (m.ys[b + 1] - m.ys[b]);
+        double low = m.z[b][a] + (m.z[b][a + 1] - m.z[b][a]) * u, high = m.z[b + 1][a] + (m.z[b + 1][a + 1] - m.z[b + 1][a]) * u;
+        return low + (high - low) * v;
+    }
+    /** The bed's lowest and highest height under a rectangle {x0, y0, x1, y1}, sampled every 4 mm and at its edges: {min, max}. Pure. */
+    static double[] under(Mesh m, double[] r) {
+        double lo = Double.POSITIVE_INFINITY, hi = Double.NEGATIVE_INFINITY;
+        int nx = Math.max(1, (int) Math.ceil((r[2] - r[0]) / 4)), ny = Math.max(1, (int) Math.ceil((r[3] - r[1]) / 4));
+        for (int j = 0; j <= ny; j++) for (int i = 0; i <= nx; i++) {
+            double h = heightAt(m, r[0] + (r[2] - r[0]) * i / nx, r[1] + (r[3] - r[1]) * j / ny);
+            lo = Math.min(lo, h); hi = Math.max(hi, h);
+        }
+        return new double[] {lo, hi};
+    }
+
+    /** Where a footprint sits flattest: its centre, the bed's variation under it there, and under it where it is now. */
+    static final class Spot { double x, y, range, rangeNow; boolean moved; }
+    /**
+     * The spot on the bed where a `w` × `h` mm footprint (now centred at cx, cy) has the least height variation under it:
+     * tried every 4 mm inside the bed {x0, y0, x1, y1} and clear (by 2 mm) of the other parts' rectangles. It stays where
+     * it is unless somewhere else is flatter by more than 0.01 mm (less than that is within what the probe repeats to); of
+     * equally flat spots the nearest wins. Null when the mesh has a missing point or the part does not fit. Pure.
+     */
+    static Spot flattest(Mesh m, double w, double h, double cx, double cy, double[] bed, List<double[]> others) {
+        if (m == null || m.xs.length < 2 || m.ys.length < 2 || m.count() != m.xs.length * m.ys.length || w > bed[2] - bed[0] || h > bed[3] - bed[1]) return null;
+        Spot s = new Spot(); s.x = cx; s.y = cy;
+        double[] now = under(m, new double[] {cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2});
+        s.rangeNow = now[1] - now[0]; s.range = s.rangeNow;
+        double best = s.rangeNow - 0.01, bestDistance = Double.POSITIVE_INFINITY;
+        for (double y = bed[1] + h / 2; y <= bed[3] - h / 2 + 1e-9; y += 4) for (double x = bed[0] + w / 2; x <= bed[2] - w / 2 + 1e-9; x += 4) {
+            double[] r = {x - w / 2, y - h / 2, x + w / 2, y + h / 2}; boolean clear = true;
+            if (others != null) for (double[] o : others) if (r[0] < o[2] + 2 && r[2] > o[0] - 2 && r[1] < o[3] + 2 && r[3] > o[1] - 2) { clear = false; break; }
+            if (!clear) continue;
+            double[] u = under(m, r); double range = u[1] - u[0], distance = Math.hypot(x - cx, y - cy);
+            if (range < best - 1e-9 || Math.abs(range - best) <= 1e-9 && distance < bestDistance) { best = range; bestDistance = distance; s.x = Math.round(x * 10) / 10.0; s.y = Math.round(y * 10) / 10.0; s.range = range; s.moved = true; }
+        }
+        return s;
+    }
+
+    /** A print's first layer set against a mesh: the bed's heights under its lines, where they are highest and lowest, and the layer's own height. */
+    static final class FirstLayer { double min, max, layerHeight; double[] lowAt, highAt; double[] box; }
+    /**
+     * The bed under a print's first layer. The start G-code's purge line is left out: only first-layer lines inside the
+     * second layer's outline (widened 3 mm) count, when there is a second layer. Null without a full mesh or a first layer. Pure.
+     */
+    static FirstLayer firstLayer(Mesh m, GcodeToolpath path) {
+        if (m == null || path == null || path.layerCount == 0 || m.xs.length < 2 || m.ys.length < 2 || m.count() != m.xs.length * m.ys.length) return null;
+        double[] keep = {Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY};
+        if (path.layerCount > 1) {
+            keep = new double[] {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+            for (int i = path.layerStart(1); i < path.layerEnd(1); i++) {
+                keep[0] = Math.min(keep[0], Math.min(path.x0[i], path.x1[i])); keep[2] = Math.max(keep[2], Math.max(path.x0[i], path.x1[i]));
+                keep[1] = Math.min(keep[1], Math.min(path.y0[i], path.y1[i])); keep[3] = Math.max(keep[3], Math.max(path.y0[i], path.y1[i]));
+            }
+            keep[0] -= 3; keep[1] -= 3; keep[2] += 3; keep[3] += 3;
+        }
+        FirstLayer f = new FirstLayer(); f.min = Double.POSITIVE_INFINITY; f.max = Double.NEGATIVE_INFINITY;
+        f.box = new double[] {Double.POSITIVE_INFINITY, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY, Double.NEGATIVE_INFINITY};
+        for (int i = path.layerStart(0); i < path.layerEnd(0); i++) {
+            double ax = path.x0[i], ay = path.y0[i], bx = path.x1[i], by = path.y1[i];
+            if (Math.min(ax, bx) < keep[0] || Math.max(ax, bx) > keep[2] || Math.min(ay, by) < keep[1] || Math.max(ay, by) > keep[3]) continue;
+            int steps = Math.max(1, (int) Math.ceil(Math.hypot(bx - ax, by - ay) / 4));
+            for (int k = 0; k <= steps; k++) {
+                double x = ax + (bx - ax) * k / steps, y = ay + (by - ay) * k / steps, z = heightAt(m, x, y);
+                if (z < f.min) { f.min = z; f.lowAt = new double[] {x, y}; }
+                if (z > f.max) { f.max = z; f.highAt = new double[] {x, y}; }
+                f.box[0] = Math.min(f.box[0], x); f.box[1] = Math.min(f.box[1], y); f.box[2] = Math.max(f.box[2], x); f.box[3] = Math.max(f.box[3], y);
+            }
+        }
+        if (f.lowAt == null) return null;
+        f.layerHeight = path.layerZ(0);
+        return f;
+    }
+    /**
+     * The first layer's check in words: how much the bed varies under it, set against the layer's height, and what to do. The
+     * printer's own levelling follows the mesh, so this is a hint where a first layer may come out uneven, not a fault. Pure.
+     */
+    static String firstLayerWords(Mesh m, FirstLayer f) {
+        double range = f.max - f.min; String when = new SimpleDateFormat("d MMM", Locale.getDefault()).format(new Date(m.at));
+        String head = String.format(Locale.getDefault(), "Under the first layer the bed varies %.2f mm (%s to %s mm; levelling of %s)", range, signed(f.min), signed(f.max), when);
+        double share = f.layerHeight > 0.01 ? range / f.layerHeight : 0;
+        if (range < 0.05 || share < 0.25) return head + ": flat enough that the first layer should go down evenly.";
+        String where = String.format(Locale.getDefault(), " Highest near X %.0f, Y %.0f; lowest near X %.0f, Y %.0f.", f.highAt[0], f.highAt[1], f.lowAt[0], f.lowAt[1]);
+        String of = f.layerHeight > 0.01 ? String.format(Locale.getDefault(), ", %d %% of the %.2f mm first layer", Math.round(share * 100), f.layerHeight) : "";
+        return head + of + "." + where + (share >= 0.5
+            ? " The printer's levelling follows the bed, but with this much the first layer can come out thin on the high side and loose on the low side: a flatter spot is worth it (plate view › More… › Move to the flattest spot)."
+            : " The printer's levelling follows the bed, so this usually prints fine; if the first layer looks uneven there, try a flatter spot (plate view › More… › Move to the flattest spot).");
+    }
+
     // ------------------------------------------------------------------ colours and 3D
 
     /** Half the colour scale's width (mm) at least, so a nearly flat bed is not painted as dramatic. */
@@ -202,6 +299,19 @@ final class BedMesh {
         return 0xff000000 | (r << 16) | (g << 8) | b;
     }
     static final int[] EXAGGERATIONS = {10, 20, 50, 100, 200, 500, 1000};
+    /** The mesh as the 3D pages paint it on their plate: {xs, ys, colours: r, g, b per point, rows by Y}, on the shared colour scale. */
+    static JSONObject paint(Mesh m, boolean dark) {
+        try {
+            double[] s = scale(m, false);
+            JSONArray colours = new JSONArray(), xs = new JSONArray(), ys = new JSONArray();
+            for (double[] row : m.z) for (double v : row) {
+                int c = colour(Double.isNaN(v) ? 0 : (v - s[0]) / s[1], dark);
+                colours.put(((c >> 16) & 255) / 255.0).put(((c >> 8) & 255) / 255.0).put((c & 255) / 255.0);
+            }
+            for (double x : m.xs) xs.put(x); for (double y : m.ys) ys.put(y);
+            return new JSONObject().put("xs", xs).put("ys", ys).put("colours", colours);
+        } catch (JSONException impossible) { throw new IllegalStateException(impossible); }
+    }
     /** A height exaggeration that makes the mesh's range about 40 mm tall (on a 256 mm bed), as a round 1-2-5 number from 10 to 1000. */
     static int autoExaggeration(Mesh m) {
         double want = 40 / Math.max(0.01, m.range());

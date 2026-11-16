@@ -168,4 +168,46 @@ public class BedMeshTest {
         int n = java.nio.ByteBuffer.wrap(stl).order(java.nio.ByteOrder.LITTLE_ENDIAN).getInt(80);
         assertEquals(2 * 40 * 40 * 2 + 4 * 40 * 2, n);
     }
+
+    @Test public void aPartIsMovedToWhereTheBedIsFlattest() throws Exception {
+        BedMesh.Mesh m = probed();   // tilted, with a 0.08 mm bump around the middle (X and Y 98 to 158)
+        assertEquals(m.z[0][0], BedMesh.heightAt(m, 10, 10), 1e-9);
+        assertEquals((m.z[0][0] + m.z[0][1]) / 2, BedMesh.heightAt(m, (m.xs[0] + m.xs[1]) / 2, 10), 1e-9);
+        assertEquals("past the probed area, the edge's height", m.z[0][0], BedMesh.heightAt(m, 0, 0), 1e-9);
+        double[] bed = {0, 0, 256, 256};
+        // A 40 mm part on the bump's edge: moved off it, to a spot that varies far less.
+        BedMesh.Spot s = BedMesh.flattest(m, 40, 40, 128, 100, bed, null);
+        assertTrue(s.moved); assertTrue(s.rangeNow > 0.08); assertTrue("" + s.range, s.range < 0.03);
+        assertTrue("inside the bed", s.x >= 20 && s.x <= 236 && s.y >= 20 && s.y <= 236);
+        double[] there = BedMesh.under(m, new double[] {s.x - 20, s.y - 20, s.x + 20, s.y + 20});
+        assertEquals(s.range, there[1] - there[0], 1e-9);
+        // Another part already on that spot: the next flattest free spot, clear of it.
+        java.util.List<double[]> taken = java.util.Collections.singletonList(new double[] {s.x - 20, s.y - 20, s.x + 20, s.y + 20});
+        BedMesh.Spot second = BedMesh.flattest(m, 40, 40, 128, 100, bed, taken);
+        assertTrue(second.moved && (Math.abs(second.x - s.x) >= 42 || Math.abs(second.y - s.y) >= 42));
+        // Already as flat as anywhere (within 0.01 mm): it stays.
+        BedMesh.Spot stay = BedMesh.flattest(m, 40, 40, s.x, s.y, bed, null);
+        assertFalse(stay.moved); assertEquals(s.x, stay.x, 0); assertEquals(s.y, stay.y, 0);
+        assertNull("a part larger than the bed", BedMesh.flattest(m, 300, 40, 128, 128, bed, null));
+    }
+
+    @Test public void theFirstLayerIsSetAgainstTheBed() throws Exception {
+        BedMesh.Mesh m = probed();
+        File dir = Files.createTempDirectory("first-layer").toFile();
+        // A purge line at the front, then a 30 mm square: over the bump's edge, or on a flat corner.
+        String gcode = String.join("\n", "M83", ";LAYER_CHANGE", ";Z:0.2", "G1 Z0.2", "G1 X10 Y2 F6000", "G1 X200 Y2 E10",
+            "G1 X%1$d Y%2$d", "G1 X%3$d Y%2$d E2", "G1 X%3$d Y%4$d E2", "G1 X%1$d Y%4$d E2", "G1 X%1$d Y%2$d E2",
+            ";LAYER_CHANGE", ";Z:0.4", "G1 Z0.4", "G1 X%3$d Y%2$d E2", "G1 X%3$d Y%4$d E2", "G1 X%1$d Y%4$d E2", "G1 X%1$d Y%2$d E2", "");
+        File bump = new File(dir, "bump.gcode"), corner = new File(dir, "corner.gcode");
+        Files.write(bump.toPath(), String.format(gcode, 80, 80, 110, 110).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Files.write(corner.toPath(), String.format(gcode, 20, 200, 50, 230).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        BedMesh.FirstLayer onBump = BedMesh.firstLayer(m, GcodeToolpath.read(bump));
+        assertEquals("the purge line at Y 2 is left out", 80, onBump.box[1], 0.01); assertEquals(110, onBump.box[2], 0.01);
+        assertEquals(0.2, onBump.layerHeight, 1e-6);
+        assertTrue(onBump.max - onBump.min > 0.08);
+        String words = BedMesh.firstLayerWords(m, onBump);
+        assertTrue(words, words.startsWith("Under the first layer the bed varies 0.1") && words.contains("% of the 0.20 mm first layer") && words.contains("Move to the flattest spot"));
+        String flat = BedMesh.firstLayerWords(m, BedMesh.firstLayer(m, GcodeToolpath.read(corner)));
+        assertTrue(flat, flat.endsWith("flat enough that the first layer should go down evenly."));
+    }
 }

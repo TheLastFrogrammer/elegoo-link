@@ -1252,16 +1252,13 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                 android.content.SharedPreferences ws = getSharedPreferences("workshop-settings", MODE_PRIVATE);
                 BedMesh.Mesh m = BedMesh.interpolate(kept.get(0), ws.getString(BedMeshActivity.BETWEEN, BedMesh.PROBED), ws.getInt(BedMeshActivity.DETAIL, 4));
                 double[] s = BedMesh.scale(m, false);
-                JSONArray colours = new JSONArray();
-                for (double[] row : m.z) for (double v : row) {
-                    int c = BedMesh.colour(Double.isNaN(v) ? 0 : (v - s[0]) / s[1], dark);
-                    colours.put(((c >> 16) & 255) / 255.0).put(((c >> 8) & 255) / 255.0).put((c & 255) / 255.0);
-                }
-                JSONArray xs = new JSONArray(), ys = new JSONArray(); for (double x : m.xs) xs.put(x); for (double y : m.ys) ys.put(y);
-                script = "viewer.setBedMesh(" + new JSONObject().put("xs", xs).put("ys", ys).put("colours", colours) + ")";
+                script = "viewer.setBedMesh(" + BedMesh.paint(m, dark) + ")";
                 words = String.format(java.util.Locale.getDefault(), "Bed mesh of %s on the bed: blue lower, orange higher, %s to %s mm.",
                     new java.text.SimpleDateFormat("d MMM HH:mm", java.util.Locale.getDefault()).format(new java.util.Date(m.at)), BedMesh.signed(s[0] - s[1]), BedMesh.signed(s[0] + s[1]));
-            } catch (org.json.JSONException impossible) { return; }
+                // With a toolpath loaded: what the bed looks like under its first layer.
+                BedMesh.FirstLayer first = BedMesh.firstLayer(kept.get(0), path);
+                if (first != null) words += " " + BedMesh.firstLayerWords(kept.get(0), first);
+            } catch (RuntimeException unreadable) { return; }
             String run = script, said = words;
             main.post(() -> { if (isDestroyed()) return; js(run); if (say) Toast.makeText(this, said, Toast.LENGTH_LONG).show(); });
         }, "viewer-bed-mesh").start();

@@ -52,6 +52,16 @@
     void main() { gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
     precision mediump float; uniform vec4 uColor; out vec4 fragment;
     void main() { fragment = uColor; }`);
+  // The bed mesh painted on the plate (blue lower, orange higher): a colour at each probe point, blended across each cell.
+  const surface = program(`#version 300 es
+    layout(location=0) in vec3 aPosition;
+    layout(location=1) in vec3 aColor;
+    uniform mat4 uViewProj;
+    out vec3 vColor;
+    void main() { vColor = aColor; gl_Position = uViewProj * vec4(aPosition, 1.0); }`, `#version 300 es
+    precision mediump float; in vec3 vColor; out vec4 fragment;
+    void main() { fragment = vec4(vColor, 0.85); }`);
+  let bedMeshVao = null, bedMeshCount = 0;
   const mesh = program(`#version 300 es
     layout(location=0) in vec3 aPosition;
     layout(location=1) in vec3 aNormal;
@@ -461,6 +471,11 @@
     gl.enable(gl.DEPTH_TEST); gl.depthFunc(gl.LEQUAL); gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
     gl.useProgram(flat.p); gl.uniformMatrix4fv(flat.u.uViewProj, false, viewProj);
     gl.uniform4fv(flat.u.uColor, theme.plate); gl.bindVertexArray(plateVao); gl.drawArrays(gl.TRIANGLES, 0, 6);
+    if (bedMeshCount) {
+      gl.useProgram(surface.p); gl.uniformMatrix4fv(surface.u.uViewProj, false, viewProj);
+      gl.bindVertexArray(bedMeshVao); gl.drawArrays(gl.TRIANGLES, 0, bedMeshCount);
+      gl.useProgram(flat.p);
+    }
     gl.uniform4fv(flat.u.uColor, theme.grid); gl.bindVertexArray(gridVao); gl.drawArrays(gl.LINES, 0, gridCount);
     if (excludedVao) { gl.uniform4fv(flat.u.uColor, theme.excluded); gl.bindVertexArray(excludedVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
     if (towerVao) { gl.uniform4fv(flat.u.uColor, theme.tower); gl.bindVertexArray(towerVao); gl.drawArrays(gl.TRIANGLES, 0, 6); }
@@ -859,6 +874,28 @@
   function current() { return selected >= 0 && selected < scene.placements.length ? scene.placements[selected] : null; }
   const api = {
     load,
+    // m: {xs, ys (mm), colours: r, g, b (0..1) per point, rows by Y}, or null to take it away.
+    setBedMesh(m) {
+      bedMeshCount = 0;
+      if (m && Array.isArray(m.xs) && Array.isArray(m.ys) && m.xs.length > 1 && m.ys.length > 1 && Array.isArray(m.colours) && m.colours.length === m.xs.length * m.ys.length * 3) {
+        const nx = m.xs.length, ny = m.ys.length, v = [], z = -0.02;
+        const at = (i, j) => { const k = (j * nx + i) * 3; v.push(m.xs[i], m.ys[j], z, m.colours[k], m.colours[k + 1], m.colours[k + 2]); };
+        for (let j = 0; j + 1 < ny; j++) for (let i = 0; i + 1 < nx; i++) { at(i, j); at(i + 1, j); at(i + 1, j + 1); at(i, j); at(i + 1, j + 1); at(i, j + 1); }
+        if (!bedMeshVao) { bedMeshVao = gl.createVertexArray(); bedMeshVao.buffer = gl.createBuffer(); }
+        gl.bindVertexArray(bedMeshVao); gl.bindBuffer(gl.ARRAY_BUFFER, bedMeshVao.buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(v), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+        gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+        gl.bindVertexArray(null); bedMeshCount = v.length / 6;
+      }
+      redraw();
+    },
+    // The selected model's footprint, the bed and the other models' footprints, for finding it a flatter spot; "" with none selected.
+    spot() {
+      const p = current(); if (!p) return "";
+      const r = rect(p), others = [];
+      scene.placements.forEach((q, i) => { if (i !== selected) others.push(rect(q).slice(0, 4)); });
+      return JSON.stringify({ x: p.x, y: p.y, w: r[2] - r[0], d: r[3] - r[1], bed: boxOf(scene.bed) || [0, 0, 256, 256], others });
+    },
     setTheme(next) { for (const key of Object.keys(next)) if (key in theme) theme[key] = next[key];
       document.body.style.setProperty("--bg", "rgb(" + theme.background.map((c) => Math.round(c * 255)).join(",") + ")"); redraw(); },
     setPlacements(list) {

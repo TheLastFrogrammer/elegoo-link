@@ -125,6 +125,25 @@ const server = http.createServer((q, r) => {
     await page.waitForTimeout(150);
     if (shots) await page.screenshot({ path: path.join(shots, 'plate-support-boxes.png') });
     if (errors.length) fail('script error: ' + errors.join(' | '));
-    if (!process.exitCode) console.log('plate check passed: move, turn, tilt and scale handles work; overhangs shaded (' + shaded + ' px); support boxes add, drag, size and ride with their model');
+    // The bed mesh on the plate, and the selected model's footprint for finding it a flatter spot.
+    const meshCheck = await page.evaluate(async () => {
+      const grab = () => { const c = document.querySelector('canvas'), p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
+        const g = p.getContext('2d'); g.drawImage(c, 0, 0); return Array.from(g.getImageData(0, 0, c.width, c.height).data.filter((v, i) => i % 16 === 0)); };
+      const wait = (ms) => new Promise((done) => setTimeout(done, ms));
+      plate.select(0); await wait(200); const plain = grab();
+      const xs = [], ys = [], colours = [];
+      for (let k = 0; k < 11; k++) { xs.push(10 + k * 23.6); ys.push(10 + k * 23.6); }
+      for (let j = 0; j < 11; j++) for (let i = 0; i < 11; i++) { const t = (i + j) / 20; colours.push(0.16 + 0.76 * t, 0.47, 0.84 - 0.64 * t); }
+      plate.setBedMesh({ xs, ys, colours }); await wait(200); const painted = grab();
+      const spot = JSON.parse(plate.spot());
+      const differ = (a, b) => a.reduce((n, v, i) => n + (Math.abs(v - b[i]) > 24 ? 1 : 0), 0);
+      return { painted: differ(plain, painted), spot };
+    });
+    if (shots) await page.screenshot({ path: path.join(shots, 'plate-bed-mesh.png') });
+    const back = await page.evaluate(async () => { plate.setBedMesh(null); plate.select(-1); return plate.spot(); });
+    if (!(meshCheck.painted > 200)) fail('the bed mesh did not colour the plate (' + meshCheck.painted + ')');
+    if (!(meshCheck.spot.w > 0 && meshCheck.spot.d > 0 && meshCheck.spot.bed.length === 4 && Array.isArray(meshCheck.spot.others))) fail('the selected model gave no footprint: ' + JSON.stringify(meshCheck.spot));
+    if (back !== '') fail('no model selected should give no footprint');
+    if (!process.exitCode) console.log('plate check passed (bed mesh painted, ' + meshCheck.painted + ' px; footprint ' + meshCheck.spot.w.toFixed(0) + ' × ' + meshCheck.spot.d.toFixed(0) + ' mm): move, turn, tilt and scale handles work; overhangs shaded (' + shaded + ' px); support boxes add, drag, size and ride with their model');
   } catch (e) { fail(e.message); } finally { await browser.close(); server.close(); }
 });

@@ -228,6 +228,43 @@ public final class PlateActivity extends Activity {
     }
     /** Support angle and whether supports are on for this slice (from the engine and the Slice screen's changes). */
     private double supportAngle = 30; private boolean supportOn, supportTree, supportManual;
+    /** The newest bed mesh kept (BedMesh), read when the page loads; null when the printer has not been seen levelling. */
+    private volatile BedMesh.Mesh bedMesh;
+    private void readBedMesh() {
+        java.io.File dir = BedMesh.directory(getFilesDir());
+        new Thread(() -> { java.util.List<BedMesh.Mesh> kept = BedMesh.list(dir); bedMesh = kept.isEmpty() ? null : kept.get(0); main.post(() -> sendBedMesh(false)); }, "plate-bed-mesh").start();
+    }
+    private static String meshDay(BedMesh.Mesh m) { return new java.text.SimpleDateFormat("d MMM", java.util.Locale.getDefault()).format(new java.util.Date(m.at)); }
+    /** Paints the mesh on the plate (filled in as chosen on the Bed mesh screen) or takes it away. */
+    private void sendBedMesh(boolean say) {
+        BedMesh.Mesh m = bedMesh; boolean on = m != null && viewChoices().getBoolean("bedMesh", false);
+        if (!on) { js("plate.setBedMesh(null)"); return; }
+        android.content.SharedPreferences ws = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        BedMesh.Mesh filled = BedMesh.interpolate(m, ws.getString(BedMeshActivity.BETWEEN, BedMesh.PROBED), ws.getInt(BedMeshActivity.DETAIL, 4));
+        js("plate.setBedMesh(" + BedMesh.paint(filled, ui.dark) + ")");
+        if (say) { double[] s = BedMesh.scale(filled, false);
+            status.setText("The bed's shape from the levelling of " + meshDay(m) + ": blue lower, orange higher (" + BedMesh.signed(s[0] - s[1]) + " to " + BedMesh.signed(s[0] + s[1]) + " mm)."); status.setTextColor(ui.muted); }
+    }
+    /** Moves the selected model to where the bed varies least under it (BedMesh.flattest), clear of the other models. */
+    private void flattest() {
+        BedMesh.Mesh m = bedMesh; if (m == null || web == null || !pageReady) return;
+        web.evaluateJavascript("plate.spot()", value -> {
+            try {
+                String text = new JSONArray("[" + value + "]").optString(0);
+                if (text.isEmpty()) return;
+                JSONObject spot = new JSONObject(text); JSONArray bed = spot.getJSONArray("bed"), others = spot.getJSONArray("others");
+                java.util.List<double[]> taken = new java.util.ArrayList<>();
+                for (int i = 0; i < others.length(); i++) { JSONArray o = others.getJSONArray(i); taken.add(new double[] {o.getDouble(0), o.getDouble(1), o.getDouble(2), o.getDouble(3)}); }
+                BedMesh.Spot best = BedMesh.flattest(m, spot.getDouble("w"), spot.getDouble("d"), spot.getDouble("x"), spot.getDouble("y"),
+                    new double[] {bed.getDouble(0), bed.getDouble(1), bed.getDouble(2), bed.getDouble(3)}, taken);
+                status.setTextColor(ui.teal);
+                if (best == null) { status.setText("The bed mesh cannot place this model (it does not fit the bed, or the mesh has a missing point)."); status.setTextColor(ui.muted); return; }
+                if (!best.moved) { status.setText(String.format(java.util.Locale.getDefault(), "Already on as flat a spot as there is: the bed varies %.2f mm under it (levelling of %s).", best.rangeNow, meshDay(m))); return; }
+                js("plate.move(" + (best.x - spot.getDouble("x")) + "," + (best.y - spot.getDouble("y")) + ")");
+                status.setText(String.format(java.util.Locale.getDefault(), "Moved to the flattest free spot: the bed varies %.2f mm under it there, %.2f mm where it was (levelling of %s).", best.range, best.rangeNow, meshDay(m)));
+            } catch (org.json.JSONException unreadable) { }
+        });
+    }
     private android.content.SharedPreferences viewChoices() { return getSharedPreferences("plate-view", MODE_PRIVATE); }
     private void applyViewChoices() {
         js("plate.setGimbal(" + viewChoices().getBoolean("handles", true) + ")");
@@ -373,9 +410,16 @@ public final class PlateActivity extends Activity {
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
         boolean on = selected >= 0;
         boolean handles = viewChoices().getBoolean("handles", true), supports = viewChoices().getBoolean("supports", true);
+        boolean meshOn = viewChoices().getBoolean("bedMesh", false);
         String[] names = {"Select a model…", "Support blockers and enforcers…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…",
             handles ? "Hide the handles" : "Show the handles (move, turn, tilt, scale)",
             supports ? "Hide where supports go" : "Show where supports go", "Reset view"};
+        if (bedMesh != null) {
+            // The bed's shape from the last levelling: shown on the plate, and used to find the selected model a flatter spot.
+            Button flat = ui.button(body, "Move to the flattest spot", () -> { dialog[0].dismiss(); flattest(); }, false); flat.setEnabled(on);
+            ui.button(body, meshOn ? "Hide the bed mesh on the plate" : "Show the bed mesh on the plate (blue lower, orange higher)", () -> {
+                dialog[0].dismiss(); viewChoices().edit().putBoolean("bedMesh", !meshOn).apply(); sendBedMesh(true); }, false);
+        }
         Runnable[] actions = {this::selectDialog, this::supportsDialog, this::moveDialog, this::copiesDialog, this::filamentDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
                 status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
             () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings,
@@ -574,7 +618,7 @@ public final class PlateActivity extends Activity {
     }
 
     private final class Bridge {
-        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; load(); }); }
+        @JavascriptInterface public void onReady() { main.post(() -> { pageReady = true; load(); readBedMesh(); }); }
         @JavascriptInterface public void onLoaded(int count) { }
         @JavascriptInterface public void onLayDone(boolean laid) {
             main.post(() -> {
