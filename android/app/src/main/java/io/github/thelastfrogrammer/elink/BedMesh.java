@@ -41,6 +41,8 @@ final class BedMesh {
         String name = "";   // the file it is kept in
         /** For a filled-in mesh (interpolate): the mesh as probed, and how many steps lie between two probe points; null and 1 otherwise. */
         Mesh probed; int detail = 1;
+        /** Probe repeatability: the largest spread (mm) between readings of a point the printer probed more than once, and how many such points; NaN and 0 when none was. */
+        double repeatSpread = Double.NaN; int repeated;
 
         int count() { int n = 0; for (double[] row : z) for (double v : row) if (!Double.isNaN(v)) n++; return n; }
         double min() { double m = Double.POSITIVE_INFINITY; for (double[] r : z) for (double v : r) if (!Double.isNaN(v)) m = Math.min(m, v); return m; }
@@ -386,8 +388,9 @@ final class BedMesh {
             if (e == null || x != lastX || y != lastY || phase != lastPhase) {
                 // The visit ends: its last touch counts.
                 if (lastPhase != Integer.MIN_VALUE && !Double.isNaN(contact)) {
-                    double[] p = byPhase.computeIfAbsent(lastPhase, q -> new LinkedHashMap<>()).computeIfAbsent(lastX + "," + lastY, q -> new double[] {0, 0, 0, 0});
-                    p[0] = lastX; p[1] = lastY; p[2] += contact; p[3]++;
+                    double[] p = byPhase.computeIfAbsent(lastPhase, q -> new LinkedHashMap<>()).computeIfAbsent(lastX + "," + lastY,
+                        q -> new double[] {0, 0, 0, 0, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY});
+                    p[0] = lastX; p[1] = lastY; p[2] += contact; p[3]++; p[4] = Math.min(p[4], contact); p[5] = Math.max(p[5], contact);
                 }
                 contact = Double.NaN; lastX = x; lastY = y; lastPhase = phase;
             }
@@ -405,7 +408,11 @@ final class BedMesh {
             m.xs = xs.stream().mapToDouble(Double::doubleValue).toArray(); m.ys = ys.stream().mapToDouble(Double::doubleValue).toArray();
             m.z = new double[m.ys.length][m.xs.length];
             for (double[] row : m.z) Arrays.fill(row, Double.NaN);
-            for (double[] p : phase.getValue().values()) m.z[Arrays.binarySearch(m.ys, p[1])][Arrays.binarySearch(m.xs, p[0])] = round4(p[2] / p[3]);
+            for (double[] p : phase.getValue().values()) {
+                m.z[Arrays.binarySearch(m.ys, p[1])][Arrays.binarySearch(m.xs, p[0])] = round4(p[2] / p[3]);
+                if (p[3] >= 2) { m.repeated++; m.repeatSpread = Double.isNaN(m.repeatSpread) ? p[5] - p[4] : Math.max(m.repeatSpread, p[5] - p[4]); }
+            }
+            if (!Double.isNaN(m.repeatSpread)) m.repeatSpread = round4(m.repeatSpread);
             best = m;
         }
         return best;
@@ -475,12 +482,13 @@ final class BedMesh {
             JSONArray rows = new JSONArray();
             for (double[] row : m.z) { JSONArray r = new JSONArray(); for (double v : row) r.put(Double.isNaN(v) ? JSONObject.NULL : v); rows.put(r); }
             JSONObject capture = new JSONObject().put("source", "status stream while probing (" + m.source + ")").put("probe_phase", m.phase)
-                .put("point_count", m.count()).put("expected_points", m.expected).put("min_z_mm", m.min()).put("max_z_mm", m.max()).put("peak_to_valley_mm", m.range());
+                .put("point_count", m.count()).put("expected_points", m.expected).put("repeated_points", m.repeated).put("min_z_mm", m.min()).put("max_z_mm", m.max()).put("peak_to_valley_mm", m.range());
             JSONObject out = new JSONObject().put("schema_version", 1).put("app", "Link Workshop").put("printer_model", "Centauri Carbon 2")
                 .put("captured_at", IntegrationStatus.iso(m.at)).put("captured_at_ms", m.at).put("units", "mm")
                 .put("plate_width_mm", PLATE_MM).put("plate_height_mm", PLATE_MM)
                 .put("x_mm", arr(m.xs)).put("y_mm", arr(m.ys)).put("z_mm", rows).put("capture", capture)
                 .put("note", "Rebuilt from the positions the printer reported while probing; not compared with the mesh the printer stores.");
+            if (!Double.isNaN(m.repeatSpread)) capture.put("repeat_spread_mm", m.repeatSpread);
             if (!Double.isNaN(m.bed)) out.put("bed_c", m.bed);
             if (!Double.isNaN(m.bedTarget)) out.put("bed_target_c", m.bedTarget);
             if (!m.file.isEmpty()) out.put("before_print", m.file);
@@ -503,7 +511,8 @@ final class BedMesh {
         }
         m.at = o.optLong("captured_at_ms", 0);
         JSONObject c = o.optJSONObject("capture");
-        m.source = c == null ? "" : c.optString("source"); m.phase = c == null ? 0 : c.optInt("probe_phase"); m.expected = c == null ? m.count() : c.optInt("expected_points", m.count());
+        m.source = c == null ? "" : c.optString("source");
+        m.repeatSpread = c == null ? Double.NaN : c.optDouble("repeat_spread_mm", Double.NaN); m.repeated = c == null ? 0 : c.optInt("repeated_points"); m.phase = c == null ? 0 : c.optInt("probe_phase"); m.expected = c == null ? m.count() : c.optInt("expected_points", m.count());
         m.bed = o.optDouble("bed_c", Double.NaN); m.bedTarget = o.optDouble("bed_target_c", Double.NaN);
         m.file = o.optString("before_print"); m.printer = o.optString("printer_id");
         return m;

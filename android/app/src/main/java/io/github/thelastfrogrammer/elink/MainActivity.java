@@ -1544,6 +1544,7 @@ public final class MainActivity extends Activity {
         recentPrints = new LinearLayout(this); recentPrints.setOrientation(LinearLayout.VERTICAL); recordings.addView(recentPrints);
         recentEmpty = label(recordings, "Prints the app watched appear here, with their graphs, camera pictures and your notes.", 13, MUTED, false);
         listRow(recordings, "All print recordings…", "Search, compare and rate every print the app watched", true, () -> startActivity(new Intent(this, RecordingsActivity.class)));
+        listRow(recordings, "Printer health…", "Heating, the bed's tilt and flatness, the probe, over the weeks", true, () -> startActivity(new Intent(this, PrinterHealthActivity.class)));
         maintenanceDetail = listRow(recordings, "Maintenance reminders…", "Nozzle, plate, belts and more, by print hours", true, () -> startActivity(new Intent(this, MaintenanceActivity.class)));
         // The printer's own records and the statistics each on their own page.
         printerHistorySection = section(HISTORY, "The printer's history", "What the printer itself lists: print again, timelapses");

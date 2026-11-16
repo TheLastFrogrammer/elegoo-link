@@ -125,6 +125,7 @@ public class BedMeshTest {
     }
     private static String key(float[] p) { return Math.round(p[0] * 100) + "," + Math.round(p[1] * 100) + "," + Math.round(p[2] * 100); }
 
+    static BedMesh.Mesh probedOnce() throws Exception { return probed(); }
     private static BedMesh.Mesh probed() throws Exception {
         BedMesh.Capture c = new BedMesh.Capture();
         for (JSONObject s : levelling(5, 121)) c.feed(s, 0, "local network", 0);

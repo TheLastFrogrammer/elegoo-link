@@ -54,6 +54,7 @@
         <activity android:name=".FileMemoryActivity" android:exported="false" android:label="Prints of a file" />
         <activity android:name=".IntegrationsActivity" android:exported="false" android:label="Other apps" />
         <activity android:name=".BedMeshActivity" android:exported="false" android:label="Bed mesh" />
+        <activity android:name=".PrinterHealthActivity" android:exported="false" android:label="Printer health" />
         <activity android:name=".ProjectsActivity" android:exported="true" android:label="Projects">
             <!-- A shared project file (.lwproject) opened or shared from another app: imported only after the person confirms. -->
             <intent-filter>

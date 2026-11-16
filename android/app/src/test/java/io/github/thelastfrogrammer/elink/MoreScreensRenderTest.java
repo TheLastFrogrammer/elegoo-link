@@ -303,6 +303,33 @@ public class MoreScreensRenderTest {
         BedMeshActivity smooth = Robolectric.buildActivity(BedMeshActivity.class).setup().get();
         shot(smooth.getWindow().getDecorView(), 1080, 3800, new File(out(), "bed-mesh-smooth-" + theme + ".png"));
     }
+    /** Printer health: seven prints whose bed heats more slowly over the weeks, and six levellings at 60 °C. */
+    @Test public void renderPrinterHealth() throws Exception {
+        setTheme(false);
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        PrintRecorder recorder = new PrintRecorder(RecordingsActivity.directory(context));
+        long first = Instant.parse("2026-09-01T18:00:00Z").toEpochMilli();
+        for (int k = 0; k < 7; k++) {
+            long begin = first + k * 7 * 86_400_000L; double rate = 4.2 - 0.18 * k;   // °C a minute, slower each week
+            for (int s = 0; s <= 60; s++) {
+                double minutes = s * 10 / 60.0, bed = Math.min(60, 24 + rate * minutes), nozzle = Math.min(220, 26 + (95 - k) * minutes);
+                JSONObject status = new JSONObject()
+                    .put("machine_status", new JSONObject().put("status", 2).put("sub_status", s < 50 ? 1405 : 2075).put("progress", s < 50 ? 0 : s - 49))
+                    .put("print_status", new JSONObject().put("filename", "Weekly.gcode").put("uuid", "w" + k).put("current_layer", s < 50 ? 0 : 1).put("total_layer", 50))
+                    .put("extruder", new JSONObject().put("temperature", nozzle).put("target", 220))
+                    .put("heater_bed", new JSONObject().put("temperature", bed).put("target", 60));
+                recorder.update(begin + s * 10_000L, status, "local", "Bedroom");
+            }
+            recorder.update(begin + 610_000L, new JSONObject().put("machine_status", new JSONObject().put("status", 1).put("sub_status", 0)), "local", "Bedroom");
+        }
+        File meshes = BedMesh.directory(context.getFilesDir());
+        for (int k = 0; k < 6; k++) BedMesh.save(meshes, PrinterHealthTest.mesh(first + k * 7 * 86_400_000L, 60, 0.05 + 0.02 * k, 0.02 + 0.015 * k));
+        PrinterHealthActivity page = Robolectric.buildActivity(PrinterHealthActivity.class).setup().get();
+        for (int i = 0; i < 300 && ((android.view.ViewGroup) ((android.widget.ScrollView) ((android.view.ViewGroup) page.findViewById(android.R.id.content)).getChildAt(0)).getChildAt(0)).getChildCount() < 4; i++) {
+            Thread.sleep(20); org.robolectric.shadows.ShadowLooper.idleMainLooper();
+        }
+        shot(page.getWindow().getDecorView(), 1080, 3400, new File(out(), "printer-health-light.png"));
+    }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }
 }
