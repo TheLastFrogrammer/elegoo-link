@@ -198,9 +198,20 @@ final class RecordingAnalysis {
             }
         }
         String nozzleDrop = drop(t, layer, nozzle, nozzleTarget, sub, 8), bedDrop = drop(t, layer, bed, bedTarget, sub, 5);
-        if (!nozzleDrop.isEmpty()) out.add(new Finding(Finding.NOZZLE_DROP, 0, "The nozzle fell " + nozzleDrop + " while printing: a draught or a fan blowing on the heater block, or the heater losing ground at high flow. Under-extruded lines are likely there."));
+        if (!nozzleDrop.isEmpty()) out.add(new Finding(Finding.NOZZLE_DROP, dropLayer(t, layer, nozzle, nozzleTarget, sub, 8), "The nozzle fell " + nozzleDrop + " while printing: a draught or a fan blowing on the heater block, or the heater losing ground at high flow. Under-extruded lines are likely there."));
         if (!bedDrop.isEmpty()) out.add(new Finding(Finding.BED_DROP, 0, "The bed fell " + bedDrop + " while printing: a draught, or the bed heater struggling. Warping or a part letting go can follow."));
         return out;
+    }
+    /** The layer of the worst reading more than `margin` below a target while printing (as drop() picks it), or 0. */
+    static int dropLayer(double[] t, double[] layer, double[] value, double[] target, double[] sub, double margin) {
+        int worst = -1; double most = margin;
+        for (int i = 0; i < t.length; i++) {
+            if (Double.isNaN(value[i]) || Double.isNaN(target[i]) || target[i] <= 0 || Double.isNaN(layer[i]) || layer[i] < 1) continue;
+            if (!Double.isNaN(sub[i]) && (int) sub[i] != 2075) continue;
+            double below = target[i] - value[i];
+            if (below > most) { most = below; worst = i; }
+        }
+        return worst < 0 ? 0 : (int) layer[worst];
     }
     /** "to 195 °C (target 210) at 1:12" for the worst reading more than `margin` below a target while printing, or "". */
     private static String drop(double[] t, double[] layer, double[] value, double[] target, double[] sub, double margin) {

@@ -34,7 +34,7 @@ public final class PrintWidget extends AppWidgetProvider {
         if (printing) {
             int percent = Math.max(0, Math.min(100, machine.optInt("progress", 0)));
             s.progress = percent; s.percent = percent + "%";
-            long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+            long remaining = FinishTimes.left(machine, print);
             int layer = print == null ? 0 : print.optInt("current_layer", 0), layers = print == null ? 0 : print.optInt("total_layer", 0);
             String left = remaining < 0 ? "" : StatusPresentation.span(remaining) + " left · done " + StatusPresentation.doneAt(nowMs, remaining, locale, zone);
             s.time = StatusPresentation.joinParts(left, layers > 0 ? "layer " + layer + "/" + layers : "");

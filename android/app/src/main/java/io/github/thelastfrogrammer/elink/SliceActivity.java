@@ -1048,17 +1048,22 @@ public final class SliceActivity extends Activity {
         useInFiles.setText(slicedFiles.size() > 1 ? "Send project plate " + (index + 1) + " to the Files tab" : "Send to Files tab");
         preview.setVisibility(View.GONE); showPreview(sliced); firstLayerNote(sliced);
     }
-    /** Adds to the result how the bed (its last kept mesh) lies under this file's first layer, when a mesh is kept. */
+    /** Adds to the result which layers run near the filament's flow limit, and how the bed (its last kept mesh) lies under the first layer. */
     private void firstLayerNote(File gcode) {
         File dir = BedMesh.directory(getFilesDir());
         new Thread(() -> {
             String words;
             try {
-                List<BedMesh.Mesh> kept = BedMesh.list(dir); if (kept.isEmpty()) return;
-                BedMesh.FirstLayer first = BedMesh.firstLayer(kept.get(0), GcodeToolpath.read(gcode)); if (first == null) return;
-                words = BedMesh.firstLayerWords(kept.get(0), first);
+                // How hard the file pushes the hot end, then (with a kept bed mesh) the bed under its first layer.
+                List<String> notes = new ArrayList<>();
+                String flow = FlowCheck.sliceWords(LayerProfile.read(gcode)); if (!flow.isEmpty()) notes.add(flow);
+                List<BedMesh.Mesh> kept = BedMesh.list(dir);
+                BedMesh.FirstLayer first = kept.isEmpty() ? null : BedMesh.firstLayer(kept.get(0), GcodeToolpath.read(gcode));
+                if (first != null) notes.add(BedMesh.firstLayerWords(kept.get(0), first));
+                if (notes.isEmpty()) return;
+                words = String.join("\n\n", notes);
             } catch (IOException | RuntimeException | OutOfMemoryError unreadable) { return; }
-            main.post(() -> { if (!isDestroyed() && gcode.equals(sliced) && !resultText.getText().toString().contains("Under the first layer")) resultText.append("\n\n" + words); });
+            main.post(() -> { if (!isDestroyed() && gcode.equals(sliced) && !resultText.getText().toString().contains(words)) resultText.append("\n\n" + words); });
         }, "slice-first-layer").start();
     }
 

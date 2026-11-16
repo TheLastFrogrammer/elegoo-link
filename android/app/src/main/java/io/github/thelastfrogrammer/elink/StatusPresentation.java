@@ -116,7 +116,7 @@ public final class StatusPresentation {
         text.append("\nNozzle ").append(temperature(status, "extruder")).append(" · Bed ").append(temperature(status, "heater_bed"))
             .append(" · Chamber ").append(temperature(status, "ztemperature_sensor"));
         if (printing && print != null) {
-            long remaining = print.optLong("remaining_time_sec", -1);
+            long remaining = FinishTimes.left(machine, print);
             text.append("\n").append(clean(print.optString("filename", "Current print"))).append("\nLayer ").append(print.optInt("current_layer", 0))
                 .append(" / ").append(print.optInt("total_layer", 0)).append(" · ")
                 .append(remaining < 0 ? "Time unavailable" : remaining / 3600 + "h " + (remaining % 3600) / 60 + "m remaining");
@@ -182,7 +182,7 @@ public final class StatusPresentation {
         List<String> parts = new ArrayList<>();
         if (machine != null && machine.has("progress")) parts.add(Math.max(0, Math.min(100, machine.optInt("progress"))) + "%");
         if (print != null && print.optInt("total_layer", 0) > 0) parts.add("layer " + print.optInt("current_layer", 0) + " of " + print.optInt("total_layer"));
-        long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+        long remaining = FinishTimes.left(machine, print);
         if (remaining >= 0) parts.add(remaining / 3600 + "h " + (remaining % 3600) / 60 + "m left");
         return parts.isEmpty() ? "Printing" : String.join(" · ", parts);
     }

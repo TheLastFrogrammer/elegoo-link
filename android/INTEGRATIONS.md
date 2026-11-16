@@ -137,6 +137,9 @@ arrive whole within 15 s. A client that stops reading for 20 s is cut off.
   - `words` is the app's own wording.
   - `machine_status` and `sub_status` are the printer's numbers, for anyone who wants them.
   - `faults` lists the printer's fault codes.
+- `print.remaining_s` and `done_at` are corrected from this phone's earlier prints when it has learned how the printer's
+  estimate runs (the same file first, else recent prints, by quarter of the print; it can be turned off in the app);
+  `print.printer_remaining_s` is the printer's own figure.
 - Fields the printer did not report are left out, never invented. Temperatures are °C, fans are %, times are UTC
   (ISO 8601) and durations are seconds.
 

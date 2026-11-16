@@ -1692,6 +1692,7 @@ public final class PrinterService extends Service {
         for (Observer watcher : new ArrayList<>(watchers)) watcher.changed();
         homeAssistant();
         if (integrations != null) integrations.statusChanged();
+        learnFinishTimes(false);
         // Home-screen widget: the status shown here, locally or through the cloud (throttled inside).
         try {
             JSONObject shownNow = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
@@ -2098,7 +2099,7 @@ public final class PrinterService extends Service {
         if (printingNow) {
             // While printing: "41% · layer 87 of 212 · 1h 15m left · done ≈ 14:30", with a progress bar.
             JSONObject print = running.optJSONObject("print_status");
-            long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+            long remaining = FinishTimes.left(runningMachine, print);
             text = StatusPresentation.runningLine(runningMachine, print) + (remaining > 0 ? " · done ≈ " + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, java.util.Locale.getDefault(), java.util.TimeZone.getDefault()) : "")
                 + (wanted ? "" : " · cloud") + (ready() && fresh() && !StatusPresentation.faultCodes(status).isEmpty() ? " · Printer reports a fault" : "");
         }
@@ -2114,7 +2115,7 @@ public final class PrinterService extends Service {
         boolean live = printingNow && Build.VERSION.SDK_INT >= 36 && getSharedPreferences("workshop-settings", MODE_PRIVATE).getBoolean("liveProgress", true);
         if (live) {
             JSONObject print = running.optJSONObject("print_status");
-            long remaining = print == null ? -1 : print.optLong("remaining_time_sec", -1);
+            long remaining = FinishTimes.left(runningMachine, print);
             Notification.ProgressStyle progress = new Notification.ProgressStyle().setStyledByProgress(true)
                 .setProgress(Math.max(0, Math.min(100, runningMachine.optInt("progress", 0))));
             builder.setStyle(progress);
@@ -2275,6 +2276,41 @@ public final class PrinterService extends Service {
             return "event handed to the Home Assistant link";
         }
     };
+    // ------------------------------------------------------------------ finish times (FinishTimes): learned from earlier prints
+    private String finishLearnedFor = "";
+    /** Learns, once per print (or when the setting changes), how this printer's time left compares with how long prints really took. */
+    void learnFinishTimes(boolean force) {
+        PrintRecorder.Recording now = recorder == null ? null : recorder.current();
+        String key = now == null ? "" : now.meta.getName();
+        if (!force && key.equals(finishLearnedFor)) return;
+        finishLearnedFor = key;
+        if (now == null || !workshop().getBoolean(FinishTimes.PREF, true)) { FinishTimes.current = null; return; }
+        String file = GcodeLibrary.baseName(now.file); java.io.File dir = RecordingsActivity.directory(this);
+        videoWorker.execute(() -> {
+            List<PrintRecorder.Recording> all = new PrintRecorder(dir).list();
+            all.sort((a, b) -> Long.compare(b.start, a.start));
+            List<double[]> factors = new ArrayList<>(); List<Boolean> same = new ArrayList<>();
+            for (PrintRecorder.Recording r : all) {
+                if (factors.size() >= 40) break;
+                if (!"complete".equals(r.outcome) || r.meta.equals(now.meta)) continue;
+                try {
+                    List<double[]> rows = PrintRecorder.samples(r);
+                    factors.add(FinishTimes.factors(RecordingsActivity.column(rows, "elapsed_s"), RecordingsActivity.column(rows, "progress"),
+                        RecordingsActivity.column(rows, "remaining_s"), RecordingsActivity.column(rows, "sub_status")));
+                    same.add(file != null && file.equals(GcodeLibrary.baseName(r.file)));
+                } catch (java.io.IOException | RuntimeException unreadable) { }
+            }
+            FinishTimes.Learned learned = FinishTimes.learn(factors, same);
+            main.post(() -> {
+                if (!key.equals(finishLearnedFor)) return;
+                FinishTimes.current = learned;
+                if (learned != null) Diagnostics.note(Diagnostics.STATUS, String.format(java.util.Locale.ROOT, "time left corrected from %d %s prints: factors %s",
+                    learned.prints, learned.sameFile ? "same-file" : "recent", java.util.Arrays.toString(learned.factor)));
+                changed();
+            });
+        });
+    }
+
     // ------------------------------------------------------------------ bed mesh (BedMesh): listened for while the printer levels
     private final BedMesh.Capture bedMeshCapture = new BedMesh.Capture();
     /** Points in the newest kept mesh, so a levelling cut short is not kept as a smaller grid (-1: not read yet). */

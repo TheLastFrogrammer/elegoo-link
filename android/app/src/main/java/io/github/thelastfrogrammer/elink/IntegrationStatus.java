@@ -62,8 +62,10 @@ final class IntegrationStatus {
                 if (!c.hideFile && !file.isEmpty()) print.put("file", file);
                 if (ps.has("current_layer")) print.put("layer", ps.optInt("current_layer"));
                 if (ps.has("total_layer")) print.put("total_layers", ps.optInt("total_layer"));
-                long remaining = ps.optLong("remaining_time_sec", -1);
+                // Corrected by the app's own prints when it has learned how this printer's estimate runs; the printer's own value beside it.
+                long reported = ps.optLong("remaining_time_sec", -1), remaining = FinishTimes.left(machine, ps);
                 if (active && remaining >= 0) print.put("remaining_s", remaining).put("done_at", iso(nowMs + remaining * 1000));
+                if (active && reported >= 0) print.put("printer_remaining_s", reported);
                 if (c.printStartedAt > 0) print.put("started_at", iso(c.printStartedAt)).put("elapsed_s", Math.max(0, (nowMs - c.printStartedAt) / 1000));
             }
             if (print.length() > 0) out.put("print", print);

@@ -657,6 +657,19 @@ public final class RecordingsActivity extends Activity {
         }
         for (String note : notes) label(card, note, 12, muted, false);
         if (!damp.isEmpty()) label(card, "• " + damp, 13, ink, false);
+        // A nozzle that fell below its temperature: whether its layer asked for much flow (from the kept G-code, read off the main thread).
+        for (RecordingAnalysis.Finding f : found) if (RecordingAnalysis.Finding.NOZZLE_DROP.equals(f.kind) && f.layer > 0) {
+            TextView flow = label(card, "", 13, ink, false); flow.setVisibility(View.GONE);
+            card.removeView(flow); card.addView(flow, Math.min(card.getChildCount(), 2 + found.indexOf(f) + 1));
+            new Thread(() -> {
+                String words = "";
+                try { File gcode = gcodeFor(recording); if (gcode != null) words = FlowCheck.dropWords(LayerProfile.read(gcode), f.layer); }
+                catch (IOException | RuntimeException | OutOfMemoryError unreadable) { }
+                String said = words;
+                runOnUiThread(() -> { if (!isDestroyed() && !said.isEmpty()) { flow.setText("  " + said); flow.setVisibility(View.VISIBLE); } });
+            }, "recording-flow").start();
+            break;
+        }
         if (settings) { LinearLayout row = new LinearLayout(this); row.setOrientation(LinearLayout.HORIZONTAL); card.addView(row); action(row, "Settings that address this…", () -> tune(recording, found)); }
     }
 
