@@ -1,5 +1,7 @@
 # Link Workshop for Android
 
+**v0.105.0:** see the bed shape reconstructed from levelling reports in 2D and 3D, or export it as an STL. Use it to find a flatter spot on the plate and check the first layer after slicing. **History → Printer health** compares warm-up and levelling measurements over time. Print finish times learn from completed recordings on the same identified printer, and the slicer flags layers that approach the filament's flow limit. The bed mesh is reconstructed from status reports; it does not read or change the firmware's compensation mesh.
+
 **v0.104.0:** a calmer recording page (six parts that open and close, heavy parts built when opened); the print guardian learns from your answers per camera, never enough to hide a problem you called real; a native Fire TV / Android TV app ([tv/](tv/README.md)); and an audit of the integration API, tuning and spool memory with 22 fixes.
 
 **v0.103.0:** other apps can watch the printer through the phone, read only. A TV or tablet opens the phone's address in its browser, pairs with a code you approve on the phone, and shows the camera and the print. Apps and scripts use a small HTTP API with Server-Sent Events, MJPEG and network discovery. A Reddit app or any page reads from your own relay, which the phone pushes signed updates to. See [INTEGRATIONS.md](INTEGRATIONS.md).

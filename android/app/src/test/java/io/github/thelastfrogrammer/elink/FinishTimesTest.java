@@ -40,14 +40,33 @@ public class FinishTimesTest {
         for (int k = 0; k < 3; k++) { newestFirst.add(factors(print(7200, 1 / 1.1, 1 / 1.1, false))); same.add(false); }
         for (int k = 0; k < 2; k++) { newestFirst.add(factors(print(7200, 1 / 1.3, 1 / 1.3, false))); same.add(true); }
         FinishTimes.Learned l = FinishTimes.learn(newestFirst, same);
-        assertTrue(l.sameFile); assertEquals(1.3, l.factor[0], 1e-6); assertEquals(2, l.prints);
+        assertTrue(l.sameFile[0]); assertEquals(1.3, l.factor[0], 1e-6); assertEquals(2, l.prints[0]);
         FinishTimes.Learned others = FinishTimes.learn(newestFirst.subList(0, 3), same.subList(0, 3));
-        assertFalse(others.sameFile); assertEquals(1.1, others.factor[2], 1e-6);
+        assertFalse(others.sameFile[2]); assertEquals(1.1, others.factor[2], 1e-6);
         assertNull("two prints of other files are not enough", FinishTimes.learn(newestFirst.subList(0, 2), same.subList(0, 2)));
         // Applied: 60 minutes said at 30 % becomes 78; the words say why.
         assertEquals(4680, FinishTimes.corrected(l, 3600, 30));
-        assertEquals("Corrected: at this stage your earlier prints of this file took 30 % longer than the printer said.", FinishTimes.basis(l, 30));
+        assertTrue(FinishTimes.basis(l, 30).contains("2 earlier prints with this filename"));
         assertEquals(3600, FinishTimes.corrected(null, 3600, 30));
+    }
+
+    @Test public void theBasisChangesWhenSameFileEvidenceRunsOut() {
+        double[] other = {1.1, 1.1, 1.1, 1.1}, same = {1.3, Double.NaN, Double.NaN, Double.NaN};
+        FinishTimes.Learned l = FinishTimes.learn(Arrays.asList(other, other, other, same, same),
+            Arrays.asList(false, false, false, true, true));
+        assertEquals(1300, FinishTimes.corrected(l, 1000, 24));
+        assertEquals(1100, FinishTimes.corrected(l, 1000, 25));
+        assertTrue(FinishTimes.basis(l, 24).contains("2 earlier prints with this filename"));
+        assertTrue(FinishTimes.basis(l, 25).contains("3 recent prints on this printer"));
+        assertEquals(1000, FinishTimes.corrected(l, 1000, -1));
+        assertTrue(FinishTimes.basis(l, Double.NaN).isEmpty());
+    }
+
+    @Test public void historyMustBelongToTheIdentifiedPrinter() {
+        assertTrue(FinishTimes.samePrinter("printer-a", "printer-a"));
+        assertFalse(FinishTimes.samePrinter("printer-a", "printer-b"));
+        assertFalse(FinishTimes.samePrinter("printer-a", ""));
+        assertFalse(FinishTimes.samePrinter("", ""));
     }
 
     @Test public void everyScreenReadsTheCorrectedTime() throws Exception {

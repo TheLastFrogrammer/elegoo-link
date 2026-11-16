@@ -21,10 +21,17 @@ final class FinishTimes {
     /** Factors outside this range are taken as a print gone wrong (stopped, restarted), not as the estimate's error. */
     static final double LOWEST = 0.5, HIGHEST = 2.0;
 
-    /** What was learned: a factor per quarter of the print, how many prints it rests on, and whether they were this file. */
+    /** The correction and its source can differ from one quarter of the print to the next. */
     static final class Learned {
-        final double[] factor = new double[BANDS]; int prints; boolean sameFile;
+        final double[] factor = new double[BANDS];
+        final int[] prints = new int[BANDS];
+        final boolean[] sameFile = new boolean[BANDS];
         boolean any() { for (double f : factor) if (!Double.isNaN(f)) return true; return false; }
+    }
+
+    /** Both recordings must identify the same physical printer before we use one to predict the other. */
+    static boolean samePrinter(String activeId, String historicalId) {
+        return activeId != null && !activeId.isEmpty() && activeId.equals(historicalId);
     }
 
     /** One finished print's factors (real time left ÷ printer's time left) per quarter: the median of its readings in each; NaN where none. Pure. */
@@ -36,7 +43,7 @@ final class FinishTimes {
         for (double s : sub) if (s == 2501 || s == 2502 || s == 2505) return out;   // paused at some point
         List<List<Double>> bands = new ArrayList<>(); for (int b = 0; b < BANDS; b++) bands.add(new ArrayList<>());
         for (int i = 0; i < elapsed.length; i++) {
-            if (Double.isNaN(elapsed[i]) || Double.isNaN(progress[i]) || Double.isNaN(remaining[i]) || remaining[i] < MIN_LEFT_S) continue;
+            if (Double.isNaN(elapsed[i]) || !validProgress(progress[i]) || Double.isNaN(remaining[i]) || remaining[i] < MIN_LEFT_S) continue;
             if (!Double.isNaN(sub[i]) && (int) sub[i] != 2075) continue;   // only while printing
             double real = end - elapsed[i], f = real / remaining[i];
             if (real <= 0 || f < LOWEST || f > HIGHEST) continue;
@@ -53,7 +60,6 @@ final class FinishTimes {
      */
     static Learned learn(List<double[]> newestFirst, List<Boolean> same) {
         Learned l = new Learned(); java.util.Arrays.fill(l.factor, Double.NaN);
-        int used = 0; boolean anySame = false;
         for (int b = 0; b < BANDS; b++) {
             List<Double> mine = new ArrayList<>(), all = new ArrayList<>();
             for (int k = 0; k < newestFirst.size(); k++) {
@@ -61,10 +67,9 @@ final class FinishTimes {
                 if (same.get(k)) mine.add(f);
                 if (all.size() < NEWEST) all.add(f);
             }
-            if (mine.size() >= SAME_FILE) { l.factor[b] = median(mine); used = Math.max(used, mine.size()); anySame = true; }
-            else if (all.size() >= ANY_FILES) { l.factor[b] = median(all); used = Math.max(used, all.size()); }
+            if (mine.size() >= SAME_FILE) { l.factor[b] = median(mine); l.prints[b] = mine.size(); l.sameFile[b] = true; }
+            else if (all.size() >= ANY_FILES) { l.factor[b] = median(all); l.prints[b] = all.size(); }
         }
-        l.prints = used; l.sameFile = anySame;
         return l.any() ? l : null;
     }
     private static double median(List<Double> v) {
@@ -81,23 +86,25 @@ final class FinishTimes {
     /** Time left, corrected when something was learned for this stage of the print; the printer's own value otherwise. */
     static long left(JSONObject machine, JSONObject print) {
         long reported = print == null ? -1 : print.optLong("remaining_time_sec", -1);
-        if (reported < 0 || machine == null || !machine.has("progress")) return reported;
-        return corrected(current, reported, machine.optInt("progress"));
+        return corrected(current, reported, machine == null ? Double.NaN : machine.optDouble("progress", Double.NaN));
     }
     static long corrected(Learned l, long reported, double progress) {
-        if (l == null || reported < 0) return reported;
+        if (l == null || reported < 0 || !validProgress(progress)) return reported;
         double f = l.factor[band(progress)];
         return Double.isNaN(f) ? reported : Math.round(reported * f);
     }
     /** What the correction rests on, for the Print tab: "your 4 earlier prints of this file ran 12 % longer than the printer said". */
     static String basis(Learned l, double progress) {
-        if (l == null) return "";
-        double f = l.factor[band(progress)]; if (Double.isNaN(f)) return "";
+        if (l == null || !validProgress(progress)) return "";
+        int b = band(progress);
+        double f = l.factor[b]; if (Double.isNaN(f)) return "";
         long percent = Math.round(Math.abs(f - 1) * 100);
-        String who = l.sameFile ? "earlier prints of this file" : "recent prints";
-        return percent < 2 ? "Your " + who + " finished when the printer said."
-            : String.format(Locale.getDefault(), "Corrected: at this stage your %s took %d %% %s than the printer said.", who, percent, f > 1 ? "longer" : "less time");
+        String who = l.prints[b] + (l.sameFile[b] ? " earlier prints with this filename" : " recent prints on this printer");
+        return percent < 2 ? "Estimate based on " + who + "; they finished close to the printer's estimate."
+            : String.format(Locale.getDefault(), "Based on %s: at this stage they took %d %% %s than the printer estimated.", who, percent, f > 1 ? "longer" : "less time");
     }
+
+    private static boolean validProgress(double progress) { return progress >= 0 && progress <= 100; }
 
     private FinishTimes() { }
 }
