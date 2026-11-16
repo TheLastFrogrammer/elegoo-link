@@ -10,6 +10,7 @@ public class FeatureIndexTest {
     @Test public void everydayWordsFindTheRightPlace() {
         assertEquals("level", first("level"));
         assertEquals("level", first("bed leveling"));
+        assertEquals("bedmesh", first("bed mesh")); assertEquals("bedmesh", first("warped bed"));
         assertEquals("timelapse", first("timelapse"));
         assertEquals("calibration", first("pressure advance"));
         assertEquals("find-models", first("thingiverse"));

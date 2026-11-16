@@ -1,0 +1,95 @@
+package io.github.thelastfrogrammer.elink;
+
+import static org.junit.Assert.*;
+
+import java.io.File;
+import java.nio.file.Files;
+import java.util.ArrayList;
+import java.util.List;
+import org.json.JSONObject;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+
+/** The bed mesh rebuilt from the positions the printer reports while probing, its summary, comparison and storage. */
+@RunWith(RobolectricTestRunner.class)
+@Config(sdk = 34)
+public class BedMeshTest {
+    /** A bed tilted 0.10 mm across X and 0.05 mm across Y, with a 0.08 mm bump near the middle. */
+    static double surface(double x, double y) { return 0.10 * x / 236 + 0.05 * y / 236 - 0.06 + (Math.abs(x - 128) < 30 && Math.abs(y - 128) < 30 ? 0.08 : 0); }
+    static JSONObject status(int code, int sub, double x, double y, double z) throws Exception {
+        return new JSONObject().put("machine_status", new JSONObject().put("status", code).put("sub_status", sub))
+            .put("gcode_move", new JSONObject().put("x", x).put("y", y).put("z", z)).put("heater_bed", new JSONObject().put("temperature", 60.2).put("target", 60));
+    }
+    /** What the status stream shows while an 11 × 11 grid is probed: travel high, a fall, the touch, the lift. */
+    static List<JSONObject> levelling(int code, int pointsLimit) throws Exception {
+        List<JSONObject> out = new ArrayList<>(); int n = 0;
+        for (int j = 0; j < 11; j++) for (int i = 0; i < 11; i++) {
+            if (n++ >= pointsLimit) return out;
+            double x = 10 + i * 23.6, y = 10 + j * 23.6;
+            out.add(status(code, 2901, x, y, 5));
+            out.add(status(code, 2901, x, y, 2.0));
+            out.add(status(code, 2901, x, y, 1.2 + surface(x, y)));        // still falling, already under the touch threshold
+            out.add(status(code, 2901, x, y, surface(x, y)));              // the touch: the last near-zero reading counts
+            out.add(status(code, 2901, x, y, 3));
+        }
+        return out;
+    }
+
+    @Test public void theProbeGridIsRebuiltFromTheStatusStream() throws Exception {
+        BedMesh.Capture c = new BedMesh.Capture();
+        assertNull(c.feed(status(1, 0, 0, 0, 0), 0, "local network", 0));
+        List<JSONObject> stream = levelling(2, 121);
+        stream.get(0).put("print_status", new JSONObject().put("filename", "Desk_mount.gcode"));
+        boolean first = true;
+        for (JSONObject s : stream) { assertNull(c.feed(s, 1000, "local network", 0)); if (first) { assertTrue(c.began); first = false; } }
+        assertTrue(c.active());
+        BedMesh.Mesh m = c.feed(status(2, 2075, 100, 100, 0.2), 2000, "local network", 0);   // printing: the levelling has ended
+        assertNotNull(c.problem, m);
+        assertEquals(121, m.count()); assertEquals(11, m.xs.length); assertEquals(11, m.ys.length);
+        assertEquals(surface(10, 10), m.z[0][0], 1e-3); assertEquals(surface(246, 246), m.z[10][10], 1e-3);
+        assertEquals("Desk_mount.gcode", m.file); assertEquals(60.2, m.bed, 0); assertEquals(2901, m.phase);
+        double[] p = BedMesh.plane(m);
+        assertEquals(0.10 / 236, p[1], 0.0002); assertEquals(0.05 / 236, p[2], 0.0002);
+        assertTrue("the bump remains once the tilt is gone", BedMesh.residualRange(m, p) > 0.07 && BedMesh.residualRange(m, p) < 0.10);
+        List<String> words = BedMesh.describe(m);
+        assertTrue(words.get(0), words.get(0).startsWith("121 points"));
+        assertTrue(words.get(2), words.get(2).startsWith("Tilt: 0.10 mm across X, 0.05 mm across Y"));
+    }
+
+    @Test public void aLevellingCutShortIsNotKept() throws Exception {
+        BedMesh.Capture c = new BedMesh.Capture();
+        for (JSONObject s : levelling(5, 60)) c.feed(s, 0, "local network", 0);
+        assertNull("rows 1-5 and part of row 6 do not make a full grid", c.feed(status(1, 0, 0, 0, 0), 1, "local network", 121));
+        assertTrue(c.problem, c.problem.contains("points came through"));
+        // A complete 3-row grid is still smaller than the last kept one: not kept either.
+        for (JSONObject s : levelling(5, 33)) c.feed(s, 0, "local network", 0);
+        assertNull(c.feed(status(1, 0, 0, 0, 0), 1, "local network", 121));
+        // Nothing reported but the state: says so.
+        c.feed(new JSONObject().put("machine_status", new JSONObject().put("status", 5).put("sub_status", 2901)), 0, "Elegoo cloud", 0);
+        assertNull(c.feed(status(1, 0, 0, 0, 0), 1, "Elegoo cloud", 0));
+        assertTrue(c.problem, c.problem.contains("no probe positions"));
+    }
+
+    @Test public void comparedKeptAndReadBack() throws Exception {
+        BedMesh.Capture c = new BedMesh.Capture();
+        for (JSONObject s : levelling(5, 121)) c.feed(s, 0, "local network", 0);
+        BedMesh.Mesh a = c.feed(status(1, 0, 0, 0, 0), 1_000_000, "local network", 0);
+        for (JSONObject s : levelling(5, 121)) { JSONObject m = s.getJSONObject("gcode_move"); if (m.getDouble("z") < 1) m.put("z", m.getDouble("z") + 0.03); c.feed(s, 0, "local network", 0); }
+        BedMesh.Mesh b = c.feed(status(1, 0, 0, 0, 0), 2_000_000, "local network", 121);
+        BedMesh.Mesh d = BedMesh.difference(a, b);
+        assertEquals(0.03, d.mean(), 1e-4);
+        assertTrue(BedMesh.changeWords(a, d), BedMesh.changeWords(a, d).startsWith("Changed by up to 0.03 mm since"));
+
+        File dir = Files.createTempDirectory("bed-mesh").toFile();
+        BedMesh.save(dir, a); BedMesh.save(dir, b);
+        List<BedMesh.Mesh> kept = BedMesh.list(dir);
+        assertEquals(2, kept.size()); assertEquals(2_000_000, kept.get(0).at);
+        assertEquals(b.z[5][5], kept.get(0).z[5][5], 1e-9); assertTrue(kept.get(0).sameGrid(kept.get(1)));
+        JSONObject file = BedMesh.json(b);
+        assertEquals("the same shape as cc2-bed-mesh's files", 11, file.getJSONArray("z_mm").getJSONArray(0).length());
+        assertEquals(121, file.getJSONObject("capture").getInt("point_count"));
+        assertFalse("no serial or address in the file", file.toString().matches(".*(\\d{1,3}\\.){3}\\d{1,3}.*"));
+    }
+}

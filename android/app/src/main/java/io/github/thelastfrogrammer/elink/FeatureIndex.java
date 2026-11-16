@@ -49,6 +49,7 @@ final class FeatureIndex {
         new Feature("spools", "Spools and filament left", "spool spools filament left remaining weight grams inventory stock enough run out", PRINTER, "Spools", Prepare.NONE, false),
         new Feature("move", "Move axes or home", "move jog axis axes home x y z bed", PRINTER, "Move axes", Prepare.NONE, false).or("Move & calibrate"),
         new Feature("level", "Auto-level bed", "level leveling levelling mesh bed calibration probe", PRINTER, "Auto-level bed", Prepare.NONE, false).or("Move & calibrate"),
+        new Feature("bedmesh", "Bed mesh: the shape of the bed", "bed mesh map shape flat flatness warped warp tilt probe heightmap height map compare", PRINTER, "Bed mesh…", Prepare.NONE, true).or("Move & calibrate"),
         new Feature("vibration", "Vibration test", "vibration input shaping resonance shaper calibration", PRINTER, "Vibration test", Prepare.NONE, false).or("Move & calibrate"),
         new Feature("ai", "Printer's own spaghetti detection", "ai detection spaghetti foreign object camera check printer", PRINTER, "The printer's own camera checks", Prepare.NONE, false).or("Printer status"),
         new Feature("emergency", "Emergency stop", "emergency stop halt kill abort urgent", PRINTER, "Emergency stop", Prepare.NONE, false).or("Printer status"),

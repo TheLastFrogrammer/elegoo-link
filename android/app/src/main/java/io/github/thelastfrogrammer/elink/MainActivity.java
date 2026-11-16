@@ -537,6 +537,7 @@ public final class MainActivity extends Activity {
         LinearLayout calibrationRow = row(group);
         autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Level the bed automatically?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration test?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
+        button(group, "Bed mesh…", () -> startActivity(new Intent(this, BedMeshActivity.class))).setContentDescription("Bed mesh: the bed's shape from each levelling");
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "The printer runs a vibration test, a heater (PID) check and bed leveling, as the official app does. This takes several minutes. Keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
         emergencyButton(upkeep);
         buildHybrid(); buildReports();

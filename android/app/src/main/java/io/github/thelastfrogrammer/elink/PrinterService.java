@@ -545,7 +545,7 @@ public final class PrinterService extends Service {
             private void deliver(Runnable action) { main.post(() -> { if (!destroyed && generation == current) { action.run(); changed(); updateNotification(false); } }); }
             public void connection(String text, boolean registered) { deliver(() -> { connection = registered ? "Connected" + (remote ? " through VPN" : " locally") + (pinProbe ? " · read-only PIN probe" : "") + " · " + host : text; if (registered) retries.connected(); }); }
             public void status(JSONObject value) { status(value, false); }
-            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; statusAt = System.currentTimeMillis(); JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); showAlert(watched(watch, value)); record(value, "local", attributes.optString("hostname", host)); }); }
+            public void status(JSONObject value, boolean canvasUpdated) { deliver(() -> { status = value; statusAt = System.currentTimeMillis(); bedMesh(value, "local network"); JSONObject trays = value.optJSONObject("canvas_info"); if (canvasUpdated && trays != null) { canvas = trays; canvasAt = System.nanoTime(); } alertChoices(); showAlert(alerts.update(value)); showAlert(watched(watch, value)); record(value, "local", attributes.optString("hostname", host)); }); }
             public void attributes(JSONObject value) { deliver(() -> attributes = value); }
             public void canvas(JSONObject value) { deliver(() -> { canvas = value; canvasAt = System.nanoTime(); }); }
             public void result(String text) { deliver(() -> feedback = text); }
@@ -1831,7 +1831,7 @@ public final class PrinterService extends Service {
                 if (destroyed || wanted || !serial.equals(cloudSerial) || cloudStatus.length() == 0) return;
                 try {
                     JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
-                    cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis(); cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
+                    cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis(); if (!wanted) bedMesh(merged, "Elegoo cloud"); cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
                     // A live report from the printer itself shows it is online.
                     cloudOnline = 1;
                     if (cloudOnline == 1) { alertChoices(); showAlert(cloudAlerts.update(merged), cloudName); showAlert(watched(cloudWatch, merged), cloudName); record(merged, "cloud", cloudName); }
@@ -2275,6 +2275,30 @@ public final class PrinterService extends Service {
             return "event handed to the Home Assistant link";
         }
     };
+    // ------------------------------------------------------------------ bed mesh (BedMesh): listened for while the printer levels
+    private final BedMesh.Capture bedMeshCapture = new BedMesh.Capture();
+    /** Points in the newest kept mesh, so a levelling cut short is not kept as a smaller grid (-1: not read yet). */
+    private volatile int bedMeshLastCount = -1;
+    private String bedMeshProblemNoted = "";
+    /** Each status on the main thread: follows a levelling and keeps the rebuilt mesh when the probing ends. Sends nothing. */
+    private void bedMesh(JSONObject value, String from) {
+        if (bedMeshLastCount < 0) { bedMeshLastCount = 0; videoWorker.execute(() -> { List<BedMesh.Mesh> kept = BedMesh.list(BedMesh.directory(getFilesDir())); bedMeshLastCount = kept.isEmpty() ? 0 : kept.get(0).count(); }); }
+        BedMesh.Mesh mesh = bedMeshCapture.feed(value, System.currentTimeMillis(), from, bedMeshLastCount);
+        if (bedMeshCapture.began) Diagnostics.note(Diagnostics.STATUS, "bed levelling seen (" + from + "): noting the probe positions for the bed mesh");
+        if (mesh == null) {
+            String problem = bedMeshCapture.problem;
+            if (!problem.isEmpty() && !problem.equals(bedMeshProblemNoted)) { bedMeshProblemNoted = problem; Diagnostics.note(Diagnostics.STATUS, "bed mesh not kept: " + problem); }
+            return;
+        }
+        String id = wanted ? serial : cloudSerial; mesh.printer = id == null || id.isEmpty() ? "" : PrintRecorder.digest(id);
+        bedMeshLastCount = mesh.count();
+        videoWorker.execute(() -> {
+            try { BedMesh.save(BedMesh.directory(getFilesDir()), mesh); Diagnostics.note(Diagnostics.STATUS, String.format(java.util.Locale.ROOT, "bed mesh kept: %d points, range %.2f mm (%s)", mesh.count(), mesh.range(), from)); }
+            catch (java.io.IOException failed) { Diagnostics.note(Diagnostics.STATUS, "bed mesh could not be kept: " + failed.getClass().getSimpleName()); }
+            main.post(this::changed);
+        });
+    }
+
     // ------------------------------------------------------------------ other apps (Settings › Other apps)
     /** The local API, its camera hub and the relay (Integrations); null until the service has started. */
     volatile Integrations integrations;

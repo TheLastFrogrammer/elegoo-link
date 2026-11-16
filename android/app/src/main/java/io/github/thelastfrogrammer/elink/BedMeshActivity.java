@@ -1,0 +1,136 @@
+package io.github.thelastfrogrammer.elink;
+
+import android.app.AlertDialog;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Bundle;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+import android.widget.Toast;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+import java.util.Locale;
+
+/**
+ * The bed's shape each time the printer levelled it (BedMesh): the chosen capture as a map with its range, tilt and
+ * shape without the tilt, a comparison with an earlier one as a difference map, and every capture kept. Only reads what
+ * the app noted while it listened; nothing here talks to the printer.
+ */
+public final class BedMeshActivity extends PlainScreen {
+    private List<BedMesh.Mesh> all = new ArrayList<>();
+    private int shown, against = -1;
+
+    @Override protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
+        if (saved != null) { shown = saved.getInt("shown", 0); against = saved.getInt("against", -1); }
+        all = BedMesh.list(BedMesh.directory(getFilesDir()));
+        render();
+    }
+    @Override protected void onSaveInstanceState(Bundle state) { super.onSaveInstanceState(state); state.putInt("shown", shown); state.putInt("against", against); }
+
+    private static String when(long at) { return new SimpleDateFormat("EEE d MMM, HH:mm", Locale.getDefault()).format(new Date(at)); }
+    private static String context(BedMesh.Mesh m) {
+        List<String> parts = new ArrayList<>();
+        if (!m.file.isEmpty()) parts.add("before printing " + m.file.replaceFirst("(?i)\\.gcode$", ""));
+        if (!Double.isNaN(m.bed)) parts.add(String.format(Locale.getDefault(), "bed %.0f °C", m.bed));
+        if (m.source.contains("cloud")) parts.add("seen through the cloud");
+        return String.join(" · ", parts);
+    }
+
+    private void render() {
+        content.removeAllViews();
+        A11y.heading(label(content, "Bed mesh", 22, ink, true));
+        label(content, "The bed's shape each time the printer levels it: before a print (when levelling is on) or from Auto-level bed. The app only listens "
+            + "to what the printer reports while it probes; nothing is sent to the printer for this.", 14, muted, false);
+        if (all.isEmpty()) {
+            LinearLayout empty = card();
+            label(empty, "No bed mesh yet", 15, ink, true);
+            label(empty, "Keep the app connected on the printer's local network (LAN Only), then let the printer level the bed: Printer › Move & calibrate › "
+                + "Auto-level bed, or start a print with levelling on. The map appears here when the probing ends.", 13, muted, false);
+            label(empty, "This works from the head positions the printer reports while probing. It was worked out on firmware 02.01.01.13 by others; "
+                + "other firmware may report differently, and the app says so in Diagnostics if a levelling gives no map.", 12, muted, false);
+            return;
+        }
+        shown = Math.max(0, Math.min(shown, all.size() - 1));
+        BedMesh.Mesh m = all.get(shown);
+
+        LinearLayout card = card();
+        A11y.heading(label(card, shown == 0 ? "Latest: " + when(m.at) : when(m.at), 15, ink, true));
+        String ctx = context(m); if (!ctx.isEmpty()) label(card, ctx, 13, muted, false);
+        List<String> words = BedMesh.describe(m);
+        BedMeshView view = new BedMeshView(this, dark, ink, muted);
+        view.set(m, false, "Bed mesh map. " + String.join(" ", words));
+        card.addView(view, new LinearLayout.LayoutParams(-1, -2));
+        TextView readout = label(card, "Tap a point to read it.", 13, muted, false); A11y.polite(readout);
+        view.onReadout(readout::setText);
+        for (String w : words) label(card, w, 14, ink, false);
+        label(card, "Rebuilt from the positions the printer reported while probing, not read from the mesh it stores: a close picture, not a calibration certificate.", 12, muted, false);
+        LinearLayout actions = row(card);
+        button(actions, "Share as JSON", () -> share(m));
+        button(actions, "Delete…", () -> delete(m));
+
+        // Comparing with an earlier capture on the same grid.
+        List<Integer> comparable = new ArrayList<>();
+        for (int k = 0; k < all.size(); k++) if (k != shown && all.get(k).sameGrid(m)) comparable.add(k);
+        if (!comparable.isEmpty()) {
+            LinearLayout compare = card();
+            A11y.heading(label(compare, "Compared with another levelling", 15, ink, true));
+            if (against < 0 || !comparable.contains(against)) against = comparable.get(0);
+            BedMesh.Mesh other = all.get(against);
+            BedMesh.Mesh older = other.at <= m.at ? other : m, newer = other.at <= m.at ? m : other;
+            BedMesh.Mesh diff = BedMesh.difference(older, newer);
+            String change = BedMesh.changeWords(older, diff);
+            label(compare, when(older.at) + " → " + when(newer.at), 13, muted, false);
+            BedMeshView map = new BedMeshView(this, dark, ink, muted);
+            map.set(diff, true, "Difference map. " + change);
+            compare.addView(map, new LinearLayout.LayoutParams(-1, -2));
+            TextView point = label(compare, "Tap a point to read its change.", 13, muted, false); A11y.polite(point);
+            map.onReadout(point::setText);
+            label(compare, change, 14, ink, false);
+            if (!Double.isNaN(older.bed) && !Double.isNaN(newer.bed) && Math.abs(older.bed - newer.bed) >= 10)
+                label(compare, String.format(Locale.getDefault(), "The bed was at %.0f °C, then %.0f °C: a warm bed changes shape a little, so compare levellings at the same temperature.", older.bed, newer.bed), 13, warning, false);
+            button(compare, "Compare with another…", () -> {
+                String[] names = new String[comparable.size()];
+                for (int k = 0; k < names.length; k++) { BedMesh.Mesh c = all.get(comparable.get(k)); names[k] = when(c.at) + String.format(Locale.getDefault(), " · range %.2f mm", c.range()); }
+                new AlertDialog.Builder(this).setTitle("Compare with").setItems(names, (d, w) -> { against = comparable.get(w); render(); }).setNegativeButton("Cancel", null).show();
+            });
+        }
+
+        // Every capture kept.
+        LinearLayout history = card();
+        A11y.heading(label(history, "Every levelling kept (" + all.size() + ")", 15, ink, true));
+        for (int k = 0; k < all.size(); k++) {
+            BedMesh.Mesh c = all.get(k); int index = k;
+            TextView rowText = label(history, (k == shown ? "▸ " : "") + when(c.at) + String.format(Locale.getDefault(), " · range %.2f mm", c.range())
+                + (context(c).isEmpty() ? "" : " · " + context(c)), 14, k == shown ? accent : ink, k == shown);
+            rowText.setMinHeight(dp(48)); rowText.setGravity(android.view.Gravity.CENTER_VERTICAL);
+            rowText.setOnClickListener(v -> { shown = index; against = -1; render(); });
+            rowText.setContentDescription("Show the levelling of " + when(c.at));
+        }
+    }
+
+    private void share(BedMesh.Mesh m) {
+        File out = ShareProvider.fresh(this, m.name.isEmpty() ? "bed-mesh.json" : m.name);
+        try (OutputStream o = new FileOutputStream(out)) { o.write(BedMesh.json(m).toString(1).getBytes(StandardCharsets.UTF_8)); }
+        catch (IOException | org.json.JSONException failed) { Toast.makeText(this, "The mesh could not be shared.", Toast.LENGTH_LONG).show(); return; }
+        Uri uri = ShareProvider.uriFor(this, out);
+        Intent send = new Intent(Intent.ACTION_SEND).setType("application/json").putExtra(Intent.EXTRA_STREAM, uri).putExtra(Intent.EXTRA_SUBJECT, "Bed mesh " + when(m.at))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        send.setClipData(android.content.ClipData.newRawUri("Bed mesh", uri));
+        startActivity(Intent.createChooser(send, "Share the bed mesh"));
+    }
+    private void delete(BedMesh.Mesh m) {
+        new AlertDialog.Builder(this).setTitle("Delete this bed mesh?").setMessage("The levelling of " + when(m.at) + " is removed from this phone. The printer is not affected.")
+            .setNegativeButton("Cancel", null).setPositiveButton("Delete", (d, w) -> {
+                new File(BedMesh.directory(getFilesDir()), m.name).delete();
+                all = BedMesh.list(BedMesh.directory(getFilesDir())); shown = 0; against = -1; render();
+            }).show();
+    }
+}

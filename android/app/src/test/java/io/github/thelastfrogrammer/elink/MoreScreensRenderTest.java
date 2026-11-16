@@ -283,6 +283,22 @@ public class MoreScreensRenderTest {
             shot(page.getWindow().getDecorView(), 1080, 3000, new File(out(), "integrations-light.png"));
         } finally { service.onDestroy(); }
     }
+    /** The bed mesh screen: the latest levelling as a map, compared with an earlier one. */
+    @Test public void renderBedMeshLight() throws Exception { bedMesh(false, "light"); }
+    @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderBedMeshDark() throws Exception { bedMesh(true, "dark"); }
+    private static void bedMesh(boolean dark, String theme) throws Exception {
+        setTheme(dark);
+        android.content.Context context = org.robolectric.RuntimeEnvironment.getApplication();
+        File dir = BedMesh.directory(context.getFilesDir());
+        for (int k = 0; k < 2; k++) {
+            BedMesh.Capture c = new BedMesh.Capture();
+            for (org.json.JSONObject s : BedMeshTest.levelling(5, 121)) { org.json.JSONObject m = s.getJSONObject("gcode_move"); if (k == 1 && m.getDouble("z") < 1) m.put("z", m.getDouble("z") + 0.02 * m.getDouble("x") / 246); c.feed(s, 0, "local network", 0); }
+            BedMesh.Mesh mesh = c.feed(BedMeshTest.status(1, 0, 0, 0, 0), 1_790_000_000_000L + k * 86_400_000L * 3, "local network", 0);
+            BedMesh.save(dir, mesh);
+        }
+        BedMeshActivity page = Robolectric.buildActivity(BedMeshActivity.class).setup().get();
+        shot(page.getWindow().getDecorView(), 1080, 3600, new File(out(), "bed-mesh-" + theme + ".png"));
+    }
     @Test public void renderNightRecordingLight() throws Exception { nightRecording("light"); }
     @Test @Config(qualifiers = DARK_QUALIFIERS) public void renderNightRecordingDark() throws Exception { nightRecording("dark"); }
 }
