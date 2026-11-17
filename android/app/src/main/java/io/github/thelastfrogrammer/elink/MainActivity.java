@@ -3186,7 +3186,7 @@ public final class MainActivity extends Activity {
             setTile(statLayer, layers > 0 ? print.optInt("current_layer", 0) + " / " + layers : "—");
             String done = remaining < 0 ? "" : "Done at " + StatusPresentation.doneAt(System.currentTimeMillis(), remaining, Locale.getDefault(), TimeZone.getDefault());
             doneText.setText(done); doneText.setContentDescription(done.isEmpty() ? null : done + (live ? "" : ", out of date"));
-            String basis = FinishTimes.basis(FinishTimes.current, machine == null ? 0 : machine.optInt("progress", 0));
+            String basis = remaining < 0 || machine == null ? "" : FinishTimes.basis(FinishTimes.current, machine.optDouble("progress", Double.NaN));
             String notes = printNotes(remaining) + (basis.isEmpty() ? "" : (printNotes(remaining).isEmpty() ? "" : "\n") + basis);
             printNotes.setText(notes); printNotes.setVisibility(notes.isEmpty() ? View.GONE : View.VISIBLE);
             detail.setText(live ? "" : "Out of date: the printer has not reported for a while.");

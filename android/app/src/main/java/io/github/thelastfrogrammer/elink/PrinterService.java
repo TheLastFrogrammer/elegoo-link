@@ -1688,11 +1688,11 @@ public final class PrinterService extends Service {
         if (!connection.equals(loggedConnection)) { loggedConnection = connection; Diagnostics.note(Diagnostics.CONNECTION, Diagnostics.scrub(connection)); }
         if (cloudOnline != loggedOnline && usingCloud()) { loggedOnline = cloudOnline; Diagnostics.note(Diagnostics.CONNECTION, "Elegoo cloud says the printer is " + (cloudOnline == 1 ? "online" : cloudOnline == 0 ? "offline" : "of unknown state")); }
         if (feedback != null && !feedback.isEmpty() && !feedback.equals(loggedFeedback)) { loggedFeedback = feedback; Diagnostics.note(Diagnostics.MESSAGES, Diagnostics.scrub(feedback)); }
+        learnFinishTimes(false);
         if (observer != null) observer.changed();
         for (Observer watcher : new ArrayList<>(watchers)) watcher.changed();
         homeAssistant();
         if (integrations != null) integrations.statusChanged();
-        learnFinishTimes(false);
         // Home-screen widget: the status shown here, locally or through the cloud (throttled inside).
         try {
             JSONObject shownNow = wanted ? (ready() && fresh() ? status : null) : (cloudFresh() ? cloudStatus : null);
@@ -2278,13 +2278,18 @@ public final class PrinterService extends Service {
     };
     // ------------------------------------------------------------------ finish times (FinishTimes): learned from earlier prints
     private String finishLearnedFor = "";
+    private long finishLearningRequest;
     /** Learns, once per print (or when the setting changes), how this printer's time left compares with how long prints really took. */
     void learnFinishTimes(boolean force) {
-        PrintRecorder.Recording now = recorder == null ? null : recorder.current();
-        String key = now == null ? "" : now.meta.getName();
+        PrintRecorder.Recording now = recorder == null || !workshop().getBoolean("recordPrints", true) ? null : recorder.current();
+        String activeId = liveFresh() ? PrintRecorder.digest(filePrinterId()) : "";
+        String key = now != null && workshop().getBoolean(FinishTimes.PREF, true)
+            && FinishTimes.samePrinter(activeId, now.printerId) ? now.meta.getName() : "";
         if (!force && key.equals(finishLearnedFor)) return;
         finishLearnedFor = key;
-        if (now == null || !workshop().getBoolean(FinishTimes.PREF, true)) { FinishTimes.current = null; return; }
+        long request = ++finishLearningRequest;
+        FinishTimes.current = null;
+        if (key.isEmpty()) { if (force) changed(); return; }
         String file = GcodeLibrary.baseName(now.file); java.io.File dir = RecordingsActivity.directory(this);
         videoWorker.execute(() -> {
             List<PrintRecorder.Recording> all = new PrintRecorder(dir).list();
@@ -2292,7 +2297,8 @@ public final class PrinterService extends Service {
             List<double[]> factors = new ArrayList<>(); List<Boolean> same = new ArrayList<>();
             for (PrintRecorder.Recording r : all) {
                 if (factors.size() >= 40) break;
-                if (!"complete".equals(r.outcome) || r.meta.equals(now.meta)) continue;
+                if (!"complete".equals(r.outcome) || r.meta.equals(now.meta)
+                    || !FinishTimes.samePrinter(activeId, r.printerId)) continue;
                 try {
                     List<double[]> rows = PrintRecorder.samples(r);
                     factors.add(FinishTimes.factors(RecordingsActivity.column(rows, "elapsed_s"), RecordingsActivity.column(rows, "progress"),
@@ -2302,13 +2308,14 @@ public final class PrinterService extends Service {
             }
             FinishTimes.Learned learned = FinishTimes.learn(factors, same);
             main.post(() -> {
-                if (!key.equals(finishLearnedFor)) return;
+                if (destroyed || request != finishLearningRequest) return;
                 FinishTimes.current = learned;
-                if (learned != null) Diagnostics.note(Diagnostics.STATUS, String.format(java.util.Locale.ROOT, "time left corrected from %d %s prints: factors %s",
-                    learned.prints, learned.sameFile ? "same-file" : "recent", java.util.Arrays.toString(learned.factor)));
+                if (learned != null) Diagnostics.note(Diagnostics.STATUS, "time left corrected using earlier prints on this printer: per-quarter sample counts "
+                    + java.util.Arrays.toString(learned.prints) + ", factors " + java.util.Arrays.toString(learned.factor));
                 changed();
             });
         });
+        if (force) changed();
     }
 
     // ------------------------------------------------------------------ bed mesh (BedMesh): listened for while the printer levels
@@ -2393,6 +2400,7 @@ public final class PrinterService extends Service {
     public void cameraViewFrame(byte[] jpeg) { Integrations i = integrations; if (i != null) i.appCameraFrame(jpeg); }
 
     @Override public void onDestroy() {
+        FinishTimes.current = null;
         if (integrations != null) integrations.close();
         if (pictureVisits != null) pictureVisits.pause();
         CloudFrameGrab.leave(); pictureWorker.shutdownNow();

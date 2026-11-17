@@ -1,6 +1,6 @@
 # Link Workshop roadmap
 
-State as of v0.104.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
+State as of v0.105.0. "Done" means in the app and covered by automated tests where possible. Little has been confirmed
 on a real Centauri Carbon 2 yet, so the app now measures that itself: Settings › Field check gathers the manual checklist
 ([FIELD_TEST.md](FIELD_TEST.md)), the checks measured during prints, and the self-test print into one report to share
 (no codes, PINs, addresses or serials).
