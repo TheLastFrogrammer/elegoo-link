@@ -457,7 +457,7 @@ public final class RecordingsActivity extends Activity {
                 LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setPadding(0, dp(8), k == 0 ? dp(8) : 0, 0);
                 both.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
                 int index = pair[k];
-                if (index < 0) { label(cell, names[k] + ": none", 12, muted, false); continue; }
+                if (index < 0) { label(cell, k == 0 ? "No picture was taken before it." : "No picture was taken after it.", 12, muted, false); continue; }
                 ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); image.setAdjustViewBounds(true);
                 String at = ChartView.elapsed(times[index]);
                 image.setContentDescription(names[k] + " picture, " + at + " into the print");

@@ -128,6 +128,8 @@ public final class SliceActivity extends Activity {
         LinearLayout row, details; TextView title, detail, swatch; Spinner preset, tray; Button settings;
         String colour, wanted; TrayPlan.Tray source; List<TrayPlan.Tray> trayChoices = new ArrayList<>();
         final Map<String, String> edits = new LinkedHashMap<>(); // this slot's filament settings changes
+        /** The spool passport offer: the spool's calibration results, Use, and Keep (changes made here, kept with the spool). */
+        LinearLayout passportBox; TextView passportLine; Button passportUse, passportKeep;
     }
     private EditText infill;
     private LinearLayout modelRows, printerDetails; private TextView printerSummary; private Button moreModels;
@@ -1647,6 +1649,7 @@ public final class SliceActivity extends Activity {
     private void showSlotSettings(Slot slot) {
         slot.settings.setText(slot.edits.isEmpty() ? "Settings…" : "Settings · " + slot.edits.size() + " changed");
         slot.settings.setTextColor(slot.edits.isEmpty() ? ColorStateList.valueOf(teal) : ColorStateList.valueOf(dark ? 0xffffd27a : 0xff8a5300));
+        showPassport(slot);
     }
 
     // ------------------------------------------------------------------ calibration prints
@@ -1768,6 +1771,11 @@ public final class SliceActivity extends Activity {
         LinearLayout.LayoutParams settingsLayout = new LinearLayout.LayoutParams(-2, -2); settingsLayout.leftMargin = dp(8); header.addView(slot.settings, settingsLayout);
         slot.row.addView(header);
         slot.details = new LinearLayout(this); slot.details.setOrientation(LinearLayout.VERTICAL); slot.row.addView(slot.details); slot.details.setVisibility(View.GONE);
+        slot.passportBox = new LinearLayout(this); slot.passportBox.setOrientation(LinearLayout.VERTICAL); slot.row.addView(slot.passportBox); slot.passportBox.setVisibility(View.GONE);
+        slot.passportLine = A11y.polite(label(slot.passportBox, "", 12, muted, false));
+        LinearLayout passportButtons = buttonRow(); slot.passportBox.addView(passportButtons);
+        slot.passportUse = rowButton(passportButtons, "Use the spool's passport", () -> usePassport(slot), false);
+        slot.passportKeep = rowButton(passportButtons, "Keep with the spool…", () -> keepPassport(slot), false);
         slot.preset = spinner(slot.details); A11y.name(slot.preset, () -> slot.title.getText() + " filament profile");
         slot.preset.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { if (slots.size() > 1 && !models.isEmpty()) showModels(); updateButtons(); }
@@ -1809,6 +1817,42 @@ public final class SliceActivity extends Activity {
         if (tray != null && match == null) fillTrayChoices(slot); // not among the reported trays: list it so the plan shows
         else { int index = match == null ? 0 : slot.trayChoices.indexOf(match) + 1; if (slot.tray.getSelectedItemPosition() != index) slot.tray.setSelection(index); }
         showSwatch(slot);
+        showPassport(slot);
+    }
+
+    // ------------------------------------------------------------------ spool passport
+    private SpoolStore spoolStore() { return SpoolStore.at(new File(getFilesDir(), "spools.json")); }
+    private SpoolStore.Spool spoolOf(Slot slot) { return slot.source == null ? null : spoolStore().inSlot(SpoolStore.slot(slot.source)); }
+    /** The spool in the slot's tray: its passport, whether this slot uses it, and whether changes made here could be kept with it. */
+    private void showPassport(Slot slot) {
+        if (slot.passportBox == null) return;
+        SpoolStore.Spool spool = spoolOf(slot);
+        boolean has = spool != null && !spool.passport.isEmpty(), applied = has && SpoolPassport.applied(spool.passport, slot.edits);
+        boolean keep = spool != null && SpoolPassport.differs(spool.passport, slot.edits);
+        slot.passportBox.setVisibility(has || keep ? View.VISIBLE : View.GONE);
+        if (!has && !keep) return;
+        String text = !has ? "This filament's flow, temperature or pressure advance differs from its profile. Keep them with the spool in this tray, and they are offered whenever it is chosen."
+            : applied ? "✓ Using this spool's passport: " + SpoolPassport.words(spool.passport) + "."
+            : "This spool's passport: " + SpoolPassport.words(spool.passport) + "." + (keep ? " Your changes here differ from it." : "");
+        slot.passportLine.setText(text); slot.passportLine.setTextColor(applied ? teal : muted);
+        slot.passportUse.setVisibility(has && !applied ? View.VISIBLE : View.GONE);
+        slot.passportKeep.setVisibility(keep ? View.VISIBLE : View.GONE);
+    }
+    /** Sets the passport's values as this filament's changes (only on this tap; the profile itself is not changed). */
+    private void usePassport(Slot slot) {
+        SpoolStore.Spool spool = spoolOf(slot); if (spool == null || spool.passport.isEmpty()) return;
+        slot.edits.putAll(SpoolPassport.changes(spool.passport)); showSlotSettings(slot);
+        status.setText("Filament " + (slots.indexOf(slot) + 1) + " uses the spool's passport: " + SpoolPassport.words(spool.passport) + "."); status.setTextColor(ink);
+    }
+    /** Keeps this filament's flow, temperature and the like with the spool in its tray, after saying what changes. */
+    private void keepPassport(Slot slot) {
+        SpoolStore.Spool spool = spoolOf(slot); if (spool == null) return;
+        Map<String, String> merged = new LinkedHashMap<>(spool.passport); merged.putAll(SpoolPassport.from(slot.edits));
+        new AlertDialog.Builder(this).setTitle("Keep with the spool")
+            .setMessage("The " + spool.material() + " spool in this tray will keep: " + SpoolPassport.words(merged) + "." + (spool.passport.isEmpty() ? "" : "\n\nBefore: " + SpoolPassport.words(spool.passport) + "."))
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Keep", (d, w) -> { spoolStore().setPassport(spool.id, merged, System.currentTimeMillis()); showPassport(slot); })
+            .show();
     }
 
     /** A plain colour chip; its hex is only in the description. Without a colour, the preset's own colour applies. */

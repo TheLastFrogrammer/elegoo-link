@@ -25,6 +25,8 @@ final class SpoolStore {
         long updated;
         /** When it was last dried, and when it was opened (a new full spool, taken as sealed until then); 0 = not known. */
         long dried, opened;
+        /** Calibration results kept with this spool (SpoolPassport: slicer filament setting -> value), and when they were last set. */
+        final Map<String, String> passport = new LinkedHashMap<>(); long passportAt;
         /** "PLA Matte · red". */
         String material() {
             String material = name.isEmpty() || name.equalsIgnoreCase(type) ? type : name.toUpperCase(Locale.ROOT).contains(type.toUpperCase(Locale.ROOT)) ? name : type + " " + name;
@@ -55,12 +57,16 @@ final class SpoolStore {
         boolean matches(TrayPlan.Tray tray) { return type.equalsIgnoreCase(tray.type) && Objects.equals(colour, tray.colour); }
         JSONObject json() throws Exception {
             return new JSONObject().put("id", id).put("type", type).put("name", name).put("colour", colour == null ? "" : colour).put("slot", slot)
-                .put("size", size).put("left", left).put("updated", updated).put("dried", dried).put("opened", opened);
+                .put("size", size).put("left", left).put("updated", updated).put("dried", dried).put("opened", opened)
+                .put("passport", new JSONObject(passport)).put("passportAt", passportAt);
         }
         static Spool from(JSONObject o) {
             Spool s = new Spool(); s.id = o.optString("id"); s.type = o.optString("type"); s.name = o.optString("name"); s.colour = TrayPlan.colour(o.optString("colour"));
             s.slot = o.optString("slot"); s.size = o.optDouble("size", DEFAULT_SIZE); s.left = o.optDouble("left", s.size); s.updated = o.optLong("updated");
-            s.dried = o.optLong("dried"); s.opened = o.optLong("opened"); return s;
+            s.dried = o.optLong("dried"); s.opened = o.optLong("opened");
+            JSONObject p = o.optJSONObject("passport");
+            if (p != null) for (java.util.Iterator<String> keys = p.keys(); keys.hasNext(); ) { String k = keys.next(); String v = SpoolPassport.accept(k, p.optString(k)); if (v != null) s.passport.put(k, v); }
+            s.passportAt = o.optLong("passportAt"); return s;
         }
     }
     /** The slot key for a tray: "canvas:tray". */
@@ -130,6 +136,11 @@ final class SpoolStore {
     synchronized void setLeft(String id, double left, long now) { for (Spool s : spools) if (s.id.equals(id)) { s.left = clamp(left, 0, s.size); s.updated = now; } save(); }
     /** Notes that a spool was dried at `when`. */
     synchronized void setDried(String id, long when, long now) { for (Spool s : spools) if (s.id.equals(id)) { s.dried = when; s.updated = now; } save(); }
+    /** Keeps calibration results with a spool (replacing what it held; empty clears them). */
+    synchronized void setPassport(String id, Map<String, String> values, long now) {
+        for (Spool s : spools) if (s.id.equals(id)) { s.passport.clear(); s.passport.putAll(SpoolPassport.from(values)); s.passportAt = s.passport.isEmpty() ? 0 : now; s.updated = now; }
+        save();
+    }
     synchronized void remove(String id) { spools.removeIf(s -> s.id.equals(id)); save(); }
 
     /** Shelf spools of the same material and colour as a tray, most filament first: the likely ones to put back. */

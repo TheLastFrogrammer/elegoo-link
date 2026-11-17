@@ -44,7 +44,7 @@ final class FailureReport {
         // The earliest finding in the readings that has a layer.
         RecordingAnalysis.Finding first = null;
         for (RecordingAnalysis.Finding f : findings) if (f.layer >= 1 && (first == null || f.layer < first.layer)) first = f;
-        if (first != null) { int i = firstAtLayer(layer, first.layer); if (i >= 0) return new Moment(t[i], first.layer, "the first thing the readings found: " + lowerFirst(first.words)); }
+        if (first != null) { int i = firstAtLayer(layer, first.layer); if (i >= 0) return new Moment(t[i], first.layer, "the readings: " + lowerFirst(Tuning.what(first.kind))); }
         // The filament sensor's first "no filament" while printing.
         for (int i = 0; i < t.length; i++) if (filament[i] == 0 && sub[i] == 2075) return new Moment(t[i], layerAt(layer, i), "the filament sensor's first report of no filament");
         // Where it was stopped: the last reading while printing.

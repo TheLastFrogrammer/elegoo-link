@@ -179,7 +179,7 @@ public class MoreScreensRenderTest {
         waitForWorker();
         whole(detail, new File(out(), "recording-night-" + theme + ".png"));
         android.content.SharedPreferences prefs = org.robolectric.RuntimeEnvironment.getApplication().getSharedPreferences("workshop-settings", 0);
-        for (String part : new String[] {"glance", "happened", "pictures", "charts", "layers", "tools"}) prefs.edit().putBoolean(PageSection.KEY + "recording." + part, true).commit();
+        for (String part : new String[] {"glance", "failure", "happened", "pictures", "charts", "layers", "tools"}) prefs.edit().putBoolean(PageSection.KEY + "recording." + part, true).commit();
         RecordingsActivity open = Robolectric.buildActivity(RecordingsActivity.class, intent).setup().get();
         waitForWorker(); waitForWorker();
         whole(open, new File(out(), "recording-night-open-" + theme + ".png"));

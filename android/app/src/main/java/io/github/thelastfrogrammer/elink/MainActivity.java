@@ -3340,7 +3340,7 @@ public final class MainActivity extends Activity {
         List<TrayPlan.Tray> loaded = canvas == null ? new ArrayList<>() : TrayPlan.trays(canvas);
         SpoolStore store = spools(); List<SpoolStore.Spool> all = store.all();
         StringBuilder key = new StringBuilder(); for (TrayPlan.Tray t : loaded) key.append(t.label()).append(';');
-        for (SpoolStore.Spool s : all) key.append(s.id).append(s.slot).append(Math.round(s.left)).append(';');
+        for (SpoolStore.Spool s : all) key.append(s.id).append(s.slot).append(Math.round(s.left)).append(s.passport).append(';');
         if (key.toString().equals(renderedSpools)) return;
         renderedSpools = key.toString(); spoolList.removeAllViews();
         if (loaded.isEmpty()) label(spoolList, "No loaded CANVAS trays reported. Refresh status on the Print tab to see them.", 13, MUTED, false);
@@ -3348,7 +3348,8 @@ public final class MainActivity extends Activity {
         for (TrayPlan.Tray tray : loaded) {
             SpoolStore.Spool spool = store.inSlot(SpoolStore.slot(tray));
             String detail = spool == null ? "Spool not set: tap to say how much is on it" : String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size)
-                + (spool.left < 100 ? " · running low" : "") + " · " + spool.dryWords(System.currentTimeMillis());
+                + (spool.left < 100 ? " · running low" : "") + " · " + spool.dryWords(System.currentTimeMillis())
+                + (spool.passport.isEmpty() ? "" : "\nPassport: " + SpoolPassport.words(spool.passport));
             listRow(spoolList, "Tray " + tray.trayId + (tray.canvasId > 0 ? " (CANVAS " + tray.canvasId + ")" : "") + " · " + tray.material(), detail, !first, () -> spoolDialog(tray));
             first = false;
         }
@@ -3357,7 +3358,8 @@ public final class MainActivity extends Activity {
             TextView heading = label(spoolList, "On the shelf", 14, INK, true); heading.setPadding(0, dp(10), 0, 0); A11y.heading(heading);
             first = true;
             for (SpoolStore.Spool spool : shelf) {
-                listRow(spoolList, spool.material(), String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size) + " · " + spool.dryWords(System.currentTimeMillis()), !first, () -> shelfDialog(spool));
+                listRow(spoolList, spool.material(), String.format(Locale.getDefault(), "About %.0f g left of %.0f g", spool.left, spool.size) + " · " + spool.dryWords(System.currentTimeMillis())
+                    + (spool.passport.isEmpty() ? "" : "\nPassport: " + SpoolPassport.words(spool.passport)), !first, () -> shelfDialog(spool));
                 first = false;
             }
         }
@@ -3369,6 +3371,7 @@ public final class MainActivity extends Activity {
         if (spool != null) { names.add("Set filament left…"); actions.add(() -> amountDialog("Filament left on this spool", spool.size, spool.left, false, (size, left) -> { store.setLeft(spool.id, left, System.currentTimeMillis()); render(); })); }
         if (spool != null) { names.add("Dried it today"); actions.add(() -> { store.setDried(spool.id, System.currentTimeMillis(), System.currentTimeMillis()); render(); }); }
         if (spool != null) { names.add("Dried it on another day…"); actions.add(() -> driedOn(spool)); }
+        if (spool != null) { names.add(spool.passport.isEmpty() ? "Calibration passport…" : "Calibration passport (" + SpoolPassport.words(spool.passport) + ")…"); actions.add(() -> passportDialog(spool)); }
         names.add("New full spool (" + Math.round(SpoolStore.DEFAULT_SIZE) + " g)"); actions.add(() -> { store.put(tray, SpoolStore.DEFAULT_SIZE, SpoolStore.DEFAULT_SIZE, System.currentTimeMillis()); render(); });
         names.add("New spool of another size, or part used…"); actions.add(() -> amountDialog("Spool in tray " + tray.trayId, SpoolStore.DEFAULT_SIZE, SpoolStore.DEFAULT_SIZE, true, (size, left) -> { store.put(tray, size, left, System.currentTimeMillis()); render(); }));
         for (SpoolStore.Spool back : store.candidates(tray)) {
@@ -3380,12 +3383,47 @@ public final class MainActivity extends Activity {
     }
     private void shelfDialog(SpoolStore.Spool spool) {
         SpoolStore store = spools();
-        new AlertDialog.Builder(this).setTitle(spool.material()).setItems(new String[] {"Set filament left…", "Dried it today", "Dried it on another day…", "Remove (spool used up or given away)"}, (d, which) -> {
+        new AlertDialog.Builder(this).setTitle(spool.material()).setItems(new String[] {"Set filament left…", "Dried it today", "Dried it on another day…", "Calibration passport…", "Remove (spool used up or given away)"}, (d, which) -> {
             if (which == 0) amountDialog("Filament left on this spool", spool.size, spool.left, false, (size, left) -> { store.setLeft(spool.id, left, System.currentTimeMillis()); render(); });
             else if (which == 1) { store.setDried(spool.id, System.currentTimeMillis(), System.currentTimeMillis()); render(); }
             else if (which == 2) driedOn(spool);
+            else if (which == 3) passportDialog(spool);
             else { store.remove(spool.id); render(); }
         }).setNegativeButton("Cancel", null).show();
+    }
+    /**
+     * The spool's calibration passport: the results of calibration prints made with it, typed in (or kept from the Slice
+     * screen). They are offered on the Slice screen when this spool's tray is chosen; nothing is sent to the printer.
+     */
+    private void passportDialog(SpoolStore.Spool spool) {
+        LinearLayout body = dialogBody();
+        label(body, "Results of calibration prints made with this spool. The Slice screen offers them when its tray is chosen for a filament; they are set only when you tap Use. Leave a field empty to keep the profile's value.", 13, MUTED, false);
+        EditText[] fields = new EditText[SpoolPassport.KEYS.length];
+        for (int i = 0; i < fields.length; i++) {
+            String[] k = SpoolPassport.KEYS[i];
+            TextView name = label(body, k[1] + (k[2].isEmpty() ? "" : " (" + k[2] + ")") + " · " + k[3] + " to " + k[4], 13, MUTED, false);
+            fields[i] = new EditText(this); fields[i].setSingleLine(true); fields[i].setTextColor(INK);
+            fields[i].setInputType(android.text.InputType.TYPE_CLASS_NUMBER | android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL);
+            String have = spool.passport.get(k[0]); if (have != null) fields[i].setText(have);
+            fields[i].setId(View.generateViewId()); name.setLabelFor(fields[i].getId()); body.addView(fields[i]);
+        }
+        if (spool.passportAt > 0) label(body, "Last set " + PreFlight.days(spool.passportAt, System.currentTimeMillis()) + ".", 12, MUTED, false);
+        TextView problem = A11y.polite(label(body, "", 13, ERROR, false)); problem.setVisibility(View.GONE);
+        ScrollView scroll = new ScrollView(this); scroll.addView(body);
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Passport · " + spool.material()).setView(scroll).setNegativeButton("Cancel", null)
+            .setNeutralButton("Clear", (d, w) -> { spools().setPassport(spool.id, new LinkedHashMap<>(), System.currentTimeMillis()); render(); })
+            .setPositiveButton("Save", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            Map<String, String> values = new LinkedHashMap<>(); List<String> wrong = new ArrayList<>();
+            for (int i = 0; i < fields.length; i++) {
+                String text = fields[i].getText().toString().trim(); if (text.isEmpty()) continue;
+                String ok = SpoolPassport.accept(SpoolPassport.KEYS[i][0], text);
+                if (ok == null) wrong.add(SpoolPassport.KEYS[i][1]); else values.put(SpoolPassport.KEYS[i][0], ok);
+            }
+            if (!wrong.isEmpty()) { problem.setText("Check " + String.join(", ", wrong).toLowerCase(Locale.ROOT) + ": a number in the range shown."); problem.setVisibility(View.VISIBLE); return; }
+            spools().setPassport(spool.id, values, System.currentTimeMillis()); render(); dialog.dismiss();
+        }));
+        dialog.show();
     }
     /** When a spool was dried, picked on a calendar (not after today): kept so problems that point to moisture can say how long ago. */
     private void driedOn(SpoolStore.Spool spool) {

@@ -36,7 +36,7 @@ public class FailureReportTest {
         assertEquals(360, FailureReport.moment(T, TIME, LAYER, PRINTING, FILAMENT, guardian, j, found).t, 0);
         found.add(new RecordingAnalysis.Finding(RecordingAnalysis.Finding.NOZZLE_DROP, 5, "The nozzle fell below its temperature at layer 5."));
         FailureReport.Moment drop = FailureReport.moment(T, TIME, LAYER, PRINTING, FILAMENT, guardian, j, found);
-        assertEquals(5, drop.layer); assertTrue(drop.how, drop.how.contains("the nozzle fell"));
+        assertEquals(5, drop.layer); assertTrue(drop.how, drop.how.startsWith("the readings: the nozzle"));
         guardian.add(new double[] {3, 0, 0.5, 0.3, 1, 0}); guardian.add(new double[] {4, 0, 0.5, 0.3, 1, 1});
         assertEquals(4, FailureReport.moment(T, TIME, LAYER, PRINTING, FILAMENT, guardian, j, found).layer);
         j.guardian.add(new JSONObject().put("at", 125000).put("fine", true));
