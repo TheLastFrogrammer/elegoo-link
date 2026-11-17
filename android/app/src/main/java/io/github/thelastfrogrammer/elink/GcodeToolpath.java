@@ -338,6 +338,20 @@ public final class GcodeToolpath {
         }
         return main;
     }
+    /** Extruded length (mm) per feature type in one layer (0-based), and the tools used there. */
+    public double[] layerFeatureLengths(int layer) {
+        double[] lengths = new double[FEATURES.length];
+        if (layer < 0 || layer >= layerCount) return lengths;
+        for (int i = layerStart(layer); i < layerEnd(layer); i++) lengths[type[i]] += Math.hypot(x1[i] - x0[i], y1[i] - y0[i]);
+        return lengths;
+    }
+    /** The tools a layer (0-based) prints with, in the order first used. */
+    public java.util.List<Integer> layerTools(int layer) {
+        java.util.List<Integer> out = new java.util.ArrayList<>();
+        if (layer < 0 || layer >= layerCount) return out;
+        for (int i = layerStart(layer); i < layerEnd(layer); i++) if (!out.contains((int) tool[i])) out.add((int) tool[i]);
+        return out;
+    }
     public double[] featureLengths() {
         double[] lengths = new double[FEATURES.length];
         for (int i = 0; i < count; i++) lengths[type[i]] += Math.hypot(x1[i] - x0[i], y1[i] - y0[i]);

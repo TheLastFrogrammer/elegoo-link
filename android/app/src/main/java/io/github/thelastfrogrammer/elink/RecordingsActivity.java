@@ -398,6 +398,11 @@ public final class RecordingsActivity extends Activity {
         boolean tour = Showcase.running();
         section("glance", "At a glance", true, tour || getIntent().getBooleanExtra(EXTRA_JOURNAL, false), () -> glanceLine(recording),
             () -> glance(recording, rows, found, runout, facts, trial == null || tuned.isEmpty() ? "" : "Tuning try: " + tuned));
+        if (FailureReport.applies(recording)) {
+            FailureReport.Moment moment = FailureReport.moment(t, column(rows, "time_ms"), column(rows, "layer"), column(rows, "sub_status"), column(rows, "filament_detected"),
+                recording.guardianChecks, recording.journal, found);
+            if (moment != null) section("failure", "What went wrong", true, tour, () -> failureLine(recording, moment), () -> failureReport(recording, rows, moment));
+        }
         List<String> notes = new ArrayList<>(); for (String line : new String[] {runout, last.isEmpty() ? "" : last + ".", coverage}) if (!line.isEmpty()) notes.add(line);
         if (!warmUp.isEmpty() || !notes.isEmpty() || !found.isEmpty() || !damp.isEmpty() || trial != null || !tried.isEmpty() || !measured.isEmpty()) {
             int lookAt = found.size() + (damp.isEmpty() ? 0 : 1); boolean tuning = trial != null || !tried.isEmpty(); int checks = measured.size(), bad = problems;
@@ -430,6 +435,53 @@ public final class RecordingsActivity extends Activity {
         }, "recording-gcode-keep").start();
         section("tools", "Tools", true, tour, () -> "All readings, CSV export, compare, report, slice again" + (GcodeLibrary.baseName(recording.file) != null ? ", every print of the file" : "") + ", delete",
             () -> tools(recording, rows));
+    }
+    /** The failure report's line while closed: "Failed at layer 42, found by the guardian's first alarm". */
+    static String failureLine(PrintRecorder.Recording recording, FailureReport.Moment m) {
+        String what = "failed".equals(recording.journal.result) ? "Failed" : "Stopped";
+        return what + (m.layer > 0 ? " at layer " + m.layer : "") + ", " + ChartView.elapsed(m.t) + " into the print";
+    }
+    /**
+     * When a print was stopped or failed: the moment it most likely went wrong and how that was found, the last good picture
+     * and the first bad one side by side, the readings then and in the minutes before, and what the G-code printed on that layer.
+     */
+    private void failureReport(PrintRecorder.Recording recording, List<double[]> rows, FailureReport.Moment m) {
+        LinearLayout card = card(); A11y.heading(label(card, "The moment it went wrong", 15, ink, true));
+        label(card, String.format(Locale.getDefault(), "%s%s into the print, found by %s.", m.layer > 0 ? "Layer " + m.layer + ", " : "", ChartView.elapsed(m.t), m.how), 13, ink, false);
+        List<File> files = PrintRecorder.pictures(recording); double[] times = pictureTimes(files);
+        int[] pair = FailureReport.pictures(times, m.t);
+        if (pair[0] >= 0 || pair[1] >= 0) {
+            LinearLayout both = new LinearLayout(this); both.setOrientation(LinearLayout.HORIZONTAL); card.addView(both);
+            String[] names = {"Last good", pair[1] >= 0 && times[pair[1]] >= m.t ? "First after" : "Last picture"};
+            for (int k = 0; k < 2; k++) {
+                LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setPadding(0, dp(8), k == 0 ? dp(8) : 0, 0);
+                both.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
+                int index = pair[k];
+                if (index < 0) { label(cell, names[k] + ": none", 12, muted, false); continue; }
+                ImageView image = new ImageView(this); image.setScaleType(ImageView.ScaleType.CENTER_CROP); image.setAdjustViewBounds(true);
+                String at = ChartView.elapsed(times[index]);
+                image.setContentDescription(names[k] + " picture, " + at + " into the print");
+                image.setImageBitmap(decode(files.get(index), dp(240)));
+                cell.addView(image, new LinearLayout.LayoutParams(-1, dp(120)));
+                label(cell, names[k] + " · " + at, 12, muted, false);
+                image.setOnClickListener(v -> PictureViewer.show(this, files, index, i -> ChartView.elapsed(pictureTimes(Collections.singletonList(files.get(i)))[0]) + " into the print"));
+            }
+        } else label(card, "No camera pictures were kept for this print.", 12, muted, false);
+        double[] t = column(rows, "elapsed_s");
+        for (String line : FailureReport.readings(t, column(rows, "nozzle_c"), column(rows, "nozzle_target_c"), column(rows, "bed_c"), column(rows, "bed_target_c"),
+            column(rows, "part_fan_pct"), column(rows, "sub_status"), m.t)) label(card, line, 13, ink, false);
+        if (m.layer > 0) {
+            TextView gcode = label(card, "Reading what the G-code printed on that layer…", 13, muted, false);
+            new Thread(() -> {
+                String words = "";
+                try { File file = gcodeFor(recording); if (file != null) words = FailureReport.gcodeWords(GcodeToolpath.read(file), m.layer); }
+                catch (IOException | RuntimeException | OutOfMemoryError unreadable) { }
+                boolean known = !words.isEmpty();
+                String said = known ? words : "The print's G-code is not kept on this phone, so what it printed on that layer is not known.";
+                runOnUiThread(() -> { if (!isDestroyed()) { gcode.setText(said); gcode.setTextColor(known ? ink : muted); } });
+            }, "recording-failure-gcode").start();
+        }
+        label(card, "The charts and Layers and G-code parts below show more around this layer.", 12, muted, false);
     }
     /** The Layers and G-code part's line while closed, once the G-code has been looked for. */
     private String layersWords = "";
