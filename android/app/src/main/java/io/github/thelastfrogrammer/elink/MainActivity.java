@@ -2073,6 +2073,35 @@ public final class MainActivity extends Activity {
                 plateNote.setVisibility(View.VISIBLE);
             });
         });
+        // Before you start: what the app already knows that bears on this print (words only; nothing here stops it).
+        subheading(body, "Before you start");
+        LinearLayout knownList = new LinearLayout(this); knownList.setOrientation(LinearLayout.VERTICAL); body.addView(knownList);
+        TextView beforeWait = label(knownList, "Looking at what the app knows about this print…", 13, MUTED, false);
+        TextView spoolLine = A11y.polite(label(body, "", 13, MUTED, false)); spoolLine.setVisibility(View.GONE);
+        checks.execute(() -> {
+            long now = System.currentTimeMillis(); List<PreFlight.Item> known = new ArrayList<>();
+            BedMesh.Mesh latest = null; BedMesh.FirstLayer first = null;
+            try {
+                List<PrintRecorder.Recording> mine = FileMemory.of(new PrintRecorder(RecordingsActivity.directory(this)).list(), name);
+                PrintRecorder.Recording last = mine.isEmpty() ? null : mine.get(0);
+                PreFlight.Item item = PreFlight.lastPrint(last, now); if (item != null) known.add(item);
+                item = PreFlight.tuning(PreFlight.pendingTrial(Tuning.all(this), name, last)); if (item != null) known.add(item);
+                List<BedMesh.Mesh> kept = BedMesh.list(BedMesh.directory(getFilesDir()));
+                latest = kept.isEmpty() ? null : kept.get(0);
+                if (latest != null && copy != null) first = BedMesh.firstLayer(latest, GcodeToolpath.read(copy));
+            } catch (Exception | OutOfMemoryError unreadable) { /* what could be read is shown */ }
+            BedMesh.Mesh mesh = latest; BedMesh.FirstLayer under = first;
+            main.post(() -> {
+                if (isDestroyed()) return;
+                known.add(PreFlight.bed(mesh, under, now, leveling.isChecked()));
+                knownList.removeView(beforeWait);
+                if (known.isEmpty()) label(knownList, "Nothing kept about this file yet.", 13, MUTED, false);
+                for (PreFlight.Item item : known) {
+                    TextView line = label(knownList, PreFlight.mark(item.level) + item.words, 13, item.level == PreFlight.Item.WARN ? AMBER : item.level == PreFlight.Item.OK ? TEAL : MUTED, false);
+                    line.setPadding(0, dp(2), 0, dp(2));
+                }
+            });
+        });
         subheading(body, "Filament");
         label(body, "Filaments used by this file", 13, MUTED, false);
         Spinner toolCount = spinner(body, new String[] {"1 filament", "2 filaments", "3 filaments", "4 filaments", "5 filaments", "6 filaments", "7 filaments", "8 filaments"});
@@ -2132,6 +2161,17 @@ public final class MainActivity extends Activity {
                 String low = tray == null ? null : spoolStore.shortfall(SpoolStore.slot(tray), toolGrams[t]);
                 if (low != null) { verdicts[t].append("\n! " + low); if (verdict.level == FilamentMatch.Level.OK) verdicts[t].setTextColor(AMBER); }
             }
+            // The chosen trays' spools: how long since they were dried (Before you start).
+            List<String> names = new ArrayList<>(); List<SpoolStore.Spool> loaded = new ArrayList<>(); java.util.Set<Integer> seen = new java.util.HashSet<>();
+            for (int t = 0; t < count; t++) {
+                int selected = maps[t].getSelectedItemPosition();
+                if (selected <= 0 || selected - 1 >= trays.size() || !seen.add(selected)) continue;
+                TrayPlan.Tray tray = trays.get(selected - 1); SpoolStore.Spool spool = spoolStore.inSlot(SpoolStore.slot(tray));
+                if (spool != null) { names.add(tray.where()); loaded.add(spool); }
+            }
+            PreFlight.Item dry = PreFlight.spools(names, loaded, System.currentTimeMillis());
+            spoolLine.setVisibility(dry == null ? View.GONE : View.VISIBLE);
+            if (dry != null) { spoolLine.setText(PreFlight.mark(dry.level) + dry.words); spoolLine.setTextColor(dry.level == PreFlight.Item.WARN ? AMBER : dry.level == PreFlight.Item.OK ? TEAL : MUTED); }
         };
         AdapterView.OnItemSelectedListener rejudge = new AdapterView.OnItemSelectedListener() {
             public void onNothingSelected(AdapterView<?> parent) { }
