@@ -1932,12 +1932,14 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             .setPositiveButton("Use for this print", (dialog, which) -> {
                 if (!sameJob(job)) { status.setText("The print changed. Choose its file again."); return; }
                 status.setText("Checking retained copy…");
+                PrintRecorder owner = PrintRecorder.active;
+                PrintRecorder.Recording attempt = owner == null ? null : owner.current();
                 worker.execute(() -> {
                     try {
                         library.selectForJob(artifact, job.printer, job.token);
                         // Kept with the print's recording too, so the choice outlasts this stretch of watching.
-                        PrintRecorder recorder = PrintRecorder.active; PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
-                        if (recording != null && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename)))
+                        PrintRecorder.Recording recording = attempt;
+                        if (recording != null && PrintRecorder.digest(job.printer).equals(recording.printerId) && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename)))
                             try { RecordingGcode.pack(artifact.file, artifact.name, recording, RecordingGcode.CHOSEN); } catch (IOException notKept) { Diagnostics.note(Diagnostics.FOLLOW, "the chosen copy could not be kept with the recording"); }
                         main.post(() -> { if (!isDestroyed() && sameJob(job)) load(artifact.file, job.filename, artifact, job); });
                     } catch (IOException error) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("The selected copy is missing or changed. Choose the file again."); }); }

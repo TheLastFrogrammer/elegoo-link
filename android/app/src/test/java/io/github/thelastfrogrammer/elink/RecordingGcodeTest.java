@@ -105,4 +105,13 @@ public class RecordingGcodeTest {
         assertEquals(0, ChartView.pictureAtOrBefore(new double[] {10, 20}, 5));
         assertEquals(-1, ChartView.pictureAtOrBefore(new double[0], 5));
     }
+    @Test public void sameNameDoesNotSupplyFailureGeometryOrReplaceAConfirmedRevision() throws Exception {
+        PrintRecorder.Recording r = recording("Part.gcode");
+        File one = source("G1 X1"), two = source("G1 X2"), cache = new File(dir, "cache");
+        RecordingGcode.pack(one, r.file, r, RecordingGcode.MATCHED);
+        assertNull(RecordingGcode.confirmed(r, cache));
+        RecordingGcode.pack(one, r.file, r, RecordingGcode.ADDED);
+        RecordingGcode.pack(two, r.file, r, RecordingGcode.MATCHED);
+        assertArrayEquals(Files.readAllBytes(one.toPath()), Files.readAllBytes(RecordingGcode.confirmed(r, cache).toPath()));
+    }
 }

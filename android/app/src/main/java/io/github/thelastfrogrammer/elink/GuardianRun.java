@@ -209,7 +209,7 @@ final class GuardianRun {
         if (source.kept != null) return "File source: kept with this print's recording (" + (RecordingGcode.MATCHED.equals(source.kept.how) ? "the phone's copy by that name" : "the copy you chose") + ") · " + source.kept.sha256.substring(0, 8);
         if (source.chosen && source.artifact != null) return "File source: the exact copy you chose · " + source.artifact.sha256.substring(0, Math.min(8, source.artifact.sha256.length()));
         if (source.file != null) return "File source: a copy with the same name on this phone (not confirmed). Tap to choose it in Live toolpath.";
-        if (source.problem != null && source.problem.startsWith("No copy")) return "File source: no copy of this print's G-code on this phone. Prints sent or sliced from this app keep one.";
+        if (source.problem != null && source.problem.startsWith("No copy")) return "Attach sliced file for live toolpath · Choose the copy used for this print.";
         return "File source: " + (source.problem == null ? "unknown" : source.problem);
     }
 

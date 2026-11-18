@@ -30,4 +30,12 @@ public class UpdateCheckTest {
         assertNull("nothing published", UpdateCheck.newest("[]"));
         assertNull("not a list", UpdateCheck.newest("{\"message\":\"Not Found\"}"));
     }
+    @Test public void previewAndUnrelatedSignersCannotOfferMainUpdates() {
+        String cert = "f6b6af40767df90602ceb330c059440e724c869068f05e6796aa86e1c2a750f8";
+        String pkg = "io.github.thelastfrogrammer.elink";
+        assertTrue(UpdateCheck.releaseChannel(pkg, cert));
+        assertFalse(UpdateCheck.releaseChannel(pkg + ".preview", cert));
+        assertFalse(UpdateCheck.releaseChannel(pkg, "unknown"));
+        assertNull(UpdateCheck.newest("[{\"tag_name\":\"android-v2.0\",\"assets\":[{\"name\":\"preview.apk\",\"browser_download_url\":\"https://github.com/x/p.apk\"}]}]"));
+    }
 }

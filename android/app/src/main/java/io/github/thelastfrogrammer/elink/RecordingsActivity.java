@@ -452,7 +452,7 @@ public final class RecordingsActivity extends Activity {
         int[] pair = FailureReport.pictures(times, m.t);
         if (pair[0] >= 0 || pair[1] >= 0) {
             LinearLayout both = new LinearLayout(this); both.setOrientation(LinearLayout.HORIZONTAL); card.addView(both);
-            String[] names = {"Last good", pair[1] >= 0 && times[pair[1]] >= m.t ? "First after" : "Last picture"};
+            String[] names = {"Before", pair[1] >= 0 && times[pair[1]] >= m.t ? "First after" : "Last picture"};
             for (int k = 0; k < 2; k++) {
                 LinearLayout cell = new LinearLayout(this); cell.setOrientation(LinearLayout.VERTICAL); cell.setPadding(0, dp(8), k == 0 ? dp(8) : 0, 0);
                 both.addView(cell, new LinearLayout.LayoutParams(0, -2, 1));
@@ -472,12 +472,13 @@ public final class RecordingsActivity extends Activity {
             column(rows, "part_fan_pct"), column(rows, "sub_status"), m.t)) label(card, line, 13, ink, false);
         if (m.layer > 0) {
             TextView gcode = label(card, "Reading what the G-code printed on that layer…", 13, muted, false);
+            action(card, "Attach sliced file…", () -> addGcode(recording, rows));
             new Thread(() -> {
                 String words = "";
-                try { File file = gcodeFor(recording); if (file != null) words = FailureReport.gcodeWords(GcodeToolpath.read(file), m.layer); }
+                try { File file = RecordingGcode.confirmed(recording, getCacheDir()); if (file != null) words = FailureReport.gcodeWords(GcodeToolpath.read(file), m.layer); }
                 catch (IOException | RuntimeException | OutOfMemoryError unreadable) { }
                 boolean known = !words.isEmpty();
-                String said = known ? words : "The print's G-code is not kept on this phone, so what it printed on that layer is not known.";
+                String said = known ? words : "Layer geometry is unavailable. Attach the sliced file used for this attempt to see what printed here.";
                 runOnUiThread(() -> { if (!isDestroyed()) { gcode.setText(said); gcode.setTextColor(known ? ink : muted); } });
             }, "recording-failure-gcode").start();
         }
