@@ -64,9 +64,10 @@ final class RecordingGcode {
         if (gcode.length() > GcodeLibrary.MAX_FILE_BYTES) throw new IOException("The G-code is too large to keep");
         String sha = sha256(gcode);
         Info had = info(r);
+        if (had != null && !MATCHED.equals(had.how) && MATCHED.equals(how)) return had;
         if (had != null && had.sha256.equals(sha)) {
             // The same file: only a choice outranks a match (it says the person confirmed it).
-            if (CHOSEN.equals(how) && !CHOSEN.equals(had.how)) writeInfo(r, new Info(had.name, sha, had.size, how, had.at));
+            if ((CHOSEN.equals(how) || ADDED.equals(how) && MATCHED.equals(had.how)) && !how.equals(had.how)) writeInfo(r, new Info(had.name, sha, had.size, how, had.at));
             return info(r);
         }
         File target = packed(r), temporary = new File(target.getParentFile(), target.getName() + ".part");
@@ -86,6 +87,11 @@ final class RecordingGcode {
      * The packed G-code as a plain file to read (unpacked into `cacheDir` once, checked against its SHA-256), or null when the
      * recording has none or it is damaged. Worker only.
      */
+    static synchronized File confirmed(PrintRecorder.Recording recording, File cacheDir) {
+        Info i = info(recording);
+        return i != null && (CHOSEN.equals(i.how) || ADDED.equals(i.how)) ? open(recording, cacheDir) : null;
+    }
+
     static synchronized File open(PrintRecorder.Recording r, File cacheDir) {
         Info info = info(r); if (info == null) return null;
         File folder = new File(cacheDir, "recording-gcode"); folder.mkdirs();

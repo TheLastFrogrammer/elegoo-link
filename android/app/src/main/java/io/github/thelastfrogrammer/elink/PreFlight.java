@@ -40,8 +40,15 @@ final class PreFlight {
     }
 
     /** The bed's last levelling: how old, and (with the file here) how the bed lies under its first layer. */
+    static BedMesh.Mesh meshFor(List<BedMesh.Mesh> meshes, String printerId) {
+        BedMesh.Mesh newest = null;
+        for (BedMesh.Mesh m : meshes) if (printerId != null && !printerId.isEmpty() && printerId.equals(m.printer)
+                && (newest == null || m.at > newest.at)) newest = m;
+        return newest;
+    }
+
     static Item bed(BedMesh.Mesh latest, BedMesh.FirstLayer first, long now, boolean levelling) {
-        if (latest == null) return new Item(Item.NOTE, "No bed mesh kept yet: the app keeps one each time the printer levels on the local network.");
+        if (latest == null) return new Item(Item.NOTE, "No bed mesh identified for this printer: the app keeps one each time the printer levels on the local network.");
         long age = (now - latest.at) / DAY;
         String when = "The bed was last levelled " + days(latest.at, now);
         if (first != null) {

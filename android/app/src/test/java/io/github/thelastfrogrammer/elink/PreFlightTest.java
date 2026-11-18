@@ -67,4 +67,11 @@ public class PreFlightTest {
         assertNotNull(PreFlight.tuning(after));
         assertNull(PreFlight.tuning(null));
     }
+    @Test public void meshNeverCrossesPrintersOrUsesUnknownIdentity() {
+        BedMesh.Mesh a = new BedMesh.Mesh(), b = new BedMesh.Mesh(), unknown = new BedMesh.Mesh();
+        a.printer = "a"; a.at = 1; b.printer = "b"; b.at = 2; unknown.at = 3;
+        assertSame(a, PreFlight.meshFor(Arrays.asList(unknown,b,a), "a"));
+        assertNull(PreFlight.meshFor(Arrays.asList(unknown,b), "a"));
+        assertNull(PreFlight.meshFor(Arrays.asList(unknown,b), ""));
+    }
 }

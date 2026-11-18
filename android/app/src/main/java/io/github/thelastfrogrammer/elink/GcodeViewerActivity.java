@@ -1803,8 +1803,8 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             // the print's recording is the one chosen or matched earlier for this same print.
             PrintRecorder recorder = PrintRecorder.active; PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
             File kept = null; RecordingGcode.Info keptInfo = null;
-            if (copy == null && recording != null && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename))) {
-                keptInfo = RecordingGcode.info(recording); if (keptInfo != null) kept = RecordingGcode.open(recording, getCacheDir());
+            if (copy == null && recording != null && PrintRecorder.digest(job.printer).equals(recording.printerId) && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename))) {
+                synchronized (RecordingGcode.class) { keptInfo = RecordingGcode.info(recording); kept = RecordingGcode.confirmed(recording, getCacheDir()); }
             }
             boolean evicted = copy == null && kept == null && library.selectionEvicted(job.printer, job.token);
             File keptFile = kept; RecordingGcode.Info keptAs = keptInfo;
@@ -1895,6 +1895,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             startActivityForResult(intent, CHOOSE);
         });
         LinearLayout fetchRow = new LinearLayout(this); fetchRow.setOrientation(LinearLayout.HORIZONTAL); missingCard.addView(fetchRow);
+        rowButton(fetchRow, "From project…", this::chooseProjectCopy);
         Button download = rowButton(fetchRow, "Download from printer", () -> {
             if (printer == null) return;
             lastAttempt = true;
@@ -1904,6 +1905,43 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         download.setEnabled(printer != null);
     }
 
+    private void chooseProjectCopy() {
+        GcodeJobTracker.Job job = printer == null ? null : printer.fileJob();
+        if (job == null) { status.setText("Wait for fresh print status before attaching a project file."); return; }
+        worker.execute(() -> {
+            File dir = new File(getFilesDir(), "projects");
+            Projects.Book book = Projects.load(dir);
+            List<Projects.Asset> files = new ArrayList<>();
+            List<String> labels = new ArrayList<>();
+            for (Projects.Project project : book.projects) {
+                if (project.archived) continue;
+                for (Projects.Attachment link : project.attachments) {
+                    Projects.Asset a = book.asset(link.assetId);
+                    if (a == null || !a.gcode()) continue;
+                    Projects.Part part = project.part(link.partId);
+                    files.add(a); labels.add(project.title + (part == null ? "" : " › " + part.name)
+                        + "\n" + a.name + (a.sha256.length() < 12 ? "" : " · " + a.sha256.substring(0, 12)));
+                }
+            }
+            main.post(() -> {
+                if (isDestroyed() || !sameJob(job)) return;
+                AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Attach a project slice");
+                if (files.isEmpty()) dialog.setMessage("No G-code copies in active projects. Use Choose file for a linked document or USB drive.").setPositiveButton("Close", null);
+                else dialog.setItems(labels.toArray(new String[0]), (d, i) -> {
+                    Projects.Asset asset = files.get(i);
+                    worker.execute(() -> {
+                        try {
+                            File file = Projects.managedFile(dir, asset);
+                            if (file == null || !file.isFile()) throw new IOException("Project copy missing");
+                            GcodeLibrary.Artifact kept = library.retain(file, asset.name, "", GcodeLibrary.Origin.PROJECT, asset.sha256);
+                            main.post(() -> { if (!isDestroyed() && sameJob(job)) confirmCopy(job, kept); });
+                        } catch (IOException e) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("Could not attach this project copy. Check the file in Projects or choose it from your phone."); }); }
+                    });
+                }).setNegativeButton("Cancel", null);
+                dialog.show();
+            });
+        });
+    }
     private void chooseKeptCopy() {
         GcodeJobTracker.Job job = printer == null ? null : printer.fileJob();
         if (job == null) { status.setText("Wait for fresh printer status before choosing this print's file."); return; }
@@ -1927,17 +1965,19 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
     private void confirmCopy(GcodeJobTracker.Job job, GcodeLibrary.Artifact artifact) {
         if (!sameJob(job)) { status.setText("The print changed. Choose its file again."); return; }
         new AlertDialog.Builder(this).setTitle("Use this copy for the current print?")
-            .setMessage(StatusPresentation.clean(job.filename) + "\n" + artifact.origin.label + " · " + String.format(Locale.getDefault(), "%,d bytes", artifact.size)
+            .setMessage("Printing: " + StatusPresentation.clean(job.filename) + "\nSelected: " + StatusPresentation.clean(artifact.name) + "\n" + artifact.origin.label + " · " + String.format(Locale.getDefault(), "%,d bytes", artifact.size)
                 + "\nSHA-256 " + artifact.sha256 + "\n\nThe printer has not supplied a matching content hash. Confirm this is the sliced file used to start this print. The viewer will label it as selected by you.")
             .setPositiveButton("Use for this print", (dialog, which) -> {
                 if (!sameJob(job)) { status.setText("The print changed. Choose its file again."); return; }
                 status.setText("Checking retained copy…");
+                PrintRecorder owner = PrintRecorder.active;
+                PrintRecorder.Recording attempt = owner == null ? null : owner.current();
                 worker.execute(() -> {
                     try {
                         library.selectForJob(artifact, job.printer, job.token);
                         // Kept with the print's recording too, so the choice outlasts this stretch of watching.
-                        PrintRecorder recorder = PrintRecorder.active; PrintRecorder.Recording recording = recorder == null ? null : recorder.current();
-                        if (recording != null && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename)))
+                        PrintRecorder.Recording recording = attempt;
+                        if (recording != null && PrintRecorder.digest(job.printer).equals(recording.printerId) && java.util.Objects.equals(GcodeLibrary.baseName(recording.file), GcodeLibrary.baseName(job.filename)))
                             try { RecordingGcode.pack(artifact.file, artifact.name, recording, RecordingGcode.CHOSEN); } catch (IOException notKept) { Diagnostics.note(Diagnostics.FOLLOW, "the chosen copy could not be kept with the recording"); }
                         main.post(() -> { if (!isDestroyed() && sameJob(job)) load(artifact.file, job.filename, artifact, job); });
                     } catch (IOException error) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("The selected copy is missing or changed. Choose the file again."); }); }

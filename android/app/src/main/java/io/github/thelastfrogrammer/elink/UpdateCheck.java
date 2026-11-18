@@ -20,6 +20,12 @@ final class UpdateCheck {
     static final long DAY_MS = 24L * 60 * 60 * 1000;
 
     /** A published release: its version, the APK to download, its page, and the first lines of its notes. */
+    static boolean releaseChannel(String pkg, String cert) {
+        return "io.github.thelastfrogrammer.elink".equals(pkg) && (
+            "1a7771a2343534e1a0d00a08cb675c342d9f28d61fdf6492d0ded6df609b7a3e".equals(cert)
+            || "f6b6af40767df90602ceb330c059440e724c869068f05e6796aa86e1c2a750f8".equals(cert));
+    }
+
     static final class Release {
         final String version, apk, page, notes;
         Release(String version, String apk, String page, String notes) { this.version = version; this.apk = apk; this.page = page; this.notes = notes; }
@@ -39,7 +45,7 @@ final class UpdateCheck {
                 JSONArray assets = r.optJSONArray("assets");
                 for (int k = 0; assets != null && k < assets.length(); k++) {
                     JSONObject a = assets.optJSONObject(k);
-                    if (a != null && a.optString("name").endsWith(".apk") && a.optString("browser_download_url").startsWith("https://github.com/")) apk = a.optString("browser_download_url");
+                    if (a != null && ("Link-Workshop-v" + version + ".apk").equals(a.optString("name")) && a.optString("browser_download_url").startsWith("https://github.com/")) apk = a.optString("browser_download_url");
                 }
                 if (apk == null || !version.matches("\\d+(\\.\\d+){0,3}")) continue;
                 String body = r.optString("body", "").trim(); if (body.length() > 400) body = body.substring(0, 400) + "…";
