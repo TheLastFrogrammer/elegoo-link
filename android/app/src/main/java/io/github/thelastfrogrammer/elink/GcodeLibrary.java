@@ -20,7 +20,7 @@ public final class GcodeLibrary {
     private final int keepFiles; private final long keepBytes;
 
     public enum Origin {
-        IMPORTED("Phone import"), SLICED("Sliced on this phone"), UPLOADED("Uploaded from this app"),
+        PROJECT("Project file"), IMPORTED("Phone import"), SLICED("Sliced on this phone"), UPLOADED("Uploaded from this app"),
         DOWNLOADED("Downloaded copy"), FOLDER("G-code folder"), CHOSEN("Chosen file"), LEGACY("Earlier phone copy");
         public final String label;
         Origin(String label) { this.label = label; }
