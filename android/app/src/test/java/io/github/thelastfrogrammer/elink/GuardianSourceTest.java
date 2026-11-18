@@ -47,4 +47,12 @@ public class GuardianSourceTest {
         library.retain(source("G1 X3"), "Cube.gcode", "", GcodeLibrary.Origin.SLICED);
         assertNull(GuardianRun.source(library, null, "Cube.gcode").problem);
     }
+    @Test public void changedProjectSliceIsNotAddedToKeptCopies() throws Exception {
+        GcodeLibrary library = new GcodeLibrary(new File(dir, "library"));
+        try {
+            library.retain(source("G1 X2"), "Bracket.gcode", "", GcodeLibrary.Origin.PROJECT, "old-digest");
+            fail("changed project slice accepted");
+        } catch (java.io.IOException expected) { assertTrue(expected.getMessage().contains("changed")); }
+        assertTrue(library.copies("Bracket.gcode").isEmpty());
+    }
 }

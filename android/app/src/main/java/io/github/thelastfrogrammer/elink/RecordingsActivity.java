@@ -472,7 +472,8 @@ public final class RecordingsActivity extends Activity {
             column(rows, "part_fan_pct"), column(rows, "sub_status"), m.t)) label(card, line, 13, ink, false);
         if (m.layer > 0) {
             TextView gcode = label(card, "Reading what the G-code printed on that layer…", 13, muted, false);
-            action(card, "Attach sliced file…", () -> addGcode(recording, rows));
+            LinearLayout attachRow = new LinearLayout(this); card.addView(attachRow);
+            action(attachRow, "Attach sliced file…", () -> addGcode(recording, rows));
             new Thread(() -> {
                 String words = "";
                 try { File file = RecordingGcode.confirmed(recording, getCacheDir()); if (file != null) words = FailureReport.gcodeWords(GcodeToolpath.read(file), m.layer); }

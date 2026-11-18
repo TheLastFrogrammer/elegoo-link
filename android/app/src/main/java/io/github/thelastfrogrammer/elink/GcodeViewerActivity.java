@@ -1933,8 +1933,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                         try {
                             File file = Projects.managedFile(dir, asset);
                             if (file == null || !file.isFile()) throw new IOException("Project copy missing");
-                            GcodeLibrary.Artifact kept = library.retain(file, asset.name, "", GcodeLibrary.Origin.PROJECT);
-                            if (!asset.sha256.isEmpty() && !asset.sha256.equals(kept.sha256)) throw new IOException("Project copy changed");
+                            GcodeLibrary.Artifact kept = library.retain(file, asset.name, "", GcodeLibrary.Origin.PROJECT, asset.sha256);
                             main.post(() -> { if (!isDestroyed() && sameJob(job)) confirmCopy(job, kept); });
                         } catch (IOException e) { main.post(() -> { if (!isDestroyed() && sameJob(job)) status.setText("Could not attach this project copy. Check the file in Projects or choose it from your phone."); }); }
                     });

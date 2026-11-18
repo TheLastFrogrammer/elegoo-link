@@ -45,6 +45,9 @@ public final class GcodeLibrary {
     /** Worker only. Existing names/versions are preserved. */
     public File put(File source, String name) throws IOException { return retain(source, name, "", Origin.IMPORTED).file; }
     public Artifact retain(File source, String name, String printer, Origin origin) throws IOException {
+        return retain(source, name, printer, origin, "");
+    }
+    Artifact retain(File source, String name, String printer, Origin origin, String expectedHash) throws IOException {
         String base = baseName(name); if (base == null) throw new IOException("Unusable G-code filename");
         synchronized (lock) {
             JSONObject state = readIndex();
@@ -63,7 +66,9 @@ public final class GcodeLibrary {
                     if (size == 0) throw new IOException("G-code is empty");
                     out.getFD().sync();
                 }
-                String hash = hex(digest.digest()); File target = object(hash);
+                String hash = hex(digest.digest());
+                if (!expectedHash.isEmpty() && !expectedHash.equals(hash)) throw new IOException("The source file has changed");
+                File target = object(hash);
                 replace(temporary, target); long now = System.currentTimeMillis(); target.setLastModified(now);
                 Artifact kept = new Artifact(target, hash, size, base, printerId(printer), origin, now);
                 JSONArray entries = state.optJSONArray("entries"), updated = new JSONArray();
