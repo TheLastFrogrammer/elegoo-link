@@ -629,6 +629,8 @@ public final class RecordingsActivity extends Activity {
             .putExtra(Intent.EXTRA_TITLE, recording.csv.getName()), EXPORT));
         LinearLayout more = row();
         action(more, "Compare with…", () -> compareWith(recording));
+        action(row(), "Count pieces toward a project…", () -> startActivity(new Intent(this, ProjectsActivity.class)
+            .putExtra(ProjectsActivity.EXTRA_RECORDING, directory(this).toURI().relativize(recording.meta.toURI()).getPath())));
         action(more, "Share a report…", () -> shareReport(recording, rows));
         action(row(), "Change settings and slice again…", () -> tune(recording, findings(recording, rows)));
         if (GcodeLibrary.baseName(recording.file) != null)
