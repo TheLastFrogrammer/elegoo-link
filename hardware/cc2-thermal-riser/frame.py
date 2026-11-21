@@ -298,7 +298,7 @@ def build(out):
     index = []
     for i, (k, (kd, v)) in enumerate(placed.items()):
         f = os.path.join(d, f"{i:02d}.stl"); cq.exporters.export(v, f, tolerance=0.15, angularTolerance=0.25); index.append({"name": k, "kind": kd, "file": f})
-    json.dump({"parts": index, "colours": COLOURS}, open(os.path.join(d, "index.json"), "w"), indent=1)
+    json.dump({"parts": index, "colours": COLOURS, "riser_height": H}, open(os.path.join(d, "index.json"), "w"), indent=1)
     os.makedirs(out, exist_ok=True)
     assy.save(os.path.join(out, "frame-assembly.step"))
     sizes = {}

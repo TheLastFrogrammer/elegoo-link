@@ -38,12 +38,13 @@ def name(label):
 
 def group(path):
     if "/top/" in path or path.endswith("/top") or "tophat" in path: return "lid"   # rides on the riser, above the camera
+    if "CANVAS v6" in path: return "canvas"   # the CANVAS unit hangs on the hood's right side and rises with it
     if "Bed_assm" in path: return "bed"
     if "xaxis_assm" in path: return "gantry"
     if "Toolhead" in path or "挤出齿外壳" in path or "散热片导风件" in path or "extruder CANVAS" in path or "multiplexer" in path: return "head"
     return "static"
 
-tris = {"bed": [], "gantry": [], "head": [], "static": [], "lid": []}; parts = []; skipped = 0
+tris = {"bed": [], "gantry": [], "head": [], "static": [], "lid": [], "canvas": []}; parts = []; skipped = 0
 
 def mesh(shape, loc, path):
     global skipped

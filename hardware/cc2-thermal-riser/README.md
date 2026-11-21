@@ -14,10 +14,13 @@ placed by a study of what the camera can see of the bed as the printer moves. Th
 
 ![The frame on the CC2 model, and from above, colour-coded](images/frame.png)
 
+![From the front, as in a photo](images/frame-front.png)
+
 ![The frame taken apart, colour-coded](images/frame-exploded.png)
 
 *Each kind of part has its own colour, the same in `frame/frame-assembly.step`; the clear polycarbonate is drawn
-see-through, the printer in greys. `python render_frame.py` redraws these after a change.*
+see-through, the printer in greys. The hood's base ring and the CANVAS unit (dark slate) ride on the hood, so they are
+drawn raised by the riser's height; the CANVAS hangs on the right as you face the printer, as on the real one. `python render_frame.py` redraws these after a change.*
 
 **How it's split:**
 - **A frame of small SAF parts (PA11 or PA12)** carries the hood and fits the printer:
