@@ -10,7 +10,70 @@ placed by a study of what the camera can see of the bed as the printer moves. Th
 
 ![The riser and the camera pod on the CC2 model](images/riser-and-pod.png)
 
-## What it is
+## The modular frame (recommended)
+
+![The frame on the CC2 model, and from above](images/frame.png)
+
+*Left: the frame on the printer, with the camera pod on the left. Right: from above, with the LED holder on the right
+top rail, the mounting plate on the left one, and the fan opening in the back. The renderer draws the panels grey;
+they are clear polycarbonate.*
+
+**How it's split:**
+- **A frame of small SAF parts (PA11 or PA12)** carries the hood and fits the printer:
+  - 4 corner posts, in two mirrored kinds.
+  - 4 bottom rails, all the same. They drop into the frame's lip.
+  - 4 top rails. Their lip and ledge hold the hood's base ring.
+  - The camera pod.
+
+  Every SAF part fits a Stratasys H350's 315 × 208 × 293 mm build: the rails are 310 × 60 × 16 mm, the posts
+  241 × 63 × 60 mm. The rails are thin enough to stand on edge in a build.
+- **Panels:** four identical **clear polycarbonate sheets, 291 × 137 × 3 mm**. They're held in grooves on all four
+  edges: no holes, just cut square. Any side can take a printed **module panel** instead.
+- **The hook rail:** a strip along the inside of every top rail. **Modules** hang anywhere along it, below the hood's
+  base ring.
+- **Wiring:** wire channels run up the corner posts, from the hook rail down to the outside at the bottom.
+
+| Part | Make | Copies | Size (mm) |
+|---|---|---|---|
+| `frame/saf/post-A-x2` | SAF | 2 (front-left, back-right) | 241 × 63 × 60 |
+| `frame/saf/post-B-x2` | SAF | 2 (front-right, back-left) | 241 × 63 × 60 |
+| `frame/saf/rail-bottom-x4` | SAF | 4 | 310 × 55 × 10 |
+| `frame/saf/rail-top-x3` | SAF | 3 (front, back, right) | 310 × 60 × 16 |
+| `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
+| `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
+| Polycarbonate 3 mm | Cut sheet | Up to 4 | 291 × 137 (`frame/panels.txt`) |
+| `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
+| `frame/fdm/panel-fan-80` | FDM | Optional (back) | 80 mm fan, 71.5 mm hole spacing |
+| `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
+| `frame/fdm/led-holder` | FDM | Any number | Holds a 17 × 8 mm aluminium LED channel, angled 35° down and in |
+| `frame/fdm/mounting-plate` | FDM | Any number | M3 grid and a ¼"-20 hole: an ordinary camera, a sensor |
+
+**Hardware:**
+- 16 × M3 bolts and nuts: one per tenon. They go through the post's outer face.
+- 4 × M3 heat-set inserts and screws for the pod: two in the camera panel, two in the left top rail.
+- 1 × ¼"-20 screw for the camera.
+
+**Assembly:**
+1. Lay the bottom rails in the frame's lip.
+2. Lower the posts onto the rails' tenons (the posts' slots open downward).
+3. Slide the panels down the posts' grooves into the bottom rails.
+4. Lower the top rails onto the panels. Their tenons drop into the posts past the ledge.
+5. Bolt the tenons.
+6. Set the hood on top.
+
+**Checks** (`frame_check.py`, `verify.py`):
+- No two parts overlap once assembled.
+- Every part is a closed solid.
+- The modules and the pod stay 4.7 mm or more under the raised hood ring.
+- The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate at their height.
+- The camera sees 55 % of the bed at the start of a print and 77 % on average, as with the one-piece walls.
+
+**Changing it:** `python frame.py [lens height]` rebuilds every part. New modules are a hook and a body
+(`hook_module` and a `*_body` function in `frame.py`). New panels start from `module_panel`.
+
+## The one-piece walls (FDM-only alternative)
+
+### What it is
 
 - **The riser** sits where the hood sits now. Its lower edge (the plug) drops inside the frame's top lip onto the ledge.
   Its body rests on the lip. Its top repeats the frame's lip and ledge, so the hood's base ring drops into it, raised by 206 mm.
@@ -82,6 +145,8 @@ camera's outline.
 pip install -r requirements.txt                  # cadquery, Open CASCADE (OCP), trimesh, embreex, numpy, pillow
 python riser.py . 100                            # lens height above the hood ring's old edge (mm); rewrites print/ and the assembly
 ./fetch_model.sh                                 # the CC2 model (OpenCentauri, GPL-3.0, downloaded into build/, ~2 min)
+python frame.py 100                              # the modular frame: frame/saf, frame/fdm, frame/panels.txt, the assembly STEP
+python frame_check.py                            # overlaps, closed solids, clearances of the frame's parts
 python verify.py 100                             # clearances, coverage, images/camera-views.png
 python overview.py                               # images/riser-and-pod.png
 ```
