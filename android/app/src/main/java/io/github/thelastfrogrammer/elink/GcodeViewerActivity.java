@@ -534,6 +534,19 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
         if (added != null) {
             // A camera the person added: its stream or snapshots, with its own line-up.
             String url = ExtraCameras.url(this, added);
+            if (ExtraCameras.THERMAL.equals(added.kind)) {
+                if (!ExtraCameras.thermalProblem(url).isEmpty()) { cameraMessage("The camera “" + added.name + "” has no usable address. Edit it in Print, Camera, Added cameras."); return; }
+                cameraStarted = true; cameraCloud = false; addedCamera = added;
+                CameraFrames frames = CameraFrames.pushed(new CameraFrames.Listener() {
+                    public void frame() { main.post(() -> { if (web != null && cameraFrames != null) { web.evaluateJavascript("viewer.cameraFrame('/live/frame.jpg?n=" + (frameNumber++) + "')", null); frameAt = System.currentTimeMillis(); keepLocalPicture(); } }); }
+                    public void error(String message) { main.post(() -> { cameraStarted = false; cameraFrames = null; cameraMessage(added.name + ": " + message + " Check it in Print, Camera, Added cameras."); }); }
+                });
+                ThermalCamera.Handle handle = ExtraCameras.thermalJpegs(this, added, 250, frames::push, why -> frames.fail("Thermal camera unavailable: " + why + "."));
+                frames.onClose(handle::close);
+                cameraFrames = frames;
+                cameraMessage("Camera: " + added.name + (linedUp(viewerPrefs(), camId) ? "." : ". Line it up by hand (More…, Line up the camera by hand) so the picture matches the toolpath."));
+                return;
+            }
             if (!ExtraCameras.problem(url).isEmpty()) { cameraMessage("The camera “" + added.name + "” has no usable address. Edit it in Print, Camera, Added cameras."); return; }
             PrinterHttp.ConnectionFactory factory = ExtraCameras.connections(added.user, ExtraCameras.password(this, added));
             cameraStarted = true; cameraCloud = false; addedCamera = added;

@@ -25,11 +25,12 @@ import java.util.UUID;
 /**
  * Cameras people add beside the printer's own: any camera that serves an MJPEG stream or a JPEG snapshot over http(s)
  * (a webcam with mjpg-streamer or go2rtc, an ESP32-CAM, an IP camera's snapshot address, a phone running an IP-webcam app,
- * a Home Assistant camera proxy). The address and password are kept encrypted (CredentialStore); the log names a camera,
+ * a Home Assistant camera proxy), or a GigE Vision thermal camera such as a FLIR A65 (ThermalCamera), shown in colour with
+ * its temperatures. The address and password are kept encrypted (CredentialStore); the log names a camera,
  * never its address. One camera can take the print pictures instead of the printer's own.
  */
 final class ExtraCameras {
-    static final String STREAM = "stream", SNAPSHOT = "snapshot";
+    static final String STREAM = "stream", SNAPSHOT = "snapshot", THERMAL = "thermal";
     static final String PREF = "extraCameras";
 
     static final class Camera {
@@ -43,7 +44,7 @@ final class ExtraCameras {
         }
         static Camera fromJson(JSONObject o) {
             Camera c = new Camera();
-            c.id = o.optString("id", c.id); c.name = Automation.cap(o.optString("name", "Camera").trim(), 40); c.kind = SNAPSHOT.equals(o.optString("kind")) ? SNAPSHOT : STREAM;
+            c.id = o.optString("id", c.id); c.name = Automation.cap(o.optString("name", "Camera").trim(), 40); c.kind = SNAPSHOT.equals(o.optString("kind")) ? SNAPSHOT : THERMAL.equals(o.optString("kind")) ? THERMAL : STREAM;
             c.user = o.optString("user", ""); int r = o.optInt("rotation", 0); c.rotation = r == 90 || r == 180 || r == 270 ? r : 0; c.mirror = o.optBoolean("mirror"); c.pictures = o.optBoolean("pictures");
             if (c.name.isEmpty()) c.name = "Camera";
             return c;
@@ -81,6 +82,18 @@ final class ExtraCameras {
     }
     static void forget(Context context, Camera c) { CredentialStore store = new CredentialStore(context); store.forget("camera-url:" + c.id); store.forget("camera-password:" + c.id); }
 
+    /** Why a thermal camera's address cannot be used, or "": an IP address or a name on the local network, nothing more. */
+    static String thermalProblem(String host) {
+        String h = host == null ? "" : host.trim();
+        if (h.isEmpty()) return "Enter the camera's IP address, for example 192.168.1.80.";
+        if (h.contains("://") || h.contains("/") || h.contains(":") || h.contains("@")) return "Enter only the camera's IP address (for example 192.168.1.80), without http:// or a port.";
+        if (!h.matches("[A-Za-z0-9.-]{1,253}")) return "That is not an IP address or a network name.";
+        if (h.matches("[0-9.]+") && !h.matches("(25[0-5]|2[0-4]\\d|1?\\d?\\d)(\\.(25[0-5]|2[0-4]\\d|1?\\d?\\d)){3}")) return "That IP address is not complete or not valid.";
+        return "";
+    }
+    /** Why the camera's address cannot be used, by its kind, or "". */
+    static String problem(Camera c, String address) { return THERMAL.equals(c.kind) ? thermalProblem(address) : problem(address); }
+
     /** Why an address cannot be used, or "": http or https, a host, no name:password@ in it (use the fields). */
     static String problem(String url) {
         try {
@@ -113,6 +126,18 @@ final class ExtraCameras {
             public void frame(Bitmap image) { listener.frame(turn(image, camera.rotation, camera.mirror)); }
             public void error(String message) { listener.error(message); }
         };
+        if (THERMAL.equals(camera.kind)) {
+            if (!thermalProblem(url).isEmpty()) {
+                new Handler(Looper.getMainLooper()).post(() -> listener.error("The camera “" + camera.name + "” has no usable address. Edit it in Settings, Cameras."));
+                return () -> { };
+            }
+            Handler main = new Handler(Looper.getMainLooper()); boolean[] closed = {false};
+            ThermalCamera.Handle handle = ThermalCamera.watch(url.trim(), 250, new ThermalCamera.Listener() {
+                public void picture(ThermalImage image) { Bitmap b = ThermalPicture.bitmap(image, camera.rotation, camera.mirror); main.post(() -> { if (!closed[0]) listener.frame(b); }); }
+                public void failed(String why) { main.post(() -> { if (!closed[0]) listener.error("Thermal camera unavailable: " + why + "."); }); }
+            });
+            return () -> { closed[0] = true; handle.close(); main.removeCallbacksAndMessages(null); };
+        }
         if (url.isEmpty() || !problem(url).isEmpty()) {
             new Handler(Looper.getMainLooper()).post(() -> listener.error("The camera “" + camera.name + "” has no usable address. Edit it in Settings, Cameras."));
             return () -> { };
@@ -121,6 +146,16 @@ final class ExtraCameras {
         if (SNAPSHOT.equals(camera.kind)) return new SnapshotPoller(url, factory, turned, 1000);
         MjpegPlayer player = new MjpegPlayer(url, factory, turned);
         return player::close;
+    }
+
+    /** A thermal camera as JPEG pictures (for the toolpath viewer and other apps), at most every `everyMs`. */
+    static ThermalCamera.Handle thermalJpegs(Context context, Camera camera, long everyMs, java.util.function.Consumer<byte[]> jpeg, java.util.function.Consumer<String> failed) {
+        String host = url(context, camera).trim();
+        if (!thermalProblem(host).isEmpty()) { failed.accept("the camera has no usable address"); return () -> { }; }
+        return ThermalCamera.watch(host, everyMs, new ThermalCamera.Listener() {
+            public void picture(ThermalImage image) { jpeg.accept(ThermalPicture.jpeg(ThermalPicture.bitmap(image, camera.rotation, camera.mirror))); }
+            public void failed(String why) { failed.accept(why); }
+        });
     }
 
     static Bitmap turn(Bitmap image, int rotation, boolean mirror) {

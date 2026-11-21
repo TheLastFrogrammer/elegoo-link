@@ -104,6 +104,9 @@ be used against you). Errors are JSON: `{"error": "words"}`, with 400, 401, 403,
   cloud video is not passed on.
 - Added cameras appear as `added-<id>`. Their `rotation` (degrees clockwise) and `mirror` say how to turn the
   picture: frames are passed on exactly as the camera sent them.
+- A thermal camera (GigE Vision, such as a FLIR A65) has `"thermal": true`. Its pictures are drawn by the phone: in
+  colour, already turned (`rotation` 0, `mirror` false), with the centre's and the hottest point's temperature and a
+  scale bar. Its pictures come at most twice a second.
 - The phone opens a camera only while someone watches, and closes it 5 s after the last viewer leaves.
 - When the app's own camera view opens, the phone hands it the printer's camera and passes its frames on. It waits up to
   12 s for that view's first picture before opening a stream of its own again, so the camera never has two.

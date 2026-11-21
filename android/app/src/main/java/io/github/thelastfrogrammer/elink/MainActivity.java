@@ -3942,7 +3942,7 @@ public final class MainActivity extends Activity {
         extraList.removeAllViews();
         List<ExtraCameras.Camera> cameras = ExtraCameras.list(this); extraCount = cameras.size();
         for (ExtraCameras.Camera c : cameras) {
-            label(extraList, c.name + " · " + (ExtraCameras.SNAPSHOT.equals(c.kind) ? "snapshots" : "stream") + (c.rotation != 0 ? " · turned " + c.rotation + "°" : "") + (c.pictures ? " · takes the print pictures" : ""), 14, INK, true);
+            label(extraList, c.name + " · " + (ExtraCameras.SNAPSHOT.equals(c.kind) ? "snapshots" : ExtraCameras.THERMAL.equals(c.kind) ? "thermal" : "stream") + (c.rotation != 0 ? " · turned " + c.rotation + "°" : "") + (c.pictures ? " · takes the print pictures" : ""), 14, INK, true);
             LinearLayout line = row(extraList);
             boolean playing = extraFeed != null && extraShown != null && extraShown.id.equals(c.id);
             rowButton(line, playing ? "Stop" : "Watch", () -> { if (playing) stopCamera(); else watchExtra(c); renderExtraCameras(); render(); }, false);
@@ -3958,9 +3958,15 @@ public final class MainActivity extends Activity {
         ExtraCameras.Camera camera = existing != null ? existing : new ExtraCameras.Camera();
         LinearLayout body = dialogBody();
         EditText name = input(body, "Name", false); name.setText(existing == null ? "" : camera.name); name.setHint("Side camera");
+        label(body, "Kind of camera", 12, MUTED, false);
+        Spinner type = spinner(body, new String[] {"Web camera (MJPEG stream or snapshot)", "Thermal camera (GigE Vision, such as a FLIR A65)"});
+        type.setSelection(ExtraCameras.THERMAL.equals(camera.kind) ? 1 : 0); A11y.name(type, "Kind of camera");
         EditText address = input(body, "Address", false); address.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
         address.setText(existing == null ? "" : ExtraCameras.url(this, camera)); address.setHint("http://192.168.1.50:8080/?action=stream");
-        label(body, "For example: mjpg-streamer or a Raspberry Pi webcam http://ADDRESS:8080/?action=stream (or ?action=snapshot); go2rtc http://ADDRESS:1984/api/stream.mjpeg?src=NAME; ESP32-CAM http://ADDRESS:81/stream; an IP-webcam phone app http://ADDRESS:8080/video; an IP camera's snapshot address. RTSP is not played directly: use the camera's snapshot address or a bridge such as go2rtc.", 12, MUTED, false);
+        TextView thermalHelp = label(body, "The camera's IP address on your network, for example 192.168.1.80, or tap Find thermal cameras. The phone takes control of the camera while a view is open, asks it for temperature pictures at its slowest frame rate, and gives control back when the view closes: close FLIR's own software first. It needs a wired connection to the same router as the phone's Wi-Fi; a 5 GHz Wi-Fi network carries its pictures best. The temperatures assume the camera's own emissivity and distance settings.", 12, MUTED, false);
+        LinearLayout findRow = row(body);
+        Button find = rowButton(findRow, "Find thermal cameras", () -> { }, false);
+        TextView webHelp = label(body, "For example: mjpg-streamer or a Raspberry Pi webcam http://ADDRESS:8080/?action=stream (or ?action=snapshot); go2rtc http://ADDRESS:1984/api/stream.mjpeg?src=NAME; ESP32-CAM http://ADDRESS:81/stream; an IP-webcam phone app http://ADDRESS:8080/video; an IP camera's snapshot address. RTSP is not played directly: use the camera's snapshot address or a bridge such as go2rtc.", 12, MUTED, false);
         EditText user = input(body, "User name (if the camera asks)", false); user.setText(camera.user);
         EditText password = input(body, existing != null && !ExtraCameras.password(this, camera).isEmpty() ? "Password (kept; blank keeps it)" : "Password (if the camera asks)", true);
         subheading(body, "Picture");
@@ -3971,8 +3977,54 @@ public final class MainActivity extends Activity {
         label(body, "Print pictures go into recordings, timelapses, notifications, Home Assistant and automations. The print guardian checks them once this camera is lined up in 3D (Line up in 3D…).", 12, MUTED, false);
         TextView result = A11y.polite(label(body, "", 13, INK, false));
         ImageView preview = new ImageView(this); preview.setAdjustViewBounds(true); preview.setVisibility(View.GONE); body.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
-        String[] kind = {camera.kind}; boolean[] tested = {existing != null};
+        String[] kind = {ExtraCameras.THERMAL.equals(camera.kind) ? ExtraCameras.STREAM : camera.kind}; boolean[] tested = {existing != null};
+        Runnable showType = () -> {
+            boolean thermal = type.getSelectedItemPosition() == 1;
+            thermalHelp.setVisibility(thermal ? View.VISIBLE : View.GONE); findRow.setVisibility(thermal ? View.VISIBLE : View.GONE);
+            webHelp.setVisibility(thermal ? View.GONE : View.VISIBLE); user.setVisibility(thermal ? View.GONE : View.VISIBLE); password.setVisibility(thermal ? View.GONE : View.VISIBLE);
+            address.setHint(thermal ? "192.168.1.80" : "http://192.168.1.50:8080/?action=stream");
+        };
+        showType.run();
+        type.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(AdapterView<?> parent, View view, int position, long id) { showType.run(); result.setText(""); preview.setVisibility(View.GONE); }
+            public void onNothingSelected(AdapterView<?> parent) { }
+        });
+        // Asks the network which GigE Vision cameras are there (each answers with its maker and model; nothing on them changes).
+        find.setOnClickListener(v -> {
+            result.setText("Looking for thermal cameras on this network…"); result.setTextColor(MUTED);
+            checks.execute(() -> {
+                List<GigeVision.Device> found; String error = null;
+                try { found = GigeVision.discover(java.net.InetAddress.getByName("255.255.255.255"), 2000); } catch (Exception failed) { found = new ArrayList<>(); error = CameraHub.words(failed); }
+                List<GigeVision.Device> all = found; String why = error;
+                main.post(() -> {
+                    if (isDestroyed()) return;
+                    if (all.isEmpty()) { result.setText(why != null ? "Could not look: " + why + "." : "No GigE Vision camera answered. Check that it is powered (PoE), wired to the same router as this phone's Wi-Fi, and has an address on this network (FLIR's IP Config tool sets one)."); result.setTextColor(ERROR); return; }
+                    String[] names = new String[all.size()];
+                    for (int i = 0; i < names.length; i++) names[i] = all.get(i).label() + " · " + all.get(i).address.getHostAddress();
+                    new AlertDialog.Builder(this).setTitle("Thermal cameras found").setItems(names, (d, which) -> {
+                        address.setText(all.get(which).address.getHostAddress()); result.setText("Chosen: " + all.get(which).label() + ". Tap Test to see a picture."); result.setTextColor(MUTED);
+                        if (name.getText().toString().trim().isEmpty()) name.setText(Automation.cap(all.get(which).model.isEmpty() ? "Thermal camera" : all.get(which).model, 40));
+                    }).setNegativeButton("Cancel", null).show();
+                    result.setText("");
+                });
+            });
+        });
         button(body, "Test", () -> {
+            if (type.getSelectedItemPosition() == 1) {
+                String host = address.getText().toString().trim(), problem = ExtraCameras.thermalProblem(host);
+                if (!problem.isEmpty()) { result.setText(problem); result.setTextColor(ERROR); return; }
+                result.setText("Asking the camera… (it can take a few seconds while it starts sending pictures)"); result.setTextColor(MUTED);
+                ThermalCamera.test(host, 12_000, (model, picture, why) -> main.post(() -> {
+                    if (isDestroyed()) return;
+                    if (picture == null) { result.setText("Not working: " + why + "."); result.setTextColor(ERROR); preview.setVisibility(View.GONE); return; }
+                    tested[0] = true;
+                    ThermalImage.Stats st = picture.stats();
+                    result.setText("Works: " + (model.isEmpty() ? "a thermal camera" : model) + ", " + picture.width + "×" + picture.height
+                        + (st.temperatures ? ", centre " + picture.words(st, st.centre) + ", hottest " + picture.words(st, st.hottest) + "." : ", but it sends no temperatures, so the picture is shown without them."));
+                    result.setTextColor(TEAL); preview.setImageBitmap(ThermalPicture.bitmap(picture, turn.getSelectedItemPosition() * 90, mirror.isChecked())); preview.setVisibility(View.VISIBLE);
+                }));
+                return;
+            }
             String url = address.getText().toString().trim(), problem = ExtraCameras.problem(url);
             if (!problem.isEmpty()) { result.setText(problem); result.setTextColor(ERROR); return; }
             String pass = password.getText().toString().isEmpty() && existing != null ? ExtraCameras.password(this, camera) : password.getText().toString();
@@ -4004,16 +4056,18 @@ public final class MainActivity extends Activity {
             }).show());
         AlertDialog dialog = builder.create();
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            String url = address.getText().toString().trim(), problem = ExtraCameras.problem(url);
+            boolean thermal = type.getSelectedItemPosition() == 1;
+            String url = address.getText().toString().trim(), problem = thermal ? ExtraCameras.thermalProblem(url) : ExtraCameras.problem(url);
             if (!problem.isEmpty()) { result.setText(problem); result.setTextColor(ERROR); return; }
-            if (!tested[0]) {   // not tested: guess from the address (a snapshot address usually says so)
+            if (thermal) kind[0] = ExtraCameras.THERMAL;
+            else if (!tested[0] || ExtraCameras.THERMAL.equals(camera.kind)) {   // not tested: guess from the address (a snapshot address usually says so)
                 String lower = url.toLowerCase(Locale.ROOT);
                 kind[0] = lower.contains("snapshot") || lower.contains("snap") || lower.contains("frame.jp") || lower.endsWith(".jpg") || lower.endsWith(".jpeg") ? ExtraCameras.SNAPSHOT : ExtraCameras.STREAM;
             }
             camera.name = Automation.cap(name.getText().toString().trim().isEmpty() ? "Camera" : name.getText().toString().trim(), 40);
-            camera.user = user.getText().toString().trim(); camera.kind = kind[0]; camera.rotation = turn.getSelectedItemPosition() * 90; camera.mirror = mirror.isChecked();
+            camera.user = thermal ? "" : user.getText().toString().trim(); camera.kind = kind[0]; camera.rotation = turn.getSelectedItemPosition() * 90; camera.mirror = mirror.isChecked();
             camera.pictures = pictures.isChecked();
-            try { ExtraCameras.setSecrets(this, camera, url, password.getText().toString().isEmpty() && existing != null ? null : password.getText().toString()); }
+            try { ExtraCameras.setSecrets(this, camera, url, thermal ? "" : password.getText().toString().isEmpty() && existing != null ? null : password.getText().toString()); }
             catch (Exception failed) { result.setText("Could not keep the address safely on this phone."); result.setTextColor(ERROR); return; }
             List<ExtraCameras.Camera> all = ExtraCameras.list(this);
             if (camera.pictures) for (ExtraCameras.Camera c : all) c.pictures = false;   // one camera takes the pictures

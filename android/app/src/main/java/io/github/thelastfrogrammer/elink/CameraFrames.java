@@ -21,6 +21,14 @@ final class CameraFrames implements AutoCloseable {
     private volatile boolean closed;
     private volatile HttpURLConnection connection;
 
+    /** Frames handed in by another source (a thermal camera): push() each JPEG, fail() once; the stop runs on close. */
+    private Listener pushedTo; private volatile Runnable stop;
+    static CameraFrames pushed(Listener listener) { return new CameraFrames(listener); }
+    private CameraFrames(Listener listener) { thread = null; pushedTo = listener; }
+    void push(byte[] jpeg) { if (closed || jpeg == null) return; latest = jpeg; if (announced.compareAndSet(false, true)) pushedTo.frame(); }
+    void fail(String why) { if (!closed) pushedTo.error(why); }
+    void onClose(Runnable r) { stop = r; if (closed) r.run(); }
+
     CameraFrames(String url, PrinterHttp.ConnectionFactory factory, Listener listener) { this(url, factory, listener, 0); }
     /** A camera that serves one JPEG per request: asked every `everyMs`; three failures in a row end it. */
     static CameraFrames snapshots(String url, PrinterHttp.ConnectionFactory factory, long everyMs, Listener listener) { return new CameraFrames(url, factory, listener, Math.max(200, everyMs)); }
@@ -77,5 +85,9 @@ final class CameraFrames implements AutoCloseable {
     byte[] latest() { return latest; }
     byte[] take() { byte[] frame = latest; announced.set(false); return frame; }
 
-    @Override public void close() { closed = true; HttpURLConnection stream = connection; if (stream != null) stream.disconnect(); thread.interrupt(); }
+    @Override public void close() {
+        closed = true; HttpURLConnection stream = connection; if (stream != null) stream.disconnect();
+        if (thread != null) thread.interrupt();
+        Runnable r = stop; stop = null; if (r != null) r.run();
+    }
 }

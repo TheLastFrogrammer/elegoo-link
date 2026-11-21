@@ -2361,9 +2361,12 @@ public final class PrinterService extends Service {
             try {
                 boolean live = ready() && route != null || localCamera();
                 out.put(new JSONObject().put("id", "printer").put("name", "Printer camera").put("live", live).put("source", live ? "camera" : "pictures").put("rotation", 0).put("mirror", false));
-                for (ExtraCameras.Camera c : ExtraCameras.list(PrinterService.this))
+                for (ExtraCameras.Camera c : ExtraCameras.list(PrinterService.this)) {
+                    // A thermal camera's pictures come already turned (its temperatures are drawn on them), so clients turn nothing.
+                    boolean thermal = ExtraCameras.THERMAL.equals(c.kind);
                     out.put(new JSONObject().put("id", "added-" + c.id).put("name", c.name).put("live", true).put("source", ExtraCameras.SNAPSHOT.equals(c.kind) ? "snapshots" : "camera")
-                        .put("rotation", c.rotation).put("mirror", c.mirror));
+                        .put("rotation", thermal ? 0 : c.rotation).put("mirror", !thermal && c.mirror).put("thermal", thermal));
+                }
             } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
             return out;
         }
@@ -2377,6 +2380,10 @@ public final class PrinterService extends Service {
                 }
                 if (id.startsWith("added-")) {
                     ExtraCameras.Camera c = ExtraCameras.find(PrinterService.this, id.substring(6)); if (c == null) return null;
+                    if (ExtraCameras.THERMAL.equals(c.kind)) {
+                        ThermalCamera.Handle h = ExtraCameras.thermalJpegs(PrinterService.this, c, 500, sink::frame, sink::failed);
+                        return h::close;
+                    }
                     String url = ExtraCameras.url(PrinterService.this, c); if (url.isEmpty() || !ExtraCameras.problem(url).isEmpty()) return null;
                     PrinterHttp.ConnectionFactory factory = ExtraCameras.connections(c.user, ExtraCameras.password(PrinterService.this, c));
                     return ExtraCameras.SNAPSHOT.equals(c.kind) ? CameraHub.snapshots(url, factory, 1_000, sink) : CameraHub.mjpeg(url, factory, sink);
