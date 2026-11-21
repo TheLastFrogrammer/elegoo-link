@@ -57,7 +57,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 168 × 59: the CANVAS and cover's outline raised by the riser, filled in, inside the hood's wall; sparse infill |
+| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 168 × 59, a 3 mm shell open at the bottom (290 cm³): the CANVAS and cover's outline raised by the riser |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -102,8 +102,10 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
   - The filler is that outline raised and filled in. Its face toward the hood's inside is the cover's and CANVAS's own
     inner profile, raised. It fills down to the riser's top and the real cover, and stops flush with the hood's wall
     (nothing sticks out). Both the front and side outlines come from the community model.
-  - It drops over the real cover from above, 0.5 mm clear all round, and rests on it.
-  - Print with sparse infill.
+  - It's a 3 mm shell of those faces, open at the bottom (290 cm³ rather than 1.9 l). Its inner wall lands on the cover's top
+    edge, the wall flush with the hood on the cover's slanted face, and the front and back walls on the riser's top: with the
+    cover below, that closes it. `images/filler-sections.png` shows it cut through (purple) over the CANVAS and cover (red).
+  - It drops over the real cover from above, 0.5 mm clear all round.
 - **Measure before printing.**
   - The CANVAS's and cover's outlines come from the community model, which agrees with Elegoo's 168 × 68 × 95 mm and a
     printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `COVER_OUTLINE`, `COVER_TOP`).

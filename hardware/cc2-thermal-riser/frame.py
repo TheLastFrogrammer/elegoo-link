@@ -277,13 +277,16 @@ def sweep_up(shape, dz):
         out = out.fuse(cq.Shape.cast(BRepPrimAPI_MakePrism(f.wrapped, gp_Vec(0, 0, dz)).Shape()))
     return out.fuse(shape.translate(cq.Vector(0, 0, dz))).clean()
 
+FILLER_SKIN = 3.0                  # the filler's wall: it is a shell of its outer faces, open at the bottom (mm)
+
 def notch_filler():
     """Fills what lifting the hood opens round the CANVAS. The hood moves straight up, so where it met the CANVAS and
     its cover it now meets their outline raised by the riser's height; they stay put below. The filler is that outline
     raised and filled in: seen from the front (across, height) the stack's outline raised by the riser's height and
     filled down to the real one, the same seen from the side (front to back, height), keeping what both views share,
     inside the hood's wall (no further out than its outer face), from the hood's bottom edge up, less the real cover
-    with 0.5 mm to spare all round (it drops over the cover and rests on it). From the community model's CANVAS and
+    with 0.5 mm to spare all round (it drops over the cover and rests on it). It is a shell of
+    FILLER_SKIN, open at the bottom: its edges rest on the riser's top and on the cover. From the community model's CANVAS and
     cover; without them it falls back to the notch outline."""
     if not (os.path.exists(CANVAS_MESH) and os.path.exists(COVER_STEP)): return notch_filler_outline()
     import trimesh
@@ -291,11 +294,17 @@ def notch_filler():
     def prism(poly, plane):
         pts = list(poly.exterior.coords)[:-1]
         return cq.Workplane(plane).polyline(pts).close().extrude(300, both=True).val()
-    front = prism(swept_up(silhouette(mesh, [0, 2]), H), "XZ")    # across (x) and height, deep in y
-    side = prism(swept_up(silhouette(mesh, [1, 2]), H), "YZ")     # front to back (y) and height, deep in x
-    inside = cq.Workplane("XY").box(1000, 1000, 1000, centered=False).translate((FX - 1000, -500, TOP + 0.3)).val()
+    from shapely.affinity import translate
+    fpoly, spoly = swept_up(silhouette(mesh, [0, 2]), H), swept_up(silhouette(mesh, [1, 2]), H)
+    def hollow(poly):   # FILLER_SKIN in from every edge, carried on down past the bottom so the shell is open there
+        g = poly.buffer(-FILLER_SKIN, join_style=2)
+        g = g if g.geom_type == "Polygon" else max(g.geoms, key=lambda x: x.area)
+        return swept_up(translate(g, 0, -300), 300)
+    box = lambda x1, z0: cq.Workplane("XY").box(1000, 1000, 1000, centered=False).translate((x1 - 1000, -500, z0)).val()
+    solid = prism(fpoly, "XZ").intersect(prism(spoly, "YZ")).intersect(box(FX, TOP + 0.3))
+    cavity = prism(hollow(fpoly), "XZ").intersect(prism(hollow(spoly), "YZ")).intersect(box(FX - FILLER_SKIN, TOP - 50))
     cover = cq.importers.importStep(COVER_STEP).val()
-    filler = front.intersect(side).intersect(inside).cut(cover)
+    filler = solid.cut(cavity).cut(cover)
     for d in ((0.5, 0, 0), (-0.5, 0, 0), (0, 0.5, 0), (0, -0.5, 0), (0, 0, 0.5)):   # 0.5 mm clear of the cover all round
         filler = filler.cut(cover.translate(cq.Vector(*d)))
     solids = [x for x in filler.clean().Solids() if x.Volume() > 50]   # drop slivers
