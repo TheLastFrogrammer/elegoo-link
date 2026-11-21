@@ -28,13 +28,19 @@ LENS = float(sys.argv[1]) if len(sys.argv) > 1 else 100.0
 FX, FY, WALL = R.FRAME_X, R.FRAME_Y, R.WALL
 LEDGE, LIP_TOP, TOP_DEPTH, TOP_LIP, LIP_T = R.LEDGE, R.LIP_TOP, R.TOP_DEPTH, R.TOP_LIP, R.LIP_T
 PLUG_IN = LIP_T + 1.0              # the plug starts this far in from the outer face (1 mm inside the frame's lip)
-POST_X, POST_Y = 60.0, 63.0        # how far each post reaches along the front/back and the sides: every rail is then 280 mm (310 with its tenons)
+POST_X, POST_Y = 65.0, 68.0        # how far each post reaches along the front/back and the sides: every rail is then 270 mm (290 with its tenons)
 BOTTOM_H = 20.0                    # the bottom rail's height above the frame's lip
 TOP_H = 60.0                       # the top rail's height, down from the riser's top
 PANEL_T, GROOVE_W, GROOVE_D = 3.0, 3.6, 6.0
 GROOVE_V = 5.25                    # the groove's centre, in from the outer face: the panel clears the top lip, so it drops in from above
-TENON_T, TENON_L, FIT = 5.0, 15.0, 0.3
-SAF_MAX = 315.0                    # SAF's longest build dimension (Stratasys H350: 315 × 208 × 293 mm)
+TENON_T, TENON_L = 5.0, 10.0
+# Fits. Parts are exported at their true size (mm): the SAF printer's own shrinkage compensation scales them, so these are
+# real clearances, sized for SAF's accuracy (about ±0.3 mm), not allowances for shrinkage.
+FIT = 0.3                          # each side of a tenon in its mortise (0.6 mm in all): a sliding fit, the bolt sets the position
+# Groove: GROOVE_W = 3.6 for 3.0 mm sheet, allowing the sheet's own tolerance (±0.2 mm) and SAF's.
+SAF_VOLUME = (315.0, 208.0, 293.0) # Stratasys H350 build volume (mm)
+SAF_SCALE = 1.035                  # the printer enlarges parts by its shrinkage compensation before building; every SAF part must
+                                   # still fit when enlarged by this much (set it to your machine's factor)
 
 # The riser's height comes from the camera pod, as in riser.py.
 pod_shape, cutout, camera, pod_top, pod_holes, (fz0, fz1) = R.pod(LENS)
@@ -194,6 +200,16 @@ def plate_body(side, u, length, v0):
     return p.cut(cq.Workplane("XY").cylinder(20, 3.3, direct=d).translate((hx, hy, z - 25)))
 
 # ------------------------------------------------------------------ build
+# One colour per kind of part (a colour-blind-safe palette), used in the assembly STEP and by render_frame.py.
+COLOURS = {
+    "post": (0.90, 0.62, 0.00), "rail-bottom": (0.00, 0.45, 0.70), "rail-top": (0.34, 0.71, 0.91), "rail-top-left": (0.00, 0.62, 0.45),
+    "camera-pod": (0.84, 0.37, 0.00), "panel-polycarbonate": (0.75, 0.90, 1.00), "panel-camera": (0.80, 0.47, 0.65),
+    "panel-fan": (0.94, 0.89, 0.26), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13)}
+def kind_of(name):
+    for k in ("rail-top-left", "rail-bottom", "rail-top", "post", "camera-pod", "led-holder", "mounting-plate"):
+        if name.startswith(k): return k
+    return name
+
 def build(out):
     parts = {"saf": {}, "fdm": {}}
     for corner, name in (((-1, -1), "post-A"), ((1, 1), "post-A (second, turned)"), ((1, -1), "post-B"), ((-1, 1), "post-B (second, turned)")):
@@ -217,13 +233,20 @@ def build(out):
     parts["fdm"]["mounting-plate"] = hook_module("left", 100, 40, plate_body)
     # The assembly in place.
     assy = cq.Assembly(name="cc2-modular-hood-riser")
-    for k, v in parts["saf"].items(): assy.add(v, name=k, color=cq.Color(0.55, 0.55, 0.58))
-    assy.add(panels["front"], name="polycarbonate front", color=cq.Color(0.7, 0.85, 1.0, 0.35))
-    assy.add(panels["right"], name="polycarbonate right", color=cq.Color(0.7, 0.85, 1.0, 0.35))
-    assy.add(panels["back"], name="fan panel (back)", color=cq.Color(0.25, 0.25, 0.28))
-    assy.add(panels["left"], name="camera panel (left)", color=cq.Color(0.25, 0.25, 0.28))
-    for k in ("led-holder", "mounting-plate"): assy.add(parts["fdm"][k], name=k, color=cq.Color(0.2, 0.6, 0.9))
-    assy.add(camera, name="FLIR A65 envelope (not printed)", color=cq.Color(0.1, 0.1, 0.1, 0.6))
+    placed = {}   # every part in place, by kind, for the renders
+    for k, v in parts["saf"].items(): placed[k] = (kind_of(k), v)
+    placed["polycarbonate front"] = ("panel-polycarbonate", panels["front"]); placed["polycarbonate right"] = ("panel-polycarbonate", panels["right"])
+    placed["fan panel (back)"] = ("panel-fan", panels["back"]); placed["camera panel (left)"] = ("panel-camera", panels["left"])
+    for k in ("led-holder", "mounting-plate"): placed[k] = (k, parts["fdm"][k])
+    placed["FLIR A65 envelope (not printed)"] = ("camera", camera)
+    for k, (kd, v) in placed.items():
+        a = 0.35 if kd == "panel-polycarbonate" else 0.7 if kd == "camera" else 1.0
+        assy.add(v, name=k, color=cq.Color(*COLOURS[kd], a))
+    d = os.path.join(HERE, "build", "parts"); os.makedirs(d, exist_ok=True)
+    index = []
+    for i, (k, (kd, v)) in enumerate(placed.items()):
+        f = os.path.join(d, f"{i:02d}.stl"); cq.exporters.export(v, f, tolerance=0.15, angularTolerance=0.25); index.append({"name": k, "kind": kd, "file": f})
+    json.dump({"parts": index, "colours": COLOURS}, open(os.path.join(d, "index.json"), "w"), indent=1)
     os.makedirs(out, exist_ok=True)
     assy.save(os.path.join(out, "frame-assembly.step"))
     sizes = {}
@@ -238,6 +261,11 @@ def build(out):
             cq.exporters.export(s, os.path.join(d, fname + ".stl"), tolerance=0.05, angularTolerance=0.1)
             cq.exporters.export(s, os.path.join(d, fname + ".step"))
             sizes[fname] = sorted([round(bb.xlen, 1), round(bb.ylen, 1), round(bb.zlen, 1)], reverse=True)
+    # Every SAF part must fit the build volume after the printer's shrinkage compensation enlarges it.
+    vol = sorted(SAF_VOLUME, reverse=True)
+    for k, v in parts["saf"].items():
+        bb = v.val().BoundingBox(); dims = sorted((bb.xlen * SAF_SCALE, bb.ylen * SAF_SCALE, bb.zlen * SAF_SCALE), reverse=True)
+        if any(d > m for d, m in zip(dims, vol)): raise SystemExit(f"{k} is {dims[0]:.0f} × {dims[1]:.0f} × {dims[2]:.0f} mm once compensated: too big for SAF")
     u0, u1 = panel_extent("front"); w = round(u1 - u0, 1); h = round(PANEL_Z[1] - PANEL_Z[0], 1)
     u0s, u1s = panel_extent("left"); ws = round(u1s - u0s, 1)
     with open(os.path.join(out, "panels.txt"), "w") as f:

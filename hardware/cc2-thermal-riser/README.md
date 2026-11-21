@@ -12,11 +12,12 @@ placed by a study of what the camera can see of the bed as the printer moves. Th
 
 ## The modular frame (recommended)
 
-![The frame on the CC2 model, and from above](images/frame.png)
+![The frame on the CC2 model, and from above, colour-coded](images/frame.png)
 
-*Left: the frame on the printer, with the camera pod on the left. Right: from above, with the LED holder on the right
-top rail, the mounting plate on the left one, and the fan opening in the back. The renderer draws the panels grey;
-they are clear polycarbonate.*
+![The frame taken apart, colour-coded](images/frame-exploded.png)
+
+*Each kind of part has its own colour, the same in `frame/frame-assembly.step`; the clear polycarbonate is drawn
+see-through, the printer in greys. `python render_frame.py` redraws these after a change.*
 
 **How it's split:**
 - **A frame of small SAF parts (PA11 or PA12)** carries the hood and fits the printer:
@@ -25,9 +26,14 @@ they are clear polycarbonate.*
   - 4 top rails. Their lip and ledge hold the hood's base ring.
   - The camera pod.
 
-  Every SAF part fits a Stratasys H350's 315 × 208 × 293 mm build: the rails are 310 × 60 × 16 mm, the posts
-  241 × 63 × 60 mm. The rails are thin enough to stand on edge in a build.
-- **Panels:** four identical **clear polycarbonate sheets, 291 × 137 × 3 mm**. They're held in grooves on all four
+  Every SAF part fits a Stratasys H350's 315 × 208 × 293 mm build **after the printer's shrinkage compensation
+  enlarges it** (allowed for at 3.5 %, `SAF_SCALE` in `frame.py`; `frame.py` stops if a part would not fit). The
+  rails are 290 × 60 × 16 mm (300 mm enlarged), the posts 241 × 68 × 65 mm. The rails are thin enough to stand on
+  edge in a build.
+- **Sizes are true sizes.** Every part is exported at its real size in millimetres, unscaled: leave the shrinkage
+  compensation to the printer. The fits are real clearances for SAF's accuracy (about ±0.3 mm): 0.3 mm on each side of
+  a tenon, and a 3.6 mm groove for 3 mm sheet.
+- **Panels:** four identical **clear polycarbonate sheets, 281 × 137 × 3 mm**. They're held in grooves on all four
   edges: no holes, just cut square. Any side can take a printed **module panel** instead.
 - **The hook rail:** a strip along the inside of every top rail. **Modules** hang anywhere along it, below the hood's
   base ring.
@@ -35,13 +41,13 @@ they are clear polycarbonate.*
 
 | Part | Make | Copies | Size (mm) |
 |---|---|---|---|
-| `frame/saf/post-A-x2` | SAF | 2 (front-left, back-right) | 241 × 63 × 60 |
-| `frame/saf/post-B-x2` | SAF | 2 (front-right, back-left) | 241 × 63 × 60 |
-| `frame/saf/rail-bottom-x4` | SAF | 4 | 310 × 55 × 10 |
-| `frame/saf/rail-top-x3` | SAF | 3 (front, back, right) | 310 × 60 × 16 |
+| `frame/saf/post-A-x2` | SAF | 2 (front-left, back-right) | 241 × 68 × 65 |
+| `frame/saf/post-B-x2` | SAF | 2 (front-right, back-left) | 241 × 68 × 65 |
+| `frame/saf/rail-bottom-x4` | SAF | 4 | 290 × 55 × 10 |
+| `frame/saf/rail-top-x3` | SAF | 3 (front, back, right) | 290 × 60 × 16 |
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
-| Polycarbonate 3 mm | Cut sheet | Up to 4 | 291 × 137 (`frame/panels.txt`) |
+| Polycarbonate 3 mm | Cut sheet | Up to 4 | 281 × 137 (`frame/panels.txt`) |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-fan-80` | FDM | Optional (back) | 80 mm fan, 71.5 mm hole spacing |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
@@ -147,6 +153,7 @@ python riser.py . 100                            # lens height above the hood ri
 ./fetch_model.sh                                 # the CC2 model (OpenCentauri, GPL-3.0, downloaded into build/, ~2 min)
 python frame.py 100                              # the modular frame: frame/saf, frame/fdm, frame/panels.txt, the assembly STEP
 python frame_check.py                            # overlaps, closed solids, clearances of the frame's parts
+python render_frame.py                           # colour-coded pictures: images/frame.png, images/frame-exploded.png
 python verify.py 100                             # clearances, coverage, images/camera-views.png
 python overview.py                               # images/riser-and-pod.png
 ```
