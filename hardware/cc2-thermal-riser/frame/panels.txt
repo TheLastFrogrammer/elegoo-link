@@ -1,4 +1,4 @@
 Polycarbonate sheet, 3 mm thick (any side without a module panel):
-  front and back: 281.0 x 137.0 mm
-  left and right: 281.0 x 137.0 mm
+  front and back: 281.0 x 123.0 mm
+  left and right: 281.0 x 123.0 mm
 Cut square, edges deburred; no holes. They slide into the grooves before the top rails go on.

@@ -7,7 +7,7 @@ HERE = os.path.dirname(os.path.abspath(__file__)); B = os.path.join(HERE, "build
 index = json.load(open(os.path.join(B, "parts", "index.json"))); C = index["colours"]
 LABELS = {"post": "Corner post (SAF)", "rail-bottom": "Bottom rail (SAF)", "rail-top": "Top rail with hook strip (SAF)",
           "rail-top-left": "Left top rail, round the pod (SAF)", "camera-pod": "Camera pod (SAF)", "panel-polycarbonate": "Clear polycarbonate panel",
-          "panel-camera": "Camera panel (FDM)", "panel-fan": "Fan panel, 80 mm (FDM)", "led-holder": "LED holder (FDM)",
+          "panel-camera": "Camera panel (FDM)", "zip-anchor": "Zip-tie anchor (FDM)", "led-holder": "LED holder (FDM)",
           "mounting-plate": "Mounting plate (FDM)", "camera": "FLIR A65 (not printed)", "printer": "The printer"}
 GREYS = {"static": (0.62, 0.62, 0.62), "bed": (0.42, 0.42, 0.45), "gantry": (0.75, 0.75, 0.75), "head": (0.5, 0.5, 0.52)}
 
@@ -23,7 +23,7 @@ def scene(explode=False, printer=True):
             elif k == "rail-bottom": m.apply_translation(out * 40 + [0, 0, -40])
             elif k.startswith("panel"): m.apply_translation(out * 150 + [0, 0, 45])
             elif k in ("camera-pod", "camera"): m.apply_translation(out * 280 + [0, 0, 45])
-            elif k in ("led-holder", "mounting-plate"): m.apply_translation(-out * 90 + [0, 0, 190])
+            elif k in ("led-holder", "mounting-plate", "zip-anchor"): m.apply_translation(-out * 90 + [0, 0, 190])
         (clear if p["kind"] == "panel-polycarbonate" else solid).append((m, C[p["kind"]]))
     if printer:
         for g, col in GREYS.items():
@@ -73,8 +73,8 @@ def sheet(images, kinds, path):
     for i in images: out.paste(i, (x, 0)); x += i.width + 10
     out.paste(lg, (0, top)); out.save(path); print("wrote", os.path.relpath(path, HERE))
 
-kinds = ["post", "rail-bottom", "rail-top", "rail-top-left", "camera-pod", "panel-polycarbonate", "panel-camera", "panel-fan",
-         "led-holder", "mounting-plate", "camera", "printer"]
+kinds = ["post", "rail-bottom", "rail-top", "rail-top-left", "camera-pod", "panel-polycarbonate", "panel-camera",
+         "led-holder", "mounting-plate", "zip-anchor", "camera", "printer"]
 assembled = scene()
 a = render(assembled, (-950, -760, 1000), (-40, 0, 470))
 b = render(assembled, (60, 60, 1200), (0, 0, 520), fov=46)

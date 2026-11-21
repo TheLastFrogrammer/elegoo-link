@@ -23,7 +23,8 @@ dx = cfg["bed"]["x0"] - cfg["head_home"][0]
 gap = band[:, 0].min() + dx - pb[1][0] if len(band) else float("inf")
 print(f"pod: x {pb[0][0]:.1f} to {pb[1][0]:.1f}, z {pb[0][2]:.1f} to {pb[1][2]:.1f}")
 print(f"clearance to the head's tall parts at its leftmost travel: {gap:.1f} mm" + ("" if gap > 5 else "  <-- TOO CLOSE"))
-cfg["meshes"]["static"] = cfg["meshes"]["static"] + [str(build / "riser-in-place.stl"), str(build / "pod-in-place.stl")]
+modules = [str(m) for m in build.glob("*-in-place.stl") if m.name.split("-in-place")[0] in ("led-holder-front", "led-holder-back", "mounting-plate", "zip-anchor", "led-holder")]
+cfg["meshes"]["static"] = cfg["meshes"]["static"] + [str(build / "riser-in-place.stl"), str(build / "pod-in-place.stl")] + modules
 printer, cam = P.Printer(cfg), P.Camera(cfg["camera"])
 states = [(d, tuple(h)) for d in cfg["travel_z"] for h in cfg["head_positions"]]
 scenes = []

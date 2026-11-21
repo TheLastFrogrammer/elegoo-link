@@ -33,26 +33,30 @@ see-through, the printer in greys. `python render_frame.py` redraws these after 
 - **Sizes are true sizes.** Every part is exported at its real size in millimetres, unscaled: leave the shrinkage
   compensation to the printer. The fits are real clearances for SAF's accuracy (about ±0.3 mm): 0.3 mm on each side of
   a tenon, and a 3.6 mm groove for 3 mm sheet.
-- **Panels:** four identical **clear polycarbonate sheets, 281 × 137 × 3 mm**. They're held in grooves on all four
+- **Panels:** four identical **clear polycarbonate sheets, 281 × 123 × 3 mm**. They're held in grooves on all four
   edges: no holes, just cut square. Any side can take a printed **module panel** instead.
+- **The outline follows the printer's.** The CC2's top frame has chamfered corners (about 21 mm on each face, blended
+  with 5 mm radii; `CORNER_CHAMFER` and `CORNER_RADIUS` in `frame.py`). The posts follow it, outside and in.
 - **The hook rail:** a strip along the inside of every top rail. **Modules** hang anywhere along it, below the hood's
   base ring.
-- **Wiring:** wire channels run up the corner posts, from the hook rail down to the outside at the bottom.
+- **Wiring:** a **cable trough** is recessed along every top rail, under the hook strip. Its lipped mouth holds a flat
+  two-core cable pressed in. The trough runs through each post into a wire channel down the post's core, which comes
+  out at the bottom on the outside. One power feed at any corner reaches every module.
 
 | Part | Make | Copies | Size (mm) |
 |---|---|---|---|
 | `frame/saf/post-A-x2` | SAF | 2 (front-left, back-right) | 241 × 68 × 65 |
 | `frame/saf/post-B-x2` | SAF | 2 (front-right, back-left) | 241 × 68 × 65 |
 | `frame/saf/rail-bottom-x4` | SAF | 4 | 290 × 55 × 10 |
-| `frame/saf/rail-top-x3` | SAF | 3 (front, back, right) | 290 × 60 × 16 |
+| `frame/saf/rail-top-x3` | SAF | 3 (front, back, right) | 290 × 74 × 16 |
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
-| Polycarbonate 3 mm | Cut sheet | Up to 4 | 281 × 137 (`frame/panels.txt`) |
+| Polycarbonate 3 mm | Cut sheet | Up to 4 | 281 × 123 (`frame/panels.txt`) |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
-| `frame/fdm/panel-fan-80` | FDM | Optional (back) | 80 mm fan, 71.5 mm hole spacing |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
-| `frame/fdm/led-holder` | FDM | Any number | Holds a 17 × 8 mm aluminium LED channel, angled 35° down and in |
+| `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
 | `frame/fdm/mounting-plate` | FDM | Any number | M3 grid and a ¼"-20 hole: an ordinary camera, a sensor |
+| `frame/fdm/zip-anchor` | FDM | Any number | Two zip-tie slots: a lever connector or a cable splice |
 
 **Hardware:**
 - 16 × M3 bolts and nuts: one per tenon. They go through the post's outer face.
@@ -71,11 +75,24 @@ see-through, the printer in greys. `python render_frame.py` redraws these after 
 - No two parts overlap once assembled.
 - Every part is a closed solid.
 - The modules and the pod stay 4.7 mm or more under the raised hood ring.
-- The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate at their height.
-- The camera sees 55 % of the bed at the start of a print and 77 % on average, as with the one-piece walls.
+- The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate. Nothing on the head reaches the
+  LED holders' height.
+- The camera sees 55 % of the bed at the start of a print and 77 % on average, with the LED holders and modules in
+  place: the same as the one-piece walls.
 
-**Changing it:** `python frame.py [lens height]` rebuilds every part. New modules are a hook and a body
-(`hook_module` and a `*_body` function in `frame.py`). New panels start from `module_panel`.
+**Lighting:**
+- **Strip:** COB LED strip, 24 V or 12 V, in standard 17 × 7 mm aluminium channel with a diffuser, cut to 230 mm.
+  - It slides into an LED holder from the end; clips every 60 mm keep it there.
+  - The holder hangs anywhere on a top rail and points the light 40° down at the bed (`LED_ANGLE`).
+  - Check your channel's size against `LED_PROFILE`.
+- **Wiring:** each holder's cable presses into the cable trough behind it and runs to the nearest post, down its
+  channel and out at the bottom.
+  - Join the holders' cables in a lever connector held by a zip-tie anchor, and bring one feed in at a corner.
+  - Use a separate power supply rather than the printer's.
+- **The thermal camera:** from its position it sees none of the top rails, so warm LEDs stay out of its picture.
+
+**Changing it:** `python frame.py [lens height]` rebuilds every part. New modules are the `hook()` plus a body in local
+coordinates, placed with `place()` (see `led_holder`, `mounting_plate`, `zip_anchor` in `frame.py`). New panels start from `module_panel`.
 
 ## The one-piece walls (FDM-only alternative)
 
