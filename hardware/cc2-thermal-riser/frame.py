@@ -296,6 +296,17 @@ def notch_filler():
         return cq.Workplane(plane).polyline(pts).close().extrude(300, both=True).val()
     from shapely.affinity import translate
     fpoly, spoly = swept_up(silhouette(mesh, [0, 2]), H), swept_up(silhouette(mesh, [1, 2]), H)
+    # Only the inner profile mates with the hood's body: past a straight diagonal from its top down to where the cover
+    # crosses the hood's wall, nothing is needed, so the filler stops there (less to print, and it prints on that face).
+    from shapely.geometry import Polygon, LineString
+    fpoly = fpoly.intersection(Polygon([(-1000, TOP), (FX, TOP), (FX, 2000), (-1000, 2000)]))
+    zt = fpoly.bounds[3]
+    xt = min(x for x, z in fpoly.exterior.coords if z > zt - 1)                           # the inner profile's top
+    hits = LineString([(FX, TOP - 100), (FX, TOP + 300)]).intersection(silhouette(mesh, [0, 2]))
+    zc = max(TOP, hits.bounds[3] + 0.5)                                                   # where the cover crosses the wall
+    keep = Polygon([(-1000, TOP - 100), (FX + 1, TOP - 100), (FX + 1, zc), (xt, zt), (xt, zt + 100), (-1000, zt + 100)])
+    fpoly = fpoly.intersection(keep)
+    fpoly = fpoly if fpoly.geom_type == "Polygon" else max(fpoly.geoms, key=lambda g: g.area)
     def hollow(poly):   # FILLER_SKIN in from every edge, carried on down past the bottom so the shell is open there
         g = poly.buffer(-FILLER_SKIN, join_style=2)
         g = g if g.geom_type == "Polygon" else max(g.geoms, key=lambda x: x.area)
@@ -307,8 +318,7 @@ def notch_filler():
     filler = solid.cut(cavity).cut(cover)
     for d in ((0.5, 0, 0), (-0.5, 0, 0), (0, 0.5, 0), (0, -0.5, 0), (0, 0, 0.5)):   # 0.5 mm clear of the cover all round
         filler = filler.cut(cover.translate(cq.Vector(*d)))
-    solids = [x for x in filler.clean().Solids() if x.Volume() > 50]   # drop slivers
-    return cq.Workplane("XY").add(solids[0] if len(solids) == 1 else cq.Compound.makeCompound(solids))
+    return cq.Workplane("XY").add(max(filler.clean().Solids(), key=lambda x: x.Volume()))   # one piece: drop scraps
 
 def notch_filler_outline():
     """Fills what lifting the hood opens in its notch. The hood's notch (the CANVAS's and cover's outline, open at the
