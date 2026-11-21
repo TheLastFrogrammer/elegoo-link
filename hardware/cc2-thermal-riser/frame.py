@@ -267,10 +267,6 @@ def swept_up(poly, dz):
     g = unary_union([poly, translate(poly, 0, dz)] + [q for q in quads if q.area > 1e-6])
     return Polygon(g.exterior) if g.geom_type == "Polygon" else Polygon(max(g.geoms, key=lambda x: x.area).exterior)
 
-FILLER_SADDLE = 6.0                # the filler's thickness over the cover, where it rests on it (mm)
-FILLER_SADDLE_REACH = 12.0         # how far the saddle reaches either side of the hood's wall (mm)
-FILLER_LIP = (6.0, 3.0, 2.0)       # the lip behind the wall: past the notch's edge, overlap with the panel, thickness (mm)
-
 def sweep_up(shape, dz):
     """A solid swept straight up by dz: every non-vertical face extruded up, joined with the shape at both ends."""
     from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
@@ -282,38 +278,24 @@ def sweep_up(shape, dz):
     return out.fuse(shape.translate(cq.Vector(0, 0, dz))).clean()
 
 def notch_filler():
-    """Fills what lifting the hood opens in its notch: a flat panel in the hood's wall, the only part shaped to the
-    CANVAS's cover being where it rests on it.
-      - The notch: a cut-out in the hood's flat right wall that the cover's side walls close, so its outline is the
-        CANVAS and cover seen from the side (from the model), raised by the riser's height; open at the bottom edge.
-      - The panel: that outline swept down to the real stack and filled, in the wall's thickness, flush with the wall,
-        less the real cover with 0.5 mm to spare: its bottom edge follows the cover's surface.
-      - The saddle: where the panel meets the cover, the cover's own top surface FILLER_SADDLE thick, FILLER_SADDLE_REACH
-        either side of the wall, so it rests on the cover rather than on an edge.
-      - The lip: a flat strip inside the hood round the notch's edge, to hold the panel in the notch.
-    Without the model's CANVAS it falls back to the notch outline."""
+    """Fills what lifting the hood opens round the CANVAS. The hood moves straight up, so where it met the CANVAS and
+    its cover it now meets their outline raised by the riser's height; they stay put below. The filler is that outline
+    raised and filled in: seen from the front (across, height) the stack's outline raised by the riser's height and
+    filled down to the real one, the same seen from the side (front to back, height), keeping what both views share,
+    inside the hood's wall (no further out than its outer face), from the hood's bottom edge up, less the real cover
+    with 0.5 mm to spare all round (it drops over the cover and rests on it). From the community model's CANVAS and
+    cover; without them it falls back to the notch outline."""
     if not (os.path.exists(CANVAS_MESH) and os.path.exists(COVER_STEP)): return notch_filler_outline()
     import trimesh
-    from shapely.geometry import Polygon
     mesh = trimesh.load(CANVAS_MESH)
-    x0, x1 = FX - HOOD_WALL, FX                                          # the hood's wall
-    section = Polygon(silhouette(mesh, [1, 2]).exterior)                 # the notch: the stack seen from the side, holes filled
-    region = swept_up(section, H)
-    def prism(poly, xa, xb):
+    def prism(poly, plane):
         pts = list(poly.exterior.coords)[:-1]
-        return cq.Workplane("YZ").polyline(pts).close().extrude(xb - xa).translate((xa, 0, 0)).val()
+        return cq.Workplane(plane).polyline(pts).close().extrude(300, both=True).val()
+    front = prism(swept_up(silhouette(mesh, [0, 2]), H), "XZ")    # across (x) and height, deep in y
+    side = prism(swept_up(silhouette(mesh, [1, 2]), H), "YZ")     # front to back (y) and height, deep in x
+    inside = cq.Workplane("XY").box(1000, 1000, 1000, centered=False).translate((FX - 1000, -500, TOP + 0.3)).val()
     cover = cq.importers.importStep(COVER_STEP).val()
-    above = lambda z: cq.Workplane("XY").box(2000, 2000, 2000, centered=(True, True, False)).translate((0, 0, z)).val()
-    panel = prism(region, x0, x1)
-    saddle = sweep_up(cover, FILLER_SADDLE).intersect(prism(region, x0 - FILLER_SADDLE_REACH, x1 + FILLER_SADDLE_REACH))
-    out, over, t = FILLER_LIP
-    raised = Polygon([(y, z + H) for y, z in section.exterior.coords])  # the notch's own edge, raised
-    ring = raised.buffer(out, join_style=2).difference(raised.buffer(-over, join_style=2))
-    lips = ring.geoms if ring.geom_type == "MultiPolygon" else [ring]
-    filler = panel.fuse(saddle)
-    for g in lips:
-        if g.area > 1: filler = filler.fuse(prism(Polygon(g.exterior), x0 - t, x0).intersect(above(TOP + 3)))
-    filler = filler.intersect(above(TOP + 0.3)).cut(cover)
+    filler = front.intersect(side).intersect(inside).cut(cover)
     for d in ((0.5, 0, 0), (-0.5, 0, 0), (0, 0.5, 0), (0, -0.5, 0), (0, 0, 0.5)):   # 0.5 mm clear of the cover all round
         filler = filler.cut(cover.translate(cq.Vector(*d)))
     solids = [x for x in filler.clean().Solids() if x.Volume() > 50]   # drop slivers
