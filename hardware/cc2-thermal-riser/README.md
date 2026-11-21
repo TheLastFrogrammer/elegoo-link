@@ -1,5 +1,10 @@
 # CC2 lid riser with a FLIR A65 thermal camera
 
+> **Superseded: don't print this as it is.** The community model's lid is only the base ring. The real CC2 lid is a
+> smoked-plastic hood about 300 mm tall, with the CANVAS unit on its right side. That hood already gives the camera the
+> height this riser was made for. The placement study, the pod and the scripts still apply. The camera's mount is being
+> redone for the hood.
+
 A lid riser for the Elegoo Centauri Carbon 2, with a pod on its left wall for a FLIR A65 thermal camera (45° lens),
 placed by a study of what the camera can see of the bed as the printer moves. The app reads the camera over GigE Vision
 (Settings → Cameras → Add a camera → Thermal camera).
@@ -114,6 +119,7 @@ Its result (`placement/tradeoff.py`, for a camera anywhere on the wall line):
 | `tree_step.py` | Prints a STEP assembly's part tree |
 | `tradeoff.py`, `podcheck.py`, `recommend.py` | The tables and views above |
 | `synthetic.py`, `syn.json` | A box printer, to test the study without the model |
+| `further.py` | A smaller riser with the camera further out on an arm: it never beats a camera at the wall line |
 
 ## Credits
 
