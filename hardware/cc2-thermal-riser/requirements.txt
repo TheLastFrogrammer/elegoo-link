@@ -1,0 +1,7 @@
+# Python 3.10 or newer. On Linux the OCC libraries also want libGLU (apt install libglu1-mesa).
+cadquery==2.8.0
+cadquery-ocp      # the version cadquery 2.8 installs (7.9 here); 8.x works too
+trimesh
+embreex
+numpy
+pillow

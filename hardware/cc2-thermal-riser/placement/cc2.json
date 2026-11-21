@@ -1,0 +1,10 @@
+{"meshes": {"static": ["../build/cc2mesh/static.stl"], "bed": ["../build/cc2mesh/bed.stl"], "head": ["../build/cc2mesh/head.stl"], "gantry": ["../build/cc2mesh/gantry.stl"]},
+ "bed_offset": 169.1,
+ "bed": {"x0": -131.5, "y0": -146.0, "x1": 124.5, "y1": 110.5, "z": 293.6},
+ "head_home": [18.7, -20.7], "nozzle": [18.7, -20.7, 293.8],
+ "travel_z": [0, 100, 200],
+ "head_positions": [[-110, -125], [105, 90], [-3, -18], [105, -125], [-110, 90]],
+ "riser": {"x0": -195, "y0": -198, "x1": 195, "y1": 198, "z0": 450, "z1": 650},
+ "avoid": [[150, -90, 0, 260, 90, 9999]],
+ "inset": 15, "step": 40, "zstep": 25, "grid": 21,
+ "camera": {"hfov": 45, "vfov": 37, "w": 640, "h": 512, "body": [106, 40, 43]}}

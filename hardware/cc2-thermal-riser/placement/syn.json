@@ -1,0 +1,7 @@
+{"meshes": {"static": ["syn/static.stl"], "bed": ["syn/bed.stl"], "head": ["syn/head.stl"], "gantry": ["syn/gantry.stl"]},
+ "bed": {"x0": 0, "y0": 0, "x1": 256, "y1": 256, "z": 300},
+ "head_home": [128, 128], "nozzle": [128, 128, 310],
+ "travel_z": [0, 250], "head_positions": [[40, 40], [216, 216]],
+ "riser": {"x0": -50, "y0": -50, "x1": 306, "y1": 306, "z0": 560, "z1": 620},
+ "step": 60, "zstep": 30, "grid": 15,
+ "camera": {"hfov": 45, "vfov": 37, "w": 640, "h": 512}}
