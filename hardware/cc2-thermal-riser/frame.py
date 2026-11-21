@@ -60,7 +60,6 @@ pod_shape, cutout, camera, pod_top, pod_holes, (fz0, fz1) = R.pod(LENS)
 H = math.ceil(max(pod_top - R.RING_BOTTOM + 5 + LIP_TOP, fz1 + 2) - LIP_TOP)
 TOP = LIP_TOP + H
 INNER = (FX - PLUG_IN, FY - PLUG_IN)   # the plugs stay inside the frame's lip on every side
-RING_IN = 163.0                    # the hood's ring reaches this far in from the centre at the sides (x), from the model (MEASURE: the CC2's insert)
 
 SIDES = {   # outer face, inward direction: local (u along the wall, v inward) to model x, y
     "front": lambda u, v: (u, -FY + v), "back": lambda u, v: (u, FY - v),
@@ -231,24 +230,19 @@ def canvas_side():
     return [cq.Workplane("XY").add(p) for p in pieces]   # front, back
 
 def cover_extension():
-    """Sits on the CANVAS where its cover sat; the stock cover goes on its top, exactly as before but higher by the riser,
-    so the raised hood's cut-out is filled as it is now. Its lower part (the CANVAS's whole footprint) is open on the
-    inside: the tubes leave the CANVAS's top and turn straight into the riser, as now. It narrows outside the raised
-    hood's ring, then widens again to the cover's footprint. Hollow, open at the bottom and the top. (How the cover seats
-    on the CANVAS is not in the model: match the top and bottom edges to yours.)"""
+    """Fills the raised hood's notch, as the CANVAS's cover fills it now: it stands on the CANVAS where the cover sat, and
+    the stock cover goes on its top, so the cover ends up where the raised notch expects it. A straight column the shape
+    of the CANVAS and cover's footprint (the hood's rim has a gap at the notch, so nothing is in its way). Its lower part
+    is open on the inside: the tubes leave the CANVAS's top and turn straight into the riser, as now. Hollow, open at the
+    bottom and the top. (How the cover seats on the CANVAS is not in the model: match the top and bottom edges to yours.)"""
     x_in = min(CANVAS_BRACKET["x"][0], COVER["x"][0]); x_out = max(CANVAS_SHELL["x"][1], COVER["x"][1])
     y0, y1 = CANVAS_SHELL["y"]
     z0 = CANVAS_SHELL["z"][1] + 0.5; z3 = COVER["bottom"] + H
-    ring_lo, ring_hi = R.RING_BOTTOM + H - 3, 440.0 + H + 3            # the raised ring's height band, with room
-    neck_x = FX - R.LIP_T + 1.0                                       # outside the ring (and the riser's lip line)
-    def box(xa, xb, za, zb, inset=0.0):
-        return cq.Workplane("XY").box(xb - xa - 2 * inset, y1 - y0 - 2 * inset, zb - za, centered=False).translate((xa + inset, y0 + inset, za))
-    solid = box(x_in, x_out, z0, ring_lo).union(box(neck_x, x_out, ring_lo, ring_hi)).union(box(x_in, x_out, ring_hi, z3))
-    hollow = (box(x_in, x_out, z0 - 1, ring_lo, EXT_WALL).union(box(neck_x, x_out, ring_lo - 1, ring_hi + 1, EXT_WALL))
-              .union(box(x_in, x_out, ring_hi, z3 + 1, EXT_WALL)))
-    e = solid.cut(hollow)
-    # The inner face of the lower part is open: the tubes' way into the riser.
-    return e.cut(cq.Workplane("XY").box(EXT_WALL + 2, y1 - y0 - 2 * EXT_WALL - 4, ring_lo - z0 - 8, centered=False).translate((x_in - 1, y0 + EXT_WALL + 2, z0 + 4)))
+    def box(inset, za, zb):
+        return cq.Workplane("XY").box(x_out - x_in - 2 * inset, y1 - y0 - 2 * inset, zb - za, centered=False).translate((x_in + inset, y0 + inset, za))
+    e = box(0, z0, z3).cut(box(EXT_WALL, z0 - 1, z3 + 1))
+    # The inner face of the lower part is open: the tubes' way into the riser, below the riser's top.
+    return e.cut(cq.Workplane("XY").box(EXT_WALL + 2, y1 - y0 - 2 * EXT_WALL - 4, TOP - TOP_DEPTH - z0 - 6, centered=False).translate((x_in - 1, y0 + EXT_WALL + 2, z0 + 4)))
 
 ANGLES = {"front": 0, "right": 90, "back": 180, "left": -90}
 def place(shape, side, u):

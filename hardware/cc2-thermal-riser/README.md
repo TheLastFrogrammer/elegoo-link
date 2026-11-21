@@ -78,8 +78,8 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 6. Set the hood on top.
 
 **Checks** (`frame_check.py`, `verify.py`):
-- No two parts overlap once assembled, and none touches the CANVAS. The cover extension clears the raised hood's ring and
-  meets the raised stock cover exactly.
+- No two parts overlap once assembled, and none touches the CANVAS. The cover extension clears the raised hood (its rim
+  has a gap at the notch) and meets the raised stock cover exactly.
 - Every part is a closed solid.
 - The modules and the pod stay 4.7 mm or more under the raised hood ring.
 - The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate. Nothing on the head reaches the
@@ -92,10 +92,15 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 - **The right side has a notch, as the hood has.** The CANVAS sits in it, straddling the wall as it straddles the hood
   now. The notch splits the right side into a front and a back piece, each held by its post and the bottom rail.
 - **The cover extension** stands on the CANVAS where its cover sat. The stock cover goes on top of it, exactly as before
-  but higher by the riser, so the raised hood's cut-out is filled as it is now.
+  but higher by the riser.
+  - Why it's needed: the hood has a tall notch in its right side, open at its bottom edge, which the CANVAS and its
+    cover fill.
+  - Raised 206 mm, that notch would be open from the riser's top up to the cover. The extension takes the cover up
+    with it.
   - Its lower part (the CANVAS's whole footprint) is open on the inside: the tubes leave the CANVAS's top and turn
     straight into the riser, as now.
-  - It narrows outside the raised hood's ring, then widens again to the cover's footprint.
+  - It's a straight column the shape of the CANVAS and cover's footprint: the hood's rim has a gap at its notch, so
+    nothing is in the way.
 - **Measure before printing.**
   - The CANVAS's outline and the cover's footprint come from the community model, which agrees with Elegoo's
     168 × 68 × 95 mm and a printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`, `COVER`).

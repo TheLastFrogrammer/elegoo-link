@@ -59,6 +59,9 @@ print("parts touching the CANVAS:", "none" if not hits else hits)
 cb = canvas.bounds
 # The cover extension against the raised hood (its ring and the stock cover, both raised by the riser's height).
 lid = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "lid.stl")); lid.apply_translation([0, 0, F.H])
-ext = as_mesh(parts["cover extension"]); lp = lid.sample(40000); inside = lp[ext.contains(lp)]
+ext = as_mesh(parts["cover extension"]); lp = lid.sample(40000)
+# The CC2 hood's rim has a gap at its CANVAS notch (the model's rim is the CC1's, which has none): leave that span out.
+lp = lp[~((np.abs(lp[:, 1]) < F.NOTCH_Y) & (lp[:, 0] > 120) & (lp[:, 2] < 460 + F.H))]
+inside = lp[ext.contains(lp)]
 print("raised hood (ring, stock cover) inside the cover extension:", len(inside), "" if not len(inside) else f"(z {inside[:, 2].min():.0f}-{inside[:, 2].max():.0f})")
 print(f"cover extension: {ext.bounds[0][2]:.1f} to {ext.bounds[1][2]:.1f}; the stock cover's bottom, raised: {F.COVER['bottom'] + F.H:.1f}")
