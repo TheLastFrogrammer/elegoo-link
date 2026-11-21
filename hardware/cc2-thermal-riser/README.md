@@ -57,7 +57,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/hood-notch-filler` | FDM | 1 | 206 × 119 × 9: a flat panel in the hood's notch, on the cover's top |
+| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 182 × 5, printed flat: the hood's notch outline less the cover's |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -80,7 +80,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 **Checks** (`frame_check.py`, `verify.py`):
 - No two parts overlap once assembled, and none touches the CANVAS or its cover.
 - The notch is closed by the CANVAS and cover except for its 1–2 mm clearances.
-- The filler clears the cover.
+- The filler clears the cover and is one closed solid.
 - Every part is a closed solid.
 - The modules and the pod stay 4.7 mm or more under the raised hood ring.
 - The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate. Nothing on the head reaches the
@@ -98,9 +98,13 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
     into the enclosure as they do today.
   - The notch splits the right side into a front and a back piece.
 - **The hood notch filler.**
-  - The hood's notch rises with the hood while the CANVAS and cover stay put. That opens a gap in the hood's notch above
-    the cover, exactly as tall as the riser.
-  - A flat panel closes it, sitting in the hood's notch on the cover's top.
+  - The hood's notch rises with the hood while the CANVAS and cover stay put, and the cover's top still stands about
+    50 mm up into it.
+  - So the filler is the hood's notch outline, raised with the hood, less the cover's outline with 1 mm to spare. It
+    closes the notch above the cover, and its two legs fill the strips either side of the cover's top down to the
+    riser.
+  - It sits in the hood's wall like the part of the cover it replaces. A lip behind the wall, 6 mm past the notch's
+    edges, locates and seals it.
 - **Measure before printing.**
   - The CANVAS's and cover's outlines come from the community model, which agrees with Elegoo's 168 × 68 × 95 mm and a
     printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `COVER_OUTLINE`, `COVER_TOP`).

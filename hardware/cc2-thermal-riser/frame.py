@@ -232,28 +232,37 @@ def canvas_side():
     w = w.cut(notch_prism(-1, vl + 1))
     return [cq.Workplane("XY").add(p) for p in sorted(w.solids().vals(), key=lambda p: p.Center().y)]   # front, back
 
-def notch_prism(v0, v1):
-    """The notch's outline (the CANVAS's width, then the cover's narrowing outline) through the right wall from v0 to v1."""
+def notch_prism(v0, v1, bottom=None, grow=0.0):
+    """The notch's outline (the CANVAS's width, then the cover's narrowing outline) through the right wall from v0 to v1,
+    from `bottom` (the riser's groove by default) up; `grow` widens it on every side (mm)."""
     top = CANVAS_SHELL["z"][1]
-    pts = [(-NOTCH_Y, GROOVE_BOTTOM[0] - 1), (NOTCH_Y, GROOVE_BOTTOM[0] - 1), (NOTCH_Y, top)]
+    b = GROOVE_BOTTOM[0] - 1 if bottom is None else bottom
+    pts = [(-NOTCH_Y, b), (NOTCH_Y, b), (NOTCH_Y, top)]
     pts += [(hw, z) for z, hw in COVER_OUTLINE]
     pts += [(-hw, z) for z, hw in reversed(COVER_OUTLINE)] + [(-NOTCH_Y, top)]
-    prism = cq.Workplane("YZ").polyline(pts).close().extrude(v1 - v0)
-    return prism.translate((FX - v1, 0, 0))
+    prism = cq.Workplane("YZ").polyline(pts).close()
+    if grow: prism = prism.offset2D(grow, "intersection")
+    return prism.extrude(v1 - v0).translate((FX - v1, 0, 0))
 
 
 def notch_filler():
-    """Closes the gap that lifting the hood opens in its notch: the hood's notch rises with it, the CANVAS and its cover
-    stay put, so above the cover's top a gap opens exactly as tall as the riser and as wide as the notch. A flat panel in
-    the hood's notch, resting on the cover's top, its edges in the notch's sides like the hood's own wall. (The notch's
-    width and the hood's wall are not in the model: check them on yours.)"""
-    x1 = FX; x0 = FX - HOOD_WALL
-    w = 2 * COVER_OUTLINE[-2][1] - 1.0   # the notch's width where the hood's notch begins
-    panel = cq.Workplane("XY").box(HOOD_WALL, w, H, centered=False).translate((x0, -w / 2, COVER_TOP + 0.5))
-    # Two small lips inside, along the edges, to locate it against the hood's notch.
-    for sgn in (-1, 1):
-        panel = panel.union(cq.Workplane("XY").box(6, 4, H - 20, centered=False).translate((x0 - 6, sgn * (w / 2 - 4) - (0 if sgn > 0 else 0) - 2, COVER_TOP + 10.5)))
-    return panel
+    """Fills what lifting the hood opens in its notch. The hood's notch (the CANVAS's and cover's outline, open at the
+    hood's bottom edge) rises with the hood; the CANVAS and cover stay put, and the cover's top still stands about 50 mm
+    up into it. So the filler is the hood's notch outline, raised with the hood, less the cover's outline with 1 mm to
+    spare: it closes the notch above the cover and the strips either side of it, and its bottom edge rests on the riser's
+    top. It sits in the hood's wall like the part of the cover it replaces, with a lip behind the wall along the notch's
+    edges to locate and seal it. (The notch's edges and the hood's wall are not in the model: check them on yours.)"""
+    hood_bottom = TOP                                                   # the hood sits on the riser's top
+    notch = notch_prism(-0.0, HOOD_WALL, bottom=LIP_TOP).translate((0, 0, H))   # the hood's notch, raised (its bottom: the hood's edge)
+    notch_top = COVER_TOP + H                                           # the hood's notch ends where the cover's top was
+    band = lambda z0: cq.Workplane("XY").box(100, 400, notch_top - z0, centered=False).translate((FX - 50, -200, z0))
+    body = notch.intersect(band(hood_bottom + 0.3))
+    # The lip: behind the hood's wall, from 6 mm outside the notch's edge to 3 mm inside it (so it is one solid with the body).
+    lip = (notch_prism(HOOD_WALL, HOOD_WALL + 2.0, bottom=LIP_TOP, grow=6.0).translate((0, 0, H))
+           .cut(notch_prism(HOOD_WALL - 1, HOOD_WALL + 3.0, bottom=LIP_TOP, grow=-3.0).translate((0, 0, H))))
+    lip = lip.intersect(band(hood_bottom + 3))
+    cover = notch_prism(-5.0, 30.0)                                     # the cover's outline (the riser's notch: cover + 1 mm)
+    return body.union(lip).cut(cover)
 
 ANGLES = {"front": 0, "right": 90, "back": 180, "left": -90}
 def place(shape, side, u):
