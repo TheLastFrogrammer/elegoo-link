@@ -435,6 +435,11 @@ def build(out):
     json.dump({"parts": index, "colours": COLOURS, "riser_height": H}, open(os.path.join(d, "index.json"), "w"), indent=1)
     os.makedirs(out, exist_ok=True)
     assy.save(os.path.join(out, "frame-assembly.step"))
+    # The same with the CANVAS's cover in place, from the community model (GPL): written to build/ only, never committed.
+    if os.path.exists(COVER_STEP):
+        assy.add(cq.Workplane("XY").add(cq.importers.importStep(COVER_STEP).val()), name="CANVAS cover (stays on the printer; community model)",
+                 color=cq.Color(0.80, 0.10, 0.10, 0.6))
+        assy.save(os.path.join(HERE, "build", "frame-assembly-with-cover.step"))
     sizes = {}
     for kind, group in parts.items():
         d = os.path.join(out, kind); os.makedirs(d, exist_ok=True)

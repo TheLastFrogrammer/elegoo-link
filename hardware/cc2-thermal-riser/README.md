@@ -203,6 +203,7 @@ pip install -r requirements.txt                  # cadquery, Open CASCADE (OCP),
 python riser.py . 100                            # lens height above the hood ring's old edge (mm); rewrites print/ and the assembly
 ./fetch_model.sh                                 # the CC2 model (OpenCentauri, GPL-3.0, downloaded into build/, ~2 min)
 python frame.py 100                              # the modular frame: frame/saf, frame/fdm, frame/panels.txt, the assembly STEP
+                                                 # (and build/frame-assembly-with-cover.step: the same with the CANVAS's cover, not committed)
 python frame_check.py                            # overlaps, closed solids, clearances of the frame's parts
 python render_frame.py                           # colour-coded pictures: images/frame.png, images/frame-exploded.png
 python verify.py 100                             # clearances, coverage, images/camera-views.png
