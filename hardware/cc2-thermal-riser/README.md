@@ -57,7 +57,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 168 × 98: the CANVAS and cover's outline raised by the riser, filled down to them; sparse infill |
+| `frame/fdm/hood-notch-filler` | FDM | 1 | a flat 3 mm panel for the hood's raised notch, with a lip inside and a saddle on the cover; print flat-ish, lip up |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -98,13 +98,13 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
     into the enclosure as they do today.
   - The notch splits the right side into a front and a back piece.
 - **The hood notch filler.**
-  - The hood moves straight up, so it now meets the CANVAS and cover's outline raised by the riser's height.
-  - The filler traces that outline as seen from the front and from the side, raises each by the riser's height and fills
-    everything between it and the real outline. It keeps what both views share: a block whose top and sides are the
-    stack's own outline (the cover, then the CANVAS's step), from the hood's bottom edge down to the riser's top.
-  - It drops over the real cover from above, 0.5 mm clear all round.
-  - The outlines come from the community model (`fetch_model.sh` meshes the CANVAS and cover and extracts the cover as a solid).
-  - It's mostly solid (about 3 l), so print it with sparse infill.
+  - The hood's right wall is flat with a tall notch, open at the bottom, that the cover's side walls close. Seen from the
+    side, its outline is the CANVAS and cover (taken from the model). Lifting the hood raises that notch by the riser's height.
+  - The filler is a flat panel in the hood's wall, 3 mm thick and flush with it. It fills the raised notch down to the
+    riser's top and the cover, 0.5 mm clear of the cover.
+  - A flat lip inside the hood, 6 mm past the notch's edge, holds it in the notch.
+  - Where it meets the cover, a saddle 6 mm thick follows the cover's own top surface 12 mm either side of the wall, so it
+    rests on the cover's surface rather than an edge.
 - **Measure before printing.**
   - The CANVAS's and cover's outlines come from the community model, which agrees with Elegoo's 168 × 68 × 95 mm and a
     printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `COVER_OUTLINE`, `COVER_TOP`).
