@@ -120,6 +120,7 @@ Its result (`placement/tradeoff.py`, for a camera anywhere on the wall line):
 | `tradeoff.py`, `podcheck.py`, `recommend.py` | The tables and views above |
 | `synthetic.py`, `syn.json` | A box printer, to test the study without the model |
 | `further.py` | A smaller riser with the camera further out on an arm: it never beats a camera at the wall line |
+| `mirror.py` | The camera folded through a front-surface mirror in the hood: `python mirror.py <riser height>` |
 
 ## Credits
 
