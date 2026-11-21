@@ -5,12 +5,15 @@ HERE = os.path.dirname(os.path.abspath(__file__)); sys.path.insert(0, HERE); sys
 import frame as F, riser as R
 parts = {}
 for corner, name in (((-1, -1), "post FL"), ((1, 1), "post BR"), ((1, -1), "post FR"), ((-1, 1), "post BL")): parts[name] = F.post(corner)
-for side in F.SIDES: parts[f"bottom {side}"] = F.rail(side, "bottom"); parts[f"top {side}"] = F.rail(side, "top")
+for side in F.SIDES:
+    parts[f"bottom {side}"] = F.rail(side, "bottom")
+    if side != "right": parts[f"top {side}"] = F.rail(side, "top")
+parts["canvas side"] = F.canvas_side(); parts["canvas bay floor"] = F.canvas_floor(); parts["hood plug"] = F.hood_plug()
 built = F.build(os.path.join(HERE, "build", "frame-check")); import importlib
 parts["top left"] = cq.importers.importStep(os.path.join(HERE, "build", "frame-check", "saf", "rail-top-left-x1.step"))
 bb = parts["top left"].val().BoundingBox(); ref = F.rail("left", "top").val().BoundingBox()
 parts["top left"] = parts["top left"].translate((ref.xmin - bb.xmin, ref.ymin - bb.ymin, ref.zmin - bb.zmin))
-for side in ("front", "right", "back"): parts[f"panel {side}"] = F.sheet(side)
+for side in ("front", "back"): parts[f"panel {side}"] = F.sheet(side)
 parts["panel left (camera)"] = F.camera_panel(); parts["camera pod"] = F.pod_shape
 parts["led holder front"] = F.place(F.led_holder(), "front", 0); parts["led holder back"] = F.place(F.led_holder(), "back", 0)
 parts["mounting plate"] = F.place(F.mounting_plate(), "left", 100); parts["zip anchor"] = F.place(F.zip_anchor(), "left", -110)
@@ -40,3 +43,23 @@ for k, axis, side in (("led holder front", 1, -1), ("led holder back", 1, 1), ("
     reach_lo = band[:, axis].min() + (dx0 if axis == 0 else dy0); reach_hi = band[:, axis].max() + (dx1 if axis == 0 else dy1)
     gap = (lo - reach_hi) if side > 0 else (reach_lo - hi)
     print(f"{k}: {gap:.1f} mm from the head's parts at its height, at the head's furthest travel toward it")
+
+# The CANVAS stays on the printer: no riser part may touch it (its points tested against every part's solid).
+canvas = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "canvas.stl"))
+pts = canvas.sample(20000) if hasattr(canvas, "sample") else canvas.vertices
+def as_mesh(shape):
+    v, f = shape.val().tessellate(0.2, 0.2); return trimesh.Trimesh([(p.x, p.y, p.z) for p in v], f)
+hits = 0
+for k, v in parts.items():
+    m = as_mesh(v)
+    if not m.is_watertight: continue
+    inside = m.contains(pts).sum()
+    if inside: print(f"  TOUCHES THE CANVAS: {k} ({inside} sample points)"); hits += 1
+print("parts touching the CANVAS:", "none" if not hits else hits)
+cb = canvas.bounds
+for k in ("canvas side", "canvas bay floor", "hood plug", "bottom right"):
+    m = as_mesh(parts[k]); d = trimesh.proximity.signed_distance(m, pts[::20]) if False else None
+# The hood plug against the raised hood ring (the ring rises by the riser's height).
+ring = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "lid.stl")); ring.apply_translation([0, 0, F.H])
+plug = as_mesh(parts["hood plug"])
+print("hood plug points inside the raised hood ring:", int(plug.contains(ring.sample(20000)).sum()))

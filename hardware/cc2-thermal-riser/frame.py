@@ -47,11 +47,22 @@ SAF_VOLUME = (315.0, 208.0, 293.0) # Stratasys H350 build volume (mm)
 SAF_SCALE = 1.035                  # the printer enlarges parts by its shrinkage compensation before building; every SAF part must
                                    # still fit when enlarged by this much (set it to your machine's factor)
 
+# The CANVAS stands on the printer's top frame at the right-hand edge and stays put: the riser steps out round it.
+# Its outline (CC2 model; Elegoo gives 168 × 68 × 95 mm): the shell outside, the mounting bracket inside (MEASURE).
+CANVAS_SHELL = {"x": (176.2, 238.5), "y": (-84.0, 84.0), "z": (447.5, 536.0)}
+CANVAS_BRACKET = {"x": (161.2, 183.0), "y": (-84.0, 84.0), "z": (436.1, 536.0)}
+BAY_Y = 92.0                       # the bay's inside, front to back: ± this
+BAY_OUT = 246.0                    # the bay's outer face (x); the CANVAS reaches 238.5
+BAY_WALL = 3.0
+BAY_BOTTOM = 430.0                 # the bay's floor, under the CANVAS's overhang (its shell's bottom is at 447.5)
+BULGE_BOTTOM = 529.8               # the open bottom of the hood's bulge over the CANVAS, with the hood on the frame (MEASURE)
+
 # The riser's height comes from the camera pod, as in riser.py.
 pod_shape, cutout, camera, pod_top, pod_holes, (fz0, fz1) = R.pod(LENS)
 H = math.ceil(max(pod_top - R.RING_BOTTOM + 5 + LIP_TOP, fz1 + 2) - LIP_TOP)
 TOP = LIP_TOP + H
 INNER = (FX - PLUG_IN, FY - PLUG_IN)   # the plugs stay inside the frame's lip on every side
+ROOF_Z = TOP - TOP_DEPTH - 8       # the bay's roof: the tubes pass under it into the riser; the beam above it carries the hood's ring
 
 SIDES = {   # outer face, inward direction: local (u along the wall, v inward) to model x, y
     "front": lambda u, v: (u, -FY + v), "back": lambda u, v: (u, FY - v),
@@ -102,6 +113,8 @@ def rail(side, kind):
     for a, b in ((-end - TENON_L, -end), (end, end + TENON_L)):
         tenon = block(side, a, b, tv - TENON_T / 2, tv + TENON_T / 2, *t)
         r = r.union(tenon).cut(bolt(side, (a + b) / 2, sum(t) / 2))
+    if kind == "bottom" and side == "right":   # where the CANVAS's shell crosses the rail
+        r = r.cut(block(side, -BAY_Y, BAY_Y, -1, WALL + 1, CANVAS_SHELL["z"][0] - 1.5, LIP_TOP + BOTTOM_H + 1))
     if kind == "top":   # the hook rail: a stem and an upturned lip, the gap between them takes the modules' hooks
         vs, vg, vl = HOOK["v"]
         r = r.union(block(side, -end, end, WALL - 0.5, vl, *HOOK["stem"])).union(block(side, -end, end, vg, vl, *HOOK["lip"]))
@@ -198,6 +211,71 @@ def camera_panel():
         if zz < GROOVE_TOP[0]: p = p.cut(cq.Workplane("YZ").circle(2.0).extrude(7).translate((-FX, yy, zz)))
     return p
 
+def canvas_side():
+    """The right side when the CANVAS stays on the printer: one SAF part in place of the right top rail and panel. Its
+    middle steps out into a bay round the CANVAS (open below for the floor, open inward for the tubes, which pass under
+    a beam that carries the hood's ring across); its ends are the top rail's profile with the hook strip and trough, and
+    tongues and tenons into the posts like the panels and rails."""
+    side = "right"; half, end = along(side)
+    w = segment(side, -end, end, LIP_TOP + BOTTOM_H, TOP)
+    w = w.union(block(side, -end, end, GROOVE_V - PANEL_T / 2, GROOVE_V + PANEL_T / 2, GROOVE_BOTTOM[0] + 0.5, LIP_TOP + BOTTOM_H))   # into the bottom rail's groove
+    for sgn in (-1, 1):
+        a, b = sorted((sgn * end, sgn * (end + GROOVE_D - 0.5)))
+        w = w.union(block(side, a, b, GROOVE_V - PANEL_T / 2, GROOVE_V + PANEL_T / 2, PANEL_Z[0], TENON_TOP[0] - FIT - 0.5))    # into the posts' grooves
+        a, b = sorted((sgn * end, sgn * (end + TENON_L)))
+        w = w.union(block(side, a, b, TENON_V["top"] - TENON_T / 2, TENON_V["top"] + TENON_T / 2, *TENON_TOP)).cut(bolt(side, (a + b) / 2, sum(TENON_TOP) / 2))
+    vs, vg, vl = HOOK["v"]
+    for a, b in ((-end, -BAY_Y - 6), (BAY_Y + 6, end)):
+        w = w.union(block(side, a, b, WALL - 0.5, vl, *HOOK["stem"])).union(block(side, a, b, vg, vl, *HOOK["lip"]))
+    w = w.cut(trough(side, -end - TENON_L - 1, end + TENON_L + 1))
+    # The opening the CANVAS and its tubes pass through, below the beam.
+    w = w.cut(block(side, -BAY_Y, BAY_Y, -1, WALL + 1, GROOVE_BOTTOM[0] - 1, ROOF_Z))
+    # The bay: front and back walls, outer wall, roof (outside the wall's line: v is negative there).
+    vo = -(BAY_OUT - FX)
+    bay = block(side, -BAY_Y - BAY_WALL, -BAY_Y, vo, 0, BAY_BOTTOM, ROOF_Z).union(block(side, BAY_Y, BAY_Y + BAY_WALL, vo, 0, BAY_BOTTOM, ROOF_Z))
+    bay = bay.union(block(side, -BAY_Y - BAY_WALL, BAY_Y + BAY_WALL, vo, vo + BAY_WALL, BAY_BOTTOM, ROOF_Z))
+    bay = bay.union(block(side, -BAY_Y - BAY_WALL, BAY_Y + BAY_WALL, vo, 0.5, ROOF_Z - 4, ROOF_Z))   # the roof joins the beam above the opening
+    # Bosses for the floor's screws, and heat-set holes in the roof for the hood plug.
+    for u in (-BAY_Y + 6, BAY_Y - 6):
+        for v in (vo + 8, -8):
+            bay = bay.union(block(side, u - 5, u + 5, v - 5, v + 5, BAY_BOTTOM, BAY_BOTTOM + 14))
+            x, y = SIDES[side](u, v)
+            bay = bay.cut(cq.Workplane("XY").cylinder(12, 2.0).translate((x, y, BAY_BOTTOM + 6)))
+    for u in (-BAY_Y + 10, BAY_Y - 10):
+        x, y = SIDES[side](u, vo / 2)
+        bay = bay.cut(cq.Workplane("XY").cylinder(8, 2.0).translate((x, y, ROOF_Z - 1)))
+    return w.union(bay)
+
+def canvas_floor():
+    """The bay's floor, under the CANVAS's overhang: screwed up into the bay's bosses after the side is in place, with a
+    slot for the filament tubes coming up from the spools to the CANVAS (seal round them with foam)."""
+    side = "right"; vo = -(BAY_OUT - FX)
+    f = block(side, -BAY_Y - BAY_WALL, BAY_Y + BAY_WALL, vo, 0, BAY_BOTTOM - 3, BAY_BOTTOM)
+    f = f.cut(block(side, -75, 75, vo + 10, -6, BAY_BOTTOM - 4, BAY_BOTTOM + 1))
+    for u in (-BAY_Y + 6, BAY_Y - 6):
+        for v in (vo + 8, -8):
+            x, y = SIDES[side](u, v); f = f.cut(cq.Workplane("XY").cylinder(10, 1.7).translate((x, y, BAY_BOTTOM - 1.5)))
+    return f
+
+def hood_plug():
+    """Fills the raised hood's CANVAS opening and the bulge's open bottom, shaped like the CANVAS's upper part where the
+    hood fits round it: outside the riser it stands on the bay's roof; over the riser's top it sits just above the hood's
+    ring. Hollow, open below, two screws into the roof. (The hood's opening is not in the model: check it on yours.)"""
+    sx0, sx1 = CANVAS_SHELL["x"]; y0, y1 = CANVAS_SHELL["y"]; top = BULGE_BOTTOM + H - 0.5   # meets the raised bulge's open bottom
+    ring_top = 440.0 + H
+    outer = cq.Workplane("XY").box(sx1 - FX, y1 - y0, top - ROOF_Z, centered=False).translate((FX, y0, ROOF_Z))
+    inner = cq.Workplane("XY").box(FX - sx0, y1 - y0, top - ring_top - 1, centered=False).translate((sx0, y0, ring_top + 1))
+    solid = outer.union(inner)
+    hollow = (cq.Workplane("XY").box(sx1 - FX - 4, y1 - y0 - 4, top - ROOF_Z, centered=False).translate((FX + 2, y0 + 2, ROOF_Z - 2))
+              .union(cq.Workplane("XY").box(FX - sx0, y1 - y0 - 4, top - ring_top - 3, centered=False).translate((sx0 + 2, y0 + 2, ring_top - 1))))
+    p = solid.cut(hollow)
+    for yy in (-BAY_Y + 10, BAY_Y - 10):
+        if y0 < yy < y1:
+            p = p.union(cq.Workplane("XY").box(10, 10, 4).translate(((FX + sx1) / 2, yy, ROOF_Z + 2)))
+            p = p.cut(cq.Workplane("XY").cylinder(10, 1.7).translate(((FX + sx1) / 2, yy, ROOF_Z + 2)))
+    # It must clear the riser's top lip (outside face at FX) where it passes over it.
+    return p.cut(cq.Workplane("XY").box(LIP_T + 1, 400, TOP - ROOF_Z + 0.5, centered=False).translate((FX - LIP_T - 0.5, -200, ROOF_Z)))
+
 ANGLES = {"front": 0, "right": 90, "back": 180, "left": -90}
 def place(shape, side, u):
     """A module built in local coordinates (x along the rail, centred on 0; y in from the outer face; z) placed at u on a side."""
@@ -254,9 +332,9 @@ def zip_anchor(width=30.0):
 COLOURS = {
     "post": (0.90, 0.62, 0.00), "rail-bottom": (0.00, 0.45, 0.70), "rail-top": (0.34, 0.71, 0.91), "rail-top-left": (0.00, 0.62, 0.45),
     "camera-pod": (0.84, 0.37, 0.00), "panel-polycarbonate": (0.75, 0.90, 1.00), "panel-camera": (0.80, 0.47, 0.65),
-    "zip-anchor": (0.94, 0.89, 0.26), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13)}
+    "zip-anchor": (0.94, 0.89, 0.26), "canvas-side": (0.20, 0.70, 0.70), "canvas-bay": (0.35, 0.35, 0.40), "hood-plug": (0.55, 0.30, 0.55), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13)}
 def kind_of(name):
-    for k in ("rail-top-left", "rail-bottom", "rail-top", "post", "camera-pod", "led-holder", "mounting-plate", "zip-anchor"):
+    for k in ("rail-top-left", "rail-bottom", "rail-top", "post", "camera-pod", "led-holder", "mounting-plate", "zip-anchor", "canvas-side"):
         if name.startswith(k): return k
     return name
 
@@ -266,7 +344,8 @@ def build(out):
         parts["saf"][f"{name}"] = post(corner)
     for side in SIDES:
         parts["saf"][f"rail-bottom-{side}"] = rail(side, "bottom")
-        parts["saf"][f"rail-top-{side}"] = rail(side, "top")
+        if side != "right": parts["saf"][f"rail-top-{side}"] = rail(side, "top")
+    parts["saf"]["canvas-side"] = canvas_side()
     # The pod's flange reaches the left top rail: two heat-set insert holes there, and the hook rail stops either side of
     # the pod (the only rail that differs).
     parts["saf"]["rail-top-left"] = parts["saf"]["rail-top-left"].cut(cutout).cut(
@@ -275,9 +354,10 @@ def build(out):
         if zz > GROOVE_TOP[0]:
             parts["saf"]["rail-top-left"] = parts["saf"]["rail-top-left"].cut(cq.Workplane("YZ").circle(2.0).extrude(7).translate((-FX, yy, zz)))
     parts["saf"]["camera-pod"] = pod_shape
-    panels = {"front": sheet("front"), "right": sheet("right"), "back": sheet("back"), "left": camera_panel()}
+    panels = {"front": sheet("front"), "back": sheet("back"), "left": camera_panel()}
     parts["fdm"]["panel-camera (left)"] = panels["left"]
     parts["fdm"]["panel-blank (any side, optional)"] = module_panel("front")
+    parts["fdm"]["canvas-bay-floor"] = canvas_floor(); parts["fdm"]["hood-plug"] = hood_plug()
     # Modules: one of each kind in the files; in place, an LED holder on the front and back top rails, a mounting plate
     # and a zip-tie anchor on the left.
     modules = {"led-holder front": ("led-holder", place(led_holder(), "front", 0)), "led-holder back": ("led-holder", place(led_holder(), "back", 0)),
@@ -287,7 +367,8 @@ def build(out):
     assy = cq.Assembly(name="cc2-modular-hood-riser")
     placed = {}   # every part in place, by kind, for the renders
     for k, v in parts["saf"].items(): placed[k] = (kind_of(k), v)
-    for side in ("front", "right", "back"): placed[f"polycarbonate {side}"] = ("panel-polycarbonate", panels[side])
+    for side in ("front", "back"): placed[f"polycarbonate {side}"] = ("panel-polycarbonate", panels[side])
+    placed["canvas-bay-floor"] = ("canvas-bay", parts["fdm"]["canvas-bay-floor"]); placed["hood-plug"] = ("hood-plug", parts["fdm"]["hood-plug"])
     placed["camera panel (left)"] = ("panel-camera", panels["left"])
     for k, (kd, v) in modules.items(): placed[k] = (kd, v)
     placed["FLIR A65 envelope (not printed)"] = ("camera", camera)
@@ -306,9 +387,10 @@ def build(out):
         d = os.path.join(out, kind); os.makedirs(d, exist_ok=True)
         for k, v in group.items():
             if "(second" in k: continue   # the same part as its pair, turned
-            if k.startswith("rail-") and not k.endswith(("-front",)) and k != "rail-top-left": continue   # the rails are all alike: one file each, but the left top rail has the pod's inserts
+            if k.startswith("rail-") and not k.endswith(("-front",)) and k not in ("rail-top-left", "rail-bottom-right"): continue   # the rails are alike: one file each, but the left top rail has the pod's inserts and the right bottom rail the CANVAS notch
             bb = v.val().BoundingBox(); s = v.translate((-bb.xmin, -bb.ymin, -bb.zmin))
-            fname = {"post-A": "post-A-x2", "post-B": "post-B-x2", "rail-bottom-front": "rail-bottom-x4", "rail-top-front": "rail-top-x3",
+            fname = {"post-A": "post-A-x2", "post-B": "post-B-x2", "rail-bottom-front": "rail-bottom-x3", "rail-top-front": "rail-top-x2",
+                     "rail-bottom-right": "rail-bottom-right-x1", "canvas-side": "canvas-side-x1",
                      "rail-top-left": "rail-top-left-x1"}.get(k.split(" (")[0], k.split(" (")[0])
             cq.exporters.export(s, os.path.join(d, fname + ".stl"), tolerance=0.05, angularTolerance=0.1)
             cq.exporters.export(s, os.path.join(d, fname + ".step"))
@@ -321,8 +403,8 @@ def build(out):
     u0, u1 = panel_extent("front"); w = round(u1 - u0, 1); h = round(PANEL_Z[1] - PANEL_Z[0], 1)
     u0s, u1s = panel_extent("left"); ws = round(u1s - u0s, 1)
     with open(os.path.join(out, "panels.txt"), "w") as f:
-        f.write(f"Polycarbonate sheet, {PANEL_T:.0f} mm thick (any side without a module panel):\n"
-                f"  front and back: {w} x {h} mm\n  left and right: {ws} x {h} mm\n"
+        f.write(f"Polycarbonate sheet, {PANEL_T:.0f} mm thick: two, front and back, {w} x {h} mm\n"
+                f"(the left side is the camera panel, the right the CANVAS side; a side without them takes {ws} x {h} mm)\n"
                 "Cut square, edges deburred; no holes. They slide into the grooves before the top rails go on.\n")
     # In place, for the checks.
     whole = None
@@ -330,6 +412,7 @@ def build(out):
         if k == "camera-pod": continue
         whole = v if whole is None else whole.union(v)
     for v in panels.values(): whole = whole.union(v)
+    whole = whole.union(parts["fdm"]["canvas-bay-floor"]).union(parts["fdm"]["hood-plug"])
     os.makedirs(os.path.join(HERE, "build"), exist_ok=True)
     cq.exporters.export(whole, os.path.join(HERE, "build", "riser-in-place.stl"), tolerance=0.2, angularTolerance=0.3)
     for k, (kd, v) in modules.items():

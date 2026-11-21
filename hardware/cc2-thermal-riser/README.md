@@ -50,11 +50,15 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 |---|---|---|---|
 | `frame/saf/post-A-x2` | SAF | 2 (front-left, back-right) | 241 × 68 × 65 |
 | `frame/saf/post-B-x2` | SAF | 2 (front-right, back-left) | 241 × 68 × 65 |
-| `frame/saf/rail-bottom-x4` | SAF | 4 | 290 × 55 × 10 |
-| `frame/saf/rail-top-x3` | SAF | 3 (front, back, right) | 290 × 74 × 16 |
+| `frame/saf/rail-bottom-x3` | SAF | 3 (front, back, left) | 290 × 55 × 10 |
+| `frame/saf/rail-bottom-right-x1` | SAF | 1 | A notch where the CANVAS crosses it |
+| `frame/saf/rail-top-x2` | SAF | 2 (front, back) | 290 × 74 × 16 |
+| `frame/saf/canvas-side-x1` | SAF | 1 (right) | 290 × 205 × 62: the right top rail and panel in one, with the bay round the CANVAS |
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
-| Polycarbonate 3 mm | Cut sheet | Up to 4 | 281 × 123 (`frame/panels.txt`) |
+| Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
+| `frame/fdm/canvas-bay-floor` | FDM | 1 | Closes the bay under the CANVAS, slot for the spools' tubes |
+| `frame/fdm/hood-plug` | FDM | 1 | Fills the raised hood's CANVAS opening up to its bulge |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -75,13 +79,25 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 6. Set the hood on top.
 
 **Checks** (`frame_check.py`, `verify.py`):
-- No two parts overlap once assembled.
+- No two parts overlap once assembled, and none touches the CANVAS. The hood plug clears the raised hood's ring.
 - Every part is a closed solid.
 - The modules and the pod stay 4.7 mm or more under the raised hood ring.
 - The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate. Nothing on the head reaches the
   LED holders' height.
 - The camera sees 55 % of the bed at the start of a print and 77 % on average, with the LED holders and modules in
   place: the same as the one-piece walls.
+
+**The CANVAS:**
+- **It stays on the printer** (it stands on the top frame's right edge), so no filament tube changes length or path.
+- **The bay:** the right side steps out round it.
+  - The tubes come out of the CANVAS's top and pass into the riser under a beam that carries the hood's ring across
+    the bay (about 55 mm of height for them to turn in).
+  - The bay's floor closes it underneath, with a slot for the spools' tubes. Seal round them with foam.
+- **The hood plug** stands on the bay's roof and fills the raised hood's CANVAS opening up to its bulge, as the CANVAS
+  itself did.
+- **Measure before printing.** The CANVAS's outline comes from the community model, and agrees with Elegoo's
+  168 × 68 × 95 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`). The hood's opening and the bulge's bottom (`BULGE_BOTTOM`) are
+  not in any model: check the plug against your hood.
 
 **Lighting:**
 - **Strip:** COB LED strip, 24 V or 12 V, in standard 17 × 7 mm aluminium channel with a diffuser, cut to 230 mm.
