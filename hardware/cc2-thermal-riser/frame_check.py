@@ -8,7 +8,7 @@ for corner, name in (((-1, -1), "post FL"), ((1, 1), "post BR"), ((1, -1), "post
 for side in F.SIDES:
     parts[f"bottom {side}"] = F.rail(side, "bottom")
     if side != "right": parts[f"top {side}"] = F.rail(side, "top")
-parts["canvas side"] = F.canvas_side(); parts["canvas bay floor"] = F.canvas_floor(); parts["hood plug"] = F.hood_plug()
+parts["canvas side front"], parts["canvas side back"] = F.canvas_side(); parts["cover extension"] = F.cover_extension()
 built = F.build(os.path.join(HERE, "build", "frame-check")); import importlib
 parts["top left"] = cq.importers.importStep(os.path.join(HERE, "build", "frame-check", "saf", "rail-top-left-x1.step"))
 bb = parts["top left"].val().BoundingBox(); ref = F.rail("left", "top").val().BoundingBox()
@@ -57,9 +57,8 @@ for k, v in parts.items():
     if inside: print(f"  TOUCHES THE CANVAS: {k} ({inside} sample points)"); hits += 1
 print("parts touching the CANVAS:", "none" if not hits else hits)
 cb = canvas.bounds
-for k in ("canvas side", "canvas bay floor", "hood plug", "bottom right"):
-    m = as_mesh(parts[k]); d = trimesh.proximity.signed_distance(m, pts[::20]) if False else None
-# The hood plug against the raised hood ring (the ring rises by the riser's height).
-ring = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "lid.stl")); ring.apply_translation([0, 0, F.H])
-plug = as_mesh(parts["hood plug"])
-print("hood plug points inside the raised hood ring:", int(plug.contains(ring.sample(20000)).sum()))
+# The cover extension against the raised hood (its ring and the stock cover, both raised by the riser's height).
+lid = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "lid.stl")); lid.apply_translation([0, 0, F.H])
+ext = as_mesh(parts["cover extension"]); lp = lid.sample(40000); inside = lp[ext.contains(lp)]
+print("raised hood (ring, stock cover) inside the cover extension:", len(inside), "" if not len(inside) else f"(z {inside[:, 2].min():.0f}-{inside[:, 2].max():.0f})")
+print(f"cover extension: {ext.bounds[0][2]:.1f} to {ext.bounds[1][2]:.1f}; the stock cover's bottom, raised: {F.COVER['bottom'] + F.H:.1f}")

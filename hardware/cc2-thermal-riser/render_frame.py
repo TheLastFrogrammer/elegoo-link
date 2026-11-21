@@ -9,7 +9,7 @@ LABELS = {"post": "Corner post (SAF)", "rail-bottom": "Bottom rail (SAF)", "rail
           "rail-top-left": "Left top rail, round the pod (SAF)", "camera-pod": "Camera pod (SAF)", "panel-polycarbonate": "Clear polycarbonate panel",
           "panel-camera": "Camera panel (FDM)", "zip-anchor": "Zip-tie anchor (FDM)", "led-holder": "LED holder (FDM)",
           "mounting-plate": "Mounting plate (FDM)", "camera": "FLIR A65 (not printed)", "printer": "The printer",
-          "canvas": "CANVAS unit (stays on the printer)", "canvas-side": "CANVAS side, with the bay (SAF)", "canvas-bay": "Bay floor (FDM)", "hood-plug": "Hood plug (FDM)", "hood": "Hood ring, and the CANVAS's cover moved up onto the plug"}
+          "canvas": "CANVAS unit (stays on the printer)", "canvas-side": "CANVAS side, either side of its notch (SAF)", "cover-extension": "Cover extension (FDM)", "hood": "Hood ring, and the CANVAS's stock cover on the extension"}
 GREYS = {"static": (0.62, 0.62, 0.62), "bed": (0.42, 0.42, 0.45), "gantry": (0.75, 0.75, 0.75), "head": (0.5, 0.5, 0.52)}
 RAISED = (0.30, 0.34, 0.42)   # the hood's base ring and its bulge over the CANVAS: they sit on the riser, so they rise by its height
 CANVAS = (0.75, 0.10, 0.10)   # the CANVAS unit: it stands on the printer's top frame, so it stays put
@@ -27,8 +27,7 @@ def scene(explode=False, printer=True):
             elif k.startswith("panel"): m.apply_translation(out * 150 + [0, 0, 45])
             elif k in ("camera-pod", "camera"): m.apply_translation(out * 280 + [0, 0, 45])
             elif k == "canvas-side": m.apply_translation(out * 60 + [0, 0, 130])
-            elif k == "canvas-bay": m.apply_translation(out * 60 + [0, 0, -120])
-            elif k == "hood-plug": m.apply_translation(out * 60 + [0, 0, 300])
+            elif k == "cover-extension": m.apply_translation(out * 140 + [0, 0, 200])
             elif k in ("led-holder", "mounting-plate", "zip-anchor"): m.apply_translation(-out * 90 + [0, 0, 190])
         (clear if p["kind"] == "panel-polycarbonate" else solid).append((m, C[p["kind"]]))
     if printer:
@@ -87,7 +86,7 @@ def sheet(images, kinds, path):
     out.paste(lg, (0, top)); out.save(path); print("wrote", os.path.relpath(path, HERE))
 
 kinds = ["post", "rail-bottom", "rail-top", "rail-top-left", "camera-pod", "panel-polycarbonate", "panel-camera",
-         "canvas-side", "canvas-bay", "hood-plug", "led-holder", "mounting-plate", "zip-anchor", "camera", "canvas", "hood", "printer"]
+         "canvas-side", "cover-extension", "led-holder", "mounting-plate", "zip-anchor", "camera", "canvas", "hood", "printer"]
 assembled = scene()
 a = render(assembled, (-950, -760, 1000), (-40, 0, 470))
 b = render(assembled, (60, 60, 1200), (0, 0, 520), fov=46)

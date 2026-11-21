@@ -53,12 +53,11 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-bottom-x3` | SAF | 3 (front, back, left) | 290 × 55 × 10 |
 | `frame/saf/rail-bottom-right-x1` | SAF | 1 | A notch where the CANVAS crosses it |
 | `frame/saf/rail-top-x2` | SAF | 2 (front, back) | 290 × 74 × 16 |
-| `frame/saf/canvas-side-x1` | SAF | 1 (right) | 290 × 205 × 62: the right top rail and panel in one, with the bay round the CANVAS |
+| `frame/saf/canvas-side-front-x1`, `canvas-side-back-x1` | SAF | 1 each (right) | 59 × 192 × 16: the right side either side of the CANVAS's notch |
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/canvas-bay-floor` | FDM | 1 | Closes the bay under the CANVAS, slot for the spools' tubes |
-| `frame/fdm/hood-plug` | FDM | 1 | Fills the raised hood's CANVAS opening up to its bulge |
+| `frame/fdm/cover-extension` | FDM | 1 | 168 × 98 × 199: stands on the CANVAS; the stock cover goes on top |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -79,7 +78,8 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 6. Set the hood on top.
 
 **Checks** (`frame_check.py`, `verify.py`):
-- No two parts overlap once assembled, and none touches the CANVAS. The hood plug clears the raised hood's ring.
+- No two parts overlap once assembled, and none touches the CANVAS. The cover extension clears the raised hood's ring and
+  meets the raised stock cover exactly.
 - Every part is a closed solid.
 - The modules and the pod stay 4.7 mm or more under the raised hood ring.
 - The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate. Nothing on the head reaches the
@@ -88,20 +88,22 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
   place: the same as the one-piece walls.
 
 **The CANVAS:**
-- **It stays on the printer** (it stands on the top frame's right edge), so no filament tube changes length or path.
-- **The bay:** the right side steps out round it.
-  - The tubes come out of the CANVAS's top and pass into the riser under a beam that carries the hood's ring across
-    the bay (about 55 mm of height for them to turn in).
-  - The bay's floor closes it underneath, with a slot for the spools' tubes. Seal round them with foam.
-- **The hood plug** stands in for the CANVAS at the raised height. It stands on the bay's roof and reaches in to the
-  CANVAS's inner plate.
-  - The raised hood's cut-out fits round it as it fitted round the CANVAS.
-  - The CANVAS's own cover (the smoked bulge, which rests on the CANVAS, 94 × 159 × 150 mm) moves up onto its top.
-- **Measure before printing.** The CANVAS's outline comes from the community model, and agrees with Elegoo's
-  168 × 68 × 95 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`). The hood's cut-out, and how the cover seats on the CANVAS
-  (`BULGE_BOTTOM`), are not in any model: check the plug against your hood and cover.
+- **It stays on the printer.** It stands on the top frame's right edge, so no filament tube changes length or path.
+- **The right side has a notch, as the hood has.** The CANVAS sits in it, straddling the wall as it straddles the hood
+  now. The notch splits the right side into a front and a back piece, each held by its post and the bottom rail.
+- **The cover extension** stands on the CANVAS where its cover sat. The stock cover goes on top of it, exactly as before
+  but higher by the riser, so the raised hood's cut-out is filled as it is now.
+  - Its lower part (the CANVAS's whole footprint) is open on the inside: the tubes leave the CANVAS's top and turn
+    straight into the riser, as now.
+  - It narrows outside the raised hood's ring, then widens again to the cover's footprint.
+- **Measure before printing.**
+  - The CANVAS's outline and the cover's footprint come from the community model, which agrees with Elegoo's
+    168 × 68 × 95 mm and a printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`, `COVER`).
+  - How the cover seats on the CANVAS is not in any model: match the extension's top and bottom edges to yours.
+  - A strip of foam closes the 2 mm gaps between the notch's edges and the CANVAS and extension.
 - **The hood's ring needs checking too.** The community model's ring (the hood's plastic insert) is the CC1's: Elegoo
-  revised it for the CC2, so check `LIP_T`, `LEDGE` and `RING_BOTTOM` in `riser.py` against your printer.
+  revised it for the CC2, so check `LIP_T`, `LEDGE` and `RING_BOTTOM` in `riser.py`, and `RING_IN` in `frame.py`,
+  against your printer.
 
 **Lighting:**
 - **Strip:** COB LED strip, 24 V or 12 V, in standard 17 × 7 mm aluminium channel with a diffuser, cut to 230 mm.
