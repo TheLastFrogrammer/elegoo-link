@@ -1,11 +1,10 @@
-# CC2 lid riser with a FLIR A65 thermal camera
+# CC2 hood riser with a FLIR A65 thermal camera
 
-> **Superseded: don't print this as it is.** The community model's lid is only the base ring. The real CC2 lid is a
-> smoked-plastic hood about 300 mm tall, with the CANVAS unit on its right side. That hood already gives the camera the
-> height this riser was made for. The placement study, the pod and the scripts still apply. The camera's mount is being
-> redone for the hood.
+> The CC2's lid is a smoked-plastic hood about 300 mm tall. The community model has only its base ring, which is all
+> the riser needs: the ring drops into the riser's top as it drops into the frame now. The model leaves out the hood's
+> clear walls, which are opaque to the camera; they rise above the riser and never block its view.
 
-A lid riser for the Elegoo Centauri Carbon 2, with a pod on its left wall for a FLIR A65 thermal camera (45° lens),
+A riser for the Elegoo Centauri Carbon 2's hood, with a pod on its left wall for a FLIR A65 thermal camera (45° lens),
 placed by a study of what the camera can see of the bed as the printer moves. The app reads the camera over GigE Vision
 (Settings → Cameras → Add a camera → Thermal camera).
 
@@ -13,13 +12,13 @@ placed by a study of what the camera can see of the bed as the printer moves. Th
 
 ## What it is
 
-- **The riser** sits where the lid sits now. Its lower edge (the plug) drops inside the frame's top lip onto the ledge.
-  Its body rests on the lip. Its top repeats the frame's lip and ledge, so the lid drops into it, raised by 212 mm.
+- **The riser** sits where the hood sits now. Its lower edge (the plug) drops inside the frame's top lip onto the ledge.
+  Its body rests on the lip. Its top repeats the frame's lip and ledge, so the hood's base ring drops into it, raised by 206 mm.
 - **The camera pod** is a sleeve that holds the front of the camera. It passes through a cut-out in the left wall.
   - The lens sits 5 mm inside the riser, so no line of sight to the bed crosses the wall.
   - The camera's body stays outside in room air. The A65 is rated to 50 °C.
   - Nothing may cover the lens: glass and clear plastic block long-wave infrared.
-- **Position:** the lens is centred front to back (in line with the bed's centre), 100 mm above the lid's old top edge,
+- **Position:** the lens is centred front to back (in line with the bed's centre), 100 mm above the hood ring's old top edge,
   tilted 61° down.
 
 What the camera sees with the riser and pod in place (`verify.py`):
@@ -30,7 +29,7 @@ What the camera sees with the riser and pod in place (`verify.py`):
 | Bed seen, on average across a print | 77 % |
 | Size of one camera pixel on the bed | about 0.6 mm |
 | Clearance between the head's tall parts (the CANVAS multiplexer) and the pod, at the head's leftmost travel | 24.5 mm |
-| Gap between the pod and the raised lid's tray | 3.6 mm |
+| Gap between the pod and the raised hood's base ring | 5.4 mm |
 
 ![The camera's view](images/camera-views.png)
 
@@ -46,12 +45,13 @@ was modelled by contributors. Check these on your printer and change them at the
 |---|---|---|
 | `FRAME_X`, `FRAME_Y` | 200, 203 | Half the outer width and depth of the top frame |
 | `LIP_T` | 3.5 | Thickness of the frame's outer top lip |
-| `LIP_TOP − LEDGE` | 35.3 | Depth from the lip's top down to the ledge the lid's tray sits on |
+| `LIP_TOP − LEDGE` | 35.3 | Depth from the lip's top down to the ledge the hood's ring sits on |
+| `LIP_TOP − RING_BOTTOM` | 38.3 | How far the hood's base ring hangs below the lip's top (it reaches about 35 mm in from the wall) |
 | `LENS_R` | 16 | Radius of the A65 lens's front, plus `FIT` clearance |
 | `CAM_W`, `CAM_H` | 40, 43 | The camera's width and height (datasheet), plus `FIT` |
 
 Also check:
-- **The lid's corners.** They may be rounded where the walls meet.
+- **The hood's corners.** They may be rounded where the walls meet.
 - **The ¼"-20 thread.** Check it lines up with the pod's slot, which runs along the camera's base.
 
 ## Printing
@@ -80,7 +80,7 @@ camera's outline.
 
 ```sh
 pip install -r requirements.txt                  # cadquery, Open CASCADE (OCP), trimesh, embreex, numpy, pillow
-python riser.py . 100                            # lens height above the lid's old edge (mm); rewrites print/ and the assembly
+python riser.py . 100                            # lens height above the hood ring's old edge (mm); rewrites print/ and the assembly
 ./fetch_model.sh                                 # the CC2 model (OpenCentauri, GPL-3.0, downloaded into build/, ~2 min)
 python verify.py 100                             # clearances, coverage, images/camera-views.png
 python overview.py                               # images/riser-and-pod.png
@@ -88,13 +88,13 @@ python overview.py                               # images/riser-and-pod.png
 
 - **A lower riser** costs coverage. The best result at each lens height (`placement/podcheck.py`):
 
-  | Lens height above the lid's old edge | Riser height | Bed seen at the start / on average |
+  | Lens height above the hood ring's old edge | Riser height | Bed seen at the start / on average |
   |---|---|---|
-  | 60 mm | about 172 mm | 48 % / 64 % |
-  | 85 mm | about 197 mm | 55 % / 74 % |
-  | **100 mm (default)** | **212 mm** | **55 % / 77 %** |
+  | 60 mm | about 166 mm | 48 % / 64 % |
+  | 85 mm | about 191 mm | 55 % / 74 % |
+  | **100 mm (default)** | **206 mm** | **55 % / 77 %** |
 
-  Above 102 mm, the wall pieces no longer fit the bed in one piece (`riser.py` says so).
+  Above about 108 mm, the wall pieces no longer fit the bed in one piece (`riser.py` says so).
 - **Another tilt** means another pod: set `TILT` and reprint `camera-pod` only.
 
 ## The placement study
@@ -107,7 +107,7 @@ python overview.py                               # images/riser-and-pod.png
 
 Its result (`placement/tradeoff.py`, for a camera anywhere on the wall line):
 - The left side beats the front, back and right. The CANVAS unit takes the right side.
-- Coverage levels off at a lens height of about 185 mm above the lid's edge: 71 % at the start, 88 % on average.
+- Coverage levels off at a lens height of about 185 mm above the hood ring's edge: 71 % at the start, 88 % on average.
 - The nozzle tip can't be seen from above at all, because the head's shroud hides it.
 
 | File | What it does |
@@ -115,7 +115,7 @@ Its result (`placement/tradeoff.py`, for a camera anywhere on the wall line):
 | `placement.py` | The study: candidate positions, line-of-sight checks, scoring, simulated views |
 | `cc2.json` | The CC2 set-up: bed, nozzle, travel, head positions, riser walls, the camera |
 | `keep_step.py` | Makes a copy of a STEP assembly that keeps only the named parts, so it imports in a minute instead of hours |
-| `occ_export.py` | Reads a STEP assembly with Open CASCADE and writes meshes grouped by what moves (bed, gantry, head, frame, lid) |
+| `occ_export.py` | Reads a STEP assembly with Open CASCADE and writes meshes grouped by what moves (bed, gantry, head, frame, hood ring) |
 | `tree_step.py` | Prints a STEP assembly's part tree |
 | `tradeoff.py`, `podcheck.py`, `recommend.py` | The tables and views above |
 | `synthetic.py`, `syn.json` | A box printer, to test the study without the model |

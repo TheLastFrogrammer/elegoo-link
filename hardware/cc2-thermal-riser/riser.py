@@ -1,8 +1,8 @@
 """
-Lid riser for the Elegoo Centauri Carbon 2 with a FLIR A65 thermal camera mount on the left wall.
+Hood riser for the Elegoo Centauri Carbon 2 with a FLIR A65 thermal camera mount on the left wall.
 
-The riser sits where the lid sits now: its lower plug drops inside the frame's top lip onto the ledge, its body rests on
-the lip, and its top repeats the frame's lip and ledge so the lid drops into it, raised by the riser's height. The camera
+The riser sits where the hood sits now: its lower plug drops inside the frame's top lip onto the ledge, its body rests on
+the lip, and its top repeats the frame's lip and ledge so the hood's base ring drops into it, the hood raised by the riser's height. The camera
 sits in a pod: a sleeve that holds the front of the camera and passes through a cut-out in the left wall, so the lens is
 just inside the riser (no line of sight to the bed crosses the wall) while the camera's body stays outside in room air
 (the A65 is rated to 50 °C). Glass and clear plastic block long-wave infrared, so nothing may cover the lens. The camera
@@ -27,6 +27,7 @@ LEDGE = 394.0          # the ledge inside the lip, where the lid's tray sits now
 LIP_T = 3.5            # thickness of the frame's outer lip (the plug goes inside it)
 LID_EDGE = 440.0       # the lid's highest rim today (the study's "lens height" is measured from here)
 CLEAR = 0.6            # clearance between the plug and the lip
+RING_BOTTOM = 391.0    # the lowest point of the hood's base ring today (3 mm below the ledge, about 35 mm in from the wall)
 
 # ------------------------------------------------------------------ the riser
 WALL = 9.5             # body thickness (outer face flush with the frame)
@@ -117,8 +118,9 @@ def pod(lens_above):
 def make(out_dir, lens_above):
     os.makedirs(out_dir, exist_ok=True)
     pod_shape, cutout, camera, pod_top, holes, (fz0, fz1) = pod(lens_above)
-    # The pod's part inside the riser stays below the lid's tray, and the flange below the wall's top lip.
-    riser_h = math.ceil(max(pod_top + TOP_DEPTH + 3, fz1 + TOP_DEPTH + 3) - LIP_TOP)
+    # The pod's part inside the riser stays 3 mm below the hood's base ring (it reaches about 35 mm in from the wall and
+    # hangs to the old ledge's height); the flange, outside the wall and the hood, only needs to stay below the riser's top.
+    riser_h = math.ceil(max(pod_top - RING_BOTTOM + 5 + LIP_TOP, fz1 + 2) - LIP_TOP)   # 5 mm under the raised ring
     if fz0 < LIP_TOP + 3: raise SystemExit("the lens is too low: the pod's flange would reach below the riser's body")
     if riser_h + LIP_TOP - LEDGE > BED_MAX: raise SystemExit(f"a {riser_h} mm riser makes walls {riser_h + LIP_TOP - LEDGE:.0f} mm tall, more than the bed takes: lower the lens")
     ws, top = walls(riser_h)
