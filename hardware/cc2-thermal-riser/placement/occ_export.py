@@ -37,8 +37,8 @@ def name(label):
     return ""
 
 def group(path):
-    if "/top/" in path or path.endswith("/top") or "tophat" in path: return "lid"   # rides on the riser, above the camera
-    if "CANVAS v6" in path: return "canvas"   # the CANVAS unit hangs on the hood's right side and rises with it
+    if "CANVAS v6" in path or "tophat" in path: return "canvas"   # the CANVAS and its cover stand on the printer's top frame
+    if "/top/" in path or path.endswith("/top"): return "lid"   # the hood's rim: rides on the riser
     if "Bed_assm" in path: return "bed"
     if "xaxis_assm" in path: return "gantry"
     if "Toolhead" in path or "挤出齿外壳" in path or "散热片导风件" in path or "extruder CANVAS" in path or "multiplexer" in path: return "head"

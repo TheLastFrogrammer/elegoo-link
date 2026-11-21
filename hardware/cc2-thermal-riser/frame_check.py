@@ -8,7 +8,7 @@ for corner, name in (((-1, -1), "post FL"), ((1, 1), "post BR"), ((1, -1), "post
 for side in F.SIDES:
     parts[f"bottom {side}"] = F.rail(side, "bottom")
     if side != "right": parts[f"top {side}"] = F.rail(side, "top")
-parts["canvas side front"], parts["canvas side back"] = F.canvas_side(); parts["cover extension"] = F.cover_extension()
+parts["canvas side front"], parts["canvas side back"] = F.canvas_side(); parts["hood notch filler"] = F.notch_filler()
 built = F.build(os.path.join(HERE, "build", "frame-check")); import importlib
 parts["top left"] = cq.importers.importStep(os.path.join(HERE, "build", "frame-check", "saf", "rail-top-left-x1.step"))
 bb = parts["top left"].val().BoundingBox(); ref = F.rail("left", "top").val().BoundingBox()
@@ -57,11 +57,17 @@ for k, v in parts.items():
     if inside: print(f"  TOUCHES THE CANVAS: {k} ({inside} sample points)"); hits += 1
 print("parts touching the CANVAS:", "none" if not hits else hits)
 cb = canvas.bounds
-# The cover extension against the raised hood (its ring and the stock cover, both raised by the riser's height).
-lid = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "lid.stl")); lid.apply_translation([0, 0, F.H])
-ext = as_mesh(parts["cover extension"]); lp = lid.sample(40000)
-# The CC2 hood's rim has a gap at its CANVAS notch (the model's rim is the CC1's, which has none): leave that span out.
-lp = lp[~((np.abs(lp[:, 1]) < F.NOTCH_Y) & (lp[:, 0] > 120) & (lp[:, 2] < 460 + F.H))]
-inside = lp[ext.contains(lp)]
-print("raised hood (ring, stock cover) inside the cover extension:", len(inside), "" if not len(inside) else f"(z {inside[:, 2].min():.0f}-{inside[:, 2].max():.0f})")
-print(f"cover extension: {ext.bounds[0][2]:.1f} to {ext.bounds[1][2]:.1f}; the stock cover's bottom, raised: {F.COVER['bottom'] + F.H:.1f}")
+# The notch: how much of it stays open to the outside. A point in the notch (at the wall's middle) is closed off when a
+# line straight out from it meets the CANVAS or its cover (the cover is a sloping roof over the CANVAS, outside the wall).
+cv = trimesh.load(os.path.join(HERE, "build", "cc2mesh", "canvas.stl")); from trimesh.ray.ray_pyembree import RayMeshIntersector
+ri = RayMeshIntersector(cv); ys = np.arange(-F.NOTCH_Y + 0.5, F.NOTCH_Y, 1.0); zs = np.arange(F.CANVAS_SHELL["z"][0] - 1, F.TOP, 1.0)   # above the bottom rail
+Y, Z = np.meshgrid(ys, zs); o = np.column_stack([np.full(Y.size, F.FX - F.WALL / 2), Y.ravel(), Z.ravel()])
+hw = np.interp(Z.ravel(), [z for z, _ in F.COVER_OUTLINE], [h for _, h in F.COVER_OUTLINE])
+inside_notch = (np.abs(Y.ravel()) < np.where(Z.ravel() < F.CANVAS_SHELL["z"][1], F.NOTCH_Y, hw))
+closed = ri.intersects_any(o, np.tile([1.0, 0, 0], (len(o), 1)))
+open_pts = inside_notch & ~closed
+print(f"the riser's notch open to the outside past the CANVAS and cover: {open_pts.sum() / 100:.1f} cm2 of {inside_notch.sum() / 100:.0f} cm2")
+if open_pts.any():
+    oy, oz = Y.ravel()[open_pts], Z.ravel()[open_pts]
+    print(f"  where: y {oy.min():.0f} to {oy.max():.0f}, z {oz.min():.0f} to {oz.max():.0f}")
+fil = as_mesh(parts["hood notch filler"]); print("hood notch filler points inside the CANVAS or its cover:", int(fil.contains(cv.sample(30000)).sum()))

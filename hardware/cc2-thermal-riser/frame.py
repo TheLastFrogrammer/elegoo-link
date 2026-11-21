@@ -51,9 +51,14 @@ SAF_SCALE = 1.035                  # the printer enlarges parts by its shrinkage
 # Its outline (CC2 model; Elegoo gives 168 × 68 × 95 mm): the shell outside, the mounting bracket inside (MEASURE).
 CANVAS_SHELL = {"x": (176.2, 238.5), "y": (-84.0, 84.0), "z": (447.5, 536.0)}
 CANVAS_BRACKET = {"x": (161.2, 183.0), "y": (-84.0, 84.0), "z": (436.1, 536.0)}
-NOTCH_Y = 86.0                     # the right side's notch for the CANVAS, front to back: ± this (the hood has the same cut-out)
+NOTCH_Y = 85.0                     # the right side's notch for the CANVAS, front to back: ± this (the hood has the same cut-out)
+NOTCH_COVER_Y = 74.0               # the cover's half-width where it leaves the CANVAS (largest above the CANVAS)
+# The notch's outline above the CANVAS follows the cover where it meets the wall's line (it narrows as it rises), with
+# 1 mm to spare: (height, half-width). From the model, which agrees with photos of the cover (MEASURE).
+COVER_OUTLINE = [(536.0, 74.0), (542.0, 71.0), (548.0, 70.0), (632.0, 62.0), (700.0, 59.0)]
 COVER = {"x": (140.7, 235.2), "y": (-74.4, 74.3), "bottom": 529.8}   # the CANVAS's cover (the smoked bulge, 94 × 159 × 150 mm) where it sits on the CANVAS (MEASURE)
-EXT_WALL = 2.5
+HOOD_WALL = 3.0                    # the hood's wall thickness at its notch (MEASURE)
+COVER_TOP = 684.1                  # the cover's top with the hood on the frame: where the hood's notch ends (MEASURE)
 
 # The riser's height comes from the camera pod, as in riser.py.
 pod_shape, cutout, camera, pod_top, pod_holes, (fz0, fz1) = R.pod(LENS)
@@ -224,25 +229,31 @@ def canvas_side():
     for a, b in ((-end, -NOTCH_Y - 4), (NOTCH_Y + 4, end)):
         w = w.union(block(side, a, b, WALL - 0.5, vl, *HOOK["stem"])).union(block(side, a, b, vg, vl, *HOOK["lip"]))
     w = w.cut(trough(side, -end - TENON_L - 1, end + TENON_L + 1))
-    w = w.cut(block(side, -NOTCH_Y, NOTCH_Y, -1, vl + 1, GROOVE_BOTTOM[0] - 1, TOP + 1))   # the notch, to the top
-    pieces = w.solids().vals()
-    pieces.sort(key=lambda p: p.Center().y)
-    return [cq.Workplane("XY").add(p) for p in pieces]   # front, back
+    w = w.cut(notch_prism(-1, vl + 1))
+    return [cq.Workplane("XY").add(p) for p in sorted(w.solids().vals(), key=lambda p: p.Center().y)]   # front, back
 
-def cover_extension():
-    """Fills the raised hood's notch, as the CANVAS's cover fills it now: it stands on the CANVAS where the cover sat, and
-    the stock cover goes on its top, so the cover ends up where the raised notch expects it. A straight column the shape
-    of the CANVAS and cover's footprint (the hood's rim has a gap at the notch, so nothing is in its way). Its lower part
-    is open on the inside: the tubes leave the CANVAS's top and turn straight into the riser, as now. Hollow, open at the
-    bottom and the top. (How the cover seats on the CANVAS is not in the model: match the top and bottom edges to yours.)"""
-    x_in = min(CANVAS_BRACKET["x"][0], COVER["x"][0]); x_out = max(CANVAS_SHELL["x"][1], COVER["x"][1])
-    y0, y1 = CANVAS_SHELL["y"]
-    z0 = CANVAS_SHELL["z"][1] + 0.5; z3 = COVER["bottom"] + H
-    def box(inset, za, zb):
-        return cq.Workplane("XY").box(x_out - x_in - 2 * inset, y1 - y0 - 2 * inset, zb - za, centered=False).translate((x_in + inset, y0 + inset, za))
-    e = box(0, z0, z3).cut(box(EXT_WALL, z0 - 1, z3 + 1))
-    # The inner face of the lower part is open: the tubes' way into the riser, below the riser's top.
-    return e.cut(cq.Workplane("XY").box(EXT_WALL + 2, y1 - y0 - 2 * EXT_WALL - 4, TOP - TOP_DEPTH - z0 - 6, centered=False).translate((x_in - 1, y0 + EXT_WALL + 2, z0 + 4)))
+def notch_prism(v0, v1):
+    """The notch's outline (the CANVAS's width, then the cover's narrowing outline) through the right wall from v0 to v1."""
+    top = CANVAS_SHELL["z"][1]
+    pts = [(-NOTCH_Y, GROOVE_BOTTOM[0] - 1), (NOTCH_Y, GROOVE_BOTTOM[0] - 1), (NOTCH_Y, top)]
+    pts += [(hw, z) for z, hw in COVER_OUTLINE]
+    pts += [(-hw, z) for z, hw in reversed(COVER_OUTLINE)] + [(-NOTCH_Y, top)]
+    prism = cq.Workplane("YZ").polyline(pts).close().extrude(v1 - v0)
+    return prism.translate((FX - v1, 0, 0))
+
+
+def notch_filler():
+    """Closes the gap that lifting the hood opens in its notch: the hood's notch rises with it, the CANVAS and its cover
+    stay put, so above the cover's top a gap opens exactly as tall as the riser and as wide as the notch. A flat panel in
+    the hood's notch, resting on the cover's top, its edges in the notch's sides like the hood's own wall. (The notch's
+    width and the hood's wall are not in the model: check them on yours.)"""
+    x1 = FX; x0 = FX - HOOD_WALL
+    w = 2 * COVER_OUTLINE[-2][1] - 1.0   # the notch's width where the hood's notch begins
+    panel = cq.Workplane("XY").box(HOOD_WALL, w, H, centered=False).translate((x0, -w / 2, COVER_TOP + 0.5))
+    # Two small lips inside, along the edges, to locate it against the hood's notch.
+    for sgn in (-1, 1):
+        panel = panel.union(cq.Workplane("XY").box(6, 4, H - 20, centered=False).translate((x0 - 6, sgn * (w / 2 - 4) - (0 if sgn > 0 else 0) - 2, COVER_TOP + 10.5)))
+    return panel
 
 ANGLES = {"front": 0, "right": 90, "back": 180, "left": -90}
 def place(shape, side, u):
@@ -300,7 +311,7 @@ def zip_anchor(width=30.0):
 COLOURS = {
     "post": (0.90, 0.62, 0.00), "rail-bottom": (0.00, 0.45, 0.70), "rail-top": (0.34, 0.71, 0.91), "rail-top-left": (0.00, 0.62, 0.45),
     "camera-pod": (0.84, 0.37, 0.00), "panel-polycarbonate": (0.75, 0.90, 1.00), "panel-camera": (0.80, 0.47, 0.65),
-    "zip-anchor": (0.94, 0.89, 0.26), "canvas-side": (0.20, 0.70, 0.70), "cover-extension": (0.55, 0.30, 0.55), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13)}
+    "zip-anchor": (0.94, 0.89, 0.26), "canvas-side": (0.20, 0.70, 0.70), "hood-notch-filler": (0.55, 0.30, 0.55), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13)}
 def kind_of(name):
     for k in ("rail-top-left", "rail-bottom", "rail-top", "post", "camera-pod", "led-holder", "mounting-plate", "zip-anchor", "canvas-side"):
         if name.startswith(k): return k
@@ -325,7 +336,7 @@ def build(out):
     panels = {"front": sheet("front"), "back": sheet("back"), "left": camera_panel()}
     parts["fdm"]["panel-camera (left)"] = panels["left"]
     parts["fdm"]["panel-blank (any side, optional)"] = module_panel("front")
-    parts["fdm"]["cover-extension"] = cover_extension()
+    parts["fdm"]["hood-notch-filler"] = notch_filler()
     # Modules: one of each kind in the files; in place, an LED holder on the front and back top rails, a mounting plate
     # and a zip-tie anchor on the left.
     modules = {"led-holder front": ("led-holder", place(led_holder(), "front", 0)), "led-holder back": ("led-holder", place(led_holder(), "back", 0)),
@@ -336,7 +347,7 @@ def build(out):
     placed = {}   # every part in place, by kind, for the renders
     for k, v in parts["saf"].items(): placed[k] = (kind_of(k), v)
     for side in ("front", "back"): placed[f"polycarbonate {side}"] = ("panel-polycarbonate", panels[side])
-    placed["cover-extension"] = ("cover-extension", parts["fdm"]["cover-extension"])
+    placed["hood-notch-filler"] = ("hood-notch-filler", parts["fdm"]["hood-notch-filler"])
     placed["camera panel (left)"] = ("panel-camera", panels["left"])
     for k, (kd, v) in modules.items(): placed[k] = (kd, v)
     placed["FLIR A65 envelope (not printed)"] = ("camera", camera)
@@ -380,11 +391,16 @@ def build(out):
         if k == "camera-pod": continue
         whole = v if whole is None else whole.union(v)
     for v in panels.values(): whole = whole.union(v)
-    whole = whole.union(parts["fdm"]["cover-extension"])
+    whole = whole.union(parts["fdm"]["hood-notch-filler"])
     os.makedirs(os.path.join(HERE, "build"), exist_ok=True)
     cq.exporters.export(whole, os.path.join(HERE, "build", "riser-in-place.stl"), tolerance=0.2, angularTolerance=0.3)
     for k, (kd, v) in modules.items():
         cq.exporters.export(v, os.path.join(HERE, "build", k.replace(" ", "-") + "-in-place.stl"), tolerance=0.2, angularTolerance=0.3)
+    # An approximate hood, for the pictures only (no model has its walls): the frame's outline, 300 mm tall, 3 mm walls,
+    # raised onto the riser, with its notch over the CANVAS (the filler closes the part the lift opened).
+    hood = outline(0, TOP, TOP + 300).cut(outline(HOOD_WALL, TOP - 1, TOP + 300 - HOOD_WALL))
+    hood = hood.cut(notch_prism(-5, 20).translate((0, 0, H)))
+    cq.exporters.export(hood, os.path.join(HERE, "build", "hood-approx.stl"), tolerance=0.5, angularTolerance=0.5)
     return {"riser_height": H, "riser_top": TOP, "lens_above_ring_edge": LENS, "panels": [w, ws, h], "part_sizes": sizes}
 
 if __name__ == "__main__":

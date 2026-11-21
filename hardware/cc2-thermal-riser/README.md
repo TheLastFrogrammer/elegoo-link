@@ -18,8 +18,8 @@ placed by a study of what the camera can see of the bed as the printer moves. Th
 
 ![The frame taken apart, colour-coded](images/frame-exploded.png)
 
-*Each kind of part has its own colour, the same in `frame/frame-assembly.step`; the clear polycarbonate is drawn
-see-through, the printer in greys. The hood's base ring and the CANVAS unit (dark slate) ride on the hood, so they are
+*Each kind of part has its own colour, the same in `frame/frame-assembly.step`. The clear polycarbonate is drawn
+see-through and the printer in greys. The hood's walls are approximate (no model has them) and see-through. The hood's base ring and the CANVAS unit (dark slate) ride on the hood, so they are
 drawn raised by the riser's height; the CANVAS hangs on the right as you face the printer, as on the real one. `python render_frame.py` redraws these after a change.*
 
 **How it's split:**
@@ -53,11 +53,11 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-bottom-x3` | SAF | 3 (front, back, left) | 290 × 55 × 10 |
 | `frame/saf/rail-bottom-right-x1` | SAF | 1 | A notch where the CANVAS crosses it |
 | `frame/saf/rail-top-x2` | SAF | 2 (front, back) | 290 × 74 × 16 |
-| `frame/saf/canvas-side-front-x1`, `canvas-side-back-x1` | SAF | 1 each (right) | 59 × 192 × 16: the right side either side of the CANVAS's notch |
+| `frame/saf/canvas-side-front-x1`, `canvas-side-back-x1` | SAF | 1 each (right) | 85 × 192 × 16: the right side either side of the notch the CANVAS and its cover sit in |
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/cover-extension` | FDM | 1 | 168 × 98 × 199: stands on the CANVAS; the stock cover goes on top |
+| `frame/fdm/hood-notch-filler` | FDM | 1 | 206 × 119 × 9: a flat panel in the hood's notch, on the cover's top |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -78,8 +78,9 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 6. Set the hood on top.
 
 **Checks** (`frame_check.py`, `verify.py`):
-- No two parts overlap once assembled, and none touches the CANVAS. The cover extension clears the raised hood (its rim
-  has a gap at the notch) and meets the raised stock cover exactly.
+- No two parts overlap once assembled, and none touches the CANVAS or its cover.
+- The notch is closed by the CANVAS and cover except for its 1–2 mm clearances.
+- The filler clears the cover.
 - Every part is a closed solid.
 - The modules and the pod stay 4.7 mm or more under the raised hood ring.
 - The head's parts pass at least 24.5 mm from the pod and 43 mm from the mounting plate. Nothing on the head reaches the
@@ -88,27 +89,25 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
   place: the same as the one-piece walls.
 
 **The CANVAS:**
-- **It stays on the printer.** It stands on the top frame's right edge, so no filament tube changes length or path.
-- **The right side has a notch, as the hood has.** The CANVAS sits in it, straddling the wall as it straddles the hood
-  now. The notch splits the right side into a front and a back piece, each held by its post and the bottom rail.
-- **The cover extension** stands on the CANVAS where its cover sat. The stock cover goes on top of it, exactly as before
-  but higher by the riser.
-  - Why it's needed: the hood has a tall notch in its right side, open at its bottom edge, which the CANVAS and its
-    cover fill.
-  - Raised 206 mm, that notch would be open from the riser's top up to the cover. The extension takes the cover up
-    with it.
-  - Its lower part (the CANVAS's whole footprint) is open on the inside: the tubes leave the CANVAS's top and turn
-    straight into the riser, as now.
-  - It's a straight column the shape of the CANVAS and cover's footprint: the hood's rim has a gap at its notch, so
-    nothing is in the way.
+- **It stays on the printer, with its cover.** It stands on the top frame's right edge, so no filament tube changes
+  length or path.
+- **The riser's right side has the same notch as the hood.**
+  - It's the CANVAS's width up to the CANVAS's top. Above that it follows the cover's outline, which narrows as it
+    rises, with about 1 mm to spare.
+  - The CANVAS and cover sit in it exactly as they sit in the hood's notch now. The tubes come out under the cover and
+    into the enclosure as they do today.
+  - The notch splits the right side into a front and a back piece.
+- **The hood notch filler.**
+  - The hood's notch rises with the hood while the CANVAS and cover stay put. That opens a gap in the hood's notch above
+    the cover, exactly as tall as the riser.
+  - A flat panel closes it, sitting in the hood's notch on the cover's top.
 - **Measure before printing.**
-  - The CANVAS's outline and the cover's footprint come from the community model, which agrees with Elegoo's
-    168 × 68 × 95 mm and a printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`, `COVER`).
-  - How the cover seats on the CANVAS is not in any model: match the extension's top and bottom edges to yours.
-  - A strip of foam closes the 2 mm gaps between the notch's edges and the CANVAS and extension.
-- **The hood's ring needs checking too.** The community model's ring (the hood's plastic insert) is the CC1's: Elegoo
-  revised it for the CC2, so check `LIP_T`, `LEDGE` and `RING_BOTTOM` in `riser.py`, and `RING_IN` in `frame.py`,
-  against your printer.
+  - The CANVAS's and cover's outlines come from the community model, which agrees with Elegoo's 168 × 68 × 95 mm and a
+    printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `COVER_OUTLINE`, `COVER_TOP`).
+  - The hood's notch and wall thickness are not in any model (`HOOD_WALL`): check the filler against your hood.
+  - Foam closes the 1–2 mm gaps round the notch's edges: about 11 cm² in all.
+- **The hood's rim needs checking too.** The community model's rim (the hood's plastic insert) is the CC1's: Elegoo
+  revised it for the CC2, so check `LIP_T`, `LEDGE` and `RING_BOTTOM` in `riser.py` against your printer.
 
 **Lighting:**
 - **Strip:** COB LED strip, 24 V or 12 V, in standard 17 × 7 mm aluminium channel with a diffuser, cut to 230 mm.
