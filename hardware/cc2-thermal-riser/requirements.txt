@@ -5,3 +5,4 @@ trimesh
 embreex
 numpy
 pillow
+shapely

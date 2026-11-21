@@ -247,24 +247,48 @@ def notch_prism(v0, v1, bottom=None, grow=0.0):
 
 COVER_STEP = os.path.join(HERE, "build", "canvas-cover.step")   # the CANVAS's cover as a solid (fetch_model.sh extracts it)
 
+CANVAS_MESH = os.path.join(HERE, "build", "cc2mesh", "canvas.stl")    # the CANVAS and its cover (fetch_model.sh meshes them)
+
+def silhouette(mesh, axes):
+    """The outline of a mesh seen along one axis: its triangles projected onto the other two axes and joined (shapely)."""
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    tris = mesh.vertices[mesh.faces][:, :, axes]
+    u = unary_union([Polygon(t) for t in tris if Polygon(t).area > 1e-6]).buffer(0.3).buffer(-0.3).simplify(0.3)
+    return u if u.geom_type == "Polygon" else max(u.geoms, key=lambda g: g.area)
+
+def swept_up(poly, dz):
+    """A 2-D outline (across, height) swept straight up by dz: itself, raised, and every edge between."""
+    from shapely.affinity import translate
+    from shapely.geometry import Polygon
+    from shapely.ops import unary_union
+    c = list(poly.exterior.coords)
+    quads = [Polygon([a, b, (b[0], b[1] + dz), (a[0], a[1] + dz)]).buffer(0) for a, b in zip(c, c[1:])]
+    g = unary_union([poly, translate(poly, 0, dz)] + [q for q in quads if q.area > 1e-6])
+    return Polygon(g.exterior) if g.geom_type == "Polygon" else Polygon(max(g.geoms, key=lambda x: x.area).exterior)
+
 def notch_filler():
-    """Fills what lifting the hood opens in its notch. The hood moves straight up, so the profile it meets is the
-    CANVAS's cover raised by the riser's height. The filler is the cover swept straight up by that height (every face
-    extruded up and joined), less the real cover with 0.5 mm to spare, from the hood's bottom edge up: its top is the
-    cover's profile where the hood now expects it, and below that it fills every gap down to the real cover. Printed in
-    FDM with sparse infill: it is mostly solid. Without the model's cover it falls back to the notch outline."""
-    if not os.path.exists(COVER_STEP): return notch_filler_outline()
-    from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
-    from OCP.gp import gp_Vec
+    """Fills what lifting the hood opens round the CANVAS. The hood moves straight up, so it now meets the CANVAS's
+    and cover's outline raised by the riser's height. The filler traces that outline as seen from the front (across,
+    height), raises it by the riser's height and fills everything between it and the real outline; the same from the
+    side (front to back, height); and keeps what both views share: a block with the stack's raised outline on top and
+    sides, from the hood's bottom edge up, less the real cover with 0.5 mm to spare all round (it drops over the cover from above).
+    Without the model's CANVAS it falls back to the notch outline."""
+    if not (os.path.exists(CANVAS_MESH) and os.path.exists(COVER_STEP)): return notch_filler_outline()
+    import trimesh
+    mesh = trimesh.load(CANVAS_MESH)
+    def prism(poly, plane, depth):
+        pts = list(poly.exterior.coords)[:-1]
+        return cq.Workplane(plane).polyline(pts).close().extrude(depth, both=True).val()
+    front = prism(swept_up(silhouette(mesh, [0, 2]), H), "XZ", 300)    # across (x) and height, deep in y
+    side = prism(swept_up(silhouette(mesh, [1, 2]), H), "YZ", 300)     # front to back (y) and height, deep in x
     cover = cq.importers.importStep(COVER_STEP).val()
-    sweep = cover
-    for f in cover.Faces():
-        if abs(f.normalAt().z) < 1e-3: continue          # a vertical face sweeps to nothing
-        sweep = sweep.fuse(cq.Shape.cast(BRepPrimAPI_MakePrism(f.wrapped, gp_Vec(0, 0, H)).Shape()))
-    sweep = sweep.fuse(cover.translate(cq.Vector(0, 0, H))).clean()
-    filler = sweep.cut(cover).cut(cover.translate(cq.Vector(0, 0, 0.5)))
-    filler = filler.intersect(cq.Workplane("XY").box(2000, 2000, 2000, centered=(True, True, False)).translate((0, 0, TOP + 0.3)).val())
-    solids = [x for x in filler.Solids() if x.Volume() > 1000]   # drop slivers
+    above = cq.Workplane("XY").box(2000, 2000, 2000, centered=(True, True, False)).translate((0, 0, TOP + 0.3)).val()
+    filler = front.intersect(side).intersect(above).cut(cover)
+    for d in ((0.5, 0, 0), (-0.5, 0, 0), (0, 0.5, 0), (0, -0.5, 0), (0, 0, 0.5)):   # 0.5 mm clear of the cover all round
+        filler = filler.cut(cover.translate(cq.Vector(*d)))
+    filler = filler.clean()
+    solids = [x for x in filler.Solids() if x.Volume() > 50]   # drop slivers
     return cq.Workplane("XY").add(solids[0] if len(solids) == 1 else cq.Compound.makeCompound(solids))
 
 def notch_filler_outline():
