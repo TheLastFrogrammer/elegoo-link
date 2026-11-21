@@ -57,7 +57,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 182 × 5, printed flat: the hood's notch outline less the cover's |
+| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 149 × 95: the cover's profile swept up by the riser, less the cover; sparse infill |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -98,13 +98,13 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
     into the enclosure as they do today.
   - The notch splits the right side into a front and a back piece.
 - **The hood notch filler.**
-  - The hood's notch rises with the hood while the CANVAS and cover stay put, and the cover's top still stands about
-    50 mm up into it.
-  - So the filler is the hood's notch outline, raised with the hood, less the cover's outline with 1 mm to spare. It
-    closes the notch above the cover, and its two legs fill the strips either side of the cover's top down to the
-    riser.
-  - It sits in the hood's wall like the part of the cover it replaces. A lip behind the wall, 6 mm past the notch's
-    edges, locates and seals it.
+  - The hood moves straight up, so the profile it meets in its notch is the CANVAS's cover, raised by the riser's height.
+  - The filler is the cover swept straight up by that height (every face extruded up and joined), less the real cover
+    with 0.5 mm to spare, from the hood's bottom edge up.
+  - Its top is the cover's own profile where the hood now expects it. Below that it fills every gap down to the cover.
+  - The cover's shape comes from the community model as a solid (`fetch_model.sh` extracts it to
+    `build/canvas-cover.step`), the same size as the printed cover on Printables (94 × 159 × 150 mm).
+  - It's mostly solid (about 2.5 l), so print it with sparse infill.
 - **Measure before printing.**
   - The CANVAS's and cover's outlines come from the community model, which agrees with Elegoo's 168 × 68 × 95 mm and a
     printed cover of 94 × 159 × 150 mm (`CANVAS_SHELL`, `COVER_OUTLINE`, `COVER_TOP`).

@@ -9,3 +9,4 @@ if [ ! -d opencentauri-cad ]; then GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 htt
 [ -f CC2_CANVAS_step.step ] || unzip -o -q opencentauri-cad/CC2_CANVAS_step.zip
 python ../placement/keep_step.py CC2_CANVAS_step.step study.step "0[0-9]{3}.*" "rod mounts" "frame" "CC_door" "CC_z_azis v12" "XY_Assm" "挤出齿外壳" "散热片导风件" "CANVAS" "CC屏幕" "cc2 tophat"
 mkdir -p cc2mesh && python ../placement/occ_export.py study.step cc2mesh
+python ../placement/extract_part.py study.step canvas-cover.step "cc2 tophat"   # the CANVAS's cover, for the hood notch filler

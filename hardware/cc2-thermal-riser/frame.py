@@ -245,7 +245,29 @@ def notch_prism(v0, v1, bottom=None, grow=0.0):
     return prism.extrude(v1 - v0).translate((FX - v1, 0, 0))
 
 
+COVER_STEP = os.path.join(HERE, "build", "canvas-cover.step")   # the CANVAS's cover as a solid (fetch_model.sh extracts it)
+
 def notch_filler():
+    """Fills what lifting the hood opens in its notch. The hood moves straight up, so the profile it meets is the
+    CANVAS's cover raised by the riser's height. The filler is the cover swept straight up by that height (every face
+    extruded up and joined), less the real cover with 0.5 mm to spare, from the hood's bottom edge up: its top is the
+    cover's profile where the hood now expects it, and below that it fills every gap down to the real cover. Printed in
+    FDM with sparse infill: it is mostly solid. Without the model's cover it falls back to the notch outline."""
+    if not os.path.exists(COVER_STEP): return notch_filler_outline()
+    from OCP.BRepPrimAPI import BRepPrimAPI_MakePrism
+    from OCP.gp import gp_Vec
+    cover = cq.importers.importStep(COVER_STEP).val()
+    sweep = cover
+    for f in cover.Faces():
+        if abs(f.normalAt().z) < 1e-3: continue          # a vertical face sweeps to nothing
+        sweep = sweep.fuse(cq.Shape.cast(BRepPrimAPI_MakePrism(f.wrapped, gp_Vec(0, 0, H)).Shape()))
+    sweep = sweep.fuse(cover.translate(cq.Vector(0, 0, H))).clean()
+    filler = sweep.cut(cover).cut(cover.translate(cq.Vector(0, 0, 0.5)))
+    filler = filler.intersect(cq.Workplane("XY").box(2000, 2000, 2000, centered=(True, True, False)).translate((0, 0, TOP + 0.3)).val())
+    solids = [x for x in filler.Solids() if x.Volume() > 1000]   # drop slivers
+    return cq.Workplane("XY").add(solids[0] if len(solids) == 1 else cq.Compound.makeCompound(solids))
+
+def notch_filler_outline():
     """Fills what lifting the hood opens in its notch. The hood's notch (the CANVAS's and cover's outline, open at the
     hood's bottom edge) rises with the hood; the CANVAS and cover stay put, and the cover's top still stands about 50 mm
     up into it. So the filler is the hood's notch outline, raised with the hood, less the cover's outline with 1 mm to
