@@ -93,11 +93,15 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
   - The tubes come out of the CANVAS's top and pass into the riser under a beam that carries the hood's ring across
     the bay (about 55 mm of height for them to turn in).
   - The bay's floor closes it underneath, with a slot for the spools' tubes. Seal round them with foam.
-- **The hood plug** stands on the bay's roof and fills the raised hood's CANVAS opening up to its bulge, as the CANVAS
-  itself did.
+- **The hood plug** stands in for the CANVAS at the raised height. It stands on the bay's roof and reaches in to the
+  CANVAS's inner plate.
+  - The raised hood's cut-out fits round it as it fitted round the CANVAS.
+  - The CANVAS's own cover (the smoked bulge, which rests on the CANVAS, 94 × 159 × 150 mm) moves up onto its top.
 - **Measure before printing.** The CANVAS's outline comes from the community model, and agrees with Elegoo's
-  168 × 68 × 95 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`). The hood's opening and the bulge's bottom (`BULGE_BOTTOM`) are
-  not in any model: check the plug against your hood.
+  168 × 68 × 95 mm (`CANVAS_SHELL`, `CANVAS_BRACKET`). The hood's cut-out, and how the cover seats on the CANVAS
+  (`BULGE_BOTTOM`), are not in any model: check the plug against your hood and cover.
+- **The hood's ring needs checking too.** The community model's ring (the hood's plastic insert) is the CC1's: Elegoo
+  revised it for the CC2, so check `LIP_T`, `LEDGE` and `RING_BOTTOM` in `riser.py` against your printer.
 
 **Lighting:**
 - **Strip:** COB LED strip, 24 V or 12 V, in standard 17 × 7 mm aluminium channel with a diffuser, cut to 230 mm.

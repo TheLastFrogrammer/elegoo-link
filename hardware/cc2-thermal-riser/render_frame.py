@@ -9,7 +9,7 @@ LABELS = {"post": "Corner post (SAF)", "rail-bottom": "Bottom rail (SAF)", "rail
           "rail-top-left": "Left top rail, round the pod (SAF)", "camera-pod": "Camera pod (SAF)", "panel-polycarbonate": "Clear polycarbonate panel",
           "panel-camera": "Camera panel (FDM)", "zip-anchor": "Zip-tie anchor (FDM)", "led-holder": "LED holder (FDM)",
           "mounting-plate": "Mounting plate (FDM)", "camera": "FLIR A65 (not printed)", "printer": "The printer",
-          "canvas": "CANVAS unit (stays on the printer)", "canvas-side": "CANVAS side, with the bay (SAF)", "canvas-bay": "Bay floor (FDM)", "hood-plug": "Hood plug (FDM)", "hood": "Hood ring and bulge (raised with the hood)"}
+          "canvas": "CANVAS unit (stays on the printer)", "canvas-side": "CANVAS side, with the bay (SAF)", "canvas-bay": "Bay floor (FDM)", "hood-plug": "Hood plug (FDM)", "hood": "Hood ring, and the CANVAS's cover moved up onto the plug"}
 GREYS = {"static": (0.62, 0.62, 0.62), "bed": (0.42, 0.42, 0.45), "gantry": (0.75, 0.75, 0.75), "head": (0.5, 0.5, 0.52)}
 RAISED = (0.30, 0.34, 0.42)   # the hood's base ring and its bulge over the CANVAS: they sit on the riser, so they rise by its height
 CANVAS = (0.75, 0.10, 0.10)   # the CANVAS unit: it stands on the printer's top frame, so it stays put

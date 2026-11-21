@@ -55,7 +55,7 @@ BAY_Y = 92.0                       # the bay's inside, front to back: ± this
 BAY_OUT = 246.0                    # the bay's outer face (x); the CANVAS reaches 238.5
 BAY_WALL = 3.0
 BAY_BOTTOM = 430.0                 # the bay's floor, under the CANVAS's overhang (its shell's bottom is at 447.5)
-BULGE_BOTTOM = 529.8               # the open bottom of the hood's bulge over the CANVAS, with the hood on the frame (MEASURE)
+BULGE_BOTTOM = 529.8               # where the CANVAS's cover (the smoked bulge, 94 × 159 × 150 mm) sits on the CANVAS (MEASURE)
 
 # The riser's height comes from the camera pod, as in riser.py.
 pod_shape, cutout, camera, pod_top, pod_holes, (fz0, fz1) = R.pod(LENS)
@@ -258,16 +258,19 @@ def canvas_floor():
     return f
 
 def hood_plug():
-    """Fills the raised hood's CANVAS opening and the bulge's open bottom, shaped like the CANVAS's upper part where the
-    hood fits round it: outside the riser it stands on the bay's roof; over the riser's top it sits just above the hood's
-    ring. Hollow, open below, two screws into the roof. (The hood's opening is not in the model: check it on yours.)"""
+    """Stands in for the CANVAS at the raised height: the raised hood's cut-out fits round it as it fitted round the
+    CANVAS, and the CANVAS's own cover (the smoked bulge, which rests on the CANVAS) moves up onto its top. Outside the
+    riser it stands on the bay's roof; inside, over the riser's top, it sits just above the hood's ring and reaches in to
+    the CANVAS's inner plate. Hollow, open below, two screws into the roof. (The hood's cut-out and the cover's seat are
+    not in the model: check them on yours.)"""
     sx0, sx1 = CANVAS_SHELL["x"]; y0, y1 = CANVAS_SHELL["y"]; top = BULGE_BOTTOM + H - 0.5   # meets the raised bulge's open bottom
     ring_top = 440.0 + H
     outer = cq.Workplane("XY").box(sx1 - FX, y1 - y0, top - ROOF_Z, centered=False).translate((FX, y0, ROOF_Z))
-    inner = cq.Workplane("XY").box(FX - sx0, y1 - y0, top - ring_top - 1, centered=False).translate((sx0, y0, ring_top + 1))
+    bx0 = CANVAS_BRACKET["x"][0]   # inside, the hood's cut-out also clears the CANVAS's inner plate
+    inner = cq.Workplane("XY").box(FX - bx0, y1 - y0, top - ring_top - 1, centered=False).translate((bx0, y0, ring_top + 1))
     solid = outer.union(inner)
     hollow = (cq.Workplane("XY").box(sx1 - FX - 4, y1 - y0 - 4, top - ROOF_Z, centered=False).translate((FX + 2, y0 + 2, ROOF_Z - 2))
-              .union(cq.Workplane("XY").box(FX - sx0, y1 - y0 - 4, top - ring_top - 3, centered=False).translate((sx0 + 2, y0 + 2, ring_top - 1))))
+              .union(cq.Workplane("XY").box(FX - bx0, y1 - y0 - 4, top - ring_top - 3, centered=False).translate((bx0 + 2, y0 + 2, ring_top - 1))))
     p = solid.cut(hollow)
     for yy in (-BAY_Y + 10, BAY_Y - 10):
         if y0 < yy < y1:
