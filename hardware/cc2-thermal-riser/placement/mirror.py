@@ -43,6 +43,9 @@ def evaluate(M, size, aim=centre, n=17, Wl=None):
     # The mirror: a rectangle `size` (w, h) in its plane, centred on M, its width along Y.
     ey = np.array([0, 1.0, 0]); ey -= normal * (ey @ normal); ey /= np.linalg.norm(ey); ez = np.cross(normal, ey)
     yaw = math.degrees(math.atan2(view[0], view[1])); pitch = math.degrees(math.atan2(-view[2], math.hypot(view[0], view[1])))
+    corners = [M + ey * sy * size[0] / 2 + ez * sz * size[1] / 2 for sy in (-1, 1) for sz in (-1, 1)]
+    if max(c[0] for c in corners) > KEEP_X or min(c[0] for c in corners) < -196:
+        return {"max_x": 1e9, "min_x": 0, "leg_clear": False}
     basis = cam.basis(yaw, pitch); cover = []
     for (drop, head), (mesh, inter, _) in zip(states, scenes):
         pts = P.bed_grid(b, n, drop)
@@ -57,21 +60,32 @@ def evaluate(M, size, aim=centre, n=17, Wl=None):
             seen[idx[first >= L - 0.5]] = True
         cover.append(seen.mean())
     # The first leg (lens to mirror) must clear the hood ring and stay in the band: checked as a straight line.
-    leg_ok = leg_clear(W, M, ey, ez, size)
+    leg_ok = leg_clear(W, M, ey, ez, size) if max(cover) > 0.3 else False
     up = math.degrees(math.atan2(M[2] - W[2], math.hypot(*(M - W)[:2])))
-    return {"mirror": [round(v) for v in M], "size": size, "virtual_height": round(V[2] - b["z"]), "tilt": round(pitch), "lens_to_mirror": round(dist),
+    corners = [M + ey * sy * size[0] / 2 + ez * sz * size[1] / 2 for sy in (-1, 1) for sz in (-1, 1)]
+    return {"max_x": max(c[0] for c in corners), "min_x": min(c[0] for c in corners), "mirror": [round(v) for v in M], "size": size, "virtual_height": round(V[2] - b["z"]), "tilt": round(pitch), "lens_to_mirror": round(dist),
             "worst": min(cover), "mean": float(np.mean(cover)), "leg_clear": leg_ok, "camera_up": round(up)}
 
-# Search: the lens anywhere up the band below the raised ring; the mirror anywhere inside the hood over the left half.
+# Search. The CANVAS tubes rise from the head and arch through the middle of the hood to its back right, so the whole
+# mirror stays left of KEEP_X (the head never goes further left than about x -131, and the tubes leave its top).
+KEEP_X = float(sys.argv[2]) if len(sys.argv) > 2 else -150.0
+ZS = [int(v) for v in sys.argv[3].split(",")] if len(sys.argv) > 3 else (110, 150, 190, 230, 270)
+XS = [int(v) for v in sys.argv[4].split(",")] if len(sys.argv) > 4 else (-185, -175, -165)
 best = []
-for lz in np.arange(LIP_TOP + 22, RING_BOTTOM + R - 18, 8):
-    for xm in (-150, -110, -70, -30, 10):
-        for zm in (120, 170, 220, 270):
-            for size in ((120, 90), (160, 120)):
-                r = evaluate([xm, -18, 440 + zm], size, Wl=[-185.0, -18.0, float(lz)])
-                if r["leg_clear"]: r["lens_z"] = round(lz - 440); best.append(r)
+for lz in np.arange(LIP_TOP + 14, RING_BOTTOM + R - 18, 8):
+    for ym in (-150, -100, -60, -18, 30, 80):
+        for zm in ZS:
+            for w, h in ((160, 120), (120, 90), (120, 60), (90, 60), (70, 50)):
+                for aim_x in (0.35, 0.5, 0.65):
+                    for aim_y in (0.35, 0.5, 0.65):
+                        aim = np.array([b["x0"] + (b["x1"] - b["x0"]) * aim_x, b["y0"] + (b["y1"] - b["y0"]) * aim_y, b["z"] - 100])
+                        # The mirror's centre as far right as the keep-out allows, for its size and tilt (found below).
+                        for xm in XS:
+                            r = evaluate([xm, ym, 440 + zm], (w, h), aim=aim, Wl=[-185.0, -18.0, float(lz)])
+                            if not r["leg_clear"] or r["max_x"] > KEEP_X or r["min_x"] < -196: continue
+                            r["lens_z"] = round(lz - 440); best.append(r)
 best.sort(key=lambda r: -(r["worst"] + r["mean"]))
-print(f"riser {R:.0f} mm: {len(best)} clear arrangements")
-for r in best[:6]:
-    print(f"  lens {r['lens_z']:+d} mm (old ring edge), looking {r['camera_up']}° up; mirror at x {r['mirror'][0]}, {r['mirror'][2] - 440} mm up, {r['size'][0]}×{r['size'][1]} mm, {r['lens_to_mirror']} mm away;"
+print(f"riser {R:.0f} mm, mirror left of x {KEEP_X:.0f}: {len(best)} clear arrangements")
+for r in best[:4]:
+    print(f"  lens {r['lens_z']:+d} mm, looking {r['camera_up']}° up; mirror centre x {r['mirror'][0]} y {r['mirror'][1]}, {r['mirror'][2] - 440} mm up, {r['size'][0]}×{r['size'][1]} mm, {r['lens_to_mirror']} mm away;"
           f" virtual camera {r['virtual_height']} mm above the bed, {r['tilt']}° down: {r['worst']:.0%} at the start / {r['mean']:.0%} average")
