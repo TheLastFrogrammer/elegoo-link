@@ -9,9 +9,10 @@ LABELS = {"post": "Corner post (SAF)", "rail-bottom": "Bottom rail (SAF)", "rail
           "rail-top-left": "Left top rail, round the pod (SAF)", "camera-pod": "Camera pod (SAF)", "panel-polycarbonate": "Clear polycarbonate panel",
           "panel-camera": "Camera panel (FDM)", "zip-anchor": "Zip-tie anchor (FDM)", "led-holder": "LED holder (FDM)",
           "mounting-plate": "Mounting plate (FDM)", "camera": "FLIR A65 (not printed)", "printer": "The printer",
-          "canvas": "CANVAS unit and hood ring (raised with the hood)"}
+          "canvas": "CANVAS unit (stays on the printer)", "hood": "Hood ring and bulge (raised with the hood)"}
 GREYS = {"static": (0.62, 0.62, 0.62), "bed": (0.42, 0.42, 0.45), "gantry": (0.75, 0.75, 0.75), "head": (0.5, 0.5, 0.52)}
-RAISED = (0.30, 0.34, 0.42)   # the hood's base ring and the CANVAS: they sit on the riser, so they rise by its height
+RAISED = (0.30, 0.34, 0.42)   # the hood's base ring and its bulge over the CANVAS: they sit on the riser, so they rise by its height
+CANVAS = (0.75, 0.10, 0.10)   # the CANVAS unit: it stands on the printer's top frame, so it stays put
 
 def scene(explode=False, printer=True):
     solid, clear = [], []
@@ -32,10 +33,12 @@ def scene(explode=False, printer=True):
             m = trimesh.load(os.path.join(B, "cc2mesh", g + ".stl"))
             if g == "bed": m.apply_translation([0, 0, 169.1])
             solid.append((m, col))
-        for g in ("lid", "canvas"):
+        # The hood (its base ring and the bulge over the CANVAS) sits on the riser, so it rises by its height. The CANVAS
+        # stands on the printer's top frame and stays where it is.
+        for g, raise_by, col in (("lid", index.get("riser_height", 0), RAISED), ("canvas", 0, CANVAS)):
             f = os.path.join(B, "cc2mesh", g + ".stl")
             if os.path.exists(f):
-                m = trimesh.load(f); m.apply_translation([0, 0, index.get("riser_height", 0)]); solid.append((m, RAISED))
+                m = trimesh.load(f); m.apply_translation([0, 0, raise_by]); solid.append((m, col))
     return solid, clear
 
 def mesh_of(items):
@@ -70,7 +73,7 @@ def legend(kinds, width):
     rows = (len(kinds) + cols - 1) // cols; im = Image.new("RGB", (width, 18 + rows * 30), "white"); dr = ImageDraw.Draw(im)
     for i, k in enumerate(kinds):
         x, y = 16 + (i % cols) * (width // cols), 10 + (i // cols) * 30
-        col = tuple(int(255 * c) for c in (C.get(k) or (RAISED if k == "canvas" else GREYS["static"])))
+        col = tuple(int(255 * c) for c in (C.get(k) or (CANVAS if k == "canvas" else RAISED if k == "hood" else GREYS["static"])))
         dr.rectangle([x, y, x + 22, y + 20], fill=col, outline=(80, 80, 80)); dr.text((x + 30, y), LABELS[k], fill="black", font=font)
     return im
 
@@ -81,13 +84,14 @@ def sheet(images, kinds, path):
     out.paste(lg, (0, top)); out.save(path); print("wrote", os.path.relpath(path, HERE))
 
 kinds = ["post", "rail-bottom", "rail-top", "rail-top-left", "camera-pod", "panel-polycarbonate", "panel-camera",
-         "led-holder", "mounting-plate", "zip-anchor", "camera", "canvas", "printer"]
+         "led-holder", "mounting-plate", "zip-anchor", "camera", "canvas", "hood", "printer"]
 assembled = scene()
 a = render(assembled, (-950, -760, 1000), (-40, 0, 470))
 b = render(assembled, (60, 60, 1200), (0, 0, 520), fov=46)
 sheet([a, b], kinds, os.path.join(HERE, "images", "frame.png"))
-front = render(assembled, (0, -1500, 560), (0, 0, 470), w=900, h=1000, fov=40)   # straight on from the front, as in a photo
-sheet([front], kinds, os.path.join(HERE, "images", "frame-front.png"))
+front = render(assembled, (0, -1500, 560), (0, 0, 470), w=900, h=1000, fov=40)
+right = render(assembled, (1300, -700, 900), (120, 0, 500), w=900, h=1000, fov=36)   # the CANVAS side   # straight on from the front, as in a photo
+sheet([front, right], kinds, os.path.join(HERE, "images", "frame-front.png"))
 exploded = scene(explode=True, printer=False)
 c = render(exploded, (-1150, -900, 1150), (0, 0, 520), w=1300, h=1000, fov=42)
-sheet([c], [k for k in kinds if k not in ("printer", "canvas")], os.path.join(HERE, "images", "frame-exploded.png"))
+sheet([c], [k for k in kinds if k not in ("printer", "canvas", "hood")], os.path.join(HERE, "images", "frame-exploded.png"))
