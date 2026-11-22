@@ -277,6 +277,8 @@ def sweep_up(shape, dz):
         out = out.fuse(cq.Shape.cast(BRepPrimAPI_MakePrism(f.wrapped, gp_Vec(0, 0, dz)).Shape()))
     return out.fuse(shape.translate(cq.Vector(0, 0, dz))).clean()
 
+POCKET_SHELVES = (705.0, 775.0, 835.0)   # the pocket's shelves: heights of their tops' undersides (mm); deeper the higher
+POCKET_LIP = (10.0, 2.5)           # the lip along each shelf's front edge: height, thickness (mm)
 FILLER_SKIN = 3.0                  # the filler's wall: it is a shell of its outer faces, open at the bottom (mm)
 
 def notch_filler():
@@ -286,7 +288,10 @@ def notch_filler():
     filled down to the real one, the same seen from the side (front to back, height), keeping what both views share,
     inside the hood's wall (no further out than its outer face), from the hood's bottom edge up, less the real cover
     with 0.5 mm to spare all round (it drops over the cover and rests on it). It is a shell of
-    FILLER_SKIN, open at the bottom: its edges rest on the riser's top and on the cover. From the community model's CANVAS and
+    FILLER_SKIN, open at the bottom: its edges rest on the riser's top and on the cover. Past the inner profile it stops at a
+    diagonal from its top down to where the cover crosses the hood's wall; the space between that and the hood's wall
+    opens through the hood's notch to the outside and is a storage pocket: walls front and back and a roof close it
+    against the notch's edges, and shelves with a lip (POCKET_SHELVES, POCKET_LIP) hold things. From the community model's CANVAS and
     cover; without them it falls back to the notch outline."""
     if not (os.path.exists(CANVAS_MESH) and os.path.exists(COVER_STEP)): return notch_filler_outline()
     import trimesh
@@ -315,7 +320,18 @@ def notch_filler():
     solid = prism(fpoly, "XZ").intersect(prism(spoly, "YZ")).intersect(box(FX, TOP + 0.3))
     cavity = prism(hollow(fpoly), "XZ").intersect(prism(hollow(spoly), "YZ")).intersect(box(FX - FILLER_SKIN, TOP - 50))
     cover = cq.importers.importStep(COVER_STEP).val()
-    filler = solid.cut(cavity).cut(cover)
+    # The pocket between the diagonal and the hood's wall opens to the outside through the hood's notch: walls front and
+    # back and a roof close it against the notch's edges (and the hood's inside), and shelves with a lip make it storage.
+    tri = Polygon([(xt, zt), (FX, zt), (FX, zc)])
+    pocket = prism(tri, "XZ").intersect(prism(spoly, "YZ"))
+    inner_s = spoly.buffer(-FILLER_SKIN, join_style=2)
+    inner_s = inner_s if inner_s.geom_type == "Polygon" else max(inner_s.geoms, key=lambda g: g.area)
+    walls = pocket.cut(prism(tri, "XZ").intersect(prism(inner_s, "YZ")))
+    slab = lambda x0, x1, z0, z1: cq.Workplane("XY").box(x1 - x0, 1000, z1 - z0, centered=(False, True, False)).translate((x0, 0, z0)).val()
+    for zs in POCKET_SHELVES:
+        walls = walls.fuse(pocket.intersect(slab(-1000, FX, zs, zs + FILLER_SKIN)))
+        walls = walls.fuse(pocket.intersect(slab(FX - POCKET_LIP[1], FX, zs, zs + POCKET_LIP[0])))
+    filler = solid.cut(cavity).fuse(walls).cut(cover)
     for d in ((0.5, 0, 0), (-0.5, 0, 0), (0, 0.5, 0), (0, -0.5, 0), (0, 0, 0.5)):   # 0.5 mm clear of the cover all round
         filler = filler.cut(cover.translate(cq.Vector(*d)))
     return cq.Workplane("XY").add(max(filler.clean().Solids(), key=lambda x: x.Volume()))   # one piece: drop scraps

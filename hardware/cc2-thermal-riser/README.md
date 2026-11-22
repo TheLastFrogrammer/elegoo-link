@@ -57,7 +57,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/saf/rail-top-left-x1` | SAF | 1 | The hook rail stops around the pod, and it holds two of the pod's inserts |
 | `frame/saf/camera-pod` | SAF | 1 | 88 × 76 × 68 |
 | Polycarbonate 3 mm | Cut sheet | 2 (front, back) | 281 × 123 (`frame/panels.txt`) |
-| `frame/fdm/hood-notch-filler` | FDM | 1 | 255 × 168 × 59, a 3 mm wedge-shaped shell open at the bottom (235 cm³); print it on its diagonal face |
+| `frame/fdm/hood-notch-filler` | FDM | 1 | 254 × 168 × 59: the wedge shell (open at the bottom) and a three-shelf pocket on its outside (345 cm³) |
 | `frame/fdm/panel-camera` | FDM | 1 (left) | Holds the pod |
 | `frame/fdm/panel-blank` | FDM | Optional | For a side without polycarbonate |
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
@@ -103,7 +103,13 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
   - The filler's inner wall is that profile, raised: it lands on the cover's top edge. From its top a straight diagonal
     runs down to where the cover crosses the hood's wall; nothing past that is needed, so the filler stops there. Its
     front and back walls follow the stack's outline seen from the side, raised.
-  - It's a 3 mm shell, open at the bottom (235 cm³). Print it lying on its diagonal face.
+  - It's a 3 mm shell, open at the bottom.
+  - The space between the diagonal and the hood's wall opens to the outside through the hood's notch, so it's a storage
+    pocket you reach from the printer's right side. Walls front and back and a roof close it against the notch's edges
+    (and the hood's inside); three shelves with a 10 mm lip, about 15, 32 and 46 mm deep from the bottom up
+    (`POCKET_SHELVES`), hold things. It stays at room temperature: it's outside the enclosure.
+  - 345 cm³ in all. Print it standing as fitted with supports under the shelves and roof, or lying on its back with
+    supports under the front-to-back shoulder.
   - It drops over the real cover from above, 0.5 mm clear all round. `images/filler-sections.png` shows it cut through
     (purple) over the CANVAS and cover (red). The outlines come from the community model.
 - **Measure before printing.**
