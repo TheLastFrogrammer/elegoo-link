@@ -17,6 +17,7 @@ for side in ("front", "back"): parts[f"panel {side}"] = F.sheet(side)
 parts["panel left (camera)"] = F.camera_panel(); parts["camera pod"] = F.pod_shape
 parts["led holder front"] = F.place(F.led_holder(), "front", 0); parts["led holder back"] = F.place(F.led_holder(), "back", 0)
 parts["mounting plate"] = F.place(F.mounting_plate(), "left", 100); parts["zip anchor"] = F.place(F.zip_anchor(), "left", -110)
+parts["camera cable guide"] = F.cable_guide(); parts["PoE cradle"] = F.poe_cradle(); parts["camera (envelope)"] = F.camera
 bad = 0
 for (a, pa), (b, pb) in itertools.combinations(parts.items(), 2):
     ba, bb = pa.val().BoundingBox(), pb.val().BoundingBox()

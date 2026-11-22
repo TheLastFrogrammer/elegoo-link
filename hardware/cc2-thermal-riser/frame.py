@@ -211,6 +211,8 @@ def camera_panel():
     p = module_panel("left").cut(cutout)
     for yy, zz in pod_holes:
         if zz < GROOVE_TOP[0]: p = p.cut(cq.Workplane("YZ").circle(2.0).extrude(7).translate((-FX, yy, zz)))
+    for yy, zz in POE_HOLES:   # heat-set inserts for the PoE cradle
+        p = p.cut(cq.Workplane("YZ").circle(2.0).extrude(7).translate((-FX, yy, zz)))
     return p
 
 def canvas_side():
@@ -406,12 +408,82 @@ def zip_anchor(width=30.0):
         p = p.cut(lbox(-L + 5, -L + 9, vl - 1, vl + 6, zz - 1.5, zz + 1.5)).cut(lbox(L - 9, L - 5, vl - 1, vl + 6, zz - 1.5, zz + 1.5))
     return p
 
+# ------------------------------------------------------------------ the camera's cable and its PoE injector
+# The A65's back end stands about 36 mm out from the left wall, facing up and out (the camera looks down at TILT), with
+# its Ethernet socket (PoE powers it) in that back face. A straight plug and its boot stand CABLE_PLUG out of it.
+CABLE_D = 6.5                      # the Ethernet cable's diameter (Cat6 patch: 6-6.5 mm) (MEASURE)
+CABLE_PLUG = 40.0                  # how far the plug and its boot stand out of the camera's back (MEASURE)
+CABLE_BEND = 25.0                  # the U-turn's radius at the cable's centre (about 4 x its diameter)
+CABLE_SOCKET_H = -8.0              # the socket's height across the back face, from its middle toward the camera's top (MEASURE)
+COLLAR = (-102.0, -82.0)           # where the guide's collar clamps the camera: mm behind the lens front (the pod holds 0-48)
+POE = (100.0, 55.0, 28.0)          # the PoE injector: length (along the wall), height, thickness (MEASURE yours)
+POE_AT = (26.0, 460.0)             # the cradle's camera-side end (y) and the injector's bottom (z) on the camera panel
+POE_HOLES = [(40.0, 475.0), (118.0, 475.0), (40.0, 501.0), (118.0, 501.0)]   # M3 into heat-set inserts in the camera panel (y, z)
+
+def _xz_prism(poly, y0, y1):
+    """A 2-D outline in (x, z) extruded from y0 to y1."""
+    from shapely.geometry import Polygon
+    polys = poly.geoms if poly.geom_type == "MultiPolygon" else [poly]
+    out = None
+    for g in polys:
+        w = cq.Workplane("XZ").polyline(list(Polygon(g.exterior).exterior.coords)[:-1]).close().extrude(y1 - y0).translate((0, y1, 0))
+        for hole in g.interiors:
+            w = w.cut(cq.Workplane("XZ").polyline(list(hole.coords)[:-1]).close().extrude(y1 - y0 + 2).translate((0, y1 + 1, 0)))
+        out = w if out is None else out.union(w)
+    return out
+
+def cable_guide(local=False):
+    """Takes the camera's Ethernet cable from the plug and turns it back under the camera, so the cable's weight never
+    hangs on the camera's socket: a split collar clamped round the camera's body behind the pod (one M3 bolt and nut) and,
+    under it, a plate with a snap-in channel: past the plug, a U-turn of CABLE_BEND, then back along under the camera.
+    Built along the camera (x along its axis, from the lens front back; z toward its top); `local` keeps it so, for printing."""
+    import math as m
+    from shapely.geometry import LineString, box as sbox
+    from shapely.ops import unary_union
+    a_plug = -(R.CAM_L + CABLE_PLUG); h0 = CABLE_SOCKET_H; r = CABLE_BEND
+    arc = [(a_plug + r * m.cos(m.radians(t)), h0 - r + r * m.sin(m.radians(t))) for t in range(90, 271, 5)]
+    path = LineString([(a_plug + 6, h0)] + arc + [(COLLAR[1], h0 - 2 * r)])
+    base = -(R.CAM_H / 2 + R.FIT * 0.4 + 3.0)                         # the collar's underside
+    plate = unary_union([path.buffer(7, join_style=1), sbox(a_plug, h0 - 2 * r - 7, COLLAR[1], base + 1)])
+    c = CABLE_D / 2
+    g = _xz_prism(plate, -6, 6)
+    g = g.cut(_xz_prism(path.buffer(c + 0.5), -c - 0.5, 3.5)).cut(_xz_prism(path.buffer(c * 0.8), 3.0, 7))   # channel, snap mouth on +y
+    # The collar: a sleeve round the body, split along one side and pinched by an M3 bolt through two ears.
+    iw, ih = R.CAM_W + 0.6, R.CAM_H + 0.6
+    L = COLLAR[1] - COLLAR[0]; ac = (COLLAR[0] + COLLAR[1]) / 2
+    col = cq.Workplane("XY").box(L, iw + 6, ih + 6).cut(cq.Workplane("XY").box(L + 2, iw, ih))
+    col = col.union(cq.Workplane("XY").box(L, 9, 18).translate((0, iw / 2 + 3 + 4.5, 0)))
+    col = col.cut(cq.Workplane("XY").box(L + 2, 20, 2).translate((0, iw / 2 + 6, 0)))
+    col = col.cut(cq.Workplane("XY").cylinder(30, 1.7).translate((0, iw / 2 + 3 + 4.5, 0)))
+    g = g.union(col.translate((ac, 0, 0)))
+    if local: return g
+    Lp, f, u = R.frames(LENS)
+    return g.rotate((0, 0, 0), (0, 1, 0), R.TILT).translate(Lp.toTuple())
+
+def poe_cradle():
+    """Holds a PoE injector flat against the camera panel's outer face beside the camera, outside the enclosure: a back
+    plate on four M3 screws into heat-set inserts in the panel, walls above and below with lips over its front, open at
+    both ends for the cables (the injector slides in from an end), and a zip-tie slot through each wall to hold it."""
+    Lg, Hg, Dg = POE; y0, z0 = POE_AT; x0 = -FX + 0.5                  # the panel's outer face
+    y1 = y0 + Lg + 1; zi0, zi1 = z0, z0 + Hg + 1; xo = x0 - 4 - Dg - 0.5   # the injector's front face
+    wb = lambda xa, xb, ya, yb, za, zb: cq.Workplane("XY").box(xb - xa, yb - ya, zb - za, centered=False).translate((xa, ya, za))
+    c = wb(x0 - 4, x0, y0, y1, zi0 - 3, zi1 + 3)                                      # the back plate
+    for za, zb in ((zi0 - 3, zi0), (zi1, zi1 + 3)): c = c.union(wb(xo - 3, x0 - 4, y0, y1, za, zb))   # top and bottom walls
+    c = c.union(wb(xo - 3, xo, y0, y1, zi0 - 3, zi0 + 8)).union(wb(xo - 3, xo, y0, y1, zi1 - 8, zi1 + 3))   # the lips
+    ym = (y0 + y1) / 2
+    for za, zb in ((zi0 - 4, zi0 + 1), (zi1 - 1, zi1 + 4)): c = c.cut(wb(xo + 4, xo + 8, ym - 2.5, ym + 2.5, za, zb))   # zip-tie slots
+    for yy, zz in POE_HOLES:   # counterbored from inside, so the screw heads sit below the injector
+        c = c.cut(cq.Workplane("YZ").circle(1.7).extrude(10).translate((x0 - 7, yy, zz)))
+        c = c.cut(cq.Workplane("YZ").circle(3.0).extrude(1.8).translate((x0 - 4.1, yy, zz)))
+    return c
+
 # ------------------------------------------------------------------ build
 # One colour per kind of part (a colour-blind-safe palette), used in the assembly STEP and by render_frame.py.
 COLOURS = {
     "post": (0.90, 0.62, 0.00), "rail-bottom": (0.00, 0.45, 0.70), "rail-top": (0.34, 0.71, 0.91), "rail-top-left": (0.00, 0.62, 0.45),
     "camera-pod": (0.84, 0.37, 0.00), "panel-polycarbonate": (0.75, 0.90, 1.00), "panel-camera": (0.80, 0.47, 0.65),
-    "zip-anchor": (0.94, 0.89, 0.26), "canvas-side": (0.20, 0.70, 0.70), "hood-notch-filler": (0.55, 0.30, 0.55), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13)}
+    "zip-anchor": (0.94, 0.89, 0.26), "canvas-side": (0.20, 0.70, 0.70), "hood-notch-filler": (0.55, 0.30, 0.55), "led-holder": (0.70, 0.87, 0.41), "mounting-plate": (0.56, 0.42, 0.77), "camera": (0.13, 0.13, 0.13),
+    "cable-guide": (0.00, 0.35, 0.30), "poe-cradle": (0.55, 0.35, 0.15)}
 def kind_of(name):
     for k in ("rail-top-left", "rail-bottom", "rail-top", "post", "camera-pod", "led-holder", "mounting-plate", "zip-anchor", "canvas-side"):
         if name.startswith(k): return k
@@ -437,6 +509,8 @@ def build(out):
     parts["fdm"]["panel-camera (left)"] = panels["left"]
     parts["fdm"]["panel-blank (any side, optional)"] = module_panel("front")
     parts["fdm"]["hood-notch-filler"] = notch_filler()
+    parts["fdm"]["camera-cable-guide"] = cable_guide(local=True).rotate((0, 0, 0), (0, 1, 0), 90)   # printed standing on its collar
+    parts["fdm"]["poe-cradle"] = poe_cradle()
     # Modules: one of each kind in the files; in place, an LED holder on the front and back top rails, a mounting plate
     # and a zip-tie anchor on the left.
     modules = {"led-holder front": ("led-holder", place(led_holder(), "front", 0)), "led-holder back": ("led-holder", place(led_holder(), "back", 0)),
@@ -450,6 +524,8 @@ def build(out):
     placed["hood-notch-filler"] = ("hood-notch-filler", parts["fdm"]["hood-notch-filler"])
     placed["camera panel (left)"] = ("panel-camera", panels["left"])
     for k, (kd, v) in modules.items(): placed[k] = (kd, v)
+    placed["camera cable guide"] = ("cable-guide", cable_guide())
+    placed["PoE cradle"] = ("poe-cradle", parts["fdm"]["poe-cradle"])
     placed["FLIR A65 envelope (not printed)"] = ("camera", camera)
     for k, (kd, v) in placed.items():
         a = 0.35 if kd == "panel-polycarbonate" else 0.7 if kd == "camera" else 1.0
