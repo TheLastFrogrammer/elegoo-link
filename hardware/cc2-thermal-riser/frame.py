@@ -410,52 +410,31 @@ def zip_anchor(width=30.0):
 
 # ------------------------------------------------------------------ the camera's cable and its PoE injector
 # The A65's back end stands about 36 mm out from the left wall, facing up and out (the camera looks down at TILT), with
-# its Ethernet socket (PoE powers it) in that back face. A straight plug and its boot stand CABLE_PLUG out of it.
+# its Ethernet socket (PoE powers it) in that back face.
 CABLE_D = 6.5                      # the Ethernet cable's diameter (Cat6 patch: 6-6.5 mm) (MEASURE)
-CABLE_PLUG = 40.0                  # how far the plug and its boot stand out of the camera's back (MEASURE)
-CABLE_BEND = 25.0                  # the U-turn's radius at the cable's centre (about 4 x its diameter)
-CABLE_SOCKET_H = -8.0              # the socket's height across the back face, from its middle toward the camera's top (MEASURE)
-COLLAR = (-102.0, -82.0)           # where the guide's collar clamps the camera: mm behind the lens front (the pod holds 0-48)
+COLLAR = (-100.0, -86.0)           # where the guide's collar clamps the camera: mm behind the lens front (the pod holds 0-48)
 POE = (100.0, 55.0, 28.0)          # the PoE injector: length (along the wall), height, thickness (MEASURE yours)
 POE_AT = (26.0, 460.0)             # the cradle's camera-side end (y) and the injector's bottom (z) on the camera panel
 POE_HOLES = [(40.0, 475.0), (118.0, 475.0), (40.0, 501.0), (118.0, 501.0)]   # M3 into heat-set inserts in the camera panel (y, z)
 
-def _xz_prism(poly, y0, y1):
-    """A 2-D outline in (x, z) extruded from y0 to y1."""
-    from shapely.geometry import Polygon
-    polys = poly.geoms if poly.geom_type == "MultiPolygon" else [poly]
-    out = None
-    for g in polys:
-        w = cq.Workplane("XZ").polyline(list(Polygon(g.exterior).exterior.coords)[:-1]).close().extrude(y1 - y0).translate((0, y1, 0))
-        for hole in g.interiors:
-            w = w.cut(cq.Workplane("XZ").polyline(list(hole.coords)[:-1]).close().extrude(y1 - y0 + 2).translate((0, y1 + 1, 0)))
-        out = w if out is None else out.union(w)
-    return out
-
 def cable_guide(local=False):
-    """Takes the camera's Ethernet cable from the plug and turns it back under the camera, so the cable's weight never
-    hangs on the camera's socket: a split collar clamped round the camera's body behind the pod (one M3 bolt and nut) and,
-    under it, a plate with a snap-in channel: past the plug, a U-turn of CABLE_BEND, then back along under the camera.
-    Built along the camera (x along its axis, from the lens front back; z toward its top); `local` keeps it so, for printing."""
-    import math as m
-    from shapely.geometry import LineString, box as sbox
-    from shapely.ops import unary_union
-    a_plug = -(R.CAM_L + CABLE_PLUG); h0 = CABLE_SOCKET_H; r = CABLE_BEND
-    arc = [(a_plug + r * m.cos(m.radians(t)), h0 - r + r * m.sin(m.radians(t))) for t in range(90, 271, 5)]
-    path = LineString([(a_plug + 6, h0)] + arc + [(COLLAR[1], h0 - 2 * r)])
-    base = -(R.CAM_H / 2 + R.FIT * 0.4 + 3.0)                         # the collar's underside
-    plate = unary_union([path.buffer(7, join_style=1), sbox(a_plug, h0 - 2 * r - 7, COLLAR[1], base + 1)])
-    c = CABLE_D / 2
-    g = _xz_prism(plate, -6, 6)
-    g = g.cut(_xz_prism(path.buffer(c + 0.5), -c - 0.5, 3.5)).cut(_xz_prism(path.buffer(c * 0.8), 3.0, 7))   # channel, snap mouth on +y
-    # The collar: a sleeve round the body, split along one side and pinched by an M3 bolt through two ears.
-    iw, ih = R.CAM_W + 0.6, R.CAM_H + 0.6
-    L = COLLAR[1] - COLLAR[0]; ac = (COLLAR[0] + COLLAR[1]) / 2
-    col = cq.Workplane("XY").box(L, iw + 6, ih + 6).cut(cq.Workplane("XY").box(L + 2, iw, ih))
-    col = col.union(cq.Workplane("XY").box(L, 9, 18).translate((0, iw / 2 + 3 + 4.5, 0)))
-    col = col.cut(cq.Workplane("XY").box(L + 2, 20, 2).translate((0, iw / 2 + 6, 0)))
-    col = col.cut(cq.Workplane("XY").cylinder(30, 1.7).translate((0, iw / 2 + 3 + 4.5, 0)))
-    g = g.union(col.translate((ac, 0, 0)))
+    """Keeps the camera's Ethernet cable from hanging on its socket: a slim split collar round the camera's body behind
+    the pod (pinched by one M3 bolt) with a snap-in clip under it. The cable loops loosely from the plug back to the clip
+    and runs on along under the camera. Built along the camera (x along its axis, from the lens front back; z toward its
+    top); `local` keeps it so, for printing."""
+    iw, ih, t = R.CAM_W + 0.6, R.CAM_H + 0.6, 2.5
+    L = COLLAR[1] - COLLAR[0]; ac = (COLLAR[0] + COLLAR[1]) / 2; c = CABLE_D / 2
+    g = cq.Workplane("XY").box(L, iw + 2 * t, ih + 2 * t).cut(cq.Workplane("XY").box(L + 2, iw, ih))
+    ear = iw / 2 + t + 3.5                                              # the pinch: two ears beside the split, one bolt
+    g = g.union(cq.Workplane("XY").box(L, 7, 12).translate((0, ear, 0)))
+    g = g.cut(cq.Workplane("XY").box(L + 2, 14, 1.5).translate((0, iw / 2 + 4, 0)))
+    g = g.cut(cq.Workplane("XY").cylinder(20, 1.7).translate((0, ear, 0)))
+    zc = -(ih / 2 + t) - c - 0.6                                        # the clip under the collar, along the camera
+    clip = cq.Workplane("YZ").circle(c + 2.2).extrude(L).translate((-L / 2, 0, zc))
+    clip = clip.union(cq.Workplane("XY").box(L, 2 * c, c + 1).translate((0, 0, zc + (c + 1) / 2)))
+    clip = clip.cut(cq.Workplane("YZ").circle(c + 0.3).extrude(L + 2).translate((-L / 2 - 1, 0, zc)))
+    clip = clip.cut(cq.Workplane("XY").box(L + 2, c * 1.6, c + 3).translate((0, 0, zc - c)))   # the snap-in mouth, underneath
+    g = g.union(clip).translate((ac, 0, 0))
     if local: return g
     Lp, f, u = R.frames(LENS)
     return g.rotate((0, 0, 0), (0, 1, 0), R.TILT).translate(Lp.toTuple())
@@ -509,7 +488,7 @@ def build(out):
     parts["fdm"]["panel-camera (left)"] = panels["left"]
     parts["fdm"]["panel-blank (any side, optional)"] = module_panel("front")
     parts["fdm"]["hood-notch-filler"] = notch_filler()
-    parts["fdm"]["camera-cable-guide"] = cable_guide(local=True).rotate((0, 0, 0), (0, 1, 0), 90)   # printed standing on its collar
+    parts["fdm"]["camera-cable-guide"] = cable_guide(local=True).rotate((0, 0, 0), (0, 1, 0), 90)   # printed standing on its end
     parts["fdm"]["poe-cradle"] = poe_cradle()
     # Modules: one of each kind in the files; in place, an LED holder on the front and back top rails, a mounting plate
     # and a zip-tie anchor on the left.

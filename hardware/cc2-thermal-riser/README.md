@@ -63,7 +63,7 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 | `frame/fdm/led-holder` | FDM | Any number (2 shown) | 230 mm long; holds a 17 × 7 mm aluminium LED channel, angled 40° down and in |
 | `frame/fdm/mounting-plate` | FDM | Any number | M3 grid and a ¼"-20 hole: an ordinary camera, a sensor |
 | `frame/fdm/zip-anchor` | FDM | Any number | Two zip-tie slots: a lever connector or a cable splice |
-| `frame/fdm/camera-cable-guide` | FDM | 1 | Clamps the camera behind the pod; turns its Ethernet cable back under it. Print standing on the collar |
+| `frame/fdm/camera-cable-guide` | FDM | 1 | A slim collar on the camera behind the pod with a snap-in clip for its Ethernet cable. Print standing on its end |
 | `frame/fdm/poe-cradle` | FDM | 1 | Holds a PoE injector on the camera panel's outer face, beside the camera |
 
 **Hardware:**
@@ -104,16 +104,14 @@ drawn raised by the riser's height; the CANVAS hangs on the right as you face th
 - **The camera's cable and PoE.**
   - The A65 takes power over its Ethernet cable (PoE), and its back end, with the socket, stands about 36 mm out from the
     left wall, facing up and out.
-  - The cable guide clamps round the camera's body behind the pod (a split collar, one M3 bolt). Under it, a channel takes
-    the cable from the plug, turns it 180° (25 mm radius), and runs it back under the camera; the cable snaps in from
-    the side. The plug's weight never hangs on the camera's socket.
+  - The cable guide is a slim split collar round the camera's body behind the pod (one M3 bolt pinches it) with a
+    snap-in clip underneath. The cable loops loosely from the plug back to the clip and runs on under the camera, so the
+    plug's weight never hangs on the camera's socket.
   - The cradle holds a PoE injector flat on the camera panel's outer face, beside the camera and outside the enclosure.
     The injector slides in from an end, the lips hold its front, and a zip tie through the slots holds it in place. The
     cables leave from both ends.
-  - Measure first: `CABLE_D`, `CABLE_PLUG` (how far the straight plug and its boot stand out), `CABLE_SOCKET_H` (where
-    the socket sits on the back face) and `POE` (your injector: 100 × 55 × 28 mm assumed).
-  - With a straight plug, the guide stands about 115 mm out from the wall. A right-angle (down-angled) RJ45 patch cable
-    makes it much smaller: set `CABLE_PLUG` to the angled plug's length.
+  - Measure first: `CABLE_D` (6.5 mm assumed) and `POE` (your injector: 100 × 55 × 28 mm assumed). A right-angle
+    (down-angled) RJ45 patch cable keeps the loop behind the camera small.
 - **The hood notch filler.**
   - The hood moves straight up, so where its body met the CANVAS and cover it now meets their inner profile raised by
     the riser's height.
