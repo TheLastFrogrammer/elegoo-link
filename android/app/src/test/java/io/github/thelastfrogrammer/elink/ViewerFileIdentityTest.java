@@ -47,6 +47,13 @@ public class ViewerFileIdentityTest {
             new android.content.ComponentName(RuntimeEnvironment.getApplication(), PrinterService.class), service.onBind(null));
         screen = Robolectric.buildActivity(GcodeViewerActivity.class, new Intent(RuntimeEnvironment.getApplication(), GcodeViewerActivity.class).putExtra(GcodeViewerActivity.EXTRA_FOLLOW, true)).setup();
         activity = screen.get(); set(activity, "printer", service); set(activity, "library", library);
+        // Opening the screen starts a cloud poll (watch). It reads the stored sign-in on the service's own thread and, finding
+        // none, posts "signed out" back: on a slow machine that answer could land mid-test and wipe the printer set up here.
+        // Let it finish now and drop its answer (and the next poll), then set the printer up again.
+        ShadowLooper.idleMainLooper();
+        ((ExecutorService) get(service, "cloudWorker")).submit(() -> { }).get(15, TimeUnit.SECONDS);
+        ((Handler) get(service, "main")).removeCallbacksAndMessages(null);
+        set(service, "cloudSignedIn", true); set(service, "cloudSerial", "CC2-A"); set(service, "cloudOnline", 1); set(service, "cloudOnlineSignal", true);
         report("CC2-A", 2, 10, 100); waitForWorker();
     }
     @After public void close() { if (screen != null) screen.pause().stop().destroy(); if (serviceController != null) serviceController.destroy(); }
