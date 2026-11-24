@@ -70,6 +70,15 @@ public class ThermalCameraTest {
         }
     }
 
+    @Test public void findingAsksEveryNetworkButOneAddressStaysOne() throws Exception {
+        InetAddress all = InetAddress.getByName("255.255.255.255"), one = InetAddress.getByName("192.168.1.80");
+        java.util.List<InetAddress> everywhere = GigeVision.targets(all);
+        assertEquals(all, everywhere.get(0));                       // the default network's broadcast stays first
+        assertEquals(everywhere.size(), new java.util.HashSet<>(everywhere).size());   // each network asked once
+        assertEquals(java.util.Collections.singletonList(one), GigeVision.targets(one));
+        assertTrue(GigeVision.isLimitedBroadcast(all)); assertFalse(GigeVision.isLimitedBroadcast(one));
+    }
+
     @Test public void picturesArriveWithTemperaturesAndControlIsGivenBack() throws Exception {
         camera = new FakeGigeCamera(); ThermalCamera.controlPort = camera.port();
         CountDownLatch two = new CountDownLatch(2); AtomicReference<ThermalImage> got = new AtomicReference<>(); AtomicReference<String> why = new AtomicReference<>();

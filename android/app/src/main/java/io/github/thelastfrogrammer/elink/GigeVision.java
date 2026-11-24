@@ -88,18 +88,25 @@ final class GigeVision {
     }
 
     /**
-     * Looks for cameras: asks `target` (one address, or 255.255.255.255 for the whole network) and gathers the answers for
-     * `waitMs`. Reads only; nothing on a camera changes.
+     * Looks for cameras: asks `target` (one address, or 255.255.255.255 for every network the phone is on) and gathers the
+     * answers for `waitMs`. Reads only; nothing on a camera changes.
      */
     static List<Device> discover(InetAddress target, int waitMs) throws IOException {
         Map<String, Device> found = new LinkedHashMap<>();
+        List<InetAddress> targets = targets(target);
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true); socket.setSoTimeout(100);
             byte[] ask = command(DISCOVERY, 1, new byte[0], false);
             long end = System.currentTimeMillis() + waitMs, again = 0;
             byte[] buffer = new byte[1024];
             while (System.currentTimeMillis() < end) {
-                if (System.currentTimeMillis() >= again) { socket.send(new DatagramPacket(ask, ask.length, target, PORT)); again = System.currentTimeMillis() + Math.max(200, waitMs / 3); }
+                if (System.currentTimeMillis() >= again) {
+                    for (InetAddress to : targets) {
+                        try { socket.send(new DatagramPacket(ask, ask.length, to, PORT)); }
+                        catch (IOException unreachable) { if (to == target) throw unreachable; }   // another network is down: the rest still count
+                    }
+                    again = System.currentTimeMillis() + Math.max(200, waitMs / 3);
+                }
                 DatagramPacket in = new DatagramPacket(buffer, buffer.length);
                 try { socket.receive(in); } catch (SocketTimeoutException quiet) { continue; }
                 Ack a = ack(in.getData(), in.getLength());
@@ -109,6 +116,33 @@ final class GigeVision {
             }
         }
         return new ArrayList<>(found.values());
+    }
+
+    /**
+     * Where to ask. One address: just it. The limited broadcast (255.255.255.255) leaves by the phone's default network
+     * only (its Wi-Fi), so it is also asked on every other network the phone has, by that network's own broadcast address:
+     * a camera on a USB Ethernet adapter, shared from the phone (Ethernet tethering), answers there.
+     */
+    static List<InetAddress> targets(InetAddress target) {
+        List<InetAddress> out = new ArrayList<>(); out.add(target);
+        if (!isLimitedBroadcast(target)) return out;
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> all = java.net.NetworkInterface.getNetworkInterfaces();
+            while (all != null && all.hasMoreElements()) {
+                java.net.NetworkInterface n = all.nextElement();
+                try { if (!n.isUp() || n.isLoopback()) continue; } catch (java.net.SocketException gone) { continue; }
+                for (java.net.InterfaceAddress a : n.getInterfaceAddresses()) {
+                    InetAddress b = a.getBroadcast();
+                    if (b != null && !out.contains(b)) out.add(b);
+                }
+            }
+        } catch (java.net.SocketException none) { }
+        return out;
+    }
+    static boolean isLimitedBroadcast(InetAddress a) {
+        byte[] b = a.getAddress(); if (b.length != 4) return false;
+        for (byte x : b) if (x != (byte) 0xff) return false;
+        return true;
     }
 
     // ------------------------------------------------------------------ control

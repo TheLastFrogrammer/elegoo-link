@@ -3998,7 +3998,7 @@ public final class MainActivity extends Activity {
                 List<GigeVision.Device> all = found; String why = error;
                 main.post(() -> {
                     if (isDestroyed()) return;
-                    if (all.isEmpty()) { result.setText(why != null ? "Could not look: " + why + "." : "No GigE Vision camera answered. Check that it is powered (PoE), wired to the same router as this phone's Wi-Fi, and has an address on this network (FLIR's IP Config tool sets one)."); result.setTextColor(ERROR); return; }
+                    if (all.isEmpty()) { result.setText(why != null ? "Could not look: " + why + "." : "No GigE Vision camera answered. Check that it is powered (PoE) and either wired to the same router as this phone's Wi-Fi, or plugged into this phone through a USB Ethernet adapter with Ethernet tethering on (then restart the camera so it takes an address from the phone)."); result.setTextColor(ERROR); return; }
                     String[] names = new String[all.size()];
                     for (int i = 0; i < names.length; i++) names[i] = all.get(i).label() + " · " + all.get(i).address.getHostAddress();
                     new AlertDialog.Builder(this).setTitle("Thermal cameras found").setItems(names, (d, which) -> {
