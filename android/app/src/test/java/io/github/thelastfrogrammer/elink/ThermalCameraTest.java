@@ -79,6 +79,14 @@ public class ThermalCameraTest {
         assertTrue(GigeVision.isLimitedBroadcast(all)); assertFalse(GigeVision.isLimitedBroadcast(one));
     }
 
+    @Test public void aCameraOnAnotherNetworkIsToldApart() throws Exception {
+        byte[] phone = {(byte) 192, (byte) 168, 1, 64}, camera = {(byte) 192, (byte) 168, 1, 80}, fixed = {(byte) 169, (byte) 254, 7, 9};
+        assertTrue(GigeVision.samePrefix(phone, camera, 24));
+        assertFalse(GigeVision.samePrefix(phone, fixed, 24));
+        assertFalse(GigeVision.samePrefix(phone, new byte[] {(byte) 192, (byte) 168, 0, 80}, 24));
+        assertTrue(GigeVision.samePrefix(phone, new byte[] {(byte) 192, (byte) 168, 0, 80}, 16));
+    }
+
     @Test public void picturesArriveWithTemperaturesAndControlIsGivenBack() throws Exception {
         camera = new FakeGigeCamera(); ThermalCamera.controlPort = camera.port();
         CountDownLatch two = new CountDownLatch(2); AtomicReference<ThermalImage> got = new AtomicReference<>(); AtomicReference<String> why = new AtomicReference<>();

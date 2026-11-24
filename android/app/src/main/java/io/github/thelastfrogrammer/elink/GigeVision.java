@@ -96,7 +96,8 @@ final class GigeVision {
         List<InetAddress> targets = targets(target);
         try (DatagramSocket socket = new DatagramSocket()) {
             socket.setBroadcast(true); socket.setSoTimeout(100);
-            byte[] ask = command(DISCOVERY, 1, new byte[0], false);
+            // Answers may come by broadcast: a camera with a fixed address on another network can still say where it is.
+            byte[] ask = command(DISCOVERY, 1, new byte[0], true);
             long end = System.currentTimeMillis() + waitMs, again = 0;
             byte[] buffer = new byte[1024];
             while (System.currentTimeMillis() < end) {
@@ -138,6 +139,26 @@ final class GigeVision {
             }
         } catch (java.net.SocketException none) { }
         return out;
+    }
+    /** The address is on one of the phone's own networks (same prefix as one of its IPv4 addresses), so it can be reached. */
+    static boolean onPhonesNetwork(InetAddress a) {
+        byte[] t = a.getAddress(); if (t.length != 4) return false;
+        try {
+            java.util.Enumeration<java.net.NetworkInterface> all = java.net.NetworkInterface.getNetworkInterfaces();
+            while (all != null && all.hasMoreElements()) {
+                java.net.NetworkInterface n = all.nextElement();
+                for (java.net.InterfaceAddress ia : n.getInterfaceAddresses()) {
+                    byte[] m = ia.getAddress().getAddress(); int bits = ia.getNetworkPrefixLength();
+                    if (m.length != 4 || bits <= 0 || bits > 32 || ia.getAddress().isLoopbackAddress()) continue;
+                    if (samePrefix(m, t, bits)) return true;
+                }
+            }
+        } catch (java.net.SocketException none) { }
+        return false;
+    }
+    static boolean samePrefix(byte[] a, byte[] b, int bits) {
+        for (int i = 0; i < bits; i++) if (((a[i / 8] >> (7 - i % 8)) & 1) != ((b[i / 8] >> (7 - i % 8)) & 1)) return false;
+        return true;
     }
     static boolean isLimitedBroadcast(InetAddress a) {
         byte[] b = a.getAddress(); if (b.length != 4) return false;

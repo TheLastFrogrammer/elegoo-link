@@ -4000,9 +4000,15 @@ public final class MainActivity extends Activity {
                     if (isDestroyed()) return;
                     if (all.isEmpty()) { result.setText(why != null ? "Could not look: " + why + "." : "No GigE Vision camera answered. Check that it is powered (PoE) and either wired to the same router as this phone's Wi-Fi, or plugged into this phone through a USB Ethernet adapter with Ethernet tethering on (then restart the camera so it takes an address from the phone)."); result.setTextColor(ERROR); return; }
                     String[] names = new String[all.size()];
-                    for (int i = 0; i < names.length; i++) names[i] = all.get(i).label() + " · " + all.get(i).address.getHostAddress();
+                    boolean[] here = new boolean[names.length];
+                    for (int i = 0; i < names.length; i++) {
+                        here[i] = GigeVision.onPhonesNetwork(all.get(i).address);
+                        names[i] = all.get(i).label() + " · " + all.get(i).address.getHostAddress() + (here[i] ? "" : " (fixed address on another network)");
+                    }
                     new AlertDialog.Builder(this).setTitle("Thermal cameras found").setItems(names, (d, which) -> {
-                        address.setText(all.get(which).address.getHostAddress()); result.setText("Chosen: " + all.get(which).label() + ". Tap Test to see a picture."); result.setTextColor(MUTED);
+                        address.setText(all.get(which).address.getHostAddress());
+                        if (here[which]) { result.setText("Chosen: " + all.get(which).label() + ". Tap Test to see a picture."); result.setTextColor(MUTED); }
+                        else { result.setText("Found " + all.get(which).label() + ", but it keeps a fixed address (" + all.get(which).address.getHostAddress() + ") that is not on this phone's network, so it cannot be reached. Set it to take its address automatically (DHCP), for example with FLIR's IP Config tool on a computer, then restart the camera and tap Find again."); result.setTextColor(ERROR); }
                         if (name.getText().toString().trim().isEmpty()) name.setText(Automation.cap(all.get(which).model.isEmpty() ? "Thermal camera" : all.get(which).model, 40));
                     }).setNegativeButton("Cancel", null).show();
                     result.setText("");
