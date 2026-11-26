@@ -23,8 +23,9 @@ import java.util.Locale;
 
 /**
  * The bed's shape each time the printer levelled it (BedMesh): the chosen capture as a map with its range, tilt and
- * shape without the tilt, a comparison with an earlier one as a difference map, and every capture kept. Only reads what
- * the app noted while it listened; nothing here talks to the printer.
+ * shape without the tilt, a comparison with an earlier one as a difference map, and every capture kept. The maps come
+ * from what the app noted while it listened; the one command sent from here is a levelling the user asks for (once,
+ * with the same checks as Auto-level bed).
  */
 public final class BedMeshActivity extends PlainScreen {
     private List<BedMesh.Mesh> all = new ArrayList<>();
@@ -32,7 +33,8 @@ public final class BedMeshActivity extends PlainScreen {
     /** Heights × this in the 3D view and the model (0: chosen for the mesh shown). */
     private int exaggeration;
     private PrinterService printer;
-    private TextView cloudCapture;
+    private TextView cloudCapture, levelReason;
+    private android.widget.Button levelButton;
     private int meshRevision = -1;
     private boolean bound;
     private final PrinterService.Observer watch = this::updateCapture;
@@ -40,6 +42,7 @@ public final class BedMeshActivity extends PlainScreen {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
             if (!(binder instanceof PrinterService.LocalBinder)) return;   // not the app's own service (or none): no live status
             printer = ((PrinterService.LocalBinder) binder).service(); printer.watch(watch);
+            printer.liveNow();   // through the cloud the map needs live updates: connect them now, not at the next attempt
         }
         @Override public void onServiceDisconnected(ComponentName name) { printer = null; updateCapture(); }
     };
@@ -64,13 +67,31 @@ public final class BedMeshActivity extends PlainScreen {
     }
     private void showCaptureStatus() {
         if (cloudCapture == null) return;
-        boolean cloud = printer != null && printer.usingCloud();
+        boolean local = printer != null && printer.ready(), cloud = printer != null && !local && printer.usingCloud();
         cloudCapture.setVisibility(cloud ? android.view.View.VISIBLE : android.view.View.GONE);
-        if (!cloud) return;
-        String result = printer.cloudMeshProgress();
-        cloudCapture.setText(result.isEmpty() ? (printer.cloudLiveOn
-            ? "Cloud live updates connected. Leave this screen open and start Auto-level on the printer."
-            : "Waiting for cloud live updates. Periodic status checks cannot collect probe points.") : result);
+        if (cloud) {
+            String result = printer.cloudMeshProgress();
+            cloudCapture.setText(result.isEmpty() ? (printer.cloudLiveOn
+                ? "Cloud live updates connected: a levelling now gives a map. Keep this screen open until it ends."
+                : "Connecting cloud live updates. Periodic status checks cannot collect probe points.") : result);
+        }
+        // Level from here: the same command and checks as Printer › Move & calibrate › Auto-level bed, sent once.
+        boolean connected = local || cloud;
+        levelButton.setVisibility(connected ? android.view.View.VISIBLE : android.view.View.GONE);
+        String why = connected ? printer.levelBlocked() : "";
+        levelButton.setEnabled(connected && why.isEmpty());
+        levelReason.setVisibility(connected && !why.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
+        levelReason.setText(why);
+    }
+    private void levelNow() {
+        if (printer == null) return;
+        boolean cloud = !printer.ready();
+        android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
+        CloudConsent.gate(this, settings, cloud, () -> new AlertDialog.Builder(this).setTitle("Level the bed now?")
+            .setMessage("The printer probes the bed (121 points). Remove anything from the plate first. Keep this screen open: the map appears here when probing ends."
+                + (cloud ? "\n\nSent through the Elegoo cloud." : ""))
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Level the bed", (d, which) -> { if (printer != null) { printer.levelForMesh(); showCaptureStatus(); } }).show());
     }
 
     @Override protected void onCreate(Bundle saved) {
@@ -93,15 +114,18 @@ public final class BedMeshActivity extends PlainScreen {
     private void render() {
         content.removeAllViews();
         A11y.heading(label(content, "Bed mesh", 22, ink, true));
-        label(content, "The bed's shape each time the printer levels it: before a print (when levelling is on) or from Auto-level bed. The app only listens "
-            + "to what the printer reports while it probes; nothing is sent to the printer for this.", 14, muted, false);
+        label(content, "The bed's shape each time the printer levels it: before a print (when levelling is on) or from Auto-level bed. The map is rebuilt "
+            + "from what the printer reports while it probes; the only command sent from here is the levelling you ask for.", 14, muted, false);
         cloudCapture = label(content, "", 13, muted, false);
+        levelButton = button(content, "Level the bed and capture", this::levelNow);
+        levelButton.setContentDescription("Level the bed now and keep its map");
+        levelReason = label(content, "", 13, muted, false);
         showCaptureStatus();
         if (all.isEmpty()) {
             LinearLayout empty = card();
             label(empty, "No bed mesh yet", 15, ink, true);
-            label(empty, "On LAN, use Printer › Move & calibrate › "
-                + "Auto-level bed. In cloud mode (experimental), wait for live updates here, then start leveling on the printer touchscreen. The map appears if enough live points arrive.", 13, muted, false);
+            label(empty, "Tap Level the bed and capture above (or start Auto-level on the printer). Through the cloud (experimental) the button waits "
+                + "until live updates are connected, since only they carry the probe points. The map appears here when probing ends.", 13, muted, false);
             label(empty, "This works from the head positions the printer reports while probing. It was worked out on firmware 02.01.01.13 by others; "
                 + "other firmware may report differently, and the app says so in Diagnostics if a levelling gives no map.", 12, muted, false);
             return;

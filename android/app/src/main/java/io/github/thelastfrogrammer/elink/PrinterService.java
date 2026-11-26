@@ -1828,7 +1828,7 @@ public final class PrinterService extends Service {
     private final Object cloudLiveLock = new Object();
     public volatile boolean cloudLiveOn;
     public String cloudLiveState = "";
-    private long cloudLiveAttempt;
+    private volatile long cloudLiveAttempt;
     /** Runs on cloudWorker after a successful poll. */
     private void startLive(CloudApi api) {
         CloudLive running = cloudLive;
@@ -1884,6 +1884,40 @@ public final class PrinterService extends Service {
         changed();
     }
     String cloudMeshProgress() { return cloudBedMesh.message(); }
+
+    // ------------------------------------------------------------------ levelling for a bed mesh, from the Bed mesh screen
+    private long levelAskedAt;
+    static final long LEVEL_GUARD_MS = 60_000;
+    /**
+     * Why the bed cannot be levelled for a mesh from here right now, in words ("" when it can). Through the cloud it also
+     * needs live updates, the only source of probe points. The cloud-control agreement is the screen's to ask.
+     */
+    public String levelBlocked() {
+        if (!liveFresh()) return "No live status from the printer yet.";
+        boolean cloud = !fresh();
+        if (cloud && !cloudLiveOn) return "Waiting for cloud live updates. Without them no probe points arrive, so levelling now would give no map.";
+        if (cloud && cloudCommandBusy()) return "Another cloud command is still running.";
+        if (cloudBedMesh.active() || bedMeshCapture.active()) return "The printer is levelling now.";
+        String upkeep = ControlState.upkeepReason(liveStatus());
+        if (!upkeep.isEmpty()) return upkeep;
+        if (System.currentTimeMillis() - levelAskedAt < LEVEL_GUARD_MS) return "Levelling was just asked for. Waiting for the printer to start probing.";
+        return "";
+    }
+    /** Asks the printer to level the bed, once (the same command and checks as Printer › Move & calibrate › Auto-level bed). */
+    public void levelForMesh() {
+        String why = levelBlocked();
+        if (!why.isEmpty()) { feedback = why; changed(); return; }
+        levelAskedAt = System.currentTimeMillis();
+        try { maintenance(Cc2Codec.maintenanceRequest(0, Cc2Codec.AUTO_LEVEL)); }
+        catch (Exception error) { feedback = "Could not prepare the levelling command."; changed(); }
+        Diagnostics.note(Diagnostics.STATUS, "bed levelling asked for from the Bed mesh screen (" + (fresh() ? "local" : "cloud") + ")");
+    }
+    /** Through the cloud: connect live updates now rather than after the usual wait between attempts (the Bed mesh screen needs them). */
+    public void liveNow() {
+        if (!usingCloud() || fresh() || cloudLiveOn) return;
+        cloudLiveAttempt = 0;
+        main.removeCallbacks(cloudPoll); main.post(cloudPoll);
+    }
     int meshRevision() { return meshRevision; }
     private int meshRevision;
 

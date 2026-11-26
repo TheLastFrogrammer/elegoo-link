@@ -1071,13 +1071,7 @@ public final class MainActivity extends Activity {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Probe", (d, which) -> cloudGate(cloud, () -> { if (printer != null) printer.probePrinter(); })).show();
     }
-    private void cloudGate(boolean cloud, Runnable action) {
-        if (!cloud || settings.getBoolean("cloudControlUnderstood", false)) { action.run(); return; }
-        new AlertDialog.Builder(this).setTitle("Turn on cloud control?")
-            .setMessage("Without a local connection, controls, files, history and settings go through Elegoo's cloud, using the same cloud sign-in as ElegooSlicer on a computer. If ElegooSlicer is open with this account, one of them may be signed out of cloud control. The Matrix app is expected to keep working, but this is untested.\n\nThe app connects only while you use these, and disconnects after two idle minutes. Monitoring works either way.")
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Turn on", (d, which) -> { settings.edit().putBoolean("cloudControlUnderstood", true).apply(); action.run(); }).show();
-    }
+    private void cloudGate(boolean cloud, Runnable action) { CloudConsent.gate(this, settings, cloud, action); }
     private void confirmRefill() {
         if (printer == null || !printer.canvasFresh() || !printer.canvas.has("auto_refill")) return;
         boolean enabled = !printer.canvas.optBoolean("auto_refill");
