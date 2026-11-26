@@ -29,8 +29,22 @@ final class CloudBedMesh {
         capture = new BedMesh.Capture(); phase = -1; lastLiveAt = 0; clearPosition();
     }
     private void clearPosition() { x = y = Double.NaN; moveKey = ""; }
+    /** Where the head stands (X and Y only) from the merged live status, when it reports a position. */
+    private void seed(JSONObject known) {
+        JSONObject at = known == null ? null : Cc2Codec.position(known);
+        if (at == null) return;
+        x = at.optDouble("x", Double.NaN); y = at.optDouble("y", Double.NaN);
+    }
 
-    BedMesh.Mesh delta(String serial, JSONObject raw, long now) throws JSONException {
+    BedMesh.Mesh delta(String serial, JSONObject raw, long now) throws JSONException { return delta(serial, raw, null, now); }
+
+    /**
+     * One live update. `known` is the merged live status including this update: live updates carry only the fields that
+     * changed, so where the head already stands when probing begins is known only from it. A probing run starts from the
+     * X and Y it holds (an axis that never changes along a row is otherwise never reported); a Z is only ever taken from a
+     * live update, never from the merged status.
+     */
+    BedMesh.Mesh delta(String serial, JSONObject raw, JSONObject known, long now) throws JSONException {
         if (!serial.equals(printer)) { reset(); printer = serial; }
         if (active() && remaining(now) == 0) interrupted();
         JSONObject machine = raw.optJSONObject("machine_status");
@@ -38,7 +52,7 @@ final class CloudBedMesh {
         int state = machine == null ? -1 : machine.optInt("status", -1);
         if (sub == BedMesh.LEVELLED || (sub >= 0 && sub != BedMesh.PROBING)
                 || (state >= 0 && state != 5 && state != 2)) return finish(now);
-        if (sub == BedMesh.PROBING && phase != sub) { clearPosition(); phase = sub; outcome = ""; }
+        if (sub == BedMesh.PROBING && phase != sub) { clearPosition(); seed(known); phase = sub; outcome = ""; }
         if (phase != BedMesh.PROBING) return null;
 
         JSONObject context = new JSONObject().put("machine_status", new JSONObject()
@@ -50,7 +64,8 @@ final class CloudBedMesh {
         String key = raw.optJSONObject("gcode_move") != null ? "gcode_move" : "gcode_move_inf";
         JSONObject p = raw.optJSONObject(key);
         if (p != null) {
-            if (!key.equals(moveKey)) { clearPosition(); moveKey = key; }
+            if (!moveKey.isEmpty() && !key.equals(moveKey)) clearPosition();   // another report of the position: start over
+            moveKey = key;
             if (p.has("x")) x = p.optDouble("x", Double.NaN);
             if (p.has("y")) y = p.optDouble("y", Double.NaN);
             double z = p.optDouble("z", Double.NaN); // Never carry a touch forward to the next X/Y.

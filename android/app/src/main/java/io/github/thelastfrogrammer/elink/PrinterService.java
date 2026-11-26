@@ -1844,7 +1844,7 @@ public final class PrinterService extends Service {
                         JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
                         cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis();
                         boolean beforeMesh = cloudBedMesh.active();
-                        saveMesh(cloudBedMesh.delta(serial, partial, cloudCheckedAt));
+                        saveMesh(cloudBedMesh.delta(serial, partial, merged, cloudCheckedAt));
                         if (cloudBedMesh.active()) {
                             main.removeCallbacks(cloudMeshTimeout); main.postDelayed(cloudMeshTimeout, cloudBedMesh.remaining(cloudCheckedAt));
                         } else if (beforeMesh) {
