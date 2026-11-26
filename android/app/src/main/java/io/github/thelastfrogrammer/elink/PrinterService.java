@@ -8,6 +8,7 @@ import android.net.Uri;
 import android.os.*;
 import android.provider.OpenableColumns;
 import org.json.JSONObject;
+import org.json.JSONException;
 import org.json.JSONArray;
 import java.io.*;
 import java.util.*;
@@ -1712,6 +1713,7 @@ public final class PrinterService extends Service {
         // A new sign-in or printer: answers still on their way from the old one are dropped (they check cloudApi), its
         // command channel is closed, and nothing it reported counts as fresh any more.
         cloudApi = null;
+        stopLive(); cloudBedMesh.reset();
         if (cloudControl != null) { cloudControl.close(); cloudControl = null; }
         cloudStatus = new JSONObject(); cloudCheckedAt = 0; if (!ready()) filesAt = 0;
         if (cloudBackground() && !wanted) startMonitoring();
@@ -1802,7 +1804,7 @@ public final class PrinterService extends Service {
                     boolean same = found.serial.equals(cloudSerial);
                     cloudName = found.name; cloudModel = found.model; cloudSerial = found.serial;
                     int onlineBefore = cloudOnline;
-                    if (!same) { cloudReportedAt = 0; cloudOnlineSignal = false; }
+                    if (!same) { cloudReportedAt = 0; cloudOnlineSignal = false; cloudBedMesh.reset(); }
                     if (reported != null && reported.reportedAt > 0) cloudReportedAt = Math.max(cloudReportedAt, CloudApi.seconds(reported.reportedAt) * 1000);
                     cloudOnline = onlineState(reportedOnline, same ? cloudOnline : -1, cloudReportedAt, System.currentTimeMillis());
                     cloudOnlineSignal = reportedOnline == 1 || reportedOnline == -1 && cloudOnlineSignal && cloudOnline == 1;
@@ -1810,6 +1812,9 @@ public final class PrinterService extends Service {
                 }
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
+                    if (!wanted && cloudOnline == 1) try {
+                        saveMesh(cloudBedMesh.snapshot(cloudSerial, reported, cloudCheckedAt));
+                    } catch (JSONException ignored) { }
                     // Local alerts take precedence while connected locally.
                     if (!wanted && cloudOnline == 1 && cloudReportRecent()) { alertChoices(); showAlert(cloudAlerts.update(reported.status), cloudName); showAlert(watched(cloudWatch, reported.status), cloudName); record(reported.status, "cloud", cloudName); }
                 } else if (found == null) { cloudSerial = ""; cloudStatus = new JSONObject(); }
@@ -1819,34 +1824,75 @@ public final class PrinterService extends Service {
     }
 
     // Live pushes over Elegoo's cloud MQTT (CloudLive); attempted at most every 5 minutes while the cloud is in use.
-    private CloudLive cloudLive;
+    private volatile CloudLive cloudLive;
+    private final Object cloudLiveLock = new Object();
     public volatile boolean cloudLiveOn;
     public String cloudLiveState = "";
     private long cloudLiveAttempt;
     /** Runs on cloudWorker after a successful poll. */
     private void startLive(CloudApi api) {
-        if (cloudLive != null && cloudLive.connected()) return;
+        CloudLive running = cloudLive;
+        if (running != null && running.connected()) return;
         long now = System.currentTimeMillis(); if (now - cloudLiveAttempt < 5 * 60_000) return; cloudLiveAttempt = now;
-        if (cloudLive == null) cloudLive = new CloudLive(new CloudLive.Listener() {
-            public void delta(String serial, JSONObject partial) { main.post(() -> {
-                if (destroyed || wanted || !serial.equals(cloudSerial) || cloudStatus.length() == 0) return;
-                try {
-                    JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
-                    cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis(); if (!wanted) bedMesh(merged, "Elegoo cloud"); cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
-                    // A live report from the printer itself shows it is online.
-                    cloudOnline = 1;
-                    if (cloudOnline == 1) { alertChoices(); showAlert(cloudAlerts.update(merged), cloudName); showAlert(watched(cloudWatch, merged), cloudName); record(merged, "cloud", cloudName); }
-                    changed(); updateNotification(false);
-                } catch (Exception ignored) { }
-            }); }
-            public void online(String serial, boolean online) { main.post(() -> { if (serial.equals(cloudSerial)) { cloudOnline = online ? 1 : 0; cloudOnlineSignal = online; if (online) cloudReportedAt = System.currentTimeMillis(); changed(); } }); }
-            public void state(String text, boolean live) { main.post(() -> { cloudLiveOn = live; cloudLiveState = text; changed(); }); }
-        });
-        try { cloudLive.connect(api.mqttCredential(CloudLive.clientId(api.account().userId))); }
-        catch (Exception error) { main.post(() -> { cloudLiveOn = false; cloudLiveState = "Live updates unavailable (" + (error.getMessage() == null ? "no credentials" : error.getMessage()) + "); using periodic checks."; changed(); }); }
+        synchronized (cloudLiveLock) {
+            if (cloudApi != api) return;
+            if (cloudLive == null) {
+                cloudLiveListener = new CloudLive.Listener() {
+                public void delta(String serial, JSONObject partial) { main.post(() -> {
+                    if (destroyed || wanted || !cloudSignedIn || !serial.equals(cloudSerial) || !currentLive(this)) return;
+                    try {
+                        JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
+                        cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis();
+                        boolean beforeMesh = cloudBedMesh.active();
+                        saveMesh(cloudBedMesh.delta(serial, partial, cloudCheckedAt));
+                        if (cloudBedMesh.active()) {
+                            main.removeCallbacks(cloudMeshTimeout); main.postDelayed(cloudMeshTimeout, cloudBedMesh.remaining(cloudCheckedAt));
+                        } else if (beforeMesh) {
+                            main.removeCallbacks(cloudMeshTimeout);
+                            Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message());
+                        }
+                        cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
+                        // A live report from the printer itself shows it is online.
+                        cloudOnline = 1;
+                        if (cloudOnline == 1) { alertChoices(); showAlert(cloudAlerts.update(merged), cloudName); showAlert(watched(cloudWatch, merged), cloudName); record(merged, "cloud", cloudName); }
+                        changed(); updateNotification(false);
+                    } catch (Exception ignored) { }
+                }); }
+                public void online(String serial, boolean online) { main.post(() -> { if (currentLive(this) && serial.equals(cloudSerial)) { if (!online) cloudBedMesh.interrupted(); cloudOnline = online ? 1 : 0; cloudOnlineSignal = online; if (online) cloudReportedAt = System.currentTimeMillis(); changed(); } }); }
+                public void state(String text, boolean live) { main.post(() -> { if (!currentLive(this)) return;
+                    if (!live) cloudBedMesh.interrupted();
+                    cloudLiveOn = live; cloudLiveState = text; changed(); }); }
+                };
+                cloudLive = new CloudLive(cloudLiveListener);
+            }
+            running = cloudLive;
+        }
+        CloudLive target = running;
+        try { target.connect(api.mqttCredential(CloudLive.clientId(api.account().userId))); }
+        catch (Exception error) { main.post(() -> { if (cloudLive != target) return; cloudLiveOn = false; cloudLiveState = "Live updates unavailable (" + (error.getMessage() == null ? "no credentials" : error.getMessage()) + "); using periodic checks."; changed(); }); }
     }
+    private volatile CloudLive.Listener cloudLiveListener;
+    private boolean currentLive(CloudLive.Listener listener) { return cloudLiveListener == listener; }
+    private final CloudBedMesh cloudBedMesh = new CloudBedMesh();
+    private final Runnable cloudMeshTimeout = this::expireCloudMesh;
+    private void expireCloudMesh() {
+        if (!cloudBedMesh.active()) return;
+        long left = cloudBedMesh.remaining(System.currentTimeMillis());
+        if (left > 0) { main.postDelayed(cloudMeshTimeout, left); return; }
+        cloudBedMesh.interrupted();
+        Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message());
+        changed();
+    }
+    String cloudMeshProgress() { return cloudBedMesh.message(); }
+    int meshRevision() { return meshRevision; }
+    private int meshRevision;
+
     private void stopLive() {
-        CloudLive live = cloudLive; cloudLive = null; cloudLiveOn = false; cloudLiveAttempt = 0;
+        CloudLive live;
+        synchronized (cloudLiveLock) { cloudLiveListener = null; live = cloudLive; cloudLive = null; }
+        main.removeCallbacks(cloudMeshTimeout);
+        cloudBedMesh.interrupted();
+        cloudLiveOn = false; cloudLiveAttempt = 0;
         if (live != null) cloudWorker.execute(live::close);
     }
 
@@ -2335,10 +2381,14 @@ public final class PrinterService extends Service {
         }
         String id = wanted ? serial : cloudSerial; mesh.printer = id == null || id.isEmpty() ? "" : PrintRecorder.digest(id);
         bedMeshLastCount = mesh.count();
+        saveMesh(mesh);
+    }
+    private void saveMesh(BedMesh.Mesh mesh) {
+        if (mesh == null) return;
         videoWorker.execute(() -> {
-            try { BedMesh.save(BedMesh.directory(getFilesDir()), mesh); Diagnostics.note(Diagnostics.STATUS, String.format(java.util.Locale.ROOT, "bed mesh kept: %d points, range %.2f mm (%s)", mesh.count(), mesh.range(), from)); }
+            try { BedMesh.save(BedMesh.directory(getFilesDir()), mesh); Diagnostics.note(Diagnostics.STATUS, String.format(java.util.Locale.ROOT, "bed mesh kept: %d points, range %.2f mm (%s)", mesh.count(), mesh.range(), mesh.source)); }
             catch (java.io.IOException failed) { Diagnostics.note(Diagnostics.STATUS, "bed mesh could not be kept: " + failed.getClass().getSimpleName()); }
-            main.post(this::changed);
+            main.post(() -> { meshRevision++; changed(); });
         });
     }
 

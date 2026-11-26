@@ -212,3 +212,12 @@ The app no longer carries Firefox's engine (it is about 17 MB again). Instead:
 3. (v0.24.2) More… → Layers, transparency and nozzle dot… → **Printhead size…**: the mask shows tinted over the camera
    picture; size it to cover the real printhead (easiest between prints, with the head parked). **Defaults** resets it.
 4. **Delay to match the camera**: if the real head in the picture trails the drawing, raise it until they move together.
+
+## Cloud bed mesh (stock firmware)
+
+1. Leave LAN Only off, keep Matrix paired, and sign into Elegoo in Link Workshop.
+2. In Link Workshop open **Printer → Move & calibrate → Bed mesh…** and wait for **Cloud live updates connected**. Keep this screen open.
+3. Start **Auto-level** on the printer touchscreen. Watch for the live position report count. When leveling ends, the new map should read **seen through the cloud** and show 121 points.
+4. If only periodic checks are available, or the screen reports an incomplete grid, record the result and firmware version. The app keeps the earlier mesh. Do not read an earlier mesh as a successful cloud capture. Settings → View logs shows capture results without coordinates or account data.
+
+The app uses the existing cloud MQTT stream; no printer changes, extra polling, or capture commands are needed. It never fills missing probe readings from the last cached status. Periodic status can only close an active capture if its printer timestamp is newer than the live observations. An 11 × 11 grid is the currently supported cloud capture for this printer.

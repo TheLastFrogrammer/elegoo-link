@@ -44,7 +44,12 @@ public final class CloudApi {
     /** A rebuilt status in the same shape as the printer's LAN status, plus the newest report time (epoch ms, 0 if unknown). */
     public static final class Snapshot {
         public final JSONObject status; public final long reportedAt;
-        Snapshot(JSONObject status, long reportedAt) { this.status = status; this.reportedAt = reportedAt; }
+        final long machineStateAt, machinePhaseAt;
+        Snapshot(JSONObject status, long reportedAt) { this(status, reportedAt, 0, 0); }
+        Snapshot(JSONObject status, long reportedAt, long machineStateAt, long machinePhaseAt) {
+            this.status = status; this.reportedAt = reportedAt;
+            this.machineStateAt = machineStateAt; this.machinePhaseAt = machinePhaseAt;
+        }
     }
 
     private final String base, userAgent;
@@ -538,7 +543,7 @@ public final class CloudApi {
 
     /** Rebuilds {group: {field: value}} from the cloud's per-field reports, with the SDK's typing rules. */
     static Snapshot assemble(JSONObject data) {
-        JSONObject status = new JSONObject(); long newest = 0;
+        JSONObject status = new JSONObject(); long newest = 0, machineStateAt = 0, machinePhaseAt = 0;
         try {
             for (Iterator<String> groups = data.keys(); groups.hasNext(); ) {
                 String group = groups.next(); JSONArray items = data.optJSONArray(group);
@@ -549,7 +554,12 @@ public final class CloudApi {
                     if (item == null) continue;
                     String key = item.optString("reportLinkKey", ""), value = item.optString("reportValue", "");
                     if (key.isEmpty()) continue;
-                    newest = Math.max(newest, item.optLong("updateTime", 0));
+                    long at = item.optLong("updateTime", 0);
+                    newest = Math.max(newest, at);
+                    if ("machine_status".equals(group)) {
+                        if ("status".equals(key)) machineStateAt = at;
+                        if ("sub_status".equals(key)) machinePhaseAt = at;
+                    }
                     Set<String> strings = STRING_FIELDS.get(group);
                     fields.put(key, strings != null && strings.contains(key) ? value : typed(value));
                 }
@@ -559,7 +569,7 @@ public final class CloudApi {
             // As in the SDK: a cloud snapshot carries no live exception list.
             if (machine != null) machine.put("exception_status", new JSONArray());
         } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
-        return new Snapshot(status, newest);
+        return new Snapshot(status, newest, machineStateAt, machinePhaseAt);
     }
     static Object typed(String value) {
         String text = value.trim();

@@ -2,6 +2,9 @@ package io.github.thelastfrogrammer.elink;
 
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.ComponentName;
+import android.content.ServiceConnection;
+import android.os.IBinder;
 import android.net.Uri;
 import android.os.Bundle;
 import android.widget.LinearLayout;
@@ -28,6 +31,48 @@ public final class BedMeshActivity extends PlainScreen {
     private int shown, against = -1;
     /** Heights × this in the 3D view and the model (0: chosen for the mesh shown). */
     private int exaggeration;
+    private PrinterService printer;
+    private TextView cloudCapture;
+    private int meshRevision = -1;
+    private boolean bound;
+    private final PrinterService.Observer watch = this::updateCapture;
+    private final ServiceConnection connection = new ServiceConnection() {
+        @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            if (isDestroyed() || !(binder instanceof PrinterService.LocalBinder)) return;
+            printer = ((PrinterService.LocalBinder) binder).service();
+            printer.watch(watch);
+        }
+        @Override public void onServiceDisconnected(ComponentName name) { printer = null; updateCapture(); }
+    };
+
+    @Override protected void onStart() {
+        super.onStart();
+        bound = bindService(new Intent(this, PrinterService.class), connection, BIND_AUTO_CREATE);
+    }
+    @Override protected void onStop() {
+        if (printer != null) printer.unwatch(watch);
+        printer = null; meshRevision = -1;
+        if (bound) { unbindService(connection); bound = false; }
+        super.onStop();
+    }
+    private void updateCapture() {
+        if (printer != null && printer.meshRevision() != meshRevision) {
+            meshRevision = printer.meshRevision();
+            all = BedMesh.list(BedMesh.directory(getFilesDir()));
+            render(); return;
+        }
+        showCaptureStatus();
+    }
+    private void showCaptureStatus() {
+        if (cloudCapture == null) return;
+        boolean cloud = printer != null && printer.usingCloud();
+        cloudCapture.setVisibility(cloud ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (!cloud) return;
+        String result = printer.cloudMeshProgress();
+        cloudCapture.setText(result.isEmpty() ? (printer.cloudLiveOn
+            ? "Cloud live updates connected. Leave this screen open and start Auto-level on the printer."
+            : "Waiting for cloud live updates. Periodic status checks cannot collect probe points.") : result);
+    }
 
     @Override protected void onCreate(Bundle saved) {
         super.onCreate(saved);
@@ -51,11 +96,13 @@ public final class BedMeshActivity extends PlainScreen {
         A11y.heading(label(content, "Bed mesh", 22, ink, true));
         label(content, "The bed's shape each time the printer levels it: before a print (when levelling is on) or from Auto-level bed. The app only listens "
             + "to what the printer reports while it probes; nothing is sent to the printer for this.", 14, muted, false);
+        cloudCapture = label(content, "", 13, muted, false);
+        showCaptureStatus();
         if (all.isEmpty()) {
             LinearLayout empty = card();
             label(empty, "No bed mesh yet", 15, ink, true);
-            label(empty, "Keep the app connected on the printer's local network (LAN Only), then let the printer level the bed: Printer › Move & calibrate › "
-                + "Auto-level bed, or start a print with levelling on. The map appears here when the probing ends.", 13, muted, false);
+            label(empty, "On LAN, use Printer › Move & calibrate › "
+                + "Auto-level bed. In cloud mode (experimental), wait for live updates here, then start leveling on the printer touchscreen. The map appears if enough live points arrive.", 13, muted, false);
             label(empty, "This works from the head positions the printer reports while probing. It was worked out on firmware 02.01.01.13 by others; "
                 + "other firmware may report differently, and the app says so in Diagnostics if a levelling gives no map.", 12, muted, false);
             return;
