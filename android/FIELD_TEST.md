@@ -216,8 +216,8 @@ The app no longer carries Firefox's engine (it is about 17 MB again). Instead:
 ## Cloud bed mesh (stock firmware)
 
 1. Leave LAN Only off, keep Matrix paired, and sign into Elegoo in Link Workshop.
-2. In Link Workshop open **Printer → Move & calibrate → Bed mesh…** and wait for **Cloud live updates connected**. Keep this screen open.
-3. Start **Auto-level** on the printer touchscreen. You can also open **Bed mesh…** while it is already probing; if the app was monitoring, it shows the count already received. Watch the live probe-location count, which ignores lifts and repeat visits. When leveling ends, the new map should read **seen through the cloud** and show 121 points.
-4. If only periodic checks are available, or the screen reports an incomplete grid, record the result and firmware version. The app keeps the earlier mesh. Do not read an earlier mesh as a successful cloud capture. Settings → View logs shows capture results without coordinates or account data.
+2. Open **Printer → Move & calibrate → Bed mesh…** and wait for **Cloud live updates connected**.
+3. Tap **Level the bed and capture**, confirm, and agree to cloud control if prompted. You can also start Auto-level on the printer and open the viewer while it is probing. Watch the distinct locations count; lifts and repeat visits do not advance it.
+4. Background Link Workshop once probing starts, then reopen it after the run. A completed map should read **seen through the cloud** and show 121 points. An incomplete capture keeps the previous map. Record the firmware version and the capture counts under Settings → View logs if the new map is missing.
 
-The app uses the existing cloud MQTT stream; no printer changes, extra polling, or capture commands are needed. It never fills missing probe readings from the last cached status. Periodic status can only close an active capture if its printer timestamp is newer than the live observations. An 11 × 11 grid is the currently supported cloud capture for this printer.
+The app uses the existing cloud MQTT stream. It uses the last known X and Y when probing starts and requires fresh live Z readings for all probe points. Periodic status can only close an active capture if its printer timestamp is newer than the live observations. The supported cloud grid is 11 × 11.

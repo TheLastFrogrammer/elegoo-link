@@ -9,8 +9,8 @@ android {
         applicationId 'io.github.thelastfrogrammer.elink'
         minSdk 26
         targetSdk 36
-        versionCode 211
-        versionName '0.105.3'
+        versionCode 212
+        versionName '0.105.4'
         // Agora ships native code for four CPU types; keep only 64-bit ARM (modern phones) to limit APK size.
         ndk { abiFilters 'arm64-v8a' }
     }
@@ -40,6 +40,8 @@ android {
     packaging { jniLibs { useLegacyPackaging = true } }
     testOptions { unitTests { includeAndroidResources = true; all {
         maxHeapSize = '2g'   // the render tests and the slicer engine
+        // A failure shows where it happened (the app's frames too), not just the test's line, in the CI log.
+        testLogging { events 'failed'; exceptionFormat 'full'; showCauses true; showStackTraces true }
         systemProperty 'screenshots', System.getProperty('screenshots', '')
         systemProperty 'csv', System.getProperty('csv', '')   // RecordingAnalysisTest.diagnoseARealRecording: a recording's CSV to diagnose
         // Opt-in: -DslicerLib=<dir with a host liblinkslicer.so> runs SlicerIntegrationTest against the real engine.

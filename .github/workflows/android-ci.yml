@@ -8,6 +8,10 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+# A newer push to the same branch replaces a run still going: only the latest commit's result matters.
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -23,12 +27,39 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
+          cache: gradle   # Gradle's dependencies and wrapper, kept between runs
+      # Robolectric downloads its Android libraries (android-all) at test time from Maven Central; kept between runs so a
+      # download blip there no longer fails every Robolectric test.
+      - name: Keep Robolectric's Android libraries
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/robolectric
+          key: robolectric-${{ hashFiles('android/app/build.gradle', 'android/tv/build.gradle') }}
+          restore-keys: robolectric-
       - name: Install Android SDK packages
         run: '"$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;35.0.0"'
       - name: The pinned slicer engine matches the engine source
         run: python3 ../.github/workflows/check-engine.py
       - name: Compile, test, lint and assemble
-        run: ./gradlew --no-daemon --no-build-cache --max-workers=2 testDebugUnitTest lintDebug assembleDebug
+        run: |
+          build() { ./gradlew --no-daemon --no-build-cache --max-workers=2 testDebugUnitTest lintDebug assembleDebug; }
+          if build; then exit 0; fi
+          # Only a failed download of Robolectric's Android libraries is retried, once; a failing test never is.
+          if grep -lq 'MavenArtifactFetcher' app/build/test-results/testDebugUnitTest/*.xml tv/build/test-results/testDebugUnitTest/*.xml 2>/dev/null; then
+            echo "::warning::Robolectric could not download its Android libraries (Maven Central); retrying once."
+            build
+          else
+            exit 1
+          fi
+      - name: Keep the test reports when tests fail
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            android/app/build/reports/tests/testDebugUnitTest
+            android/tv/build/reports/tests/testDebugUnitTest
+          retention-days: 7
       - name: The APK carries the slicer engine and its presets
         run: python3 ../.github/workflows/check-engine.py app/build/outputs/apk/debug/app-debug.apk
       - name: Keep the debug APK for testing on a phone

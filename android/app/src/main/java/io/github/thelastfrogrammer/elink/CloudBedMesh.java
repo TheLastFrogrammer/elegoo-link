@@ -11,51 +11,107 @@ final class CloudBedMesh {
     static final int EXPECTED_POINTS = CC2_POINTS_PER_AXIS * CC2_POINTS_PER_AXIS;
     private BedMesh.Capture capture = new BedMesh.Capture();
     private String printer = "", moveKey = "";
-    private int phase = -1;
+    private int phase = -1, levelState = -1;
+    private boolean paused;
     private double x = Double.NaN, y = Double.NaN;
     private long lastLiveAt;
     String outcome = "";
+    /**
+     * The last run in counts, for the log: live updates during probing, those with a position, probe touches seen, the
+     * places touched, and the longest wait between updates. No coordinates. Whether the cloud forwards the printer's
+     * positions often enough to rebuild a grid is the open question this answers.
+     */
+    String stats = "";
+    private int updates, positions, touches; private long lastUpdateAt, longestGapMs;
 
     boolean active() { return capture.active(); }
     int probeLocations() { return capture.probeLocations(); }
     long remaining(long now) { return Math.max(0, Math.min(SILENCE_MS, SILENCE_MS - (now - lastLiveAt))); }
     String message() {
-        if (active()) return "Cloud leveling in progress · " + capture.points() + " distinct position reports received.";
+        if (active()) return "Cloud levelling in progress · probe touches at " + probeLocations() + " of " + EXPECTED_POINTS + " places so far.";
         return outcome;
     }
+    /** The printer's own levelling state (5) with a step other than probing: it is still levelling, between probes. */
+    private static boolean betweenProbes(int state, int sub) { return state == 5 && sub >= 0 && sub != BedMesh.PROBING && sub != BedMesh.LEVELLED; }
 
-    void reset() { stop(""); printer = ""; outcome = ""; }
+    void reset() { stop(""); printer = ""; outcome = ""; stats = ""; }
     void interrupted() { stop("Cloud updates paused during leveling. Run Auto-level again while cloud live updates are connected."); }
     private void stop(String why) {
-        if (active()) outcome = why;
-        capture = new BedMesh.Capture(); phase = -1; lastLiveAt = 0; clearPosition();
+        if (active()) { outcome = why; stats = counts(); }
+        capture = new BedMesh.Capture(); phase = -1; lastLiveAt = 0; paused = false; levelState = -1; clearPosition();
     }
     private void clearPosition() { x = y = Double.NaN; moveKey = ""; }
+    /** Follows the head's X and Y from an update that is not a probe (no point is kept from it). */
+    private void follow(JSONObject raw) {
+        String key = raw.optJSONObject("gcode_move") != null ? "gcode_move" : "gcode_move_inf";
+        JSONObject p = raw.optJSONObject(key);
+        if (p == null) return;
+        if (!moveKey.isEmpty() && !key.equals(moveKey)) clearPosition();
+        moveKey = key;
+        if (p.has("x")) x = p.optDouble("x", Double.NaN);
+        if (p.has("y")) y = p.optDouble("y", Double.NaN);
+    }
+    /** Where the head stands (X and Y only) from the merged live status, when it reports a position. */
+    private void seed(JSONObject known) {
+        JSONObject at = known == null ? null : Cc2Codec.position(known);
+        if (at == null) return;
+        x = at.optDouble("x", Double.NaN); y = at.optDouble("y", Double.NaN);
+    }
 
-    BedMesh.Mesh delta(String serial, JSONObject raw, long now) throws JSONException {
+    private String counts() {
+        return String.format(java.util.Locale.ROOT, "%d live updates while probing, %d with a position, %d probe touches at %d places, longest wait %.1f s",
+            updates, positions, touches, probeLocations(), longestGapMs / 1000.0);
+    }
+    private void startCounting(long now) {
+        updates = positions = touches = 0; longestGapMs = 0; lastUpdateAt = now; stats = "";
+    }
+
+    BedMesh.Mesh delta(String serial, JSONObject raw, long now) throws JSONException { return delta(serial, raw, null, now); }
+
+    /**
+     * One live update. `known` is the merged live status including this update: live updates carry only the fields that
+     * changed, so where the head already stands when probing begins is known only from it. A probing run starts from the
+     * X and Y it holds (an axis that never changes along a row is otherwise never reported); a Z is only ever taken from a
+     * live update, never from the merged status.
+     */
+    BedMesh.Mesh delta(String serial, JSONObject raw, JSONObject known, long now) throws JSONException {
         if (!serial.equals(printer)) { reset(); printer = serial; }
         if (active() && remaining(now) == 0) interrupted();
         JSONObject machine = raw.optJSONObject("machine_status");
         int sub = machine == null ? -1 : machine.optInt("sub_status", -1);
         int state = machine == null ? -1 : machine.optInt("status", -1);
+        if (state >= 0) levelState = state;
+        // While the printer still says it is levelling (state 5), another step (homing, heating) pauses the capture
+        // rather than ending it, as the local capture does. Its positions are not probes, so none is kept, but the head's
+        // X and Y are still followed: updates carry only what changed, so after the pause they may not be sent again.
+        if (active() && (betweenProbes(levelState, sub) || paused && sub < 0 && levelState == 5)) { paused = true; lastLiveAt = now; follow(raw); return null; }
         if (sub == BedMesh.LEVELLED || (sub >= 0 && sub != BedMesh.PROBING)
                 || (state >= 0 && state != 5 && state != 2)) return finish(now);
-        if (sub == BedMesh.PROBING && phase != sub) { clearPosition(); phase = sub; outcome = ""; }
+        if (sub == BedMesh.PROBING) paused = false;
+        if (sub == BedMesh.PROBING && phase != sub) { clearPosition(); seed(known); phase = sub; outcome = ""; startCounting(now); }
         if (phase != BedMesh.PROBING) return null;
+        updates++; longestGapMs = Math.max(longestGapMs, now - lastUpdateAt); lastUpdateAt = now;
 
         JSONObject context = new JSONObject().put("machine_status", new JSONObject()
             .put("status", state < 0 ? 2 : state).put("sub_status", BedMesh.PROBING));
+        // The bed's temperature and the print being started are state, not probe readings: from this update, else from the
+        // merged live status (an update carries them only when they change), so a cloud mesh is kept with its temperature.
         for (String key : new String[]{"heater_bed", "print_status"}) {
-            JSONObject v = raw.optJSONObject(key); if (v != null) context.put(key, v);
+            JSONObject v = raw.optJSONObject(key);
+            if (v == null && known != null) v = known.optJSONObject(key);
+            if (v != null) context.put(key, v);
         }
 
         String key = raw.optJSONObject("gcode_move") != null ? "gcode_move" : "gcode_move_inf";
         JSONObject p = raw.optJSONObject(key);
         if (p != null) {
-            if (!key.equals(moveKey)) { clearPosition(); moveKey = key; }
+            if (!moveKey.isEmpty() && !key.equals(moveKey)) clearPosition();   // another report of the position: start over
+            moveKey = key;
             if (p.has("x")) x = p.optDouble("x", Double.NaN);
             if (p.has("y")) y = p.optDouble("y", Double.NaN);
             double z = p.optDouble("z", Double.NaN); // Never carry a touch forward to the next X/Y.
+            positions++;
+            if (Double.isFinite(z) && Math.abs(z) < BedMesh.CONTACT_MM) touches++;
             if (Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z))
                 context.put("gcode_move", new JSONObject().put("x", x).put("y", y).put("z", z));
         }
@@ -74,20 +130,20 @@ final class CloudBedMesh {
         long phaseAt = CloudApi.seconds(report.machinePhaseAt) * 1000;
         long stateAt = CloudApi.seconds(report.machineStateAt) * 1000;
         if (phaseAt > lastLiveAt && phaseAt <= now && phaseAt >= stateAt && sub >= 0)
-            return sub == BedMesh.PROBING ? null : finish(now);
+            return sub == BedMesh.PROBING || betweenProbes(state, sub) ? null : finish(now);
         if (stateAt > lastLiveAt && stateAt <= now && state >= 0 && state != 2 && state != 5) return finish(now);
         return null;
     }
 
     private BedMesh.Mesh finish(long now) throws JSONException {
         if (!active()) return null;
-        int reports = capture.points();
+        stats = counts();
         // Treat 2902 as the end of probing; any final positioning isn't another measurement.
         BedMesh.Mesh mesh = capture.feed(new JSONObject().put("machine_status", new JSONObject().put("status", 1)),
             now, SOURCE, EXPECTED_POINTS);
         stop("");
         if (mesh == null || mesh.xs.length != CC2_POINTS_PER_AXIS || mesh.ys.length != CC2_POINTS_PER_AXIS) {
-            outcome = "No cloud mesh saved: received " + reports + " distinct position reports, but not a complete 11 × 11 probe grid. Try LAN if another run has the same result.";
+            outcome = "No cloud mesh saved: not a complete 11 × 11 probe grid (" + stats + "). Try LAN if another run has the same result.";
             return null;
         }
         outcome = "Cloud bed mesh captured · " + mesh.count() + " probe points.";

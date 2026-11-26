@@ -538,7 +538,7 @@ public final class MainActivity extends Activity {
         autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Level the bed automatically?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration test?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "The printer runs a vibration test, a heater (PID) check and bed leveling, as the official app does. This takes several minutes. Keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
-        // The mesh viewer is read-only, so keep it available while maintenance commands are disabled.
+        // Opening the viewer sends no command, so keep it available while maintenance commands are disabled.
         button(upkeep, "Bed mesh…", () -> startActivity(new Intent(this, BedMeshActivity.class)))
             .setContentDescription("Bed mesh: live leveling progress and saved maps");
         emergencyButton(upkeep);
@@ -1073,13 +1073,7 @@ public final class MainActivity extends Activity {
             .setNegativeButton("Cancel", null)
             .setPositiveButton("Probe", (d, which) -> cloudGate(cloud, () -> { if (printer != null) printer.probePrinter(); })).show();
     }
-    private void cloudGate(boolean cloud, Runnable action) {
-        if (!cloud || settings.getBoolean("cloudControlUnderstood", false)) { action.run(); return; }
-        new AlertDialog.Builder(this).setTitle("Turn on cloud control?")
-            .setMessage("Without a local connection, controls, files, history and settings go through Elegoo's cloud, using the same cloud sign-in as ElegooSlicer on a computer. If ElegooSlicer is open with this account, one of them may be signed out of cloud control. The Matrix app is expected to keep working, but this is untested.\n\nThe app connects only while you use these, and disconnects after two idle minutes. Monitoring works either way.")
-            .setNegativeButton("Not now", null)
-            .setPositiveButton("Turn on", (d, which) -> { settings.edit().putBoolean("cloudControlUnderstood", true).apply(); action.run(); }).show();
-    }
+    private void cloudGate(boolean cloud, Runnable action) { CloudConsent.gate(this, settings, cloud, action); }
     private void confirmRefill() {
         if (printer == null || !printer.canvasFresh() || !printer.canvas.has("auto_refill")) return;
         boolean enabled = !printer.canvas.optBoolean("auto_refill");

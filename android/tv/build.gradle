@@ -16,6 +16,8 @@ android {
     compileOptions { sourceCompatibility JavaVersion.VERSION_11; targetCompatibility JavaVersion.VERSION_11 }
     testOptions { unitTests { includeAndroidResources = true; all {
         maxHeapSize = '1g'
+        // A failure shows where it happened (the app's frames too), not just the test's line, in the CI log.
+        testLogging { events 'failed'; exceptionFormat 'full'; showCauses true; showStackTraces true }
         // Opt-in: -Dscreenshots=<dir> writes the screens as 1920×1080 PNGs (ScreensTest).
         systemProperty 'screenshots', System.getProperty('screenshots', '')
     } } }
