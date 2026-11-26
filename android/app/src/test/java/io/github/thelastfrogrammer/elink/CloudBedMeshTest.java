@@ -49,13 +49,15 @@ public class CloudBedMeshTest {
 
     @Test public void onlyNewSnapshotsCanCloseAndNoneCanContributePoints() throws Exception {
         CloudBedMesh capture = new CloudBedMesh();
-        assertNull(capture.snapshot("SN1", phase(BedMesh.PROBING), 1, 2));
+        assertNull(capture.snapshot("SN1", new CloudApi.Snapshot(phase(BedMesh.PROBING), 1), 2000));
         assertFalse(capture.active());
-        long now = grid(capture, "SN1", 11, true);
-        assertNull(capture.snapshot("SN1", phase(BedMesh.LEVELLED), now - 1, now + 1));
-        assertNull(capture.snapshot("SN2", phase(BedMesh.LEVELLED), now, now + 1));
+        grid(capture, "SN1", 11, true);
+        JSONObject ended = phase(BedMesh.LEVELLED);
+        long now = 4000;
+        assertNull(capture.snapshot("SN1", new CloudApi.Snapshot(ended, 4, 1, 1), now));
+        assertNull(capture.snapshot("SN2", new CloudApi.Snapshot(ended, 4, 0, 3), now));
         assertTrue(capture.active());
-        assertNotNull(capture.snapshot("SN1", phase(BedMesh.LEVELLED), now, now + 1));
+        assertNotNull(capture.snapshot("SN1", new CloudApi.Snapshot(ended, 4, 0, 3), now));
     }
 
     @Test public void printerChangeAndGapNeverCompleteUnknownRuns() throws Exception {

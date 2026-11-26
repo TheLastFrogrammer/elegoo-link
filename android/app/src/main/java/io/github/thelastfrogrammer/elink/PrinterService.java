@@ -1813,7 +1813,7 @@ public final class PrinterService extends Service {
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
                     if (!wanted && cloudOnline == 1) try {
-                        saveMesh(cloudBedMesh.snapshot(cloudSerial, reported.status, CloudApi.seconds(reported.reportedAt) * 1000, cloudCheckedAt));
+                        saveMesh(cloudBedMesh.snapshot(cloudSerial, reported, cloudCheckedAt));
                     } catch (JSONException ignored) { }
                     // Local alerts take precedence while connected locally.
                     if (!wanted && cloudOnline == 1 && cloudReportRecent()) { alertChoices(); showAlert(cloudAlerts.update(reported.status), cloudName); showAlert(watched(cloudWatch, reported.status), cloudName); record(reported.status, "cloud", cloudName); }

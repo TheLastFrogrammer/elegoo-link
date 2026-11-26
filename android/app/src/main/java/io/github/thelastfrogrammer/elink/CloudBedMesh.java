@@ -62,15 +62,19 @@ final class CloudBedMesh {
         return null;
     }
 
-    BedMesh.Mesh snapshot(String serial, JSONObject status, long reportedAtMs, long now) throws JSONException {
-        // The cloud status endpoint can return old data. A snapshot cannot start or contribute to a capture.
-        if (!active() || !printer.equals(serial) || reportedAtMs <= lastLiveAt || reportedAtMs > now) return null;
+    BedMesh.Mesh snapshot(String serial, CloudApi.Snapshot report, long now) throws JSONException {
+        if (!active() || !printer.equals(serial)) return null;
         if (remaining(now) == 0) { interrupted(); return null; }
-        JSONObject machine = status.optJSONObject("machine_status");
+        JSONObject machine = report.status.optJSONObject("machine_status");
         if (machine == null) return null;
         int sub = machine.optInt("sub_status", -1), state = machine.optInt("status", -1);
-        if (sub == BedMesh.PROBING || (sub < 0 && (state == 2 || state == 5 || state < 0))) return null;
-        return finish(now);
+        // Per-field timestamps matter: a fresh temperature must not make a cached idle status look new.
+        long phaseAt = CloudApi.seconds(report.machinePhaseAt) * 1000;
+        long stateAt = CloudApi.seconds(report.machineStateAt) * 1000;
+        if (phaseAt > lastLiveAt && phaseAt <= now && phaseAt >= stateAt && sub >= 0)
+            return sub == BedMesh.PROBING ? null : finish(now);
+        if (stateAt > lastLiveAt && stateAt <= now && state >= 0 && state != 2 && state != 5) return finish(now);
+        return null;
     }
 
     private BedMesh.Mesh finish(long now) throws JSONException {
