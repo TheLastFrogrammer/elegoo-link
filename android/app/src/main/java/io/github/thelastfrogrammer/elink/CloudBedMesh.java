@@ -10,7 +10,8 @@ final class CloudBedMesh {
     private static final int CC2_POINTS_PER_AXIS = 11;
     private BedMesh.Capture capture = new BedMesh.Capture();
     private String printer = "", moveKey = "";
-    private int phase = -1;
+    private int phase = -1, levelState = -1;
+    private boolean paused;
     private double x = Double.NaN, y = Double.NaN;
     private long lastLiveAt;
     String outcome = "";
@@ -26,17 +27,29 @@ final class CloudBedMesh {
     boolean active() { return capture.active(); }
     long remaining(long now) { return Math.max(0, Math.min(SILENCE_MS, SILENCE_MS - (now - lastLiveAt))); }
     String message() {
-        if (active()) return "Cloud leveling in progress · " + capture.points() + " distinct position reports received.";
+        if (active()) return "Cloud levelling in progress · probe touches at " + touched.size() + " of " + CC2_POINTS_PER_AXIS * CC2_POINTS_PER_AXIS + " places so far.";
         return outcome;
     }
+    /** The printer's own levelling state (5) with a step other than probing: it is still levelling, between probes. */
+    private static boolean betweenProbes(int state, int sub) { return state == 5 && sub >= 0 && sub != BedMesh.PROBING && sub != BedMesh.LEVELLED; }
 
     void reset() { stop(""); printer = ""; outcome = ""; stats = ""; }
     void interrupted() { stop("Cloud updates paused during leveling. Run Auto-level again while cloud live updates are connected."); }
     private void stop(String why) {
         if (active()) { outcome = why; stats = counts(); }
-        capture = new BedMesh.Capture(); phase = -1; lastLiveAt = 0; clearPosition();
+        capture = new BedMesh.Capture(); phase = -1; lastLiveAt = 0; paused = false; levelState = -1; clearPosition();
     }
     private void clearPosition() { x = y = Double.NaN; moveKey = ""; }
+    /** Follows the head's X and Y from an update that is not a probe (no point is kept from it). */
+    private void follow(JSONObject raw) {
+        String key = raw.optJSONObject("gcode_move") != null ? "gcode_move" : "gcode_move_inf";
+        JSONObject p = raw.optJSONObject(key);
+        if (p == null) return;
+        if (!moveKey.isEmpty() && !key.equals(moveKey)) clearPosition();
+        moveKey = key;
+        if (p.has("x")) x = p.optDouble("x", Double.NaN);
+        if (p.has("y")) y = p.optDouble("y", Double.NaN);
+    }
     /** Where the head stands (X and Y only) from the merged live status, when it reports a position. */
     private void seed(JSONObject known) {
         JSONObject at = known == null ? null : Cc2Codec.position(known);
@@ -66,8 +79,14 @@ final class CloudBedMesh {
         JSONObject machine = raw.optJSONObject("machine_status");
         int sub = machine == null ? -1 : machine.optInt("sub_status", -1);
         int state = machine == null ? -1 : machine.optInt("status", -1);
+        if (state >= 0) levelState = state;
+        // While the printer still says it is levelling (state 5), another step (homing, heating) pauses the capture
+        // rather than ending it, as the local capture does. Its positions are not probes, so none is kept, but the head's
+        // X and Y are still followed: updates carry only what changed, so after the pause they may not be sent again.
+        if (active() && (betweenProbes(levelState, sub) || paused && sub < 0 && levelState == 5)) { paused = true; lastLiveAt = now; follow(raw); return null; }
         if (sub == BedMesh.LEVELLED || (sub >= 0 && sub != BedMesh.PROBING)
                 || (state >= 0 && state != 5 && state != 2)) return finish(now);
+        if (sub == BedMesh.PROBING) paused = false;
         if (sub == BedMesh.PROBING && phase != sub) { clearPosition(); seed(known); phase = sub; outcome = ""; startCounting(now); }
         if (phase != BedMesh.PROBING) return null;
         updates++; longestGapMs = Math.max(longestGapMs, now - lastUpdateAt); lastUpdateAt = now;
@@ -113,7 +132,7 @@ final class CloudBedMesh {
         long phaseAt = CloudApi.seconds(report.machinePhaseAt) * 1000;
         long stateAt = CloudApi.seconds(report.machineStateAt) * 1000;
         if (phaseAt > lastLiveAt && phaseAt <= now && phaseAt >= stateAt && sub >= 0)
-            return sub == BedMesh.PROBING ? null : finish(now);
+            return sub == BedMesh.PROBING || betweenProbes(state, sub) ? null : finish(now);
         if (stateAt > lastLiveAt && stateAt <= now && state >= 0 && state != 2 && state != 5) return finish(now);
         return null;
     }

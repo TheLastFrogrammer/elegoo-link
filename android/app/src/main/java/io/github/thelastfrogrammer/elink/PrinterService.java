@@ -1770,7 +1770,7 @@ public final class PrinterService extends Service {
         boolean visible = cloudVisible || !watchers.isEmpty();
         // A levelling being captured through the cloud keeps its live updates (the only source of probe points), even
         // with the app out of sight: stopping them mid-probe would lose the map.
-        boolean capturing = cloudBedMesh.active() || System.currentTimeMillis() - levelAskedAt < LEVEL_GUARD_MS;
+        boolean capturing = cloudBedMesh.active() || levelPending();
         if (wanted || !(visible || background || capturing)) { cloudPolling = false; stopLive(); return; }
         cloudPolling = true;
         // With live pushes, polling is only a consistency check.
@@ -1816,7 +1816,12 @@ public final class PrinterService extends Service {
                 if (reported != null) {
                     cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
                     if (!wanted && cloudOnline == 1) try {
+                        boolean beforeMesh = cloudBedMesh.active();
                         saveMesh(cloudBedMesh.snapshot(cloudSerial, reported, cloudCheckedAt));
+                        if (beforeMesh && !cloudBedMesh.active()) {   // a newer periodic status ended the capture
+                            main.removeCallbacks(cloudMeshTimeout);
+                            Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message() + " (" + cloudBedMesh.stats + ")");
+                        }
                     } catch (JSONException ignored) { }
                     // Local alerts take precedence while connected locally.
                     if (!wanted && cloudOnline == 1 && cloudReportRecent()) { alertChoices(); showAlert(cloudAlerts.update(reported.status), cloudName); showAlert(watched(cloudWatch, reported.status), cloudName); record(reported.status, "cloud", cloudName); }
@@ -1891,6 +1896,18 @@ public final class PrinterService extends Service {
     // ------------------------------------------------------------------ levelling for a bed mesh, from the Bed mesh screen
     private long levelAskedAt;
     static final long LEVEL_GUARD_MS = 60_000;
+    /** Levelling was asked for from here and the printer has not finished it: before probing it heats the bed and homes. */
+    private boolean levelPending() {
+        long since = System.currentTimeMillis() - levelAskedAt;
+        if (levelAskedAt == 0 || since > LEVEL_PREPARE_MS) return false;
+        return since < LEVEL_GUARD_MS || levellingNow();
+    }
+    static final long LEVEL_PREPARE_MS = 15 * 60_000;
+    /** The printer reports its own levelling state (5). */
+    private boolean levellingNow() {
+        JSONObject machine = liveStatus().optJSONObject("machine_status");
+        return machine != null && machine.optInt("status", -1) == 5;
+    }
     /**
      * Why the bed cannot be levelled for a mesh from here right now, in words ("" when it can). Through the cloud it also
      * needs live updates, the only source of probe points. The cloud-control agreement is the screen's to ask.
@@ -1901,6 +1918,7 @@ public final class PrinterService extends Service {
         if (cloud && !cloudLiveOn) return "Waiting for cloud live updates. Without them no probe points arrive, so levelling now would give no map.";
         if (cloud && cloudCommandBusy()) return "Another cloud command is still running.";
         if (cloudBedMesh.active() || bedMeshCapture.active()) return "The printer is levelling now.";
+        if (levellingNow()) return "The printer is getting ready to level (heating the bed and homing). The map appears here once it has probed.";
         String upkeep = ControlState.upkeepReason(liveStatus());
         if (!upkeep.isEmpty()) return upkeep;
         if (System.currentTimeMillis() - levelAskedAt < LEVEL_GUARD_MS) return "Levelling was just asked for. Waiting for the printer to start probing.";

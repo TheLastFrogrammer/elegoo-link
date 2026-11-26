@@ -47,6 +47,12 @@ public class LevelForMeshTest {
         assertTrue(service.levelBlocked(), service.levelBlocked().contains("No live status"));
     }
 
+    @Test public void whileThePrinterPreparesToLevelItSaysSo() throws Exception {
+        service.cloudLiveOn = true;
+        idle(5);   // levelling: heating the bed and homing before it probes
+        assertTrue(service.levelBlocked(), service.levelBlocked().contains("getting ready"));
+    }
+
     @Test public void askedOnceItWaitsInsteadOfAskingAgain() throws Exception {
         service.cloudLiveOn = true;
         set(service, "levelAskedAt", System.currentTimeMillis());
