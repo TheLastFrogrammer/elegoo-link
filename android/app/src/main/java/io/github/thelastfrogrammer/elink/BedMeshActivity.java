@@ -38,6 +38,7 @@ public final class BedMeshActivity extends PlainScreen {
     private final PrinterService.Observer watch = this::updateCapture;
     private final ServiceConnection connection = new ServiceConnection() {
         @Override public void onServiceConnected(ComponentName name, IBinder binder) {
+            if (!(binder instanceof PrinterService.LocalBinder)) return;   // not the app's own service (or none): no live status
             printer = ((PrinterService.LocalBinder) binder).service(); printer.watch(watch);
         }
         @Override public void onServiceDisconnected(ComponentName name) { printer = null; updateCapture(); }
