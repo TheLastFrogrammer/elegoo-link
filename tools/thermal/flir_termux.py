@@ -106,29 +106,56 @@ def on_my_network(address):
     return False
 
 
-def discover(wait=2.0, port=PORT, target=None):
-    """Cameras that answer: asks `target`, or the whole network and every other network this device is on. Reads only."""
-    targets = [target] if target else ["255.255.255.255"] + [b for _, _, b, _ in networks()]
-    found = {}
+IP_UNICAST_IF = 50   # Linux: the interface a socket's unicast and broadcast packets leave by (no root needed)
+
+
+def interface_socket(name):
+    """A UDP socket whose packets, broadcasts included, leave by interface `name`; None when that cannot be set."""
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1); s.settimeout(0.1)
+    try:
+        s.setsockopt(socket.IPPROTO_IP, IP_UNICAST_IF, struct.pack(">I", socket.if_nametoindex(name)))
+        return s
+    except (OSError, AttributeError):
+        s.close(); return None
+
+
+def discover(wait=2.0, port=PORT, target=None):
+    """Cameras that answer: asks `target`, or every network this device is on. The whole-network broadcast normally
+    leaves by the default network (Wi-Fi) only, so it is also sent out of each interface, with that network's own
+    broadcast address too: a camera on its automatic 169.254 address, which ignores those, still hears it, and answers
+    by broadcast. Reads only."""
+    sockets = []   # (socket, addresses to ask)
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sockets.append((s, [target] if target else ["255.255.255.255"]))
+    if not target:
+        for _, _, broadcast, name in networks():
+            t = interface_socket(name)
+            sockets.append((t, ["255.255.255.255", broadcast]) if t else (s, [broadcast]))
+    found = {}
+    import select
+    opened = list(dict.fromkeys(x for x, _ in sockets))
+    for x in opened:
+        x.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1); x.bind(("", 0))
     ask = command(DISCOVERY, 1, b"", broadcast_answer=True)
     end, again = time.time() + wait, 0
     try:
         while time.time() < end:
             if time.time() >= again:
-                for t in dict.fromkeys(targets):
-                    try: s.sendto(ask, (t, port))
-                    except OSError: pass        # a network that is down: the rest still count
+                for x, targets in sockets:
+                    for t in targets:
+                        try: x.sendto(ask, (t, port))
+                        except OSError: pass        # a network that is down: the rest still count
                 again = time.time() + max(0.2, wait / 3)
-            try: data, (sender, _) = s.recvfrom(2048)
-            except socket.timeout: continue
-            a = ack(data)
-            if not a or a[1] != DISCOVERY + 1 or a[0] != 0: continue
-            d = device(a[3], sender)
-            if d: found[d["address"]] = d
+            ready, _, _ = select.select(opened, [], [], 0.1)
+            for x in ready:
+                try: data, (sender, _) = x.recvfrom(2048)
+                except OSError: continue
+                a = ack(data)
+                if not a or a[1] != DISCOVERY + 1 or a[0] != 0: continue
+                d = device(a[3], sender)
+                if d: found[d["address"]] = d
     finally:
-        s.close()
+        for x in opened: x.close()
     return list(found.values())
 
 
@@ -571,7 +598,9 @@ def main():
             found = discover(port=a.port, target=a.camera)
             if not found: print("No camera answered."); return
             for d in found:
-                where = "" if on_my_network(d["address"]) else "  <- a fixed address on another network: it cannot be reached until it is set to DHCP"
+                where = ("" if on_my_network(d["address"]) else
+                         "  <- its own automatic address: restart the camera (unplug the PoE injector for 10 s) so it asks this device for one" if d["address"].startswith("169.254.") else
+                         "  <- a fixed address on another network: it cannot be reached until it is set to DHCP")
                 print("%s %s  serial %s  at %s%s" % (d["maker"], d["model"], d["serial"], d["address"], where))
         elif a.action == "info":
             cam = pick(a); c = Control(cam, a.port)
