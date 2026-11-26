@@ -51,7 +51,9 @@ public class ThermalCameraTest {
 
     @Test public void slowestAndScale() throws Exception {
         assertEquals("Rate7_5Hz", ThermalCamera.slowest(Arrays.asList("Rate30Hz", "Rate7_5Hz", "Rate15Hz")));
-        assertNull(ThermalCamera.slowest(Arrays.asList("Fast", "Slow")));
+        assertEquals("Slow", ThermalCamera.slowest(Arrays.asList("Fast", "Slow")));   // the Ax5's SensorFrameRate
+        assertNull(ThermalCamera.slowest(Arrays.asList("Fast", "Normal")));
+        assertEquals(0.04, ThermalCamera.ax5Scale("High"), 0); assertEquals(0.4, ThermalCamera.ax5Scale("Low"), 0);
         assertEquals(0.1, ThermalCamera.scaleFor("TemperatureLinear100mK", null), 0);
         assertEquals(0.01, ThermalCamera.scaleFor("TemperatureLinear10mK", null), 0);
     }

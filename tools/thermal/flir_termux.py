@@ -386,13 +386,19 @@ def scale_for(fmt, g):
     return 0.01
 
 
+def ax5_scale(resolution):
+    """Kelvin per step of an Ax5's temperature-linear mode: 0.04 at High resolution, 0.4 at Low."""
+    return 0.4 if (resolution or "").lower().startswith("low") else 0.04
+
+
 def slowest(names):
     def rate(n):
         digits = "".join(ch if ch.isdigit() else "." if ch == "_" else " " for ch in n).split()
         try: return float(digits[0])
         except (IndexError, ValueError): return None
     rated = [(rate(n), n) for n in names if rate(n) is not None]
-    return min(rated)[1] if rated else None
+    if rated: return min(rated)[1]
+    return next((n for n in names if n.lower() == "slow"), None)   # the Ax5's SensorFrameRate: Slow or Fast
 
 
 def configure(g):
@@ -415,7 +421,15 @@ def configure(g):
         want = next((f for f in ("TemperatureLinear10mK", "TemperatureLinear100mK") if f in formats),
                     next((f for f in formats if f.lower().startswith("temperaturelinear")), None))
         if want and g.choose("IRFormat", want): scale = scale_for(want, g); words.append(want)
-    for rate in ("IRFrameRate", "AcquisitionFrameRateEnum"):
+    # The Ax5 (A65 and family) has no IRFormat: temperature-linear output is a mode, 0.04 K a step at High resolution,
+    # 0.4 K at Low. High is asked for.
+    if scale is None and g.usable("TemperatureLinearMode") and g.choose("TemperatureLinearMode", "On"):
+        resolution = ""
+        if g.usable("TemperatureLinearResolution"):
+            g.choose("TemperatureLinearResolution", "High"); resolution = g.chosen("TemperatureLinearResolution")
+        scale = ax5_scale(resolution)
+        words.append("temperature linear, %s resolution (%g K a step)" % (resolution or "default", scale))
+    for rate in ("IRFrameRate", "AcquisitionFrameRateEnum", "SensorFrameRate"):
         if g.usable(rate):
             s = slowest(g.entries(rate))
             if s and g.choose(rate, s): words.append(s)
@@ -651,7 +665,9 @@ def main():
                 centre, hottest, coolest = save(values, w, h, scale, name, os.path.join(a.out, "raw", "%03d" % (start + k)))
                 if scale:
                     c = lambda v: v * scale - 273.15
-                    print("%s.png  %dx%d  centre %.1f °C  hottest %.1f °C  coolest %.1f °C" % (name, w, h, c(centre), c(hottest), c(coolest)))
+                    print("%s.png  %dx%d  centre %.1f °C  hottest %.1f °C  coolest %.1f °C   (raw centre %d)" % (name, w, h, c(centre), c(hottest), c(coolest), centre))
+                    if not (-60 <= c(coolest) and c(hottest) <= 1500):
+                        print("    These temperatures look wrong: the camera's scale is not what was assumed. Tell me the raw centre value above.")
                 else:
                     print("%s.png  %dx%d  (no temperatures: drawn from raw values)" % (name, w, h))
             print("Look at them with:  termux-open %s" % os.path.join(a.out, "%03d.png" % start))

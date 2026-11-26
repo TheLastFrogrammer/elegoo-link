@@ -94,7 +94,15 @@ final class ThermalCamera {
                 s.temperatures = "temperatures in " + (s.scale == 0.01 ? "0.01" : "0.1") + " °C steps";
             }
         }
-        for (String rateFeature : new String[] {"IRFrameRate", "AcquisitionFrameRateEnum"}) if (g.usable(rateFeature)) {
+        // The Ax5 (A65 and family) has no IRFormat: its temperature-linear output is a mode, with a resolution of 0.04 K a
+        // step (High) or 0.4 K (Low). High is asked for: finer, and still up to 2600 K in 16 bits.
+        if (Double.isNaN(s.scale) && g.usable("TemperatureLinearMode") && g.choose("TemperatureLinearMode", "On")) {
+            String resolution = "";
+            if (g.usable("TemperatureLinearResolution")) { g.choose("TemperatureLinearResolution", "High"); resolution = g.chosen("TemperatureLinearResolution"); }
+            s.scale = ax5Scale(resolution);
+            s.temperatures = "temperatures in " + (s.scale == 0.04 ? "0.04" : "0.4") + " °C steps";
+        }
+        for (String rateFeature : new String[] {"IRFrameRate", "AcquisitionFrameRateEnum", "SensorFrameRate"}) if (g.usable(rateFeature)) {
             String slowest = slowest(g.entries(rateFeature).keySet());
             if (slowest != null && g.choose(rateFeature, slowest)) s.rate = rateWords(slowest);
             break;
@@ -111,10 +119,13 @@ final class ThermalCamera {
         if (g != null && g.usable("TemperatureLinearResolution")) return g.chosen("TemperatureLinearResolution").toLowerCase(Locale.ROOT).startsWith("high") ? 0.01 : 0.1;
         return 0.01;
     }
-    /** The entry with the lowest number in its name ("Rate7_5Hz" before "Rate30Hz"); null when none has one. */
+    /** Kelvin per step of an Ax5's temperature-linear mode: 0.04 at High resolution, 0.4 at Low. */
+    static double ax5Scale(String resolution) { return resolution != null && resolution.toLowerCase(Locale.ROOT).startsWith("low") ? 0.4 : 0.04; }
+    /** The entry with the lowest number in its name ("Rate7_5Hz" before "Rate30Hz"), else one called "Slow"; null when none. */
     static String slowest(Iterable<String> names) {
         String best = null; double lowest = Double.MAX_VALUE;
         for (String n : names) {
+            if (best == null && n.equalsIgnoreCase("Slow")) best = n;
             java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)(?:[_.](\\d+))?").matcher(n);
             if (!m.find()) continue;
             double v = Double.parseDouble(m.group(1) + (m.group(2) != null ? "." + m.group(2) : ""));
