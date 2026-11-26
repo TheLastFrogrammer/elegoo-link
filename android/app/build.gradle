@@ -36,6 +36,8 @@ android {
     packaging { jniLibs { useLegacyPackaging = true } }
     testOptions { unitTests { includeAndroidResources = true; all {
         maxHeapSize = '2g'   // the render tests and the slicer engine
+        // A failure shows where it happened (the app's frames too), not just the test's line, in the CI log.
+        testLogging { events 'failed'; exceptionFormat 'full'; showCauses true; showStackTraces true }
         systemProperty 'screenshots', System.getProperty('screenshots', '')
         systemProperty 'csv', System.getProperty('csv', '')   // RecordingAnalysisTest.diagnoseARealRecording: a recording's CSV to diagnose
         // Opt-in: -DslicerLib=<dir with a host liblinkslicer.so> runs SlicerIntegrationTest against the real engine.
