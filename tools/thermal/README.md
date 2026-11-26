@@ -16,3 +16,18 @@ python3 flir_snapshot.py -n 3 --serve
 
 `--serve` shares the pictures on port 8000: open the address it prints on a phone on the same Wi-Fi. The settings the
 script changes on the camera last only until it restarts; nothing is saved to it.
+
+## From a phone (Termux)
+
+`flir_termux.py` is the Android app's camera code in plain Python (only Pillow is needed, for the pictures), for a phone
+wired to the camera by Ethernet tethering, or on the same router:
+
+```
+pkg install python python-pillow
+curl -fLO https://raw.githubusercontent.com/TheLastFrogrammer/elegoo-link/claude/dreamy-hypatia-4ru1wu/tools/thermal/flir_termux.py
+python flir_termux.py find        # which cameras answer (reads only)
+python flir_termux.py info        # the camera's settings (reads only)
+python flir_termux.py snap -n 3   # three pictures into ./thermal, then: termux-open thermal/000.png
+```
+
+`snap` controls the camera only while it runs and hands it back as it found it; nothing is saved to the camera.
