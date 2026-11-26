@@ -18,7 +18,7 @@
         <package android:name="io.github.forkmaintainers.iceraven" />
         <package android:name="us.spotco.fennec_dos" />
     </queries>
-    <application android:label="Link Workshop" android:theme="@style/WorkshopLaunch"
+    <application android:label="Link Workshop Preview" android:theme="@style/WorkshopLaunch"
         android:icon="@drawable/ic_launcher" android:allowBackup="false" android:fullBackupContent="false" android:dataExtractionRules="@xml/data_extraction_rules" android:usesCleartextTraffic="true" android:supportsRtl="true">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
