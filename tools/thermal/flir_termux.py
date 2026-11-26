@@ -570,8 +570,11 @@ def save(values, w, h, scale, name, raw_name=None):
     out = Image.new("RGB", (w * factor, h * factor + bar), (16, 20, 24))
     out.paste(Image.frombytes("RGB", (w, h), bytes(rgb)).resize((w * factor, h * factor), Image.BILINEAR), (0, 0))
     d = ImageDraw.Draw(out)
-    try: font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(14, w * factor // 36))
-    except OSError: font = ImageFont.load_default()
+    size = max(14, w * factor // 36)
+    try: font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
+    except OSError:
+        try: font = ImageFont.load_default(size=size)   # Pillow 10.1+: a scalable built-in font (Termux has no DejaVu)
+        except TypeError: font = ImageFont.load_default()
     words = (lambda v: "%.1f °C" % (v * scale - 273.15)) if scale else (lambda v: str(v))
     cx, cy = w // 2, h // 2; X, Y, arm = cx * factor, cy * factor, 6 * factor
     for width, col in ((5, "black"), (2, "white")):

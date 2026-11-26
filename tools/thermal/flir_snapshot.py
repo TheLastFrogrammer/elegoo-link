@@ -55,8 +55,11 @@ def render(celsius, factor=2):
     bar = max(28, h * factor // 14)
     out = Image.new("RGB", (w * factor, h * factor + bar), (16, 20, 24)); out.paste(pic, (0, 0))
     d = ImageDraw.Draw(out)
-    try: font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(14, w * factor // 36))
-    except OSError: font = ImageFont.load_default()
+    size = max(14, w * factor // 36)
+    try: font = ImageFont.truetype("DejaVuSans-Bold.ttf", size)
+    except OSError:
+        try: font = ImageFont.load_default(size=size)   # Pillow 10.1+: a scalable built-in font (Termux has no DejaVu)
+        except TypeError: font = ImageFont.load_default()
     def label(x, y, text):
         d.text((x, y), text, fill="white", font=font, stroke_width=2, stroke_fill="black")
     cy, cx = h // 2, w // 2
