@@ -1768,7 +1768,10 @@ public final class PrinterService extends Service {
         if (destroyed) return;
         boolean background = cloudBackground();
         boolean visible = cloudVisible || !watchers.isEmpty();
-        if (wanted || !(visible || background)) { cloudPolling = false; stopLive(); return; }
+        // A levelling being captured through the cloud keeps its live updates (the only source of probe points), even
+        // with the app out of sight: stopping them mid-probe would lose the map.
+        boolean capturing = cloudBedMesh.active() || System.currentTimeMillis() - levelAskedAt < LEVEL_GUARD_MS;
+        if (wanted || !(visible || background || capturing)) { cloudPolling = false; stopLive(); return; }
         cloudPolling = true;
         // With live pushes, polling is only a consistency check.
         main.postDelayed(cloudPoll, cloudLiveOn ? 60_000 : visible ? CLOUD_VISIBLE_POLL_MS : CLOUD_BACKGROUND_POLL_MS);
@@ -1849,7 +1852,7 @@ public final class PrinterService extends Service {
                             main.removeCallbacks(cloudMeshTimeout); main.postDelayed(cloudMeshTimeout, cloudBedMesh.remaining(cloudCheckedAt));
                         } else if (beforeMesh) {
                             main.removeCallbacks(cloudMeshTimeout);
-                            Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message());
+                            Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message() + " (" + cloudBedMesh.stats + ")");
                         }
                         cloudReportedAt = cloudCheckedAt; cloudOnlineSignal = true;
                         // A live report from the printer itself shows it is online.
@@ -1880,7 +1883,7 @@ public final class PrinterService extends Service {
         long left = cloudBedMesh.remaining(System.currentTimeMillis());
         if (left > 0) { main.postDelayed(cloudMeshTimeout, left); return; }
         cloudBedMesh.interrupted();
-        Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message());
+        Diagnostics.note(Diagnostics.STATUS, cloudBedMesh.message() + " (" + cloudBedMesh.stats + ")");
         changed();
     }
     String cloudMeshProgress() { return cloudBedMesh.message(); }
@@ -2419,6 +2422,7 @@ public final class PrinterService extends Service {
     }
     private void saveMesh(BedMesh.Mesh mesh) {
         if (mesh == null) return;
+        bedMeshLastCount = mesh.count();   // a later levelling (local or cloud) is not kept as a smaller grid
         videoWorker.execute(() -> {
             try { BedMesh.save(BedMesh.directory(getFilesDir()), mesh); Diagnostics.note(Diagnostics.STATUS, String.format(java.util.Locale.ROOT, "bed mesh kept: %d points, range %.2f mm (%s)", mesh.count(), mesh.range(), mesh.source)); }
             catch (java.io.IOException failed) { Diagnostics.note(Diagnostics.STATUS, "bed mesh could not be kept: " + failed.getClass().getSimpleName()); }

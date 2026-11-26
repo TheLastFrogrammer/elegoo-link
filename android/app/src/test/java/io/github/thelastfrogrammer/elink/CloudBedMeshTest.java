@@ -73,6 +73,45 @@ public class CloudBedMeshTest {
         assertEquals(0, mesh.z[0][0], .0001); assertEquals(.14, mesh.z[0][10], .0001);
     }
 
+    /** A levelling as the printer reports it, change-only, from a bed already at `bedC`; returns the time after it. */
+    private static long changeOnlyRun(CloudBedMesh capture, JSONObject known, double bedC, int rowsWithTouches) throws Exception {
+        long now = 1000;
+        send(capture, known, new JSONObject().put("heater_bed", new JSONObject().put("temperature", bedC).put("target", bedC)), now++);
+        send(capture, known, move("gcode_move_inf", new JSONObject().put("x", 150).put("y", 10).put("z", 3)), now++);
+        send(capture, known, phase(BedMesh.PROBING), now++);
+        double px = 150, py = 10;
+        for (int y = 0; y < 11; y++) for (int x = 0; x < 11; x++) {
+            double nx = 10 + x * 23.6, ny = 10 + y * 23.6; JSONObject p = new JSONObject();
+            if (nx != px) p.put("x", nx);
+            if (ny != py) p.put("y", ny);
+            px = nx; py = ny;
+            if (p.length() > 0) send(capture, known, move("gcode_move_inf", p), now++);
+            if (y < rowsWithTouches) {
+                send(capture, known, move("gcode_move_inf", new JSONObject().put("z", (x - y) * .014)), now++);
+                send(capture, known, move("gcode_move_inf", new JSONObject().put("z", 3)), now++);
+            }
+        }
+        return now;
+    }
+
+    @Test public void aCloudMeshKeepsTheBedTemperatureFromTheLiveStatus() throws Exception {
+        // The bed's temperature was reported before probing and not again (it did not change): the mesh still has it.
+        CloudBedMesh capture = new CloudBedMesh(); JSONObject known = new JSONObject();
+        long now = changeOnlyRun(capture, known, 60, 11);
+        BedMesh.Mesh mesh = send(capture, known, phase(BedMesh.LEVELLED), now);
+        assertNotNull(capture.message(), mesh);
+        assertEquals(60, mesh.bed, 0); assertEquals(60, mesh.bedTarget, 0);
+    }
+
+    @Test public void eachRunIsSummedUpInCountsWithoutPositions() throws Exception {
+        CloudBedMesh capture = new CloudBedMesh(); JSONObject known = new JSONObject();
+        long now = changeOnlyRun(capture, known, 60, 10);   // the last row's touches never came through
+        assertNull(send(capture, known, phase(BedMesh.LEVELLED), now));
+        // 11 × 11 places visited, 10 rows touched: the log says touches never came through, not that updates were missing.
+        assertTrue(capture.stats, capture.stats.startsWith("342 live updates while probing, 341 with a position, 110 probe touches at 110 places"));
+        assertFalse("no coordinates in the log", capture.stats.contains("23.6") || capture.stats.contains("10,"));
+    }
+
     @Test public void theMergedStatusNeverSuppliesAProbeHeight() throws Exception {
         // A Z already in the merged status (here a touch from before probing began) is not a probe reading.
         CloudBedMesh capture = new CloudBedMesh(); JSONObject known = new JSONObject(); long now = 1000;
