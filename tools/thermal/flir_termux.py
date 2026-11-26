@@ -8,7 +8,9 @@ It is the Android app's own camera code (GigeVision.java, Genicam.java, ThermalC
   python flir_termux.py info  [-c ADDRESS]    what the camera is and the settings the app uses (reads only)
   python flir_termux.py snap  [-c ADDRESS] [-n 3] [-i 1] [-o thermal]
                                               takes pictures: NNN.png in the app's iron palette with the centre's and the
-                                              hottest point's temperature, NNN-raw.png with the camera's 16-bit values
+                                              hottest point's temperature, raw/NNN-raw.png with the camera's 16-bit values
+  python flir_termux.py features [WORDS]      the camera's own settings whose names hold WORDS (temperature-related by
+                                              default), with its descriptions of them (reads only)
 
 `snap` takes control of the camera while it runs, sets it up as the app does (16-bit pixels, temperature-linear values,
 the slowest frame rate) and gives control back when it ends. Nothing is saved to the camera: those settings last until
@@ -537,11 +539,11 @@ def colour(t):
     return tuple(round(((a >> s) & 255) + f * (((b >> s) & 255) - ((a >> s) & 255))) for s in (16, 8, 0))
 
 
-def save(values, w, h, scale, name):
+def save(values, w, h, scale, name, raw_name=None):
     from PIL import Image, ImageDraw, ImageFont
     little = array.array("H", values)
     if sys.byteorder == "big": little.byteswap()
-    Image.frombytes("I;16", (w, h), little.tobytes()).save(name + "-raw.png")   # the camera's own values
+    Image.frombytes("I;16", (w, h), little.tobytes()).save((raw_name or name) + "-raw.png")   # the camera's own values
     lo, hi = min(values), max(values)
     if hi == lo: hi = lo + 1
     lut = [colour(i / 255) for i in range(256)]
@@ -584,7 +586,9 @@ def pick(args):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__.split("\n\n")[0], formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
-    p.add_argument("action", choices=["find", "info", "snap"])
+    p.add_argument("action", choices=["find", "info", "snap", "features"])
+    p.add_argument("pattern", nargs="?", default="temp|linear|ir|format|rate|gain|range|emiss|calib|nuc",
+                   help="features: which settings to list (words separated by |; default: the temperature-related ones)")
     p.add_argument("-c", "--camera", help="the camera's address (default: the first one found)")
     p.add_argument("-n", "--count", type=int, default=1, help="snap: how many pictures (default 1)")
     p.add_argument("-i", "--interval", type=float, default=1.0, help="snap: seconds between pictures (default 1)")
@@ -615,13 +619,36 @@ def main():
                         except CameraError as e: print("  %-28s (%s)" % (f, e))
             finally:
                 c.close()
+        elif a.action == "features":
+            cam = pick(a); c = Control(cam, a.port)
+            try:
+                g = Genicam(description(c), c)
+                words = [w.lower() for w in a.pattern.split("|") if w]
+                print("Camera at", cam, "- settings matching", a.pattern, "(reads only)")
+                for name in sorted(g.nodes):
+                    e = g.nodes[name]; kind = local_name(e.tag)
+                    if kind not in ("Enumeration", "Integer", "Float", "Boolean", "Command", "IntConverter", "Converter", "String"): continue
+                    if not any(w in name.lower() for w in words): continue
+                    line = "%s (%s)" % (name, kind)
+                    if kind != "Command":
+                        try: line += " = " + (g.chosen(name) or str(g.get(name)) if kind == "Enumeration" else str(g.get(name)))
+                        except CameraError as err: line += " (%s)" % err
+                    entries = g.entries(name)
+                    if entries: line += "  of " + ", ".join(entries)
+                    print(line)
+                    for t in ("ToolTip", "Description"):
+                        d = g.text(e, t)
+                        if d: print("    " + d); break
+            finally:
+                c.close()
         else:
             cam = pick(a); os.makedirs(a.out, exist_ok=True)
-            start = len([f for f in os.listdir(a.out) if f.endswith("-raw.png")])
+            os.makedirs(os.path.join(a.out, "raw"), exist_ok=True)
+            start = len([f for f in os.listdir(os.path.join(a.out, "raw")) if f.endswith("-raw.png")])
             print("Camera at", cam)
             for k, (w, h, values, scale) in enumerate(pictures(cam, a.count, a.interval, a.port)):
                 name = os.path.join(a.out, "%03d" % (start + k))
-                centre, hottest, coolest = save(values, w, h, scale, name)
+                centre, hottest, coolest = save(values, w, h, scale, name, os.path.join(a.out, "raw", "%03d" % (start + k)))
                 if scale:
                     c = lambda v: v * scale - 273.15
                     print("%s.png  %dx%d  centre %.1f °C  hottest %.1f °C  coolest %.1f °C" % (name, w, h, c(centre), c(hottest), c(coolest)))
