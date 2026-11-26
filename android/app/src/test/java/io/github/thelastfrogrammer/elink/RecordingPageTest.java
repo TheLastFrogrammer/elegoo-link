@@ -164,8 +164,13 @@ public class RecordingPageTest {
         RecordingsActivity page = open(record("Benchy_PLA.gcode", "2026-10-06T14:05:00Z", 60, 0), false);
         View tools = part(page, "Tools").body;
         List<String> actions = new ArrayList<>(); for (Button b : all(tools, Button.class)) actions.add(b.getText().toString());
-        assertEquals(Arrays.asList("All readings…", "Export CSV…", "Compare with…", "Share a report…", "Change settings and slice again…", "Every print of this file…", "Delete this recording…"), actions);
-        Button delete = all(tools, Button.class).get(6), readings = all(tools, Button.class).get(0);
+        assertEquals(Arrays.asList("All readings…", "Export CSV…", "Compare with…", "Share a report…", "Count pieces toward a project…", "Change settings and slice again…", "Every print of this file…", "Delete this recording…"), actions);
+        List<Button> buttons = all(tools, Button.class);
+        buttons.get(actions.indexOf("Count pieces toward a project…")).performClick();
+        Intent project = Shadows.shadowOf(page).getNextStartedActivity();
+        assertEquals(ProjectsActivity.class.getName(), project.getComponent().getClassName());
+        assertNotNull(project.getStringExtra(ProjectsActivity.EXTRA_RECORDING));
+        Button delete = buttons.get(actions.indexOf("Delete this recording…")), readings = buttons.get(0);
         assertNotEquals("deleting is in the warning colour", readings.getCurrentTextColor(), delete.getCurrentTextColor());
         // Opening the other parts adds their cards and buttons: the G-code, timelapse and chart chips are all still reachable.
         part(page, "Layers and G-code").header.performClick();

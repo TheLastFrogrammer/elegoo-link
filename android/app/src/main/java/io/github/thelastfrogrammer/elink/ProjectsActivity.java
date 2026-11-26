@@ -25,6 +25,7 @@ import java.util.concurrent.Executors;
  * projects and parts without a second copy. Nothing here talks to the printer.
  */
 public final class ProjectsActivity extends Activity {
+    static final String EXTRA_RECORDING = "countRecording";
     static final String EXTRA_PROJECT = "project", EXTRA_ADD_PATH = "addPath", EXTRA_ADD_NAME = "addName";
     private static final int PICK_COPY = 1, PICK_LINK = 2, PICK_RELINK = 3, EXPORT = 4, SAVE_ARCHIVE = 5, IMPORT = 6, SAVE_COVER_PNG = 7, SAVE_COVER_PDF = 8;
     private static final String HOME = "home", OVERVIEW = "overview", PARTS = "parts", FILES = "files", PART = "part", UNASSIGNED = "unassigned", ARCHIVED = "archived", COVER = "cover", PRINTS = "prints";
@@ -65,7 +66,7 @@ public final class ProjectsActivity extends Activity {
         }
         if (android.os.Build.VERSION.SDK_INT >= 33) getOnBackInvokedDispatcher().registerOnBackInvokedCallback(android.window.OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::back);
         ui.label(content, "Loading projects…", 14, ui.muted, false);
-        worker.execute(() -> { Projects.Book loaded = Projects.load(dir); main.post(() -> { if (isDestroyed()) return; book = loaded; render(); if (handedPath != null) offerHanded(); if (incoming != null) { Uri u = incoming; incoming = null; importFrom(u); } }); });
+        worker.execute(() -> { Projects.Book loaded = Projects.load(dir); main.post(() -> { if (isDestroyed()) return; book = loaded; render(); if (saved == null && getIntent().hasExtra(EXTRA_RECORDING)) countRecording(getIntent().getStringExtra(EXTRA_RECORDING)); if (handedPath != null) offerHanded(); if (incoming != null) { Uri u = incoming; incoming = null; importFrom(u); } }); });
     }
     @Override protected void onSaveInstanceState(Bundle state) {
         super.onSaveInstanceState(state);
@@ -662,6 +663,35 @@ public final class ProjectsActivity extends Activity {
                 new AlertDialog.Builder(this).setTitle("Which print?").setItems(names.subList(0, Math.min(50, names.size())).toArray(new String[0]), (d, w) -> {
                     String rel = root.toURI().relativize(metas.get(w).toURI()).getPath();
                     editAttempt(p, null, rel, names.get(w).replaceFirst(" · .*$", ""));
+                }).setNegativeButton("Cancel", null).show();
+            });
+        });
+    }
+    /** Start from the recording the user is viewing, without asking them to find it again. */
+    private void countRecording(String relative) {
+        worker.execute(() -> {
+            PrintRecorder.Recording recording;
+            try {
+                File root = RecordingsActivity.directory(this).getCanonicalFile();
+                if (relative == null || !Projects.safeRelative(relative)) throw new java.io.IOException();
+                File meta = new File(root, relative).getCanonicalFile();
+                if (!meta.toPath().startsWith(root.toPath()) || !meta.getName().endsWith(".json")) throw new java.io.IOException();
+                recording = PrintRecorder.Recording.read(meta);
+            } catch (Exception gone) { main.post(() -> { if (!isDestroyed()) toast("This recording is unavailable."); }); return; }
+            main.post(() -> {
+                if (isDestroyed()) return;
+                List<Projects.Project> choices = new ArrayList<>(); List<String> names = new ArrayList<>();
+                for (Projects.Project project : book.projects) if (!project.archived && project.parts.stream().anyMatch(part -> Projects.PRINTED.equals(part.kind))) {
+                    choices.add(project); names.add(project.title + (project.hasRecording(relative) ? " · already linked" : ""));
+                }
+                if (choices.isEmpty()) { toast("Create a project with a printed part first."); return; }
+                new AlertDialog.Builder(this).setTitle("Which project made these pieces?").setItems(names.toArray(new String[0]), (d,w) -> {
+                    Projects.Project project = choices.get(w); projectId = project.id; screen = PRINTS; render();
+                    for (Projects.Attempt a : project.attempts) if (relative.equals(a.recording)) {
+                        if (a.pieces.isEmpty()) editAttempt(project, a, relative, a.title); else inspect(project, a);
+                        return;
+                    }
+                    editAttempt(project, null, relative, recording.file);
                 }).setNegativeButton("Cancel", null).show();
             });
         });

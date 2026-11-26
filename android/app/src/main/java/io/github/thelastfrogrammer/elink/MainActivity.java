@@ -2043,6 +2043,23 @@ public final class MainActivity extends Activity {
         dialog.show();
     }
     private void startDialog(JSONObject file, String storage) {
+        String name = file.optString("filename");
+        GcodeInspector.Report candidate = printer == null ? null : printer.selectedReport;
+        String identity = printer == null ? "" : PrintRecorder.digest(printer.filePrinterId());
+        if (candidate == null || identity.isEmpty() || !name.equals(printer.selectedName)) {
+            setupForCopy(file, storage, null); return;
+        }
+        new AlertDialog.Builder(this).setTitle("Use the sliced copy on this phone?")
+            .setMessage(name + "\nSHA-256 " + candidate.sha256 + "\n\nUse its material and first-layer details only if this is the slice you put on this printer.")
+            .setPositiveButton("Use this copy", (d,w) -> {
+                if (printer != null && identity.equals(PrintRecorder.digest(printer.filePrinterId()))) setupForCopy(file, storage, candidate);
+                else message("The printer changed. Open Print setup again.");
+            }).setNegativeButton("Printer details only", (d,w) -> {
+                if (printer != null && identity.equals(PrintRecorder.digest(printer.filePrinterId()))) setupForCopy(file, storage, null);
+                else message("The printer changed. Open Print setup again.");
+            }).show();
+    }
+    private void setupForCopy(JSONObject file, String storage, GcodeInspector.Report confirmed) {
         if (printer != null && printer.pinProbe()) { message("Read-only PIN probe: printing is turned off."); return; }
         if (printer != null && printer.fileBusy()) { message("A file is being sent or received. Wait for it to finish before starting a print."); return; }
         if (printer == null || !printer.liveFresh() || !Cc2Codec.idle(printer.liveStatus()) || !printer.filesFresh()) { message("Refresh status and files, then wait for the printer to be idle."); return; }
@@ -2055,18 +2072,8 @@ public final class MainActivity extends Activity {
         leveling.setOnCheckedChangeListener((view, checked) -> { if (!checked) force.setChecked(false); });
         subheading(body, "Build plate");
         Spinner plate = spinner(body, new String[] {"A · textured PEI side", "B · smooth side"});
-        // The side the file was sliced for, when this phone has a copy: read off the main thread, then chosen here.
-        TextView plateNote = label(body, "", 13, MUTED, false); plateNote.setVisibility(View.GONE);
-        java.io.File copy = new GcodeLibrary(new java.io.File(getFilesDir(), "gcode-library")).find(name);
-        if (copy != null) checks.execute(() -> {
-            String side = GcodeInspector.plateSide(copy);
-            main.post(() -> {
-                if (side.isEmpty()) return;
-                plate.setSelection(side.equals("A") ? 0 : 1);
-                plateNote.setText("This file was sliced for side " + side + (side.equals("A") ? " (textured PEI)." : " (smooth)."));
-                plateNote.setVisibility(View.VISIBLE);
-            });
-        });
+        String printerId = PrintRecorder.digest(printer.filePrinterId());
+        label(body, "Choose the side fitted on the printer.", 13, MUTED, false);
         // Before you start: what the app already knows that bears on this print (words only; nothing here stops it).
         subheading(body, "Before you start");
         LinearLayout knownList = new LinearLayout(this); knownList.setOrientation(LinearLayout.VERTICAL); body.addView(knownList);
@@ -2077,12 +2084,16 @@ public final class MainActivity extends Activity {
             BedMesh.Mesh latest = null; BedMesh.FirstLayer first = null;
             try {
                 List<PrintRecorder.Recording> mine = FileMemory.of(new PrintRecorder(RecordingsActivity.directory(this)).list(), name);
-                PrintRecorder.Recording last = mine.isEmpty() ? null : mine.get(0);
-                PreFlight.Item item = PreFlight.lastPrint(last, now); if (item != null) known.add(item);
-                item = PreFlight.tuning(PreFlight.pendingTrial(Tuning.all(this), name, last)); if (item != null) known.add(item);
+                PrintRecorder.Recording last = mine.stream().filter(r -> !printerId.isEmpty() && printerId.equals(r.printerId)).findFirst().orElse(null);
+                PreFlight.Item item = PreFlight.lastPrint(last, now); if (item != null) known.add(new PreFlight.Item(item.level, "Earlier print with this name on this printer (revision unknown): " + item.words));
                 List<BedMesh.Mesh> kept = BedMesh.list(BedMesh.directory(getFilesDir()));
-                latest = kept.isEmpty() ? null : kept.get(0);
-                if (latest != null && copy != null) first = BedMesh.firstLayer(latest, GcodeToolpath.read(copy));
+                latest = PreFlight.meshFor(kept, printerId);
+                if (latest != null && confirmed != null) {
+                    GcodeLibrary archive = new GcodeLibrary(new File(getFilesDir(), "gcode-library"));
+                    for (GcodeLibrary.Artifact a : archive.copies(name)) if (confirmed.sha256.equals(a.sha256) && archive.verify(a)) {
+                        first = BedMesh.firstLayer(latest, GcodeToolpath.read(a.file)); break;
+                    }
+                }
             } catch (Exception | OutOfMemoryError unreadable) { /* what could be read is shown */ }
             BedMesh.Mesh mesh = latest; BedMesh.FirstLayer under = first;
             main.post(() -> {
@@ -2107,18 +2118,12 @@ public final class MainActivity extends Activity {
             choices.add(tray.material() + "\n" + tray.where()); dots.add(tray.colour);
         }
         if (!printer.canvasFresh()) printer.refresh();
-        // What the file was sliced for, per tool: a plan saved when slicing on this phone, the printer's file details, or the
-        // slicer notes of the same file inspected on this phone.
-        TrayPlan plan = TrayPlan.parse(getSharedPreferences(SliceActivity.TRAY_PLANS, MODE_PRIVATE).getString(GcodeLibrary.safeName(name), null));
-        boolean sameFile = printer.selectedReport != null && GcodeLibrary.safeName(printer.selectedName) != null && GcodeLibrary.safeName(printer.selectedName).equals(GcodeLibrary.safeName(name));
-        FilamentMatch.Need[] needs = FilamentMatch.merge(TrayPlan.MAX_TOOLS, FilamentMatch.fromPlan(plan), FilamentMatch.fromColorMap(file.opt("color_map")),
-            sameFile ? FilamentMatch.fromComments(printer.selectedReport.materials, TrayPlan.MAX_TOOLS) : new ArrayList<>());
-        // Grams per filament (from slicing on this phone, or the slicer notes of the same file inspected here) for the spool check.
+        // The file list identifies a printer entry, not a same-name phone slice.
+        FilamentMatch.Need[] needs = FilamentMatch.merge(TrayPlan.MAX_TOOLS, new ArrayList<>(),
+            FilamentMatch.fromColorMap(file.opt("color_map")), confirmed == null ? new ArrayList<>() : FilamentMatch.fromComments(confirmed.materials, TrayPlan.MAX_TOOLS));
         double[] toolGrams = new double[8];
-        for (int t = 0; t < 8; t++) {
-            toolGrams[t] = plan == null ? 0 : plan.grams(t);
-            if (toolGrams[t] <= 0 && sameFile) for (SlicedMaterials.Entry entry : printer.selectedReport.materials.entries) if (entry.index == t && entry.massG != null) toolGrams[t] = entry.massG;
-        }
+        if (confirmed != null) for (SlicedMaterials.Entry e : confirmed.materials.entries)
+            if (e.index >= 0 && e.index < toolGrams.length && e.massG != null) toolGrams[e.index] = e.massG;
         SpoolStore spoolStore = spools();
         if (file.has("color_map")) Diagnostics.note(Diagnostics.TRAYS, "file details carry color_map (" + (file.opt("color_map") instanceof JSONArray ? "list" : file.opt("color_map") == null ? "null" : file.opt("color_map").getClass().getSimpleName()) + ")");
         Spinner[] maps = new Spinner[8]; LinearLayout[] rows = new LinearLayout[8]; TextView[] verdicts = new TextView[8];
@@ -2182,27 +2187,11 @@ public final class MainActivity extends Activity {
                 : "Suggested " + filled + (filled == 1 ? " tray" : " trays") + " by material, then colour. Check each before starting.");
             judge.run();
         };
-        if (plan != null) {
-            toolCount.setSelection(plan.count - 1);
-            int matched = 0;
-            for (TrayPlan.Tool tool : plan.tools)
-                for (int i = 0; i < trays.size(); i++) if (trays.get(i).same(tool.canvasId, tool.trayId)) { maps[tool.t].setSelection(i + 1); matched++; }
-            StringBuilder reported = new StringBuilder();
-            for (TrayPlan.Tray tray : trays) reported.append(reported.length() > 0 ? ", " : "").append(tray.canvasId).append("/").append(tray.trayId);
-            Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": plan " + plan.toJson() + " · loaded trays (canvas/tray) [" + reported + "]"
-                + (printer.canvasFresh() ? "" : " · tray status not fresh") + " · prefilled " + matched + " of " + plan.tools.size());
-            source.setText(plan.tools.isEmpty() ? "Filament count from slicing this file on the phone (" + plan.count + ")."
-                : matched == plan.tools.size() ? "Filament count and trays from slicing this file on the phone."
-                : "Filament count from slicing this file on the phone; " + (plan.tools.size() - matched) + " planned tray(s) are not loaded now. Choose them, or use Suggest trays.");
-            if (plan.tools.isEmpty() && trays.size() > 0) main.post(suggestTrays);
-        } else {
-            // No stored plan: the file's own T selections (when this is the file inspected on the phone) are a starting point, not proof.
-            int guess = TrayPlan.defaultToolCount(null, sameFile ? printer.selectedReport.tools : null);
-            int known = 0; for (FilamentMatch.Need need : needs) if (need != null) known = Math.max(known, need.t + 1);
-            if (known > 0) { toolCount.setSelection(Math.max(known, guess) - 1); }
-            else if (sameFile && !printer.selectedReport.tools.isEmpty()) { toolCount.setSelection(guess - 1); source.setText("Filament count taken from the tool changes in the file (" + guess + "). Check it against your slice."); }
-            if (known > 0 && trays.size() > 0) main.post(suggestTrays);
-        }
+        int knownTools = confirmed == null ? 0 : TrayPlan.defaultToolCount(null, confirmed.tools);
+        for (FilamentMatch.Need need : needs) if (need != null) knownTools = Math.max(knownTools, need.t + 1);
+        if (knownTools > 0) toolCount.setSelection(knownTools - 1);
+        source.setText(confirmed != null ? "Using the phone slice you identified. Check the filament count and trays." : knownTools > 0 ? "Material from the printer file listing. Choose trays or tap Suggest trays."
+            : "No material list from the printer. Check the filament count and trays against your slice.");
         LinearLayout tools = row(body);
         rowButton(tools, "Suggest trays", suggestTrays, false);
         rowButton(tools, "Clear trays", () -> { for (Spinner map : maps) map.setSelection(0); source.setText(""); judge.run(); }, false);
@@ -2272,8 +2261,11 @@ public final class MainActivity extends Activity {
             settingsShown.add(new String[] {"Timelapse on the printer", timelapse.isChecked() ? "On" : "Off"});
             int wrongCount = wrong, checkCount = check;
             Runnable start = () -> {
-                if (plan != null || mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
+                if (mapping.length() > 0) Diagnostics.note(Diagnostics.TRAYS, StatusPresentation.clean(name) + ": start with " + count + " filament(s), mapping " + mapping
                     + (wrongCount + checkCount > 0 ? " · " + wrongCount + " material mismatch, " + checkCount + " to check" : ""));
+                if (printer == null || !printerId.equals(PrintRecorder.digest(printer.filePrinterId()))) {
+                    message("The printer changed. Open Print setup again."); return;
+                }
                 if (printer != null) {
                     String before = printer.feedback;
                     printer.start(storage, name, leveling.isChecked(), force.isChecked(), timelapse.isChecked(), plate.getSelectedItemPosition() == 0 ? "A" : "B", mapping);
@@ -3840,6 +3832,12 @@ public final class MainActivity extends Activity {
      * a newer version, once per version). The download opens in the browser; nothing installs by itself.
      */
     private void checkForUpdate(boolean asked) {
+        if (!releaseChannel()) {
+            if (asked) new AlertDialog.Builder(this).setTitle("Updates for this installation")
+                .setMessage("This installation is outside the main release signing channel. Keep it installed and back up your data before moving to another build.")
+                .setNegativeButton("Close", null).setPositiveButton("Back up settings…", (d, w) -> backupDialog()).show();
+            return;
+        }
         long now = System.currentTimeMillis();
         if (!asked && (!settings.getBoolean(UpdateCheck.PREF_AUTO, true) || now - settings.getLong(UpdateCheck.PREF_LAST, 0) < UpdateCheck.DAY_MS)) return;
         settings.edit().putLong(UpdateCheck.PREF_LAST, now).apply();
@@ -3858,15 +3856,27 @@ public final class MainActivity extends Activity {
                 }
                 if (!newer || !asked && release.version.equals(settings.getString("updateOffered", ""))) return;
                 settings.edit().putString("updateOffered", release.version).apply();
-                boolean development = (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
                 new AlertDialog.Builder(this).setTitle("Link Workshop " + release.version + " is available")
-                    .setMessage((release.notes.isEmpty() ? "" : release.notes + "\n\n") + "The download opens in your browser; open it to install. Android checks that it is signed like this app."
-                        + (development ? "\n\nThis phone has a development build, signed with a different key: Android will refuse to install over it. Make a backup first (Settings › Backup), uninstall, install the release, then restore." : ""))
+                    .setMessage((release.notes.isEmpty() ? "" : release.notes + "\n\n") + "Download the main release, then open it to update. Android verifies the APK before installation.")
                     .setNegativeButton("Later", null)
                     .setNeutralButton(release.page.isEmpty() ? null : "Release page", (d, w) -> startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.page))))
                     .setPositiveButton("Download", (d, w) -> startActivity(new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.apk)))).show();
             });
         });
+    }
+    private boolean releaseChannel() {
+        if (android.os.Build.VERSION.SDK_INT < 28) return false;
+        try {
+            android.content.pm.SigningInfo info = getPackageManager().getPackageInfo(getPackageName(),
+                android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES).signingInfo;
+            if (info == null || info.hasMultipleSigners()) return false;
+            android.content.pm.Signature[] signers = info.getApkContentsSigners();
+            if (signers == null || signers.length != 1) return false;
+            StringBuilder fingerprint = new StringBuilder();
+            for (byte b : java.security.MessageDigest.getInstance("SHA-256").digest(signers[0].toByteArray()))
+                fingerprint.append(String.format(Locale.ROOT, "%02x", b & 255));
+            return UpdateCheck.releaseChannel(getPackageName(), fingerprint.toString());
+        } catch (Exception unknown) { return false; }
     }
     private String appVersion() { try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception error) { return "dev"; } }
     /** A card heading with a "More ›" style link on the right that opens the card's details. Returns the link. */
