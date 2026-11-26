@@ -20,6 +20,10 @@ final class AgoraLink implements CloudControl.Link {
     private static final long OPERATION_TIMEOUT_S = 10;
     private RtmClient client;
     private volatile boolean closed;
+    private volatile boolean subscribed;
+    private volatile String disconnectedReason = "";
+
+    @Override public String disconnectedReason() { return disconnectedReason; }
 
     @Override public void login(String appId, String rtmUserId, String token, Events events) throws IOException {
         RtmEventListener listener = new RtmEventListener() {
@@ -31,11 +35,18 @@ final class AgoraLink implements CloudControl.Link {
             @Override public void onLinkStateEvent(LinkStateEvent event) {
                 if (closed) return;
                 RtmConstants.RtmLinkStateChangeReason reason = event.getReasonCode();
+                RtmConstants.RtmLinkState state = event.getCurrentState();
+                String message;
                 if (reason == RtmConstants.RtmLinkStateChangeReason.SAME_UID_LOGIN)
-                    events.ended("Another Elegoo app (such as ElegooSlicer) signed in to cloud control with this account, so this app's cloud control session ended.");
+                    message = "Another Elegoo app (such as ElegooSlicer) signed in to cloud control with this account, so this app's cloud control session ended.";
                 else if (reason == RtmConstants.RtmLinkStateChangeReason.KICKED_OUT_BY_SERVER || reason == RtmConstants.RtmLinkStateChangeReason.TOKEN_EXPIRED
-                    || reason == RtmConstants.RtmLinkStateChangeReason.INVALID_TOKEN || event.getCurrentState() == RtmConstants.RtmLinkState.FAILED)
-                    events.ended("Elegoo's cloud control service ended the session. Try again later.");
+                    || reason == RtmConstants.RtmLinkStateChangeReason.INVALID_TOKEN || state == RtmConstants.RtmLinkState.FAILED)
+                    message = "Elegoo's cloud control service ended the session.";
+                else if (subscribed && (state == RtmConstants.RtmLinkState.DISCONNECTED || state == RtmConstants.RtmLinkState.SUSPENDED))
+                    message = CloudControl.CONTROL_DISCONNECTED;
+                else return;
+                disconnectedReason = message;
+                events.ended(message);
             }
         };
         try {
@@ -47,6 +58,7 @@ final class AgoraLink implements CloudControl.Link {
     @Override public void subscribe(String channel) throws IOException {
         SubscribeOptions options = new SubscribeOptions(); options.setWithMessage(true); options.setWithPresence(true);
         await("subscribe to printer replies", callback -> client.subscribe(channel, options, callback));
+        subscribed = true;
     }
 
     @Override public void publish(String channel, String text) throws IOException {
@@ -79,6 +91,10 @@ final class AgoraLink implements CloudControl.Link {
         } catch (InterruptedException error) { Thread.currentThread().interrupt(); throw new IOException("Interrupted."); }
         catch (IOException error) { throw error; }
         catch (Exception error) { throw new IOException("Could not " + what + " through the cloud."); }
-        if (failure[0] != null) throw new IOException("Could not " + what + " through the cloud (" + StatusPresentation.clean(failure[0]) + ").");
+        if (failure[0] != null) {
+            if (failure[0].equals("NOT_CONNECTED") || failure[0].startsWith("NOT_CONNECTED "))
+                throw new CloudControl.LinkDisconnected();
+            throw new IOException("Could not " + what + " through the cloud (" + StatusPresentation.clean(failure[0]) + ").");
+        }
     }
 }

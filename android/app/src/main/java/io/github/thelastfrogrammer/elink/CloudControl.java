@@ -15,7 +15,12 @@ public final class CloudControl implements AutoCloseable {
     /** Agora app ID from the SDK (src/cloud/services/rtm_service.cpp). */
     public static final String AGORA_APP_ID = "d035320941e34cd5bc4ec106eff05580";
     static final String OUTCOME_UNKNOWN = "The command may or may not have reached the printer; it was not repeated. Check the printer's status.";
+    static final String CONTROL_DISCONNECTED = "The cloud command connection dropped. It will reconnect on the next action.";
     static final long REPLY_TIMEOUT_MS = 10_000, IDLE_CLOSE_MS = 120_000;
+
+    static final class LinkDisconnected extends IOException {
+        LinkDisconnected() { super(CONTROL_DISCONNECTED); }
+    }
 
     public interface Link {
         interface Events {
@@ -26,6 +31,7 @@ public final class CloudControl implements AutoCloseable {
         void login(String appId, String rtmUserId, String token, Events events) throws IOException;
         void subscribe(String channel) throws IOException;
         void publish(String channel, String text) throws IOException;
+        default String disconnectedReason() { return ""; }
         void close();
     }
     public interface LinkFactory { Link create(); }
@@ -64,7 +70,7 @@ public final class CloudControl implements AutoCloseable {
     /** Serial whose transfer is being watched; keeps the session open until cleared. */
     private String watching;
 
-    private static final class Pending { int id, method; String publisher; Reply reply; ScheduledFuture<?> timeout; }
+    private static final class Pending { int id, method; String publisher; Reply reply; ScheduledFuture<?> timeout; boolean publishAttempted; }
 
     /**
      * Least time between two commands put on the channel. The printer drops replies when three or more requests arrive in
@@ -107,7 +113,7 @@ public final class CloudControl implements AutoCloseable {
 
     /** Last reason the session ended from outside, or "" if it did not. */
     public synchronized String endedReason() { return ended; }
-    public synchronized boolean connected() { return link != null; }
+    public synchronized boolean connected() { return link != null && link.disconnectedReason().isEmpty(); }
 
     /** Sends one request built by the caller (Cc2Codec envelope); its id is replaced. Reply arrives on the worker thread. */
     public void send(String serial, JSONObject request, Reply reply) { dispatch(serial, request, reply, false); }
@@ -211,6 +217,7 @@ public final class CloudControl implements AutoCloseable {
         {
             try {
                 ensureConnected();
+                Link target = link;
                 JSONObject message = new JSONObject(request.toString());
                 Pending wait = new Pending();
                 long delay;
@@ -225,41 +232,59 @@ public final class CloudControl implements AutoCloseable {
                     long timeout = Cc2Codec.timeoutSeconds(method) > 15 ? Math.max(replyTimeoutMs, Cc2Codec.timeoutSeconds(method) * 1000L) : replyTimeoutMs;
                     wait.timeout = worker.schedule(() -> finish(wait, false, "No reply through the cloud. Check the printer's status before trying again; the command was not repeated."), timeout + delay, TimeUnit.MILLISECONDS);
                 }
-                if (delay > 0) {
-                    String text = message.toString();
-                    worker.schedule(() -> {
-                        synchronized (this) { if (pending != wait && urgent != wait) return; }   // ended meanwhile (link closed): never sent
-                        try { link.publish(wait.publisher, text); }
-                        catch (Exception error) {
-                            String why = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
-                            finish(wait, false, Cc2Codec.changing(method) ? why + " " + OUTCOME_UNKNOWN : why); closeLink();
-                        }
-                    }, delay, TimeUnit.MILLISECONDS);
-                } else link.publish(wait.publisher, message.toString());
+                String text = message.toString();
+                if (delay > 0) worker.schedule(() -> publish(target, wait, text), delay, TimeUnit.MILLISECONDS);
+                else publish(target, wait, text);
             } catch (Exception error) {
                 Pending failed; synchronized (this) { failed = asUrgent ? urgent : pending; }
-                String text = error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
-                if (failed != null && Cc2Codec.changing(method)) text += " " + OUTCOME_UNKNOWN;
-                if (failed != null) finish(failed, false, text); else { reply.done(false, text); failWaiting(text); }
+                String text = failureMessage(error);
+                if (failed != null) finish(failed, false, endedMessage(failed, text));
+                else {
+                    if (error instanceof LinkDisconnected) synchronized (this) { ended = text; }
+                    reply.done(false, text + " This command was not sent.");
+                    failWaiting(text);
+                }
                 closeLink();
             }
             scheduleIdleClose();
         }
     }
 
+    private void publish(Link target, Pending wait, String text) {
+        synchronized (this) { if (pending != wait && urgent != wait) return; }
+        String reason = target.disconnectedReason();
+        if (!reason.isEmpty()) { endedOutside(target, reason); return; }
+        try {
+            wait.publishAttempted = true;
+            target.publish(wait.publisher, text);
+        } catch (Exception error) { endedOutside(target, failureMessage(error)); }
+    }
+
+    private static String failureMessage(Exception error) {
+        return error instanceof IOException && error.getMessage() != null ? error.getMessage() : "Could not reach the printer through the cloud.";
+    }
+
     private void ensureConnected() throws IOException {
-        synchronized (this) { if (link != null) return; }
+        Link previous;
+        synchronized (this) { previous = link; }
+        if (previous != null) {
+            String reason = previous.disconnectedReason();
+            if (reason.isEmpty()) return;
+            endedOutside(previous, reason);
+        }
         CloudApi.AgoraCredential credential = credentials.get();
         Link created = factory.create();
-        synchronized (this) { ended = ""; userId = credential.userId; }
         try {
             created.login(AGORA_APP_ID, credential.rtmUserId, credential.rtmToken, new Link.Events() {
-                public void message(String publisher, String text) { worker.execute(() -> received(publisher, text)); }
+                public void message(String publisher, String text) {
+                    worker.execute(() -> { if (link == created) received(publisher, text); });
+                }
                 public void ended(String reason) { worker.execute(() -> endedOutside(created, reason)); }
             });
             created.subscribe(credential.userId);
+            if (!created.disconnectedReason().isEmpty()) throw new IOException(created.disconnectedReason());
         } catch (IOException error) { created.close(); throw error; }
-        synchronized (this) { link = created; }
+        synchronized (this) { link = created; userId = credential.userId; ended = ""; }
     }
 
     private volatile long listenUntil;
@@ -355,11 +380,16 @@ public final class CloudControl implements AutoCloseable {
     private void endedOutside(Link which, String reason) {
         synchronized (this) { if (link != which) return; ended = reason; }
         Pending wait, stop; Transfers watcher; synchronized (this) { wait = pending; stop = urgent; watcher = watching == null ? null : transfers; }
-        if (wait != null) finish(wait, false, Cc2Codec.changing(wait.method) ? reason + " " + OUTCOME_UNKNOWN : reason);
-        if (stop != null) finish(stop, false, reason + " " + OUTCOME_UNKNOWN);
+        if (wait != null) finish(wait, false, endedMessage(wait, reason));
+        if (stop != null) finish(stop, false, endedMessage(stop, reason));
         failWaiting(reason);
         closeLink();
         if (watcher != null) watcher.ended(reason);
+    }
+
+    private static String endedMessage(Pending wait, String reason) {
+        if (!wait.publishAttempted) return reason + " This command was not sent.";
+        return Cc2Codec.changing(wait.method) ? reason + " " + OUTCOME_UNKNOWN : reason;
     }
 
     private void scheduleIdleClose() {

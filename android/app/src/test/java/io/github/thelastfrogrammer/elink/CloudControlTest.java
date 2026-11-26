@@ -18,14 +18,20 @@ public class CloudControlTest {
         final BlockingQueue<String[]> published = new LinkedBlockingQueue<>();
         /** When each publish happened (System.nanoTime), so spacing is measured at the link, not after the test thread wakes. */
         final java.util.List<Long> publishedAt = java.util.Collections.synchronizedList(new java.util.ArrayList<>());
-        volatile Events events; volatile boolean failLogin, closed;
+        volatile Events events; volatile boolean failLogin, failPublish, closed;
+        volatile String disconnected = "";
         public void login(String appId, String rtmUserId, String token, Events events) throws IOException {
             calls.add("login " + appId + " " + rtmUserId + " " + token);
             if (failLogin) throw new IOException("Could not sign in to cloud control through the cloud (LOGIN_REJECTED).");
             this.events = events;
         }
         public void subscribe(String channel) { calls.add("subscribe " + channel); }
-        public void publish(String channel, String text) { publishedAt.add(System.nanoTime()); calls.add("publish " + channel); published.add(new String[] {channel, text}); }
+        public void publish(String channel, String text) throws IOException {
+            publishedAt.add(System.nanoTime()); calls.add("publish " + channel);
+            if (failPublish) throw new CloudControl.LinkDisconnected();
+            published.add(new String[] {channel, text});
+        }
+        public String disconnectedReason() { return disconnected; }
         public void close() { closed = true; calls.add("close"); }
     }
     private static final class Replies implements CloudControl.Reply {
@@ -146,6 +152,42 @@ public class CloudControlTest {
         waitFor(() -> links.size() == 2); assertEquals("", control.endedReason());
     }
 
+    @Test public void staleConnectionIsReplacedBeforePublishingTheNextAction() throws Exception {
+        CloudControl control = control(5000, 60000);
+        BlockingQueue<String> listening = new LinkedBlockingQueue<>();
+        control.listen(1000, listening::add);
+        assertEquals("", listening.poll(5, TimeUnit.SECONDS));
+        FakeLink stale = links.get(0);
+        stale.disconnected = CloudControl.CONTROL_DISCONNECTED;
+
+        control.send("SN818", Cc2Codec.request(0, Cc2Codec.PAUSE), new Replies());
+        waitFor(() -> links.size() == 2);
+        assertEquals(Cc2Codec.PAUSE, new JSONObject(take(links.get(1))[1]).getInt("method"));
+        assertTrue(stale.closed);
+        assertTrue(stale.published.isEmpty());
+    }
+
+    @Test public void publishDisconnectDoesNotReplayAnAttemptedCommand() throws Exception {
+        CloudControl control = control(5000, 60000);
+        BlockingQueue<String> listening = new LinkedBlockingQueue<>();
+        control.listen(1000, listening::add);
+        assertEquals("", listening.poll(5, TimeUnit.SECONDS));
+        FakeLink failed = links.get(0);
+        failed.failPublish = true;
+
+        Replies replies = new Replies();
+        control.send("SN818", Cc2Codec.request(0, Cc2Codec.PAUSE), replies);
+        String message = replies.take();
+        assertTrue(message, message.contains(CloudControl.CONTROL_DISCONNECTED));
+        assertTrue(message, message.contains(CloudControl.OUTCOME_UNKNOWN));
+        waitFor(() -> failed.closed);
+        assertEquals(1, links.size());
+
+        control.send("SN818", Cc2Codec.request(0, Cc2Codec.RESUME), new Replies());
+        waitFor(() -> links.size() == 2);
+        assertEquals(Cc2Codec.RESUME, new JSONObject(take(links.get(1))[1]).getInt("method"));
+    }
+
     @Test public void unsupportedCommandsAndBadSerialsNeverConnect() throws Exception {
         CloudControl control = control(5000, 60000); Replies replies = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.CAMERA), replies);
@@ -160,7 +202,7 @@ public class CloudControlTest {
             () -> { FakeLink link = new FakeLink(); link.failLogin = true; links.add(link); return link; }, worker, 5000, 60000);
         Replies replies = new Replies();
         control.send("SN818", Cc2Codec.request(1, Cc2Codec.PAUSE), replies);
-        assertEquals("fail: Could not sign in to cloud control through the cloud (LOGIN_REJECTED).", replies.take());
+        assertEquals("fail: Could not sign in to cloud control through the cloud (LOGIN_REJECTED). This command was not sent.", replies.take());
         waitFor(() -> links.get(0).closed); assertFalse(control.connected());
     }
 

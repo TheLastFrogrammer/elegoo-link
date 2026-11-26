@@ -2594,7 +2594,7 @@ public final class MainActivity extends Activity {
         out.add("Picture source now: " + (ready ? "the printer's camera on this network" : cloud && printer.localCamera() ? "the printer's camera alongside the cloud"
             : cloud ? (cloudVideo != null && cloudVideo.playing() ? "the Print tab's cloud video" : "none: in cloud mode only an open cloud video gives pictures") : "none: not connected"));
         boolean signedIn = printer.cloudSignedIn, chosen = !printer.cloudSerial.isEmpty();
-        if (CloudVideo.emptyStreak() > 0) out.add("Cloud video: the printer did not join its channel " + CloudVideo.emptyStreak() + " time(s) in a row" + (CloudVideo.emptyStreak() >= 2 ? "; restart the printer" : ""));
+        if (CloudVideo.emptyStreak() > 0) out.add("Cloud video: no video received on " + CloudVideo.emptyStreak() + " consecutive attempts");
         out.add("Cloud picture visits: " + (settings.getBoolean(PictureVisits.PREF, true) ? "on" : "off") + (visitRunning() ? ", one running now" : "") + "; in the background: "
             + (CloudFrameGrab.broken() != null ? "cannot run on this phone (" + CloudFrameGrab.broken() + ")" : printer != null && printer.nativePictures() ? "on" : "waiting after two empty tries"));
         out.add("Elegoo cloud: " + (signedIn ? "signed in" : "not signed in") + ", printer " + (chosen ? "chosen" : "not chosen") + ", "
@@ -3156,6 +3156,8 @@ public final class MainActivity extends Activity {
         title.setContentDescription(canSwitch ? name + ", switch printer" : name); identity.setText(model);
         String reachText = Showcase.running() ? "" : StatusPresentation.reach(ready, ready && printer.pinProbe(), cloud, cloud && printer.cloudOnline != 0, cloudOk,
             ready ? printer.statusAt : cloud ? printer.cloudCheckedAt : 0, System.currentTimeMillis());
+        if (!reachText.isEmpty() && cloudFresh && cloudOk && printer.cloudCommandLinkDropped())
+            reachText = lastReport() + " · cloud controls reconnect on demand";
         if (!reachText.contentEquals(reach.getText())) reach.setText(reachText);
         reach.setVisibility(reachText.isEmpty() ? View.GONE : View.VISIBLE); reach.setTextColor(live || reachText.isEmpty() ? MUTED : AMBER);
         // Hero: state and job.
@@ -3233,11 +3235,10 @@ public final class MainActivity extends Activity {
         fullChip.setContentDescription(toolpathShown ? "Open Live toolpath" : "Show the camera full screen");
         monitorCameraStart.setText(toolpathShown ? "Show the camera" : monitorCameraStart.getText());
         monitorHide.setText(toolpathShown ? "Hide preview" : "Hide camera"); monitorShow.setText(toolpathShown ? "Show preview" : "Show camera");
-        // Two empty channels in a row: the printer's camera service is probably stuck; say so before the next 20 s wait.
-        if (!toolpathShown && !ready && cloudVideo == null && CloudVideo.emptyStreak() >= 2) {
-            monitorCameraInfo.setText("The printer's camera has not answered " + CloudVideo.emptyStreak() + " times in a row. Its camera service is probably stuck: restart the printer, then tap Watch camera.");
+        if (!toolpathShown && cloud && cloudVideo == null && CloudVideo.emptyStreak() >= 2) {
+            monitorCameraInfo.setText("No cloud video received on the last " + CloudVideo.emptyStreak() + " attempts. Tap Watch camera to try again.");
             monitorCameraInfo.setTextColor(ERROR); monitorCameraInfo.setVisibility(View.VISIBLE);
-        } else if (CloudVideo.emptyStreak() < 2 && monitorCameraInfo.getText().toString().startsWith("The printer's camera has not answered")) monitorCameraInfo.setText("");
+        } else if (monitorCameraInfo.getText().toString().startsWith("No cloud video received on the last ")) monitorCameraInfo.setText("");
         if (monitorCameraInfo.getText().length() == 0) monitorCameraInfo.setVisibility(View.GONE);
         // Hide camera only while there is a picture to hide; otherwise Watch camera stands alone.
         monitorHide.setVisibility(monitorFrame.getVisibility() == View.VISIBLE ? View.VISIBLE : View.GONE);

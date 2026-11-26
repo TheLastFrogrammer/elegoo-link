@@ -245,6 +245,7 @@ public final class PrinterService extends Service {
     public boolean cloudSignedIn;
     /** A cloud command is waiting for its reply or for its turn to be sent (derived from CloudControl, so it cannot drift). */
     public boolean cloudCommandBusy() { CloudControl control = cloudControl; return control != null && control.outstanding() > 0; }
+    boolean cloudCommandLinkDropped() { CloudControl control = cloudControl; return control != null && !control.endedReason().isEmpty(); }
     private final Runnable cloudPoll = new Runnable() { public void run() { pollCloud(); } };
     private final Runnable freshness = new Runnable() {
         public void run() { if (destroyed) return; checkRoute(); if (!fresh()) alerts.disconnected(); changed(); if (foreground) updateNotification(false); main.postDelayed(this, 2000); }
@@ -1932,7 +1933,7 @@ public final class PrinterService extends Service {
             return;
         }
         ensureCloudControl();
-        if (!query) { feedback = "Sending through the Elegoo cloud…"; Diagnostics.note(Diagnostics.COMMANDS, "Elegoo cloud: " + Cc2Codec.name(method) + " sent"); }
+        if (!query) { feedback = "Requesting through the Elegoo cloud…"; Diagnostics.note(Diagnostics.COMMANDS, "Elegoo cloud: " + Cc2Codec.name(method) + " requested"); }
         JSONObject params = request.optJSONObject("params") == null ? new JSONObject() : request.optJSONObject("params");
         cloudControl.send(cloudSerial, request, new CloudControl.Reply() {
             public void done(boolean acknowledged, String text) { done(acknowledged, text, new JSONObject()); }
@@ -1946,9 +1947,9 @@ public final class PrinterService extends Service {
                     // Refresh status once the acknowledgement has settled so the result shows; nothing is retried.
                     main.removeCallbacks(cloudPoll); main.postDelayed(cloudPoll, acknowledged ? CLOUD_ACK_SETTLE_MS + 500 : 2000);
                 });
-        changed();
             }
         });
+        changed();
     }
     // Read-only printer probe (Settings → Diagnostics): network ports, then Elegoo's "Get…" questions, once each. See PrinterProbe.
     static final int[] PROBE_PORTS = {21, 22, 23, 80, 443, 554, 1883, 3030, 7125, 8080, 8554, 8883, 9001};
