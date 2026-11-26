@@ -62,6 +62,8 @@ final class ThermalCamera {
         String model = "", format = "", rate = "", temperatures = "";
         int width, height;
         double scale = Double.NaN;
+        /** The bits of each pixel that are the reading: the Ax5 sends 14-bit values with the top two bits of 16 set. */
+        int mask = 0xFFFF;
         String words() {
             List<String> parts = new ArrayList<>();
             if (!model.isEmpty()) parts.add(model);
@@ -99,7 +101,7 @@ final class ThermalCamera {
         if (Double.isNaN(s.scale) && g.usable("TemperatureLinearMode") && g.choose("TemperatureLinearMode", "On")) {
             String resolution = "";
             if (g.usable("TemperatureLinearResolution")) { g.choose("TemperatureLinearResolution", "High"); resolution = g.chosen("TemperatureLinearResolution"); }
-            s.scale = ax5Scale(resolution);
+            s.scale = ax5Scale(resolution); s.mask = AX5_MASK;
             s.temperatures = "temperatures in " + (s.scale == 0.04 ? "0.04" : "0.4") + " °C steps";
         }
         for (String rateFeature : new String[] {"IRFrameRate", "AcquisitionFrameRateEnum", "SensorFrameRate"}) if (g.usable(rateFeature)) {
@@ -118,6 +120,13 @@ final class ThermalCamera {
         if (f.contains("10mk")) return 0.01;
         if (g != null && g.usable("TemperatureLinearResolution")) return g.chosen("TemperatureLinearResolution").toLowerCase(Locale.ROOT).startsWith("high") ? 0.01 : 0.1;
         return 0.01;
+    }
+    /** The Ax5's 14-bit readings: the top two bits of its 16-bit pixels are set (0xC000) and are not part of the value. */
+    static final int AX5_MASK = 0x3FFF;
+    static int[] masked(int[] values, int mask) {
+        if (mask == 0xFFFF) return values;
+        for (int i = 0; i < values.length; i++) values[i] &= mask;
+        return values;
     }
     /** Kelvin per step of an Ax5's temperature-linear mode: 0.04 at High resolution, 0.4 at Low. */
     static double ax5Scale(String resolution) { return resolution != null && resolution.toLowerCase(Locale.ROOT).startsWith("low") ? 0.4 : 0.04; }
@@ -184,7 +193,7 @@ final class ThermalCamera {
                     if (image == null) continue;
                     lastPicture = System.currentTimeMillis();
                     double scale = image.pixelFormat == GigeVision.MONO8 ? Double.NaN : setup.scale;
-                    ThermalImage picture = new ThermalImage(image.width, image.height, image.values, scale);
+                    ThermalImage picture = new ThermalImage(image.width, image.height, masked(image.values, setup.mask), scale);
                     for (Viewer v : viewers) if (lastPicture - v.last >= v.everyMs) { v.last = lastPicture; v.listener.picture(picture); }
                 }
             } catch (Exception failure) {

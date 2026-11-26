@@ -54,6 +54,12 @@ public class ThermalCameraTest {
         assertEquals("Slow", ThermalCamera.slowest(Arrays.asList("Fast", "Slow")));   // the Ax5's SensorFrameRate
         assertNull(ThermalCamera.slowest(Arrays.asList("Fast", "Normal")));
         assertEquals(0.04, ThermalCamera.ax5Scale("High"), 0); assertEquals(0.4, ThermalCamera.ax5Scale("Low"), 0);
+        // An A65 in temperature-linear High: room, face and hand as it sent them (top two bits set), then in °C.
+        int[] sent = {56514, 56766, 56904};
+        int[] v = ThermalCamera.masked(sent.clone(), ThermalCamera.AX5_MASK);
+        assertEquals(7362, v[0]);
+        assertEquals(21.3, v[0] * 0.04 - 273.15, 0.05); assertEquals(31.4, v[1] * 0.04 - 273.15, 0.05); assertEquals(36.9, v[2] * 0.04 - 273.15, 0.05);
+        assertSame(sent, ThermalCamera.masked(sent, 0xFFFF));
         assertEquals(0.1, ThermalCamera.scaleFor("TemperatureLinear100mK", null), 0);
         assertEquals(0.01, ThermalCamera.scaleFor("TemperatureLinear10mK", null), 0);
     }

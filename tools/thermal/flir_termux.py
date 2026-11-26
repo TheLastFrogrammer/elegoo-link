@@ -386,6 +386,10 @@ def scale_for(fmt, g):
     return 0.01
 
 
+# The Ax5 sends 14-bit values in 16-bit pixels with the top two bits set (0xC000): they are not part of the reading.
+AX5_MASK = 0x3FFF
+
+
 def ax5_scale(resolution):
     """Kelvin per step of an Ax5's temperature-linear mode: 0.04 at High resolution, 0.4 at Low."""
     return 0.4 if (resolution or "").lower().startswith("low") else 0.04
@@ -404,7 +408,7 @@ def slowest(names):
 def configure(g):
     """16-bit pixels, temperature-linear values and the slowest frame rate, as the app asks. Returns (Kelvin per step or
     None, words about the set-up)."""
-    words = []
+    words = []; mask = 0xFFFF
     if g.usable("AcquisitionStop"):
         try: g.execute("AcquisitionStop")
         except CameraError: pass
@@ -427,14 +431,14 @@ def configure(g):
         resolution = ""
         if g.usable("TemperatureLinearResolution"):
             g.choose("TemperatureLinearResolution", "High"); resolution = g.chosen("TemperatureLinearResolution")
-        scale = ax5_scale(resolution)
+        scale = ax5_scale(resolution); mask = AX5_MASK
         words.append("temperature linear, %s resolution (%g K a step)" % (resolution or "default", scale))
     for rate in ("IRFrameRate", "AcquisitionFrameRateEnum", "SensorFrameRate"):
         if g.usable(rate):
             s = slowest(g.entries(rate))
             if s and g.choose(rate, s): words.append(s)
             break
-    return scale, words
+    return scale, words, mask
 
 
 # ------------------------------------------------------------------ the stream
@@ -489,7 +493,7 @@ def pictures(camera, count, interval, port=PORT, timeout=8.0):
             raise CameraError("another program (FLIR's own software, the app, or another phone) is controlling the camera"
                               if "another program" in str(e) else str(e))
         g = Genicam(description(c), c)
-        scale, words = configure(g)
+        scale, words, mask = configure(g)
         print("Set up:", ", ".join(words) or "as the camera was")
         stream.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 4 << 20); stream.bind(("", 0)); stream.settimeout(0.2)
         me = c.local_address()
@@ -524,7 +528,9 @@ def pictures(camera, count, interval, port=PORT, timeout=8.0):
                 if sys.byteorder == "big": values.byteswap()
             else:
                 values = array.array("H", list(raw))
-            yield w, h, values, (None if fmt == MONO8 else scale)
+            raw_values = values
+            if mask != 0xFFFF: values = array.array("H", (v & mask for v in values))
+            yield w, h, values, (None if fmt == MONO8 else scale), raw_values
             taken += 1; next_at = last_picture + interval
     finally:
         if g is not None:
@@ -553,9 +559,9 @@ def colour(t):
     return tuple(round(((a >> s) & 255) + f * (((b >> s) & 255) - ((a >> s) & 255))) for s in (16, 8, 0))
 
 
-def save(values, w, h, scale, name, raw_name=None):
+def save(values, w, h, scale, name, raw_name=None, raw_values=None):
     from PIL import Image, ImageDraw, ImageFont
-    little = array.array("H", values)
+    little = array.array("H", raw_values if raw_values is not None else values)
     if sys.byteorder == "big": little.byteswap()
     Image.frombytes("I;16", (w, h), little.tobytes()).save((raw_name or name) + "-raw.png")   # the camera's own values
     lo, hi = min(values), max(values)
@@ -663,9 +669,9 @@ def main():
             os.makedirs(os.path.join(a.out, "raw"), exist_ok=True)
             start = len([f for f in os.listdir(os.path.join(a.out, "raw")) if f.endswith("-raw.png")])
             print("Camera at", cam)
-            for k, (w, h, values, scale) in enumerate(pictures(cam, a.count, a.interval, a.port)):
+            for k, (w, h, values, scale, raw_values) in enumerate(pictures(cam, a.count, a.interval, a.port)):
                 name = os.path.join(a.out, "%03d" % (start + k))
-                centre, hottest, coolest = save(values, w, h, scale, name, os.path.join(a.out, "raw", "%03d" % (start + k)))
+                centre, hottest, coolest = save(values, w, h, scale, name, os.path.join(a.out, "raw", "%03d" % (start + k)), raw_values)
                 if scale:
                     c = lambda v: v * scale - 273.15
                     print("%s.png  %dx%d  centre %.1f °C  hottest %.1f °C  coolest %.1f °C   (raw centre %d)" % (name, w, h, c(centre), c(hottest), c(coolest), centre))
