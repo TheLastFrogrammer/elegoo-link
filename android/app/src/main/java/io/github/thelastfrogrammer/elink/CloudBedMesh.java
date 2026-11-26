@@ -8,6 +8,7 @@ final class CloudBedMesh {
     static final String SOURCE = "Elegoo cloud live";
     static final long SILENCE_MS = 45_000;
     private static final int CC2_POINTS_PER_AXIS = 11;
+    static final int EXPECTED_POINTS = CC2_POINTS_PER_AXIS * CC2_POINTS_PER_AXIS;
     private BedMesh.Capture capture = new BedMesh.Capture();
     private String printer = "", moveKey = "";
     private int phase = -1;
@@ -16,6 +17,7 @@ final class CloudBedMesh {
     String outcome = "";
 
     boolean active() { return capture.active(); }
+    int probeLocations() { return capture.probeLocations(); }
     long remaining(long now) { return Math.max(0, Math.min(SILENCE_MS, SILENCE_MS - (now - lastLiveAt))); }
     String message() {
         if (active()) return "Cloud leveling in progress · " + capture.points() + " distinct position reports received.";
@@ -58,7 +60,7 @@ final class CloudBedMesh {
                 context.put("gcode_move", new JSONObject().put("x", x).put("y", y).put("z", z));
         }
         if (sub == BedMesh.PROBING || p != null) lastLiveAt = now;
-        capture.feed(context, now, SOURCE, CC2_POINTS_PER_AXIS * CC2_POINTS_PER_AXIS);
+        capture.feed(context, now, SOURCE, EXPECTED_POINTS);
         return null;
     }
 
@@ -82,7 +84,7 @@ final class CloudBedMesh {
         int reports = capture.points();
         // Treat 2902 as the end of probing; any final positioning isn't another measurement.
         BedMesh.Mesh mesh = capture.feed(new JSONObject().put("machine_status", new JSONObject().put("status", 1)),
-            now, SOURCE, CC2_POINTS_PER_AXIS * CC2_POINTS_PER_AXIS);
+            now, SOURCE, EXPECTED_POINTS);
         stop("");
         if (mesh == null || mesh.xs.length != CC2_POINTS_PER_AXIS || mesh.ys.length != CC2_POINTS_PER_AXIS) {
             outcome = "No cloud mesh saved: received " + reports + " distinct position reports, but not a complete 11 × 11 probe grid. Try LAN if another run has the same result.";

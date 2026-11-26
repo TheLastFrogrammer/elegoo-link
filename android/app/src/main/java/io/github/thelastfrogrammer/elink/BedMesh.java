@@ -31,6 +31,10 @@ final class BedMesh {
     static final int KEEP = 200, MAX_EVENTS = 20_000;
     /** The printer's steps while it probes (levelling inside a print's start, a self-check or Auto-level). */
     static final int PROBING = 2901, LEVELLED = 2902;
+    static boolean probing(JSONObject status) {
+        JSONObject machine = status == null ? null : status.optJSONObject("machine_status");
+        return machine != null && machine.optInt("sub_status", -1) == PROBING;
+    }
 
     /** One probed shape: the grid's X and Y (mm), Z per row (mm, rows by Y), and what was known when it was kept. */
     static final class Mesh {
@@ -430,6 +434,8 @@ final class BedMesh {
      */
     static final class Capture {
         private final List<Event> events = new ArrayList<>();
+        private final java.util.Set<Long> probeLocations = new java.util.HashSet<>();
+        int probeLocations() { return probeLocations.size(); }
         private boolean active; private String lastSignature = ""; private long startedAt;
         private double bed = Double.NaN, bedTarget = Double.NaN; private String file = "", source = "";
         /** The last levelling that gave no mesh, in words ("" none), and whether a levelling just began (for the log). */
@@ -446,12 +452,17 @@ final class BedMesh {
             int code = machine.optInt("status", -1), sub = machine.optInt("sub_status", -1);
             boolean levelling = sub == PROBING || sub == LEVELLED || code == 5;
             if (levelling) {
-                if (!active) { active = true; began = true; events.clear(); lastSignature = ""; startedAt = now; source = from; file = ""; }
+                if (!active) { active = true; began = true; events.clear(); probeLocations.clear(); lastSignature = ""; startedAt = now; source = from; file = ""; }
                 JSONObject at = Cc2Codec.position(status);
                 double x = at == null ? Double.NaN : at.optDouble("x", Double.NaN), y = at == null ? Double.NaN : at.optDouble("y", Double.NaN), z = at == null ? Double.NaN : at.optDouble("z", Double.NaN);
                 if (Double.isFinite(x) && Double.isFinite(y) && Double.isFinite(z) && events.size() < MAX_EVENTS) {
                     String signature = sub + "|" + Math.round(x * 100) + "|" + Math.round(y * 100) + "|" + Math.round(z * 1000);
-                    if (!signature.equals(lastSignature)) { lastSignature = signature; events.add(new Event(sub, x, y, z)); }
+                    if (!signature.equals(lastSignature)) {
+                        lastSignature = signature; events.add(new Event(sub, x, y, z));
+                        // Match the reconstruction's X/Y rounding. Lifts, repeats, and other phases don't advance progress.
+                        if (sub == PROBING && Math.abs(z) < CONTACT_MM)
+                            probeLocations.add((Math.round(x) << 32) ^ (Math.round(y) & 0xffffffffL));
+                    }
                 }
                 JSONObject heater = status.optJSONObject("heater_bed");
                 if (heater != null) { bed = heater.optDouble("temperature", bed); bedTarget = heater.optDouble("target", bedTarget); }
@@ -461,7 +472,7 @@ final class BedMesh {
             }
             if (!active) return null;
             active = false;
-            Mesh m = reconstruct(events); int seen = events.size(); events.clear();
+            Mesh m = reconstruct(events); int seen = events.size(); events.clear(); probeLocations.clear();
             if (!complete(m, lastCount)) {
                 problem = m == null ? "the printer levelled the bed, but no probe positions came through (" + seen + " reports)"
                     : "the printer levelled the bed, but only " + m.count() + " of " + Math.max(m.expected, lastCount) + " points came through (" + from + ")";

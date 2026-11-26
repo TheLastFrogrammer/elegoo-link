@@ -1884,6 +1884,9 @@ public final class PrinterService extends Service {
         changed();
     }
     String cloudMeshProgress() { return cloudBedMesh.message(); }
+    boolean meshCapturing() { return usingCloud() ? cloudBedMesh.active() : ready() && fresh() && bedMeshCapture.active(); }
+    int meshProbeLocations() { return usingCloud() ? cloudBedMesh.probeLocations() : bedMeshCapture.probeLocations(); }
+    String localMeshProblem() { return ready() && fresh() ? bedMeshCapture.problem : ""; }
     int meshRevision() { return meshRevision; }
     private int meshRevision;
 

@@ -68,4 +68,20 @@ public class CloudBedMeshTest {
         assertNull(capture.delta("SN1", phase(BedMesh.LEVELLED), now + CloudBedMesh.SILENCE_MS));
         assertTrue(capture.message(), capture.message().contains("paused"));
     }
+    @Test public void liveProgressCountsProbeLocationsRatherThanMovesOrRepeatTouches() throws Exception {
+        CloudBedMesh capture = new CloudBedMesh();
+        capture.delta("SN1", phase(BedMesh.PROBING), 1);
+        assertEquals(0, capture.probeLocations());
+        capture.delta("SN1", move("gcode_move", new JSONObject().put("x", 10).put("y", 10).put("z", 3)), 2);
+        assertEquals(0, capture.probeLocations());
+        capture.delta("SN1", move("gcode_move", new JSONObject().put("z", .1)), 3);
+        capture.delta("SN1", move("gcode_move", new JSONObject().put("z", .2)), 4);
+        assertEquals(1, capture.probeLocations());
+        capture.delta("SN1", move("gcode_move", new JSONObject().put("x", 34)), 5);
+        assertEquals(1, capture.probeLocations());
+        capture.delta("SN1", move("gcode_move", new JSONObject().put("z", .16)), 6);
+        assertEquals(2, capture.probeLocations());
+        capture.delta("SN1", phase(BedMesh.LEVELLED), 7);
+        assertEquals(0, capture.probeLocations());
+    }
 }

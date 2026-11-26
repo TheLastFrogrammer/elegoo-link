@@ -537,8 +537,10 @@ public final class MainActivity extends Activity {
         LinearLayout calibrationRow = row(group);
         autoLevel = rowButton(calibrationRow, "Auto-level bed", () -> maintenanceConfirm("Level the bed automatically?", "The printer probes the bed. Remove any objects first.", Cc2Codec.AUTO_LEVEL), false);
         vibration = rowButton(calibrationRow, "Vibration test", () -> maintenanceConfirm("Run vibration test?", "The printer shakes the print head and bed to tune motion. Keep the printer clear.", Cc2Codec.VIBRATION), false);
-        button(group, "Bed mesh…", () -> startActivity(new Intent(this, BedMeshActivity.class))).setContentDescription("Bed mesh: the bed's shape from each levelling");
         selfCheck = button(group, "Full self-check…", () -> confirmRequest("Run the full self-check?", "The printer runs a vibration test, a heater (PID) check and bed leveling, as the official app does. This takes several minutes. Keep the printer clear.", () -> Cc2Codec.selfCheckRequest(0)));
+        // The mesh viewer is read-only, so keep it available while maintenance commands are disabled.
+        button(upkeep, "Bed mesh…", () -> startActivity(new Intent(this, BedMeshActivity.class)))
+            .setContentDescription("Bed mesh: live leveling progress and saved maps");
         emergencyButton(upkeep);
         buildHybrid(); buildReports();
         currentSection = fronts[FILES];
@@ -1142,6 +1144,7 @@ public final class MainActivity extends Activity {
             case "find-models": startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "find"), SLICE); return;
             case "calibration": startActivityForResult(new Intent(this, SliceActivity.class).putExtra(SliceActivity.EXTRA_OPEN, "calibration"), SLICE); return;
             case "projects": startActivity(new Intent(this, ProjectsActivity.class)); return;
+            case "bedmesh": startActivity(new Intent(this, BedMeshActivity.class)); return;
             default: break;
         }
         selectPage(f.tab);
@@ -3079,7 +3082,9 @@ public final class MainActivity extends Activity {
         boolean canStop = canControl || block == ControlState.Block.CLOUD_BUSY;
         for (Button stop : emergencyStops) { stop.setEnabled(canStop); stop.setVisibility(canStop ? View.VISIBLE : View.GONE); }
         upkeepButtons.setVisibility(upkeepOk ? View.VISIBLE : View.GONE); filamentButtons.setVisibility(upkeepButtons.getVisibility());
-        upkeepHint.setText(upkeepOk ? "Each tap sends one command. Nothing here is repeated automatically." : upkeepReason + " Emergency stop stays available.");
+        upkeepHint.setText(upkeepOk ? "Each tap sends one command. Nothing here is repeated automatically."
+            : BedMesh.probing(snapshot) ? "The printer is leveling. Open Bed mesh to follow progress."
+            : upkeepReason + " You can still view Bed mesh. Emergency stop stays available.");
         // On a new install the Get started card already offers Find, Sign in and Slice, so the empty Controls card waits.
         controlsCard.setVisibility(firstRun && block == ControlState.Block.DISCONNECTED ? View.GONE : View.VISIBLE);
         // On first run the Get started card already says how to connect; the "Not connected" summary would repeat it.

@@ -32,7 +32,9 @@ public final class BedMeshActivity extends PlainScreen {
     /** Heights × this in the 3D view and the model (0: chosen for the mesh shown). */
     private int exaggeration;
     private PrinterService printer;
-    private TextView cloudCapture;
+    private LinearLayout captureCard;
+    private TextView captureTitle, captureDetail;
+    private android.widget.ProgressBar captureBar;
     private int meshRevision = -1;
     private boolean bound;
     private final PrinterService.Observer watch = this::updateCapture;
@@ -64,14 +66,33 @@ public final class BedMeshActivity extends PlainScreen {
         showCaptureStatus();
     }
     private void showCaptureStatus() {
-        if (cloudCapture == null) return;
+        if (captureCard == null) return;
         boolean cloud = printer != null && printer.usingCloud();
-        cloudCapture.setVisibility(cloud ? android.view.View.VISIBLE : android.view.View.GONE);
-        if (!cloud) return;
-        String result = printer.cloudMeshProgress();
-        cloudCapture.setText(result.isEmpty() ? (printer.cloudLiveOn
-            ? "Cloud live updates connected. Leave this screen open and start Auto-level on the printer."
-            : "Waiting for cloud live updates. Periodic status checks cannot collect probe points.") : result);
+        boolean active = printer != null && printer.meshCapturing();
+        int points = active ? printer.meshProbeLocations() : 0;
+        int expected = CloudBedMesh.EXPECTED_POINTS;
+        boolean reported = printer != null && printer.liveFresh() && BedMesh.probing(printer.liveStatus());
+        String result = printer == null ? "" : cloud ? printer.cloudMeshProgress() : printer.localMeshProblem();
+        captureCard.setVisibility(cloud || active || reported || !result.isEmpty() ? android.view.View.VISIBLE : android.view.View.GONE);
+        captureBar.setVisibility(active ? android.view.View.VISIBLE : android.view.View.GONE);
+        if (active || reported) {
+            captureBar.setVisibility(android.view.View.VISIBLE);
+            captureTitle.setText(cloud ? "Leveling live · Cloud" : "Leveling live · LAN");
+            captureBar.setIndeterminate(!cloud || points == 0 || points > expected);
+            captureBar.setMax(expected);
+            if (!captureBar.isIndeterminate() && captureBar.getProgress() != points) captureBar.setProgress(points);
+            captureDetail.setText(points == 0 ? (cloud && !printer.cloudLiveOn
+                ? "The printer reports leveling. Waiting for live cloud probe positions."
+                : "Waiting for probe positions…")
+                : cloud && points == expected ? points + " probe locations seen. Waiting for leveling to finish and the grid to be checked."
+                : cloud && points < expected ? points + " of " + expected + " probe locations seen."
+                : points + " probe locations seen.");
+            return;
+        }
+        captureTitle.setText(cloud ? "Cloud capture" : "Leveling capture");
+        captureDetail.setText(!result.isEmpty() ? result : cloud && printer.cloudLiveOn
+            ? "Cloud live updates connected. You can start Auto-level on the printer."
+            : "Waiting for cloud live updates. Periodic status checks cannot collect probe points.");
     }
 
     @Override protected void onCreate(Bundle saved) {
@@ -96,7 +117,12 @@ public final class BedMeshActivity extends PlainScreen {
         A11y.heading(label(content, "Bed mesh", 22, ink, true));
         label(content, "The bed's shape each time the printer levels it: before a print (when levelling is on) or from Auto-level bed. The app only listens "
             + "to what the printer reports while it probes; nothing is sent to the printer for this.", 14, muted, false);
-        cloudCapture = label(content, "", 13, muted, false);
+        captureCard = card();
+        captureTitle = label(captureCard, "", 15, ink, true); A11y.heading(captureTitle);
+        captureBar = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        captureBar.setContentDescription("Probe locations received by the app");
+        captureCard.addView(captureBar, new LinearLayout.LayoutParams(-1, dp(14)));
+        captureDetail = label(captureCard, "", 13, muted, false);
         showCaptureStatus();
         if (all.isEmpty()) {
             LinearLayout empty = card();

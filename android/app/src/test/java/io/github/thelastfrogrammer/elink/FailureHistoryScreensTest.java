@@ -77,6 +77,21 @@ public class FailureHistoryScreensTest {
     private JSONObject row(Rig rig, String id) throws Exception { JSONArray rows = rig.service.history.getJSONArray("history_task_list"); for (int i = 0; i < rows.length(); i++) if (rows.getJSONObject(i).getString("task_id").equals(id)) return rows.getJSONObject(i); throw new AssertionError(id); }
     private static void printAgain(MainActivity activity, JSONObject row) throws Exception { call(activity, "printAgain", new Class<?>[] {JSONObject.class}, row); org.robolectric.shadows.ShadowLooper.idleMainLooper(); }
 
+    @Test public void bedMeshOpensWhileCloudLevelingDisablesMotion() throws Exception {
+        Rig rig = rig("dark", 5);
+        rig.service.cloudStatus.getJSONObject("machine_status").put("sub_status", BedMesh.PROBING);
+        render(rig.activity);
+        Field field = MainActivity.class.getDeclaredField("upkeepCard"); field.setAccessible(true);
+        View card = (View) field.get(rig.activity);
+        Button mesh = buttons(card, "Bed mesh…").get(0);
+        Button motion = buttons(card, "Auto-level bed").get(0);
+        assertTrue(mesh.isEnabled() && mesh.getVisibility() == View.VISIBLE && mesh.getParent() == card);
+        assertFalse(motion.isEnabled());
+        mesh.performClick();
+        Intent intent = org.robolectric.Shadows.shadowOf(rig.activity).getNextStartedActivity();
+        assertEquals(BedMeshActivity.class.getName(), intent.getComponent().getClassName());
+    }
+
     @Test public void printAgainIsOnlyEnabledForAFileTheListingHolds() throws Exception {
         Rig rig = rig("light", 1); render(rig.activity);
         Field list = MainActivity.class.getDeclaredField("historyList"); list.setAccessible(true); View historyList = (View) list.get(rig.activity);
