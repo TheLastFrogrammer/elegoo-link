@@ -95,6 +95,14 @@ final class CloudVideo {
         startedAt = android.os.SystemClock.elapsedRealtime();
         log("started; asking for camera access");
         view().loadUrl(ORIGIN + "/assets/camera/index.html");
+        listener.status("Asking the printer for its camera…", false);
+        // In cloud mode the printer joins its video channel after being asked for its camera (read-only), as Elegoo's app does.
+        PrinterService p = printer.get();
+        if (p != null) p.wakeCloudCamera(this::fetchAccess); else fetchAccess();
+    }
+    /** Gets camera access from Elegoo; the page joins the channel once both the page and the access are ready. */
+    private void fetchAccess() {
+        if (stopped) return;
         listener.status("Getting camera access from Elegoo…", false);
         worker.execute(() -> {
             String error = null; CloudApi.AgoraCredential issued = null;

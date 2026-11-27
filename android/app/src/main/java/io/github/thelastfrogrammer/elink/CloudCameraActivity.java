@@ -116,7 +116,19 @@ public final class CloudCameraActivity extends Activity {
     }
 
     /** Gets camera credentials from Elegoo; the page joins the channel once both the page and the credentials are ready. */
-    private void connect(String serial) {
+    private void connect(String serial) { connect(serial, 0); }
+    /**
+     * Asks the printer for its camera first (read-only; in cloud mode it joins its video channel after that, as with
+     * Elegoo's app), once the app's service is bound (up to a second), then gets camera access.
+     */
+    private void connect(String serial, int waited) {
+        if (isDestroyed()) return;
+        if (printer == null && waited < 10) { main.postDelayed(() -> connect(serial, waited + 1), 100); return; }
+        showNormal("Asking the printer for its camera…");
+        if (printer != null) printer.wakeCloudCamera(() -> fetchAccess(serial)); else fetchAccess(serial);
+    }
+    private void fetchAccess(String serial) {
+        if (isDestroyed()) return;
         showNormal("Getting camera access from Elegoo…");
         worker.execute(() -> {
             String error = null; CloudApi.AgoraCredential issued = null;
