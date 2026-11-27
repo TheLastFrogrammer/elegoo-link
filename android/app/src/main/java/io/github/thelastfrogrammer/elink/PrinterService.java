@@ -317,7 +317,7 @@ public final class PrinterService extends Service {
     /** Ends any cloud picture taking now (a camera view is about to join: one join per account). */
     void leaveCloudPictures() { CloudFrameGrab.leave(); if (pictureVisits != null) pictureVisits.end(); }
     boolean cloudPictureRunning() { return CloudFrameGrab.busy() || pictureVisits != null && pictureVisits.running(); }
-    /** Cloud mode, a picture due: joins the printer's video with the native library, keeps one frame and leaves. Nothing is sent to the printer. */
+    /** Cloud mode, a picture due: asks the printer for its camera (read-only), joins its video with the native library, keeps one frame and leaves. */
     private void nativePicture() {
         android.content.SharedPreferences settings = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         if (!settings.getBoolean(PictureVisits.PREF, true) || !settings.getBoolean("cloudControlUnderstood", false)) return;
@@ -327,7 +327,7 @@ public final class PrinterService extends Service {
         if (now < nativeNextAt || CloudFrameGrab.broken() != null) return;
         nativeNextAt = now + 60_000;   // at most one join a minute, whatever happens
         String serial = cloudSerial;
-        pictureWorker.execute(() -> {
+        wakeCloudCamera(() -> { if (!destroyed) pictureWorker.execute(() -> {
             CloudApi.AgoraCredential issued = null; String error = null;
             try {
                 CloudAccountStore store = new CloudAccountStore(this);
@@ -359,7 +359,7 @@ public final class PrinterService extends Service {
                 });
                 if (!started && CloudFrameGrab.broken() != null) Diagnostics.note(Diagnostics.CAMERA, "background cloud picture: the native video library cannot run on this phone (" + CloudFrameGrab.broken() + "); the app's screens take pictures while open");
             });
-        });
+        }); });
     }
     /** What the recorder's layer reach was read for (file and camera position), so it is read once per print and camera spot. */
     private String reachFor = ""; private boolean reachReading; private long reachTriedAt;
@@ -1744,6 +1744,17 @@ public final class PrinterService extends Service {
      * That endpoint refuses some accounts' tokens (answer -1, unknown), so an unknown answer keeps what live updates last
      * showed, or counts a status report from the last two minutes as online.
      */
+    /**
+     * The online state after a poll. While live updates are connected, Elegoo pushes the printer's own online and offline
+     * (and every live report shows it online), so the online endpoint's "offline" no longer overrides a printer they show
+     * online: it answered "offline" every minute for a printer that was printing and reporting, which made the status stale
+     * and stopped the camera each time.
+     */
+    static int polledOnline(int reported, int previous, long reportedAt, long nowMs, boolean live) {
+        if (live && previous == 1 && reported == 0) return 1;   // an "online" answer is still believed, and a live offline stands
+        return onlineState(reported, previous, reportedAt, nowMs);
+    }
+    private boolean endpointDisagreementNoted;
     static int onlineState(int reported, int previous, long reportedAt, long nowMs) {
         if (reported == 0 || reported == 1) return reported;
         boolean recent = reportedAt > 0 && nowMs - CloudApi.seconds(reportedAt) * 1000 < REPORT_RECENT_MS;
@@ -1810,8 +1821,14 @@ public final class PrinterService extends Service {
                     int onlineBefore = cloudOnline;
                     if (!same) { cloudReportedAt = 0; cloudOnlineSignal = false; cloudBedMesh.reset(); }
                     if (reported != null && reported.reportedAt > 0) cloudReportedAt = Math.max(cloudReportedAt, CloudApi.seconds(reported.reportedAt) * 1000);
-                    cloudOnline = onlineState(reportedOnline, same ? cloudOnline : -1, cloudReportedAt, System.currentTimeMillis());
-                    cloudOnlineSignal = reportedOnline == 1 || reportedOnline == -1 && cloudOnlineSignal && cloudOnline == 1;
+                    boolean live = same && cloudLiveOn;
+                    cloudOnline = polledOnline(reportedOnline, same ? cloudOnline : -1, cloudReportedAt, System.currentTimeMillis(), live);
+                    boolean overruled = live && onlineBefore == 1 && reportedOnline == 0;
+                    if (!overruled) cloudOnlineSignal = reportedOnline == 1 || reportedOnline == -1 && cloudOnlineSignal && cloudOnline == 1;
+                    else if (!endpointDisagreementNoted) {
+                        endpointDisagreementNoted = true;
+                        Diagnostics.note(Diagnostics.CONNECTION, "Elegoo's online check said offline while live updates show the printer online; live updates decide while they are connected");
+                    }
                     if (cloudOnline != onlineBefore) Diagnostics.note(Diagnostics.FILES, "cloud printer online state " + onlineBefore + " -> " + cloudOnline + " (online endpoint said " + reportedOnline + ")");
                 }
                 if (reported != null) {
@@ -1978,6 +1995,26 @@ public final class PrinterService extends Service {
         });
         return true;
     }
+    /**
+     * Before a cloud video joins the printer's channel: asks the printer for its camera (Elegoo's read-only question 1042),
+     * which Elegoo's own app asks before showing the camera; without it the printer was seen not to join its video channel.
+     * At most once every CAMERA_ASK_GAP_MS, only with cloud control agreed, fresh status and no other cloud command
+     * running; never repeated on a missing reply. `then` runs once on the main thread: after the answer, after
+     * CAMERA_ASK_WAIT_MS without one, or straight away when no question is sent.
+     */
+    public void wakeCloudCamera(Runnable then) {
+        long now = SystemClock.elapsedRealtime();
+        boolean due = workshop().getBoolean(CloudConsent.KEY, false) && !ready() && usingCloud() && cloudFresh()
+            && (cameraAskedAt == 0 || now - cameraAskedAt >= CAMERA_ASK_GAP_MS);
+        boolean[] done = {false};
+        Runnable once = () -> { if (done[0]) return; done[0] = true; then.run(); };
+        if (!due) { main.post(once); return; }
+        cameraAskedAt = now;
+        if (!askCloudCamera(answer -> once.run())) { main.post(once); return; }
+        main.postDelayed(once, CAMERA_ASK_WAIT_MS);
+    }
+    static final long CAMERA_ASK_GAP_MS = 30_000, CAMERA_ASK_WAIT_MS = 8_000;
+    private long cameraAskedAt;
     public void cloudCommand(JSONObject request) {
         int method = request.optInt("method", -1);
         boolean query = Cc2Codec.isQuery(method) || method == Cc2Codec.CANVAS;

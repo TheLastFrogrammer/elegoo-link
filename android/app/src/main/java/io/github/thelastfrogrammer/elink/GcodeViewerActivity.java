@@ -580,6 +580,10 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
             cameraStarted = true; cameraCloud = true; cloudShown = true;
             printer.leaveCloudPictures();   // one join per account: a picture visit or grab leaves first
             String serial = printer.cloudSerial;
+            cameraMessage("Asking the printer for its camera…");
+            // In cloud mode the printer joins its video channel after being asked for its camera (read-only), as Elegoo's app does.
+            printer.wakeCloudCamera(() -> {
+            if (isDestroyed() || web == null || !cameraStarted) return;
             cameraMessage("Getting camera access from Elegoo…");
             worker.execute(() -> {
                 String error = null; CloudApi.AgoraCredential issued = null;
@@ -601,6 +605,7 @@ public final class GcodeViewerActivity extends Activity implements PrinterServic
                     web.evaluateJavascript("viewer.cameraCloud(" + JSONObject.quote(CloudControl.AGORA_APP_ID) + "," + JSONObject.quote(serial) + ","
                         + JSONObject.quote(credential.rtcToken) + "," + JSONObject.quote(credential.rtcUserId) + ")", null);
                 });
+            });
             });
         } else cameraMessage("No camera picture. Connect to the printer, or watch it through the Elegoo cloud.");
     }
