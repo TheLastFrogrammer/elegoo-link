@@ -1743,6 +1743,17 @@ public final class PrinterService extends Service {
      * That endpoint refuses some accounts' tokens (answer -1, unknown), so an unknown answer keeps what live updates last
      * showed, or counts a status report from the last two minutes as online.
      */
+    /**
+     * The online state after a poll. While live updates are connected, Elegoo pushes the printer's own online and offline
+     * (and every live report shows it online), so the online endpoint's "offline" no longer overrides a printer they show
+     * online: it answered "offline" every minute for a printer that was printing and reporting, which made the status stale
+     * and stopped the camera each time.
+     */
+    static int polledOnline(int reported, int previous, long reportedAt, long nowMs, boolean live) {
+        if (live && previous == 1 && reported == 0) return 1;   // an "online" answer is still believed, and a live offline stands
+        return onlineState(reported, previous, reportedAt, nowMs);
+    }
+    private boolean endpointDisagreementNoted;
     static int onlineState(int reported, int previous, long reportedAt, long nowMs) {
         if (reported == 0 || reported == 1) return reported;
         boolean recent = reportedAt > 0 && nowMs - CloudApi.seconds(reportedAt) * 1000 < REPORT_RECENT_MS;
@@ -1809,8 +1820,14 @@ public final class PrinterService extends Service {
                     int onlineBefore = cloudOnline;
                     if (!same) { cloudReportedAt = 0; cloudOnlineSignal = false; cloudBedMesh.reset(); }
                     if (reported != null && reported.reportedAt > 0) cloudReportedAt = Math.max(cloudReportedAt, CloudApi.seconds(reported.reportedAt) * 1000);
-                    cloudOnline = onlineState(reportedOnline, same ? cloudOnline : -1, cloudReportedAt, System.currentTimeMillis());
-                    cloudOnlineSignal = reportedOnline == 1 || reportedOnline == -1 && cloudOnlineSignal && cloudOnline == 1;
+                    boolean live = same && cloudLiveOn;
+                    cloudOnline = polledOnline(reportedOnline, same ? cloudOnline : -1, cloudReportedAt, System.currentTimeMillis(), live);
+                    boolean overruled = live && onlineBefore == 1 && reportedOnline == 0;
+                    if (!overruled) cloudOnlineSignal = reportedOnline == 1 || reportedOnline == -1 && cloudOnlineSignal && cloudOnline == 1;
+                    else if (!endpointDisagreementNoted) {
+                        endpointDisagreementNoted = true;
+                        Diagnostics.note(Diagnostics.CONNECTION, "Elegoo's online check said offline while live updates show the printer online; live updates decide while they are connected");
+                    }
                     if (cloudOnline != onlineBefore) Diagnostics.note(Diagnostics.FILES, "cloud printer online state " + onlineBefore + " -> " + cloudOnline + " (online endpoint said " + reportedOnline + ")");
                 }
                 if (reported != null) {

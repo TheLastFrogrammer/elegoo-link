@@ -25,4 +25,13 @@ public class CloudOnlineStateTest {
         assertEquals(-1, PrinterService.onlineState(-1, -1, NOW - 10 * 60_000, NOW));
         assertEquals(-1, PrinterService.onlineState(-1, -1, 0, NOW));
     }
+
+    @Test public void withLiveUpdatesConnectedTheyDecideNotTheOnlineEndpoint() {
+        // Seen on a CC2: the endpoint said offline once a minute while the printer printed and reported live.
+        assertEquals(1, PrinterService.polledOnline(0, 1, NOW, NOW, true));
+        assertEquals("an online answer is still believed", 1, PrinterService.polledOnline(1, 0, NOW, NOW, true));
+        assertEquals("a live offline stands", 0, PrinterService.polledOnline(-1, 0, NOW, NOW, true));
+        assertEquals("nothing live yet: the endpoint decides", 0, PrinterService.polledOnline(0, -1, NOW, NOW, true));
+        assertEquals("without live updates the endpoint decides as before", 0, PrinterService.polledOnline(0, 1, NOW, NOW, false));
+    }
 }
