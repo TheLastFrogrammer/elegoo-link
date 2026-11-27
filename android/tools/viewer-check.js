@@ -39,7 +39,16 @@ const server = http.createServer((q, r) => {
     // Edge mode and per-type opacity: the same view drawn solid, then as edges only, must differ, and see-through infill too.
     const pixels = () => page.evaluate(() => { const c = document.querySelector('canvas'), p = document.createElement('canvas'); p.width = c.width; p.height = c.height;
       const g = p.getContext('2d'); g.drawImage(c, 0, 0); return Array.from(g.getImageData(0, 0, c.width, c.height).data.filter((v, i) => i % 16 === 0)); });
-    const draw = async (state) => { await page.evaluate((st) => { viewer.setViewState({ looking: false, camera: { yaw: -60, pitch: 30, distance: 160, target: [128, 128, 2] } }); viewer.update(st); }, state); await page.waitForTimeout(300); return pixels(); };
+    // The viewer draws on the next animation frame: wait for real frames (at most 3 s), not a fixed time, before reading.
+    const frames = () => page.evaluate(() => new Promise((done) => { let n = 0; const tick = () => (++n >= 2 ? done() : requestAnimationFrame(tick)); requestAnimationFrame(tick); setTimeout(done, 3000); }));
+    const draw = async (state) => { await page.evaluate((st) => { viewer.setViewState({ looking: false, camera: { yaw: -60, pitch: 30, distance: 160, target: [128, 128, 2] } }); viewer.update(st); }, state); await page.waitForTimeout(100); await frames(); return pixels(); };
+    // When a drawing does not change, what the page had: segments loaded, whether anything is drawn, the 3D context, the browser.
+    const why = async (shot) => {
+      const gl = await page.evaluate(() => { const c = document.querySelector('canvas'), g = c && (c.getContext('webgl2') || c.getContext('webgl'));
+        return g ? { lost: g.isContextLost(), size: c.width + 'x' + c.height } : { lost: 'no context' }; });
+      const lit = shot.reduce((n, v) => n + (Math.abs(v - shot[0]) > 24 ? 1 : 0), 0);
+      return ' [loaded ' + r.loaded + ', ' + lit + ' samples differ from the corner, context lost ' + gl.lost + (gl.size ? ', canvas ' + gl.size : '') + ', ' + browser.version() + (r.error ? ', load error ' + r.error : '') + ']';
+    };
     const full = { start: 0, end: r.loaded, layerStart: 0, edgeMask: 0, typeAlpha: null };
     const solid = await draw(full);
     if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/viewer-solid.png' });
@@ -47,8 +56,8 @@ const server = http.createServer((q, r) => {
     if (process.env.SHOTS) await page.screenshot({ path: process.env.SHOTS + '/viewer-edges.png' });
     const faded = await draw(Object.assign({}, full, { typeAlpha: [1, 1, 1, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 1, 1, 1, 1, 1, 1, 0.2, 1, 1] }));
     const differ = (a, b) => a.reduce((n, v, i) => n + (Math.abs(v - b[i]) > 24 ? 1 : 0), 0);
-    if (!(differ(solid, edges) > 200)) fail('edges only did not change the drawing (' + differ(solid, edges) + ')');
-    if (!(differ(solid, faded) > 50)) fail('see-through infill did not change the drawing (' + differ(solid, faded) + ')');
+    if (!(differ(solid, edges) > 200)) fail('edges only did not change the drawing (' + differ(solid, edges) + ')' + await why(solid));
+    if (!(differ(solid, faded) > 50)) fail('see-through infill did not change the drawing (' + differ(solid, faded) + ')' + await why(solid));
     await page.evaluate(() => viewer.update({ edgeMask: 0, typeAlpha: null }));
     // The bed mesh painted on the plate: an 11 × 11 grid from blue (front left) to orange (back right) must change the
     // plate's colour, and taking it away must bring the plain plate back.
@@ -64,7 +73,7 @@ const server = http.createServer((q, r) => {
     if (process.env.SHOTS) { await draw(full); await page.screenshot({ path: process.env.SHOTS + '/viewer-bed-mesh.png' }); }
     await page.evaluate(() => viewer.setBedMesh(null));
     const again = await draw(bedView);
-    if (!(differ(plain, painted) > 200)) fail('the bed mesh did not colour the plate (' + differ(plain, painted) + ')');
+    if (!(differ(plain, painted) > 200)) fail('the bed mesh did not colour the plate (' + differ(plain, painted) + ')' + await why(plain));
     if (differ(plain, again) > 5) fail('taking the bed mesh away did not bring the plain plate back (' + differ(plain, again) + ')');
     // A previous job's asynchronous data fetches must not repopulate the scene after it was cleared.
     const cleared = await page.evaluate(async () => {
