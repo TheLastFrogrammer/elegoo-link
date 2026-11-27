@@ -17,6 +17,13 @@
   const android = window.Android || null;
   const gl = canvas.getContext("webgl2", { antialias: true, alpha: false, preserveDrawingBuffer: true });
 
+  // The phone's graphics can drop the 3D context (low memory, a GPU reset); the drawing cannot come back on its own then,
+  // so say so instead of leaving a blank view.
+  canvas.addEventListener("webglcontextlost", () => {
+    window.__contextLost = true;
+    fail("The phone's graphics reset the 3D view (this can happen when memory runs low). Close the viewer and open it again.");
+  });
+
   function fail(text) {
     message.textContent = text; message.style.display = "flex";
     if (android && android.onError) android.onError(String(text));

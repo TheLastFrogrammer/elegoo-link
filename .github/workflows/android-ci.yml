@@ -68,10 +68,17 @@ jobs:
           name: link-workshop-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 14
+      # The pages are checked on the Chromium that Playwright pins, not the runner's own Chrome: that one changes under
+      # us, and Chrome 158's software 3D lost its context mid-check (the drawing went blank).
+      - name: Keep Playwright's Chromium
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-1.56.1-chromium
       - name: The toolpath viewer, camera and plate pages work in a browser
         run: |
           npm install --no-save --no-package-lock --silent playwright@1.56.1
-          export CHROME="$(command -v google-chrome || command -v chromium || true)"
+          npx playwright install chromium
           node tools/viewer-check.js
           node tools/camera-check.js
           node tools/plate-check.js
