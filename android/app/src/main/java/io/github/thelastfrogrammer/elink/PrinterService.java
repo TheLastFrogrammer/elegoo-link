@@ -1754,6 +1754,22 @@ public final class PrinterService extends Service {
         return onlineState(reported, previous, reportedAt, nowMs);
     }
     private boolean endpointDisagreementNoted;
+    /** When the last cloud live update arrived (phone ms; 0 none since live updates connected). */
+    private long cloudLiveDeltaAt;
+    private boolean rollbackNoted;
+    /** Logs once when a periodic read would have taken the print's progress or time left back to an older value. */
+    private void noteRollback(JSONObject live, JSONObject polled, JSONObject kept) {
+        if (rollbackNoted) return;
+        JSONObject lm = live.optJSONObject("machine_status"), pm = polled.optJSONObject("machine_status"), lp = live.optJSONObject("print_status"), pp = polled.optJSONObject("print_status");
+        String what = "";
+        if (lm != null && pm != null && lm.has("progress") && pm.optInt("progress", -1) != lm.optInt("progress", -1)) what += "progress " + pm.optInt("progress", -1) + " (live " + lm.optInt("progress", -1) + ")";
+        if (lp != null && pp != null && lp.has("remaining_time_sec") && pp.optLong("remaining_time_sec", -1) != lp.optLong("remaining_time_sec", -1))
+            what += (what.isEmpty() ? "" : ", ") + "time left " + pp.optLong("remaining_time_sec", -1) + " s (live " + lp.optLong("remaining_time_sec", -1) + " s)";
+        if (what.isEmpty()) return;
+        rollbackNoted = true;
+        JSONObject km = kept.optJSONObject("machine_status");
+        Diagnostics.note(Diagnostics.STATUS, "a periodic cloud read had older values than live updates (" + what + "); kept " + (km != null && lm != null && km.optInt("progress", -1) == lm.optInt("progress", -1) ? "the live ones" : "the read's newer ones"));
+    }
     static int onlineState(int reported, int previous, long reportedAt, long nowMs) {
         if (reported == 0 || reported == 1) return reported;
         boolean recent = reportedAt > 0 && nowMs - CloudApi.seconds(reportedAt) * 1000 < REPORT_RECENT_MS;
@@ -1818,7 +1834,7 @@ public final class PrinterService extends Service {
                     boolean same = found.serial.equals(cloudSerial);
                     cloudName = found.name; cloudModel = found.model; cloudSerial = found.serial;
                     int onlineBefore = cloudOnline;
-                    if (!same) { cloudReportedAt = 0; cloudOnlineSignal = false; cloudBedMesh.reset(); }
+                    if (!same) { cloudReportedAt = 0; cloudOnlineSignal = false; cloudBedMesh.reset(); cloudLiveDeltaAt = 0; }   // another printer: nothing live to keep
                     if (reported != null && reported.reportedAt > 0) cloudReportedAt = Math.max(cloudReportedAt, CloudApi.seconds(reported.reportedAt) * 1000);
                     boolean live = same && cloudLiveOn;
                     cloudOnline = polledOnline(reportedOnline, same ? cloudOnline : -1, cloudReportedAt, System.currentTimeMillis(), live);
@@ -1831,7 +1847,15 @@ public final class PrinterService extends Service {
                     if (cloudOnline != onlineBefore) Diagnostics.note(Diagnostics.FILES, "cloud printer online state " + onlineBefore + " -> " + cloudOnline + " (online endpoint said " + reportedOnline + ")");
                 }
                 if (reported != null) {
-                    cloudStatus = reported.status; cloudCheckedAt = System.currentTimeMillis();
+                    // While live updates are connected the status they built is newer than most stored fields: keep a live
+                    // value unless the read's copy was reported after the last live update (CloudMerge).
+                    JSONObject polled = reported.status;
+                    if (cloudLiveOn && found != null && cloudLiveDeltaAt > 0 && cloudStatus.length() > 0) try {
+                        JSONObject kept = CloudMerge.newest(cloudStatus, polled, reported.fieldAt, cloudLiveDeltaAt);
+                        noteRollback(cloudStatus, polled, kept);
+                        polled = kept;
+                    } catch (JSONException unreadable) { }
+                    cloudStatus = polled; cloudCheckedAt = System.currentTimeMillis();
                     if (!wanted && cloudOnline == 1) try {
                         boolean beforeMesh = cloudBedMesh.active();
                         saveMesh(cloudBedMesh.snapshot(cloudSerial, reported, cloudCheckedAt));
@@ -1867,7 +1891,7 @@ public final class PrinterService extends Service {
                     if (destroyed || wanted || !cloudSignedIn || !serial.equals(cloudSerial) || !currentLive(this)) return;
                     try {
                         JSONObject merged = new JSONObject(cloudStatus.toString()); Cc2Codec.merge(merged, partial);
-                        cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis();
+                        cloudStatus = merged; cloudCheckedAt = System.currentTimeMillis(); cloudLiveDeltaAt = cloudCheckedAt;
                         boolean beforeMesh = cloudBedMesh.active();
                         saveMesh(cloudBedMesh.delta(serial, partial, merged, cloudCheckedAt));
                         if (cloudBedMesh.active()) {
@@ -1964,7 +1988,7 @@ public final class PrinterService extends Service {
         synchronized (cloudLiveLock) { cloudLiveListener = null; live = cloudLive; cloudLive = null; }
         main.removeCallbacks(cloudMeshTimeout);
         cloudBedMesh.interrupted();
-        cloudLiveOn = false; cloudLiveAttempt = 0;
+        cloudLiveOn = false; cloudLiveAttempt = 0; cloudLiveDeltaAt = 0;
         if (live != null) cloudWorker.execute(live::close);
     }
 

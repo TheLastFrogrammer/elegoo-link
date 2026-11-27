@@ -45,10 +45,13 @@ public final class CloudApi {
     public static final class Snapshot {
         public final JSONObject status; public final long reportedAt;
         final long machineStateAt, machinePhaseAt;
+        /** Each field's report time ("group.key" → epoch ms or s), so a newer live value is not replaced by an older stored one. */
+        final java.util.Map<String, Long> fieldAt;
         Snapshot(JSONObject status, long reportedAt) { this(status, reportedAt, 0, 0); }
-        Snapshot(JSONObject status, long reportedAt, long machineStateAt, long machinePhaseAt) {
+        Snapshot(JSONObject status, long reportedAt, long machineStateAt, long machinePhaseAt) { this(status, reportedAt, machineStateAt, machinePhaseAt, new java.util.HashMap<>()); }
+        Snapshot(JSONObject status, long reportedAt, long machineStateAt, long machinePhaseAt, java.util.Map<String, Long> fieldAt) {
             this.status = status; this.reportedAt = reportedAt;
-            this.machineStateAt = machineStateAt; this.machinePhaseAt = machinePhaseAt;
+            this.machineStateAt = machineStateAt; this.machinePhaseAt = machinePhaseAt; this.fieldAt = fieldAt;
         }
     }
 
@@ -544,6 +547,7 @@ public final class CloudApi {
     /** Rebuilds {group: {field: value}} from the cloud's per-field reports, with the SDK's typing rules. */
     static Snapshot assemble(JSONObject data) {
         JSONObject status = new JSONObject(); long newest = 0, machineStateAt = 0, machinePhaseAt = 0;
+        java.util.Map<String, Long> fieldAt = new java.util.HashMap<>();
         try {
             for (Iterator<String> groups = data.keys(); groups.hasNext(); ) {
                 String group = groups.next(); JSONArray items = data.optJSONArray(group);
@@ -555,7 +559,7 @@ public final class CloudApi {
                     String key = item.optString("reportLinkKey", ""), value = item.optString("reportValue", "");
                     if (key.isEmpty()) continue;
                     long at = item.optLong("updateTime", 0);
-                    newest = Math.max(newest, at);
+                    newest = Math.max(newest, at); fieldAt.put(group + "." + key, at);
                     if ("machine_status".equals(group)) {
                         if ("status".equals(key)) machineStateAt = at;
                         if ("sub_status".equals(key)) machinePhaseAt = at;
@@ -569,7 +573,7 @@ public final class CloudApi {
             // As in the SDK: a cloud snapshot carries no live exception list.
             if (machine != null) machine.put("exception_status", new JSONArray());
         } catch (org.json.JSONException impossible) { throw new IllegalStateException(impossible); }
-        return new Snapshot(status, newest, machineStateAt, machinePhaseAt);
+        return new Snapshot(status, newest, machineStateAt, machinePhaseAt, fieldAt);
     }
     static Object typed(String value) {
         String text = value.trim();
