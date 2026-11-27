@@ -1849,13 +1849,13 @@ public final class PrinterService extends Service {
                 if (reported != null) {
                     // While live updates are connected the status they built is newer than most stored fields: keep a live
                     // value unless the read's copy was reported after the last live update (CloudMerge).
-                    JSONObject polled = reported.status;
+                    JSONObject read = reported.status;
                     if (cloudLiveOn && found != null && cloudLiveDeltaAt > 0 && cloudStatus.length() > 0) try {
-                        JSONObject kept = CloudMerge.newest(cloudStatus, polled, reported.fieldAt, cloudLiveDeltaAt);
-                        noteRollback(cloudStatus, polled, kept);
-                        polled = kept;
+                        JSONObject kept = CloudMerge.newest(cloudStatus, read, reported.fieldAt, cloudLiveDeltaAt);
+                        noteRollback(cloudStatus, read, kept);
+                        read = kept;
                     } catch (JSONException unreadable) { }
-                    cloudStatus = polled; cloudCheckedAt = System.currentTimeMillis();
+                    cloudStatus = read; cloudCheckedAt = System.currentTimeMillis();
                     if (!wanted && cloudOnline == 1) try {
                         boolean beforeMesh = cloudBedMesh.active();
                         saveMesh(cloudBedMesh.snapshot(cloudSerial, reported, cloudCheckedAt));
