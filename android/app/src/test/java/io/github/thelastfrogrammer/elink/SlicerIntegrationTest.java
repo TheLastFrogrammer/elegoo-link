@@ -904,12 +904,12 @@ public class SlicerIntegrationTest {
         android.widget.Spinner chooser = (android.widget.Spinner) field(activity, "resultPlate");
         assertEquals(View.VISIBLE, ((View) field(activity, "resultPlateBox")).getVisibility());
         assertEquals(2, chooser.getAdapter().getCount());
-        assertEquals("Send project plate 1 to the Files tab", buttonText(activity, "useInFiles"));
+        assertEquals("Send plate 1 to Files", buttonText(activity, "useInFiles"));
         chooser.setSelection(1); layOut(chooser); org.robolectric.shadows.ShadowLooper.idleMainLooper();
         @SuppressWarnings("unchecked") List<File> files = (List<File>) field(activity, "slicedFiles");
         assertEquals(files.get(1), field(activity, "sliced"));
         assertEquals("twoplate_project_plate2.gcode", field(activity, "slicedName"));
-        assertEquals("Send project plate 2 to the Files tab", buttonText(activity, "useInFiles"));
+        assertEquals("Send plate 2 to Files", buttonText(activity, "useInFiles"));
 
         controller.recreate();
         SliceActivity again = controller.get();
@@ -917,7 +917,7 @@ public class SlicerIntegrationTest {
         org.robolectric.shadows.ShadowLooper.idleMainLooper();
         assertEquals(1, ((android.widget.Spinner) field(again, "resultPlate")).getSelectedItemPosition());
         assertEquals("twoplate_project_plate2.gcode", field(again, "slicedName"));
-        assertEquals("Send project plate 2 to the Files tab", buttonText(again, "useInFiles"));
+        assertEquals("Send plate 2 to Files", buttonText(again, "useInFiles"));
         // Open Settings from the result keeps the chosen plate: it goes to the Files tab, and the main screen opens on Settings.
         invoke(again, "openSettingsTab");
         android.content.Intent next = ((org.robolectric.shadows.ShadowActivity) org.robolectric.shadow.api.Shadow.extract(again)).getNextStartedActivity();

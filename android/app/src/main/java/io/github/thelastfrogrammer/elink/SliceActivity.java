@@ -155,7 +155,9 @@ public final class SliceActivity extends Activity {
         error = dark ? 0xffffb4ab : 0xffba1a1a;
         LinearLayout root = new LinearLayout(this); root.setOrientation(LinearLayout.VERTICAL); root.setBackgroundColor(background); root.setFitsSystemWindows(true);
         scroll = new ScrollView(this); scroll.setBackgroundColor(background);
-        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
+        content = new LinearLayout(this); content.setOrientation(LinearLayout.VERTICAL);
+        // The form takes the first focus, so the infill box is not focused (keyboard, cursor) when the screen opens.
+        content.setFocusableInTouchMode(true); content.setDescendantFocusability(android.view.ViewGroup.FOCUS_BEFORE_DESCENDANTS); content.setPadding(dp(16), dp(16), dp(16), dp(24)); scroll.addView(content);
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         // The slice controls stay on screen below the form.
         actionBar = new LinearLayout(this); actionBar.setOrientation(LinearLayout.VERTICAL); actionBar.setPadding(dp(16), dp(8), dp(16), dp(12));
@@ -472,7 +474,9 @@ public final class SliceActivity extends Activity {
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
         LinearLayout modelActions = buttonRow(); modelCard.addView(modelActions);
-        ((LinearLayout) chooseModels.getParent()).removeView(chooseModels); modelActions.addView(chooseModels, new LinearLayout.LayoutParams(0, -2, 1));
+        ((LinearLayout) chooseModels.getParent()).removeView(chooseModels);
+        LinearLayout.LayoutParams chooseLayout = modelActions.getOrientation() == LinearLayout.VERTICAL ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
+        chooseLayout.topMargin = dp(6); modelActions.addView(chooseModels, chooseLayout);   // in line with Edit layout beside it
         editPlate = rowButton(modelActions, "Edit layout…", this::openPlate, false);
         LinearLayout moreActions = buttonRow(); modelCard.addView(moreActions);
         findModels = rowButton(moreActions, "Find online…", () -> startActivityForResult(new Intent(this, ModelSearchActivity.class), FIND_MODELS), false);
@@ -520,7 +524,7 @@ public final class SliceActivity extends Activity {
         LinearLayout infillColumn = column(quick, narrow, 0), brimColumn = column(quick, narrow, dp(12));
         TextView infillLabel = label(infillColumn, "Infill density (%)", 12, muted, false);
         infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
-        infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setMinHeight(dp(52)); infillColumn.addView(infill, new LinearLayout.LayoutParams(-1, -2));
+        infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setTextSize(16); infill.setMinHeight(dp(52)); infillColumn.addView(infill, new LinearLayout.LayoutParams(-1, -2));
         label(brimColumn, "Brim", 12, muted, false);
         brimSpinner = spinner(brimColumn); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
         label(settingsCard, "Supports", 12, muted, false);
@@ -574,24 +578,27 @@ public final class SliceActivity extends Activity {
             @Override public void onItemSelected(AdapterView<?> p, View v, int position, long id) { if (position < slicedFiles.size() && !slicedFiles.get(position).equals(sliced)) showResultPlate(position); }
             @Override public void onNothingSelected(AdapterView<?> p) { }
         });
+        // Print first (or why it can't, with the way to fix it), then looking at the result, then keeping it.
         uploadPrint = button(resultCard, "Upload and print…", this::uploadAndPrint, true);
-        button(resultCard, "Layer charts", () -> { if (sliced != null && sliced.isFile()) startActivity(new Intent(this, LayerChartsActivity.class).putExtra(LayerChartsActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, slicedName)); }, false);
         printerHint = label(resultCard, "", 12, muted, false);
         printerFix = button(resultCard, "Open Settings (the file waits in Files)", this::openSettingsTab, false);
-        resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
-        LinearLayout pair = buttonRow(); resultCard.addView(pair);
-        rowButton(pair, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
+        LinearLayout look = buttonRow(); resultCard.addView(look);
+        rowButton(look, "Preview toolpath", () -> startActivity(new Intent(this, GcodeViewerActivity.class)
             .putExtra(GcodeViewerActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(GcodeViewerActivity.EXTRA_NAME, slicedName)), false);
-        saveCopy = rowButton(pair, "Save to phone…", () -> {
+        rowButton(look, "Layer charts", () -> { if (sliced != null && sliced.isFile()) startActivity(new Intent(this, LayerChartsActivity.class).putExtra(LayerChartsActivity.EXTRA_FILE, sliced.getAbsolutePath()).putExtra(LayerChartsActivity.EXTRA_NAME, slicedName)); }, false);
+        LinearLayout keep = buttonRow(); resultCard.addView(keep);
+        saveCopy = rowButton(keep, "Save to phone…", () -> {
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT); intent.addCategory(Intent.CATEGORY_OPENABLE);
             intent.setType("application/octet-stream"); intent.putExtra(Intent.EXTRA_TITLE, slicedName); startActivityForResult(intent, SAVE);
         }, false);
-        useInFiles = button(resultCard, "Send to Files tab", () -> {
+        useInFiles = rowButton(keep, "Send to Files", () -> {
             Intent handOver = new Intent().putExtra(RESULT_FILE, sliced.getAbsolutePath()).putExtra(RESULT_NAME, slicedName);
             if (getCallingActivity() != null) setResult(RESULT_OK, handOver);
             else startActivity(handOver.setClass(this, MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP)); // opened from another app
             finish();
         }, false);
+        useInFiles.setContentDescription("Send to the Files tab");
+        resultCard.addView(preview, new LinearLayout.LayoutParams(-1, dp(160)));
 
         updateButtons();
     }
@@ -1047,7 +1054,8 @@ public final class SliceActivity extends Activity {
 
     private void showResultPlate(int index) {
         sliced = slicedFiles.get(index); slicedName = slicedNames.get(index);
-        useInFiles.setText(slicedFiles.size() > 1 ? "Send project plate " + (index + 1) + " to the Files tab" : "Send to Files tab");
+        useInFiles.setText(slicedFiles.size() > 1 ? "Send plate " + (index + 1) + " to Files" : "Send to Files");
+        useInFiles.setContentDescription(slicedFiles.size() > 1 ? "Send project plate " + (index + 1) + " to the Files tab" : "Send to the Files tab");
         preview.setVisibility(View.GONE); showPreview(sliced); firstLayerNote(sliced);
     }
     /** Adds to the result which layers run near the filament's flow limit, and how the bed (its last kept mesh) lies under the first layer. */
@@ -1071,7 +1079,7 @@ public final class SliceActivity extends Activity {
 
     /**
      * Opens the Settings tab of the main screen, where the connection and cloud control are turned on. The sliced file
-     * goes to the Files tab first (as Send to Files tab does), so it is waiting there once the printer is connected.
+     * goes to the Files tab first (as Send to Files does), so it is waiting there once the printer is connected.
      */
     private void openSettingsTab() {
         Intent handOver = new Intent().putExtra(MainActivity.EXTRA_PAGE, FeatureIndex.SETTINGS);
@@ -1085,7 +1093,7 @@ public final class SliceActivity extends Activity {
     private void uploadAndPrint() {
         if (printer == null || slicedFiles.isEmpty()) return;
         boolean cloud = !printer.ready() && printer.cloudUploadReady() && settings.getBoolean("cloudControlUnderstood", false);
-        if (!cloud && (!printer.ready() || printer.pinProbe())) { status.setText("Uploading needs a connection to the printer, or cloud control turned on. Open Settings, or use Send to Files tab."); status.setTextColor(error); return; }
+        if (!cloud && (!printer.ready() || printer.pinProbe())) { status.setText("Uploading needs a connection to the printer, or cloud control turned on. Open Settings, or use Send to Files."); status.setTextColor(error); return; }
         for (File file : slicedFiles) if (!file.isFile()) { status.setText("The sliced file is gone; slice again."); status.setTextColor(error); return; }
         if (!printer.uploadFiles(new ArrayList<>(slicedFiles), new ArrayList<>(slicedNames))) return;
         Intent back = new Intent();
@@ -1436,7 +1444,10 @@ public final class SliceActivity extends Activity {
         row.setPadding(0, dp(6), 0, dp(6));
         TextView title = new TextView(this); title.setText(name); title.setTextColor(ink); title.setTextSize(15); title.setSingleLine(true); title.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         TextView line = new TextView(this); line.setText(detail); line.setTextColor(muted); line.setTextSize(12);
-        row.addView(title); row.addView(line);
+        LinearLayout text = new LinearLayout(this); text.setOrientation(LinearLayout.VERTICAL); text.addView(title); text.addView(line);
+        TextView chevron = new TextView(this); chevron.setText("›"); chevron.setTextColor(muted); chevron.setTextSize(22); chevron.setPadding(dp(12), 0, 0, 0);
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        row.setOrientation(LinearLayout.HORIZONTAL); row.addView(text, new LinearLayout.LayoutParams(0, -2, 1)); row.addView(chevron);
         row.setOnClickListener(v -> action.run()); A11y.button(row); row.setContentDescription(name + ", " + detail + ". Change");
         if (modelRows.getChildCount() > 0) { View hairline = new View(this); hairline.setBackgroundColor(dark ? 0xff2a3a40 : 0xffdbe6e6); modelRows.addView(hairline, new LinearLayout.LayoutParams(-1, Math.max(1, dp(1)))); }
         modelRows.addView(row, new LinearLayout.LayoutParams(-1, -2));
