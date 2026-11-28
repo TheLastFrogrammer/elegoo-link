@@ -21,7 +21,16 @@ public class PlateResizeTest {
 
     @Test public void outOfRangeSizesAreRefused() {
         assertNull(PlateActivity.resize(1, PLAIN, SIZE, new double[] {0, 20, 10}, false));
-        assertNull(PlateActivity.resize(1, PLAIN, SIZE, new double[] {2000, 20, 10}, false));
-        assertNull("more than 2000% of the original", PlateActivity.resize(1, PLAIN, new double[] {0.2, 20, 10}, new double[] {900, 20, 10}, false));
+        assertNull(PlateActivity.resize(1, PLAIN, SIZE, new double[] {20000, 20, 10}, false));
+        assertNull("1000 times the original or more: the slicer refuses it", PlateActivity.resize(1, PLAIN, new double[] {0.2, 20, 10}, new double[] {200, 20, 10}, false));
+    }
+
+    @Test public void aFileMadeInOtherUnitsCanBeSizedBack() {
+        // Made in inches: a 2-inch cube reads as 2 mm; typed back as 50.8 mm.
+        assertArrayEquals(new double[] {25.4, 1, 1, 1}, PlateActivity.resize(1, PLAIN, new double[] {2, 2, 2}, new double[] {50.8, 50.8, 50.8}, true), 1e-9);
+        // Made in micrometres-as-mm: 40000 "mm" brought down to 40 mm.
+        assertArrayEquals(new double[] {0.004, 1, 1, 1}, PlateActivity.resize(1, PLAIN, new double[] {10000, 5000, 2500}, new double[] {40, 20, 10}, true), 1e-9);
+        assertTrue(PlateActivity.inRange(25.4) && PlateActivity.inRange(0.1) && PlateActivity.inRange(1 / 25.4));
+        assertFalse(PlateActivity.inRange(0.001)); assertFalse(PlateActivity.inRange(1000));
     }
 }

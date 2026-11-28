@@ -194,11 +194,19 @@ public class PlateDialogsTest {
         button(dialog(), "Scale…").performClick(); idle();
         AlertDialog scale = dialog();
         List<View> all = new ArrayList<>(); collect(scale.getWindow().getDecorView(), all);
-        for (View v : all) if (v instanceof EditText) ((EditText) v).setText("5000");
+        for (View v : all) if (v instanceof EditText) ((EditText) v).setText("100000");
         String before = lastScript();
         scale.getButton(AlertDialog.BUTTON_POSITIVE).performClick(); idle();
         assertEquals(before, lastScript());
-        assertEquals("Scale between 1% and 2000%.", ((TextView) get("status")).getText().toString());
+        assertEquals("Scale between 0.2% and 99900%.", ((TextView) get("status")).getText().toString());
+    }
+
+    @Test public void aFileInInchesIsConvertedInOneTap() throws Exception {
+        more().performClick(); idle();
+        button(dialog(), "Scale…").performClick(); idle();
+        button(dialog(), "Inches → mm (×25.4)").performClick(); idle();
+        assertTrue(lastScript(), lastScript().endsWith(";plate.setScale(25.4)"));
+        assertEquals("Inches → mm (×25.4): even scale now 2540%.", ((TextView) get("status")).getText().toString());
     }
 
     @Test public void modelSettingsReturnsTheLayoutAndTheObject() throws Exception {
