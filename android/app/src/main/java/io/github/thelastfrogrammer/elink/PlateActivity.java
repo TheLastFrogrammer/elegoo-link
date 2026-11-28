@@ -296,7 +296,7 @@ public final class PlateActivity extends Activity {
         ui.label(body, "Too big for the bed? One tap shrinks it to fit.", 13, ui.muted, false);
         ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
             status.setText("Fitted to the bed and the printer height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
-        ui.label(body, "Wrong size because the file was made in other units? Convert it in one tap (on top of the even scale).", 13, ui.muted, false);
+        ui.label(body, "Made in other units? Convert in one tap.", 13, ui.muted, false);
         for (int r = 0; r < UNIT_FIXES.length; r += 3) {
             LinearLayout row = ui.row(body);
             for (int c = r; c < r + 3; c++) {
@@ -306,8 +306,8 @@ public final class PlateActivity extends Activity {
                     double next = Double.parseDouble(String.format(Locale.ROOT, "%.6g", p.optDouble("scale", 1) * factor));
                     if (!inRange(next)) { status.setText(RANGE_TEXT); status.setTextColor(ui.error); return; }
                     js(selectScript(selected) + ";plate.setScale(" + number(next) + ")");
-                    status.setText(label.replace('\n', ' ') + ": even scale now " + percentText(next) + "."); status.setTextColor(ui.muted);
-                }, false).setTextSize(13);
+                    status.setText("Converted " + label + ": even scale now " + percentText(next) + "."); status.setTextColor(ui.muted);
+                }, false).setTextSize(14);
             }
         }
         ui.label(body, "Then each axis, on top of the even scale. 100 = unchanged. Z is height.", 13, ui.muted, false);
@@ -384,7 +384,7 @@ public final class PlateActivity extends Activity {
     static boolean inRange(double factor) { return factor > 0 && !Double.isInfinite(factor); }
     static final String RANGE_WORDS = "above 0", RANGE_TEXT = "Enter a scale above 0%.";
     /** One-tap fixes for a file in other units, applied on top of the current even scale. */
-    static final String[] UNIT_FIXES = {"From inches\n×25.4", "From cm\n×10", "From metres\n×1000", "To inches\n÷25.4", "To cm\n÷10", "To metres\n÷1000"};
+    static final String[] UNIT_FIXES = {"in → mm", "cm → mm", "m → mm", "mm → in", "mm → cm", "mm → m"};
     static final double[] UNIT_FACTORS = {25.4, 10, 1000, 1 / 25.4, 0.1, 0.001};
     private static String percentText(double factor) { return (factor * 100 >= 10 ? String.format(Locale.ROOT, "%.0f%%", factor * 100) : new java.math.BigDecimal(factor * 100).round(new java.math.MathContext(3)).stripTrailingZeros().toPlainString() + "%"); }
     private ScrollView scrollOf(View body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); return scroll; }
@@ -435,30 +435,45 @@ public final class PlateActivity extends Activity {
         boolean on = selected >= 0;
         boolean handles = viewChoices().getBoolean("handles", true), supports = viewChoices().getBoolean("supports", true);
         boolean meshOn = viewChoices().getBoolean("bedMesh", false);
-        String[] names = {"Select a model…", "Support blockers and enforcers…", "Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…",
-            handles ? "Hide the handles" : "Show the handles (move, turn, tilt, scale)",
-            supports ? "Hide where supports go" : "Show where supports go", "Reset view"};
-        if (bedMesh != null) {
-            // The bed's shape from the last levelling: shown on the plate, and used to find the selected model a flatter spot.
-            Button flat = ui.button(body, "Move to the flattest spot", () -> { dialog[0].dismiss(); flattest(); }, false); flat.setEnabled(on);
-            ui.button(body, meshOn ? "Hide the bed mesh on the plate" : "Show the bed mesh on the plate (blue lower, orange higher)", () -> {
-                dialog[0].dismiss(); viewChoices().edit().putBoolean("bedMesh", !meshOn).apply(); sendBedMesh(true); }, false);
-        }
-        Runnable[] actions = {this::selectDialog, this::supportsDialog, this::moveDialog, this::copiesDialog, this::filamentDialog, () -> js("plate.rotate(45)"), () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
-                status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); },
-            () -> js("plate.upright()"), this::scaleDialog, () -> js("plate.remove()"), this::editSelectedSettings,
-            () -> { viewChoices().edit().putBoolean("handles", !handles).apply(); applyViewChoices(); },
-            () -> { viewChoices().edit().putBoolean("supports", !supports).apply(); applyViewChoices();
-                if (!supports) { status.setText("Purple hatching: faces that will need support (facing down, less than " + Math.round(supportAngle) + "° from flat)." + (supportOn ? "" : " Supports are off for this slice: turn them on on the Slice screen.")); status.setTextColor(ui.muted); } },
-            () -> js("plate.resetCamera()")};
-        for (int i = 0; i < names.length; i++) {
-            Runnable action = actions[i];
-            Button b = ui.button(body, names[i], () -> { dialog[0].dismiss(); action.run(); }, false);
-            b.setEnabled(i <= 1 ? placements.length() > 0 : i >= names.length - 3 || on);
-        }
+        boolean any = placements.length() > 0;
+        Runnable layFlat = () -> { laying = true; js("plate.setLayMode(true)"); more.setText("Cancel lay flat");
+            status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); };
+        // Grouped: what changes the selected model, then the whole plate, then only the view. Short actions sit two to a row.
+        section(body, "This model");
+        grid(body, dialog, on, new String[] {"Move…", "Scale…", "Turn 45° left", "Several copies…", "Lay flat on a face", "Upright again", "Filament…", "Model settings…"},
+            new Runnable[] {this::moveDialog, this::scaleDialog, () -> js("plate.rotate(45)"), this::copiesDialog, layFlat, () -> js("plate.upright()"), this::filamentDialog, this::editSelectedSettings});
+        // The bed's shape from the last levelling: used to find the selected model a flatter spot.
+        if (bedMesh != null) { Button flat = ui.button(body, "Move to the flattest spot", () -> { dialog[0].dismiss(); flattest(); }, false); flat.setEnabled(on); }
+        Button remove = ui.button(body, "Remove", () -> { dialog[0].dismiss(); js("plate.remove()"); }, false); remove.setEnabled(on);
+        if (on) remove.setTextColor(ui.error);
+        section(body, "Plate");
+        grid(body, dialog, any, new String[] {"Select a model…", "Support blockers and enforcers…"}, new Runnable[] {this::selectDialog, this::supportsDialog});
+        section(body, "View");
+        ui.button(body, handles ? "Hide the handles" : "Show the handles (move, turn, tilt, scale)", () -> { dialog[0].dismiss(); viewChoices().edit().putBoolean("handles", !handles).apply(); applyViewChoices(); }, false);
+        ui.button(body, supports ? "Hide where supports go" : "Show where supports go", () -> { dialog[0].dismiss();
+            viewChoices().edit().putBoolean("supports", !supports).apply(); applyViewChoices();
+            if (!supports) { status.setText("Purple hatching: faces that will need support (facing down, less than " + Math.round(supportAngle) + "° from flat)." + (supportOn ? "" : " Supports are off for this slice: turn them on on the Slice screen.")); status.setTextColor(ui.muted); } }, false);
+        if (bedMesh != null) ui.button(body, meshOn ? "Hide the bed mesh on the plate" : "Show the bed mesh on the plate (blue lower, orange higher)", () -> {
+            dialog[0].dismiss(); viewChoices().edit().putBoolean("bedMesh", !meshOn).apply(); sendBedMesh(true); }, false);
+        ui.button(body, "Reset view", () -> { dialog[0].dismiss(); js("plate.resetCamera()"); }, false);
         if (!on) ui.label(body, "Pick a model first: tap it on the plate, or use Select a model…", 13, ui.muted, false);
         ScrollView scroll = new ScrollView(this); scroll.addView(body);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle(selected >= 0 ? name(selected) : "Model").setView(scroll).setNegativeButton("Close", null).show();
+    }
+
+    /** A small heading inside a dialog. */
+    private void section(LinearLayout body, String title) {
+        TextView t = A11y.heading(ui.label(body, title, 13, ui.muted, true)); t.setPadding(0, ui.dp(14), 0, ui.dp(2)); t.setAllCaps(true); t.setLetterSpacing(0.06f);
+    }
+    /** Dialog actions two to a row; each closes the dialog first. */
+    private void grid(LinearLayout body, android.app.AlertDialog[] dialog, boolean enabled, String[] names, Runnable[] actions) {
+        LinearLayout row = null;
+        for (int i = 0; i < names.length; i++) {
+            if (i % 2 == 0) row = ui.row(body);
+            Runnable action = actions[i];
+            Button b = ui.rowButton(row, names[i], () -> { dialog[0].dismiss(); action.run(); }, false); b.setEnabled(enabled); b.setTextSize(14);
+        }
+        if (names.length % 2 == 1) { View spacer = new View(this); LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, 1, 1); l.leftMargin = ui.dp(8); row.addView(spacer, l); }
     }
 
     /** Support blockers (no supports inside) and enforcers (supports inside): add one, or pick one to change. */
