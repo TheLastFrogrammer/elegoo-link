@@ -290,13 +290,22 @@ public final class PlateActivity extends Activity {
         if (selected < 0 || selected >= placements.length()) return;
         JSONObject p = placements.optJSONObject(selected); JSONArray k = p.optJSONArray("stretch");
         LinearLayout body = new LinearLayout(this); body.setOrientation(LinearLayout.VERTICAL); body.setPadding(ui.dp(24), ui.dp(8), ui.dp(24), 0);
-        EditText all = percentField(body, "Even scale (all axes)", p.optDouble("scale", 1) * 100);
-        ui.label(body, "Makes the whole model bigger or smaller, keeping its shape. 100 = original size.", 13, ui.muted, false);
         android.app.AlertDialog[] dialog = new android.app.AlertDialog[1];
-        ui.label(body, "Too big for the bed? One tap shrinks it to fit.", 13, ui.muted, false);
-        ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
+        // Typed scales first (even, then each axis side by side), then the one-tap fixes.
+        EditText all = percentField(body, "Even scale, % (100 = original size)", p.optDouble("scale", 1) * 100); all.setContentDescription("Even scale in percent");
+        ui.label(body, "Each axis, % (on top of the even scale; Z is height)", 13, ui.ink, false);
+        LinearLayout axisRow = ui.row(body);
+        EditText[] axes = new EditText[3]; String[] names = {"X (width)", "Y (depth)", "Z (height)"}, shortNames = {"X", "Y", "Z"};
+        for (int i = 0; i < 3; i++) {
+            LinearLayout column = new LinearLayout(this); column.setOrientation(LinearLayout.VERTICAL);
+            LinearLayout.LayoutParams l = new LinearLayout.LayoutParams(0, -2, 1); if (i > 0) l.leftMargin = ui.dp(12); axisRow.addView(column, l);
+            axes[i] = percentField(column, shortNames[i], k == null ? 100 : k.optDouble(i, 1) * 100); axes[i].setContentDescription(names[i] + " in percent");
+        }
+        ui.button(body, "Size in millimetres…", () -> { dialog[0].dismiss(); sizeDialog(); }, false);
+        section(body, "One tap");
+        ui.button(body, "Fit to the bed (shrinks it if too big)", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
             status.setText("Fitted to the bed and the printer height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
-        ui.label(body, "Made in other units? Convert in one tap.", 13, ui.muted, false);
+        ui.label(body, "Made in other units?", 13, ui.muted, false);
         for (int r = 0; r < UNIT_FIXES.length; r += 3) {
             LinearLayout row = ui.row(body);
             for (int c = r; c < r + 3; c++) {
@@ -310,10 +319,6 @@ public final class PlateActivity extends Activity {
                 }, false).setTextSize(14);
             }
         }
-        ui.label(body, "Then each axis, on top of the even scale. 100 = unchanged. Z is height.", 13, ui.muted, false);
-        EditText[] axes = new EditText[3]; String[] names = {"X (width)", "Y (depth)", "Z (height)"};
-        for (int i = 0; i < 3; i++) axes[i] = percentField(body, names[i], k == null ? 100 : k.optDouble(i, 1) * 100);
-        ui.button(body, "Size in millimetres…", () -> { dialog[0].dismiss(); sizeDialog(); }, false);
         dialog[0] = new android.app.AlertDialog.Builder(this).setTitle("Scale " + name(selected)).setView(scrollOf(body))
             .setNegativeButton("Cancel", null).setPositiveButton("Set", (d, w) -> applyScale(all.getText().toString(), axes)).show();
     }
