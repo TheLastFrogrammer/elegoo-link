@@ -16,11 +16,14 @@
   .banner { position: absolute; left: 12px; right: 12px; display: none; padding: 10px 14px; border-radius: 14px; font: 14px/1.35 sans-serif;
     text-align: center; pointer-events: none; background: rgba(20,28,32,.82); color: #fff; }
   #hint { bottom: 12px; }
+  #front { position: absolute; display: none; transform: translate(-50%, -50%); pointer-events: none; font: 600 12px/1 sans-serif;
+    letter-spacing: .08em; text-transform: uppercase; color: var(--muted, #5a6d76); }
   #mode { top: 12px; background: #00796b; font-weight: 600; }
 </style>
 </head>
 <body>
 <canvas id="view" role="img" aria-label="3D view of the build plate with the models. To select, move, turn or reset the view without touching it, use More below the view."></canvas>
+<div id="front" aria-hidden="true">Front</div>
 <div id="tags"></div>
 <div id="mode" class="banner" role="status"></div>
 <div id="hint" class="banner" role="note"></div>

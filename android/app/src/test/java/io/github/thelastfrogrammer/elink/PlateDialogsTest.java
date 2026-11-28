@@ -80,7 +80,7 @@ public class PlateDialogsTest {
         more().performClick(); idle();
         AlertDialog d = dialog();
         List<String> names = new ArrayList<>(); for (Button b : buttons(d)) names.add(b.getText().toString());
-        assertEquals("this model, then the plate, then the view", Arrays.asList("Move…", "Scale…", "Turn 45° left", "Several copies…", "Lay flat on a face", "Upright again", "Filament…", "Model settings…", "Remove", "Select a model…", "Support blockers and enforcers…", "Hide the handles", "Hide where supports go", "Reset view", "Close"), names);
+        assertEquals("this model, then the plate, then the view", Arrays.asList("Move…", "Scale…", "Turn ↺ 45°", "Several copies…", "Lay flat on a face", "Upright again", "Filament…", "Model settings…", "Remove", "Select a model…", "Support blockers and enforcers…", "Hide the handles", "Hide where supports go", "Reset view", "Close"), names);
         for (String name : names.subList(0, 12)) assertTrue(name, button(d, name).isEnabled());
     }
 
@@ -119,7 +119,7 @@ public class PlateDialogsTest {
         select(-1);
         more().performClick(); idle();
         AlertDialog d = dialog();
-        for (String name : new String[] {"Move…", "Several copies…", "Filament…", "Turn 45° left", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
+        for (String name : new String[] {"Move…", "Several copies…", "Filament…", "Turn ↺ 45°", "Lay flat on a face", "Upright again", "Scale…", "Remove", "Model settings…"}) assertFalse(name, button(d, name).isEnabled());
         assertTrue("choosing a model works without a selection", button(d, "Select a model…").isEnabled());
         assertTrue(button(d, "Reset view").isEnabled());
     }
@@ -128,7 +128,7 @@ public class PlateDialogsTest {
         // Copy sits on the panel itself; the rest are under More….
         ((Button) get("copyButton")).performClick(); idle();
         assertEquals("plate.duplicate()", lastScript());
-        for (String[] pair : new String[][] {{"Turn 45° left", "plate.rotate(45)"}, {"Remove", "plate.remove()"}, {"Upright again", "plate.upright()"}}) {
+        for (String[] pair : new String[][] {{"Turn ↺ 45°", "plate.rotate(45)"}, {"Remove", "plate.remove()"}, {"Upright again", "plate.upright()"}}) {
             more().performClick(); idle();
             button(dialog(), pair[0]).performClick(); idle();
             assertEquals(pair[0], pair[1], lastScript());

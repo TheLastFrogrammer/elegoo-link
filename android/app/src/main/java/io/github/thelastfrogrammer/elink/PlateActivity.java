@@ -76,8 +76,8 @@ public final class PlateActivity extends Activity {
         selectedLabel.setMaxLines(3); selectedLabel.setEllipsize(android.text.TextUtils.TruncateAt.END);
         status.setPadding(0, ui.dp(2), 0, ui.dp(2)); selectedLabel.setPadding(0, ui.dp(2), 0, ui.dp(2));
         LinearLayout turn = ui.row(panel);
-        rotateLeft = ui.rowButton(turn, "Left 15°", () -> js("plate.rotate(15)"), false);
-        rotateRight = ui.rowButton(turn, "Right 15°", () -> js("plate.rotate(-15)"), false);
+        rotateLeft = ui.rowButton(turn, "Turn ↺ 15°", () -> js("plate.rotate(15)"), false);
+        rotateRight = ui.rowButton(turn, "Turn ↻ 15°", () -> js("plate.rotate(-15)"), false);
         copyButton = ui.rowButton(turn, "Copy", () -> js("plate.duplicate()"), false);
         more = ui.rowButton(turn, "More…", this::moreDialog, false);
         // The compact panel keeps its buttons' text to at most 1.3x so the 3D view stays large; longer labels wrap onto a second line.
@@ -132,7 +132,7 @@ public final class PlateActivity extends Activity {
     }
 
     private void leave() {
-        if (placements.length() == 0) { status.setText("Put at least one model in the layout, or go back to the Slice screen with Arrange."); status.setTextColor(ui.error); return; }
+        if (placements.length() == 0) { status.setText("Every copy was removed, so there is nothing to slice. Back returns to the Slice screen with the last layout that had a model."); status.setTextColor(ui.error); return; }
         setResult(RESULT_OK, result());
         finish();
     }
@@ -173,9 +173,9 @@ public final class PlateActivity extends Activity {
                     if (isDestroyed()) return;
                     scene = built; placements = initial; sceneReady = true;
                     int unfit = layout.optInt("unfit");
-                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, open More…, choose Scale…, then tap Fit to the bed; or turn on shrinking in Arrange options on the Slice screen."
-                        : layout.optDouble("shrunk", 1) < 0.999 ? "Every model was shrunk to " + Math.round(layout.optDouble("shrunk") * 100) + " % so all of them fit (Arrange options on the Slice screen)."
-                        : layout.optBoolean("kept_layout") ? "Layout from the project. Drag to move; use two fingers to zoom and turn the view." : "Drag a model to move it, or use its handles: arrows move, rings turn and tilt, the yellow square scales. One finger turns the view, two fingers zoom and pan.");
+                    status.setText(unfit > 0 ? (unfit == 1 ? "One model is" : unfit + " models are") + " too big to fit the bed, so they sit in the middle. Select one, then More… › Scale… › Fit to the bed. Or let Arrange shrink everything: Slice screen › More… › Arrange options."
+                        : layout.optDouble("shrunk", 1) < 0.999 ? "Every model was shrunk to " + Math.round(layout.optDouble("shrunk") * 100) + " % so all of them fit (Slice screen › More… › Arrange options)."
+                        : (layout.optBoolean("kept_layout") ? "Layout from the project. " : "") + "Tap a model to select it; its handles: arrows move, rings turn and tilt, the yellow square scales.");
                     status.setTextColor(unfit > 0 ? ui.error : ui.muted);
                     load();
                 });
@@ -445,7 +445,7 @@ public final class PlateActivity extends Activity {
             status.setText("Tap the face of the model that should lie flat on the bed."); status.setTextColor(ui.teal); };
         // Grouped: what changes the selected model, then the whole plate, then only the view. Short actions sit two to a row.
         section(body, "This model");
-        grid(body, dialog, on, new String[] {"Move…", "Scale…", "Turn 45° left", "Several copies…", "Lay flat on a face", "Upright again", "Filament…", "Model settings…"},
+        grid(body, dialog, on, new String[] {"Move…", "Scale…", "Turn ↺ 45°", "Several copies…", "Lay flat on a face", "Upright again", "Filament…", "Model settings…"},
             new Runnable[] {this::moveDialog, this::scaleDialog, () -> js("plate.rotate(45)"), this::copiesDialog, layFlat, () -> js("plate.upright()"), this::filamentDialog, this::editSelectedSettings});
         // The bed's shape from the last levelling: used to find the selected model a flatter spot.
         if (bedMesh != null) { Button flat = ui.button(body, "Move to the flattest spot", () -> { dialog[0].dismiss(); flattest(); }, false); flat.setEnabled(on); }
@@ -614,7 +614,7 @@ public final class PlateActivity extends Activity {
     static String arrangedText(JSONObject result) {
         double shrunk = result.optDouble("shrunk", 1); int unfit = result.optInt("unfit");
         String text = shrunk < 0.999 ? "Arranged, with every model shrunk to " + Math.round(shrunk * 100) + " % so they fit." : "Arranged.";
-        if (unfit > 0) text += " " + (unfit == 1 ? "One model still does not" : unfit + " models still do not") + " fit: try Arrange options on the Slice screen (turn or shrink), or remove some.";
+        if (unfit > 0) text += " " + (unfit == 1 ? "One model still does not" : unfit + " models still do not") + " fit: scale them down (More… › Scale…), remove some, or let Arrange turn or shrink them (Slice screen › More… › Arrange options).";
         return text;
     }
     /** The filament the selected model (all its copies) prints with: one of the slots, or the file's own (as set on the Slice screen). */

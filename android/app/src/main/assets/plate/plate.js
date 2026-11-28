@@ -506,6 +506,19 @@
     drawGimbal(viewProj);
     gl.bindVertexArray(null);
     updateTags(issues, viewProj);
+    placeFront(viewProj);
+  }
+  // "Front" just outside the middle of the bed's front edge (Y = 0 side), so it is clear which way the plate faces.
+  const frontLabel = document.getElementById("front");
+  function placeFront(viewProj) {
+    if (!frontLabel) return;
+    const b = boxOf(scene.bed) || [0, 0, 256, 256];
+    const c = transform(viewProj, [(b[0] + b[2]) / 2, b[1] - 8, 0], 1);
+    if (c[3] <= 0.001) { frontLabel.style.display = "none"; return; }
+    const x = (c[0] / c[3] * 0.5 + 0.5) * canvas.clientWidth, y = (0.5 - c[1] / c[3] * 0.5) * canvas.clientHeight;
+    const inside = x > 20 && x < canvas.clientWidth - 20 && y > 10 && y < canvas.clientHeight - 10;
+    frontLabel.style.display = inside ? "block" : "none";
+    frontLabel.style.left = x + "px"; frontLabel.style.top = y + "px";
   }
   let ringVao, ringBuffer;
   function ring(r, gap, width, colour) {
@@ -897,7 +910,8 @@
       return JSON.stringify({ x: p.x, y: p.y, w: r[2] - r[0], d: r[3] - r[1], bed: boxOf(scene.bed) || [0, 0, 256, 256], others });
     },
     setTheme(next) { for (const key of Object.keys(next)) if (key in theme) theme[key] = next[key];
-      document.body.style.setProperty("--bg", "rgb(" + theme.background.map((c) => Math.round(c * 255)).join(",") + ")"); redraw(); },
+      document.body.style.setProperty("--bg", "rgb(" + theme.background.map((c) => Math.round(c * 255)).join(",") + ")");
+      document.body.style.setProperty("--muted", theme.background[0] + theme.background[1] + theme.background[2] < 1.5 ? "#9fb3bb" : "#5a6d76"); redraw(); },
     setPlacements(list) {
       // Arranged: each box goes where its copy went, turned with it.
       const before = scene.placements, rides = scene.supports.map((b) => { const i = owner(b); return i >= 0 ? { b, i, p: Object.assign({}, before[i]) } : null; }).filter(Boolean);
