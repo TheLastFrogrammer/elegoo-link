@@ -95,9 +95,10 @@ final class NativeSlicer implements AutoCloseable {
                 json.put("overrides", settings).put("plate", plate).put("project_settings", projectSettings);
                 JSONArray places = new JSONArray();
                 for (double[] p : placements) {
-                    JSONObject place = new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", p[5]);
+                    double[] k = engineFactors(p[5], p.length >= 12 ? new double[] {p[9], p[10], p[11]} : new double[] {1, 1, 1});
+                    JSONObject place = new JSONObject().put("file", (int) p[0]).put("object", (int) p[1]).put("x", p[2]).put("y", p[3]).put("rotation", p[4]).put("scale", k[0]);
                     if (p.length >= 9 && (p[6] != 0 || p[7] != 0 || p[8] != 0)) place.put("down", new JSONArray().put(p[6]).put(p[7]).put(p[8]));
-                    if (p.length >= 12 && (p[9] != 1 || p[10] != 1 || p[11] != 1)) place.put("stretch", new JSONArray().put(p[9]).put(p[10]).put(p[11]));
+                    if (k[1] != 1 || k[2] != 1 || k[3] != 1) place.put("stretch", new JSONArray().put(k[1]).put(k[2]).put(k[3]));
                     if (p.length >= 13 && p[12] > 0) place.put("slot", (int) p[12]);
                     places.put(place);
                 }
@@ -239,4 +240,22 @@ final class NativeSlicer implements AutoCloseable {
     private static native String inspect(long handle, String[] models, String meshDir, int maxTriangles);
     private static native String arrange(long handle, String[] models, String selection);
     private static native String describe(long handle, String[] models, String selection, String[] keys);
+
+    /**
+     * The even scale and per-axis stretch as the engine takes them: it refuses any one factor at 0.001 or below, or at
+     * 1000 or above. The even scale multiplies each axis's stretch, so a typed scale past that (a file made in metres, ×1000)
+     * is shared between the two, the same size either way. Already in range: unchanged.
+     */
+    static double[] engineFactors(double scale, double[] stretch) {
+        double[] out = {scale, stretch[0], stretch[1], stretch[2]};
+        if (within(scale) && within(stretch[0]) && within(stretch[1]) && within(stretch[2])) return out;
+        double[] axis = {scale * stretch[0], scale * stretch[1], scale * stretch[2]};
+        // Half the overall size change in each: the even scale takes the square root of the axes' mean factor.
+        double even = Math.sqrt(Math.cbrt(axis[0] * axis[1] * axis[2]));
+        if (!(even > 0) || Double.isInfinite(even)) return out;
+        out[0] = even;
+        for (int i = 0; i < 3; i++) out[i + 1] = axis[i] / even;
+        return out;
+    }
+    private static boolean within(double factor) { return factor > 0.001 && factor < 1000; }
 }

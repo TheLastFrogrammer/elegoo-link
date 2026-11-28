@@ -296,17 +296,17 @@ public final class PlateActivity extends Activity {
         ui.label(body, "Too big for the bed? One tap shrinks it to fit.", 13, ui.muted, false);
         ui.button(body, "Fit to the bed", () -> { dialog[0].dismiss(); web.evaluateJavascript("plate.fitToBed()", value -> {
             status.setText("Fitted to the bed and the printer height, and moved to the middle."); status.setTextColor(ui.muted); }); }, false);
-        ui.label(body, "Wrong size because the file was made in other units? Convert it in one tap.", 13, ui.muted, false);
-        for (int r = 0; r < UNIT_FIXES.length; r += 2) {
+        ui.label(body, "Wrong size because the file was made in other units? Convert it in one tap (on top of the even scale).", 13, ui.muted, false);
+        for (int r = 0; r < UNIT_FIXES.length; r += 3) {
             LinearLayout row = ui.row(body);
-            for (int c = r; c < r + 2; c++) {
+            for (int c = r; c < r + 3; c++) {
                 double factor = UNIT_FACTORS[c]; String label = UNIT_FIXES[c];
                 ui.rowButton(row, label, () -> {
                     dialog[0].dismiss();
-                    double now = p.optDouble("scale", 1), next = Math.round(now * factor * 1e6) / 1e6;
+                    double next = Double.parseDouble(String.format(Locale.ROOT, "%.6g", p.optDouble("scale", 1) * factor));
                     if (!inRange(next)) { status.setText(RANGE_TEXT); status.setTextColor(ui.error); return; }
                     js(selectScript(selected) + ";plate.setScale(" + number(next) + ")");
-                    status.setText(label + ": even scale now " + percentText(next) + "."); status.setTextColor(ui.muted);
+                    status.setText(label.replace('\n', ' ') + ": even scale now " + percentText(next) + "."); status.setTextColor(ui.muted);
                 }, false).setTextSize(13);
             }
         }
@@ -356,7 +356,7 @@ public final class PlateActivity extends Activity {
                     try { for (int i = 0; i < 3; i++) wanted[i] = Double.parseDouble(fields[i].getText().toString().trim()); }
                     catch (NumberFormatException e) { status.setText("Enter sizes in millimetres, such as 120 or 42.5."); status.setTextColor(ui.error); return; }
                     double[] result = resize(scale, stretch, size, wanted, keep.isChecked());
-                    if (result == null) { status.setText("Sizes must be between 0.01 and 10000 mm, and the scale " + RANGE_WORDS + "."); status.setTextColor(ui.error); return; }
+                    if (result == null) { status.setText("Enter sizes above 0 mm."); status.setTextColor(ui.error); return; }
                     js(selectScript(which) + ";plate.setScale(" + number(result[0]) + ");plate.setStretch(" + number(result[1]) + "," + number(result[2]) + "," + number(result[3]) + ")");
                 }).show();
         });
@@ -367,7 +367,7 @@ public final class PlateActivity extends Activity {
      * otherwise each axis's stretch takes its own factor. Null when a size or the result is out of range.
      */
     static double[] resize(double scale, double[] stretch, double[] size, double[] wanted, boolean keep) {
-        for (double v : wanted) if (!(v >= 0.01 && v <= 10000)) return null;
+        for (double v : wanted) if (!(v > 0) || Double.isInfinite(v)) return null;
         double[] out = {scale, stretch[0], stretch[1], stretch[2]};
         if (keep) {
             double factor = 1;
@@ -378,16 +378,15 @@ public final class PlateActivity extends Activity {
         return out;
     }
     /**
-     * Scale factors the slicer engine takes (it refuses 0.001 and below, and 1000 and above), wide enough to undo a file
-     * made in other units: inches ×25.4, centimetres ×10, and back.
+     * Any scale above zero is taken: a file made in other units can need ×1000 (metres) or ÷1000 (micrometres), and the
+     * plate already says when a model is too big for the bed. The slice shares a large scale with the stretch (engineFactors).
      */
-    static final double MIN_SCALE = 0.002, MAX_SCALE = 999;
-    static boolean inRange(double factor) { return factor >= MIN_SCALE && factor <= MAX_SCALE; }
-    static final String RANGE_WORDS = "between 0.2% and 99900%", RANGE_TEXT = "Scale " + RANGE_WORDS + ".";
+    static boolean inRange(double factor) { return factor > 0 && !Double.isInfinite(factor); }
+    static final String RANGE_WORDS = "above 0", RANGE_TEXT = "Enter a scale above 0%.";
     /** One-tap fixes for a file in other units, applied on top of the current even scale. */
-    static final String[] UNIT_FIXES = {"Inches → mm (×25.4)", "Centimetres → mm (×10)", "mm → inches (÷25.4)", "mm → centimetres (÷10)"};
-    static final double[] UNIT_FACTORS = {25.4, 10, 1 / 25.4, 0.1};
-    private static String percentText(double factor) { return String.format(Locale.ROOT, factor * 100 >= 10 ? "%.0f%%" : "%.2f%%", factor * 100); }
+    static final String[] UNIT_FIXES = {"From inches\n×25.4", "From cm\n×10", "From metres\n×1000", "To inches\n÷25.4", "To cm\n÷10", "To metres\n÷1000"};
+    static final double[] UNIT_FACTORS = {25.4, 10, 1000, 1 / 25.4, 0.1, 0.001};
+    private static String percentText(double factor) { return (factor * 100 >= 10 ? String.format(Locale.ROOT, "%.0f%%", factor * 100) : new java.math.BigDecimal(factor * 100).round(new java.math.MathContext(3)).stripTrailingZeros().toPlainString() + "%"); }
     private ScrollView scrollOf(View body) { ScrollView scroll = new ScrollView(this); scroll.addView(body); return scroll; }
     private EditText percentField(LinearLayout parent, String label, double value) {
         ui.label(parent, label, 13, ui.ink, false);

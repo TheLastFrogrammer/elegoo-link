@@ -697,7 +697,7 @@
     else if (kind === "z") { const turn = Math.round(wrap(now - reading) / 5) * 5; p.rotation = wrap(start.rotation + turn); text = "Turn " + turn + "°"; }
     else if (kind === "s") {
       if (reading < 1) return;
-      p.scale = Math.max(0.002, Math.min(999, Math.round(start.scale * now / reading * 1000) / 1000)); text = "Scale " + (p.scale < 0.1 ? (p.scale * 100).toFixed(1) : Math.round(p.scale * 100)) + " %";
+      p.scale = Math.max(start.scale / 100, Math.min(start.scale * 100, Number((start.scale * now / reading).toPrecision(3)))); text = "Scale " + Number((p.scale * 100).toPrecision(3)) + " %";
     } else {
       let tilt = Math.round(wrap(now - reading) / 5) * 5; if (kind === "ty") tilt = -tilt;
       setOrientation(p, mul3(axisTurn(kind === "tx" ? "x" : "y", tilt), orientation(start)));
@@ -915,10 +915,10 @@
     /** Moves the selected model by a distance in mm, as dragging does: rounded to 0.1 mm, problems checked by changed(). */
     move(dx, dy) { const p = current(); if (!p || !isFinite(dx) || !isFinite(dy)) return; const list = riders(selected); p.x = Math.round((p.x + dx) * 10) / 10; p.y = Math.round((p.y + dy) * 10) / 10; carry(list, p); changed(); },
     rotate(degrees) { const p = current(); if (!p) return; p.rotation = ((p.rotation + degrees) % 360 + 540) % 360 - 180; changed(); },
-    setScale(scale) { const p = current(); if (!p || !(scale > 0.001 && scale < 1000)) return; p.scale = scale; changed(); },
+    setScale(scale) { const p = current(); if (!p || !(scale > 0 && isFinite(scale))) return; p.scale = scale; changed(); },
     /** Per-axis stretch of the selected copy (1 = as is); all three at 1 removes it. */
     setStretch(x, y, z) {
-      const p = current(); if (!p || ![x, y, z].every((v) => v > 0.001 && v < 1000)) return;
+      const p = current(); if (!p || ![x, y, z].every((v) => v > 0 && isFinite(v))) return;
       if (x === 1 && y === 1 && z === 1) delete p.stretch; else p.stretch = [x, y, z];
       changed();
     },
