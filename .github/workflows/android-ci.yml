@@ -76,6 +76,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-1.56.1-chromium
       - name: The toolpath viewer, camera and plate pages work in a browser
+        # The runner is Ubuntu 26.04, which this Playwright has no download for; its Ubuntu 24.04 Chromium runs there.
+        env:
+          PLAYWRIGHT_HOST_PLATFORM_OVERRIDE: ubuntu24.04-x64
         run: |
           npm install --no-save --no-package-lock --silent playwright@1.56.1
           npx playwright install chromium
