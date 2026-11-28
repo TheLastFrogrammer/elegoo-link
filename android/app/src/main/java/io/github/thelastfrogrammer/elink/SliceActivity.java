@@ -88,17 +88,17 @@ public final class SliceActivity extends Activity {
     private org.json.JSONArray placements;    // the plate view's layout, or null to arrange automatically
     private org.json.JSONArray supportBoxes;  // the plate view's support blockers and enforcers (with its layout only)
     /** The Supports choices; the last two make supports only inside enforcers added in the Layout screen. */
-    static final String[] SUPPORT_CHOICES = {"Preset", "Off", "Normal (auto)", "Tree (auto)", "Normal, only where enforced", "Tree, only where enforced"};
+    static final String[] SUPPORT_CHOICES = {"From profile", "Off", "Normal (auto)", "Tree (auto)", "Normal, only where enforced", "Tree, only where enforced"};
     private String calibration;               // a calibration print instead of models (engine mode), or null
     private double[] calibrationRange = new double[3];
     private TextView calibrationLabel;
-    private Button calibrate;
+    private Button calibrate, backToModels;
     private boolean largeConfirmed;
     private LinearLayout projectBox;
     private TextView layoutLabel, settingsSummary;
     private Button editPlate, autoLayout, allSettings;
-    private Button modelExtras, printExtras;                 // collapsible headers: model settings and calibration; more print settings
-    private LinearLayout modelExtrasBody, printExtrasBody;
+    private Button modelExtras;                 // collapsible header: model settings and calibration
+    private LinearLayout modelExtrasBody;
     private String restoredPrinter, restoredProcess;
     private SharedPreferences settings;
     private boolean dark, busy;
@@ -435,7 +435,7 @@ public final class SliceActivity extends Activity {
         content.removeView(tuneCard); content.addView(tuneCard, Math.min(2, content.getChildCount()));
         label(tuneCard, "Set from " + (tune.basedOnName.isEmpty() ? "an earlier print" : tune.basedOnName) + ": " + tune.changeWords() + ".", 14, ink, false);
         label(tuneCard, (found ? "Everything else is as that file was sliced. " : "This phone did not keep what that file was sliced from: choose the model again (the changes stay set). ")
-            + "The changes are on top of the presets, which stay as they are; check them in the filament's Settings… and All settings, then tap Slice. "
+            + "The changes are on top of the profiles, which stay as they are; check them in the filament's Settings… and All print settings, then tap Slice. "
             + "The next print of this file is then set against the earlier one.", 12, muted, false);
         tuneFound = found; getIntent().removeExtra(EXTRA_TUNE);
     }
@@ -473,6 +473,8 @@ public final class SliceActivity extends Activity {
         projectBox = new LinearLayout(this); projectBox.setOrientation(LinearLayout.VERTICAL); modelCard.addView(projectBox);
         layoutLabel = label(modelCard, "", 13, muted, false); layoutLabel.setVisibility(View.GONE);
         calibrationLabel = label(modelCard, "", 13, teal, false); calibrationLabel.setVisibility(View.GONE);
+        // While a calibration print is chosen, the way back is on the card itself (the Calibration button sits in More…).
+        backToModels = button(modelCard, "Back to my models", () -> { calibration = null; showCalibration(); updateButtons(); }, false); backToModels.setVisibility(View.GONE);
         LinearLayout modelActions = buttonRow(); modelCard.addView(modelActions);
         ((LinearLayout) chooseModels.getParent()).removeView(chooseModels);
         LinearLayout.LayoutParams chooseLayout = modelActions.getOrientation() == LinearLayout.VERTICAL ? new LinearLayout.LayoutParams(-1, -2) : new LinearLayout.LayoutParams(0, -2, 1);
@@ -485,7 +487,7 @@ public final class SliceActivity extends Activity {
         moreModels.setContentDescription("More: arrange, model settings, calibration prints, remove models");
         LinearLayout holders = new LinearLayout(this); holders.setOrientation(LinearLayout.VERTICAL); holders.setVisibility(View.GONE); modelCard.addView(holders);
         removeModels = button(holders, "Remove models…", this::removeModelsDialog, false); removeModels.setVisibility(View.GONE);
-        autoLayout = button(holders, "Arrange automatically", () -> { placements = null; supportBoxes = null; showLayout(); }, false);
+        autoLayout = button(holders, "Drop my layout, arrange automatically", () -> { placements = null; supportBoxes = null; showLayout(); }, false);
         autoLayout.setVisibility(View.GONE);
         arrangeOptions = button(holders, "", this::arrangeDialog, false); showArrangeOptions();
         LinearLayout modelExtrasBox = new LinearLayout(this);
@@ -510,25 +512,25 @@ public final class SliceActivity extends Activity {
         traysNote = label(filamentCard, "", 12, muted, false); traysNote.setVisibility(View.GONE);
         slotList = new LinearLayout(this); slotList.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(slotList);
         LinearLayout slotButtons = buttonRow(); filamentCard.addView(slotButtons);
-        fillTrays = rowButton(slotButtons, "From trays", this::fillFromTrays, false); fillTrays.setContentDescription("Fill the filaments from the CANVAS trays");
-        addSlot = rowButton(slotButtons, "Add", () -> { addSlot(null); showModels(); updateButtons(); }, false); addSlot.setContentDescription("Add a filament");
-        removeSlot = rowButton(slotButtons, "Remove", () -> { removeLastSlot(); showModels(); updateButtons(); }, false); removeSlot.setContentDescription("Remove the last filament");
+        addSlot = rowButton(slotButtons, "Add filament", () -> { addSlot(null); showModels(); updateButtons(); }, false); addSlot.setContentDescription("Add a filament");
+        removeSlot = rowButton(slotButtons, "Remove last", () -> { removeLastSlot(); showModels(); updateButtons(); }, false); removeSlot.setContentDescription("Remove the last filament");
+        fillTrays = button(filamentCard, "Fill from the CANVAS trays", this::fillFromTrays, false);
         modelAssign = new LinearLayout(this); modelAssign.setOrientation(LinearLayout.VERTICAL); filamentCard.addView(modelAssign);
         addSlot(null);
 
         LinearLayout settingsCard = card("3 · Print settings");
-        label(settingsCard, "“Preset” keeps the print profile's value.", 13, muted, false);
-        // Infill and brim side by side (two columns, one under the other with large text), supports on its own: its choices are long.
-        boolean narrow = getResources().getConfiguration().fontScale >= 1.3f;
+        label(settingsCard, "Leave these on “From profile” to use the print profile's own value.", 13, muted, false);
+        // Infill, brim and supports one under the other: side by side, "From profile" wrapped onto two lines in the brim box.
+        boolean narrow = true;
         LinearLayout quick = new LinearLayout(this); quick.setOrientation(narrow ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL); settingsCard.addView(quick, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout infillColumn = column(quick, narrow, 0), brimColumn = column(quick, narrow, dp(12));
         TextView infillLabel = label(infillColumn, "Infill density (%)", 12, muted, false);
-        infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("Preset"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
+        infill = new EditText(this); A11y.labelFor(infillLabel, infill); infill.setHint("From profile"); infill.setHintTextColor(muted); infill.setTextColor(ink); infill.setSingleLine(true);
         infill.setInputType(InputType.TYPE_CLASS_NUMBER); infill.setBackgroundTintList(ColorStateList.valueOf(teal)); infill.setTextSize(16); infill.setMinHeight(dp(52)); infillColumn.addView(infill, new LinearLayout.LayoutParams(-1, -2));
         label(brimColumn, "Brim", 12, muted, false);
-        brimSpinner = spinner(brimColumn); fill(brimSpinner, Arrays.asList("Preset", "Off", "Auto", "Outer only"), "Preset");
+        brimSpinner = spinner(brimColumn); fill(brimSpinner, Arrays.asList("From profile", "Off", "Auto", "Outer only"), "From profile");
         label(settingsCard, "Supports", 12, muted, false);
-        supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList(SUPPORT_CHOICES), "Preset");
+        supportSpinner = spinner(settingsCard); fill(supportSpinner, Arrays.asList(SUPPORT_CHOICES), SUPPORT_CHOICES[0]);
         // Smooth timelapse: the head parks at a corner at each layer change, and the recording takes its picture then.
         android.content.SharedPreferences workshop = getSharedPreferences("workshop-settings", MODE_PRIVATE);
         smoothSwitch = new Switch(this); smoothSwitch.setText("Smooth timelapse: park the head for each layer's picture"); smoothSwitch.setTextColor(ink); smoothSwitch.setTextSize(15);
@@ -551,14 +553,12 @@ public final class SliceActivity extends Activity {
         smoothSwitch.setOnCheckedChangeListener((v, on) -> { smoothBox.setVisibility(on ? View.VISIBLE : View.GONE); if (!selfTest) workshop.edit().putBoolean("smoothTimelapse", on).apply(); updateButtons(); });
         smoothSwitch.setChecked(workshop.getBoolean("smoothTimelapse", false)); smoothBox.setVisibility(smoothSwitch.isChecked() ? View.VISIBLE : View.GONE);
         settingsSummary = label(settingsCard, "", 13, muted, false);
-        // Overrides from All settings: opens by itself when there are any, so the changes are never hidden.
-        LinearLayout settingsBox = new LinearLayout(this);
-        allSettings = button(settingsBox, "All settings…", this::openSettings, false);
-        printExtrasBody = settingsBox; printExtras = section(settingsCard, "More print settings", settingsBox);
+        // Every other setting, one tap away (a fold around this single button only added a tap).
+        allSettings = button(settingsCard, "All print settings…", this::openSettings, false);
         showSettingsSummary();
 
         LinearLayout sliceCard = actionBar; actionBar.setVisibility(View.VISIBLE);
-        status = A11y.polite(label(sliceCard, "Loading presets…", 14, ink, false)); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(5); // the Slice bar stays on screen whatever the message
+        status = A11y.polite(label(sliceCard, "Loading profiles…", 14, ink, false)); status.setPadding(0, dp(2), 0, dp(2)); status.setMaxLines(5); // the Slice bar stays on screen whatever the message
         progress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal); progress.setMax(100); progress.setProgressTintList(ColorStateList.valueOf(teal));
         progress.setVisibility(View.GONE); sliceCard.addView(progress, new LinearLayout.LayoutParams(-1, dp(12)));
         sliceHint = label(sliceCard, "", 12, muted, false); sliceHint.setVisibility(View.GONE); sliceHint.setMinHeight(dp(48)); sliceHint.setGravity(android.view.Gravity.CENTER_VERTICAL);
@@ -735,9 +735,8 @@ public final class SliceActivity extends Activity {
     }
 
     private void showSettingsSummary() {
-        settingsSummary.setText(customOverrides.isEmpty() ? "Everything else follows the print profile." : customOverrides.size() + " more setting(s) changed in All settings.");
+        settingsSummary.setText(customOverrides.isEmpty() ? "Everything else follows the print profile." : (customOverrides.size() == 1 ? "1 more setting" : customOverrides.size() + " more settings") + " changed in All print settings.");
         settingsSummary.setTextColor(customOverrides.isEmpty() ? muted : teal);
-        if (!customOverrides.isEmpty() && printExtras != null) setSection(printExtras, printExtrasBody, true);
     }
 
     /** What to slice: presets, filament slots, settings, 3MF plate and the layout. Null when something is missing or invalid. */
@@ -1540,7 +1539,7 @@ public final class SliceActivity extends Activity {
         for (int i = 0; i < modelSlots.size(); i++) if (is3mf(models.get(i))) modelSlots.set(i, 0);
         showModels(); updateButtons();
         String filaments = slots.size() + " filament" + (slots.size() == 1 ? "" : "s");
-        status.setText(missing.isEmpty() ? "Set up " + filaments + " from the project." : "Set up " + filaments + "; this printer has no filament preset named " + String.join(", ", missing) + ", so those filaments keep their preset.");
+        status.setText(missing.isEmpty() ? "Set up " + filaments + " from the project." : "Set up " + filaments + "; this printer has no filament profile named " + String.join(", ", missing) + ", so those filaments keep their profile.");
         status.setTextColor(missing.isEmpty() ? ink : error);
     }
 
@@ -1740,9 +1739,10 @@ public final class SliceActivity extends Activity {
             String range = calibrationSpec[2].isEmpty() ? "" : String.format(Locale.getDefault(), " · %s → %s%s", trimNumber(calibrationRange[0]), trimNumber(calibrationRange[1]),
                 calibrationSpec[4].isEmpty() ? "" : calibrationSpec[4].startsWith("Step") ? ", step " + trimNumber(calibrationRange[2])
                     : ", " + calibrationSpec[4].replaceFirst(" \\(.*", "").toLowerCase(Locale.ROOT) + " " + trimNumber(calibrationRange[2]));
-            calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nHow to read it: " + calibrationSpec[5] + "\nYour models are kept. Tap Back to my models to return to them.");
+            calibrationLabel.setText("Calibration: " + calibrationSpec[1] + range + "\nHow to read it: " + calibrationSpec[5] + "\nYour models are kept: Back to my models, below, returns to them.");
         }
         calibrate.setText(on ? "Back to my models" : "Calibration print…");
+        if (backToModels != null) backToModels.setVisibility(on ? View.VISIBLE : View.GONE);
         if (on && modelExtras != null) setSection(modelExtras, modelExtrasBody, true);
     }
 
@@ -1968,7 +1968,7 @@ public final class SliceActivity extends Activity {
         String reason = null; hintAction = null;
         Slot unset = null; for (Slot slot : slots) if (unset == null && selected(slot.preset) == null) unset = slot;
         if (busy) reason = null;   // the status line says what is going on
-        else if (models.isEmpty() && calibration == null) reason = "Choose model files, or a calibration print, to slice.";
+        else if (models.isEmpty() && calibration == null) reason = "Choose model files to slice, or a calibration print from More….";
         else if (presetProblem != null) { reason = presetProblem + " Tap here to try again."; hintAction = () -> loadCompatible(selected(printerSpinner)); }
         else if (selected(printerSpinner) == null) reason = "Choose a printer profile to slice.";
         else if (!loaded) { reason = "The print profiles are not loaded yet. Tap here to load them."; hintAction = () -> loadCompatible(selected(printerSpinner)); }
@@ -2008,7 +2008,7 @@ public final class SliceActivity extends Activity {
         for (int i = 0; i < modelRows.getChildCount(); i++) modelRows.getChildAt(i).setEnabled(!busy);
         // One line per closed group: what is chosen now.
         String printerNow = selected(printerSpinner), processNow = selected(processSpinner);
-        String summary = printerNow == null ? "Loading presets…" : printerNow.replaceFirst("^Elegoo ", "") + (processNow == null ? "" : " · " + processNow.replaceFirst(" @.*$", ""));
+        String summary = printerNow == null ? "Loading profiles…" : printerNow.replaceFirst("^Elegoo ", "") + (processNow == null ? "" : " · " + processNow.replaceFirst(" @.*$", ""));
         if (!summary.contentEquals(printerSummary.getText())) printerSummary.setText(summary);
         for (Slot slot : slots) {
             String preset = selected(slot.preset), tray = slot.tray.getSelectedItemPosition() > 0 ? selected(slot.tray) : null;
@@ -2033,7 +2033,7 @@ public final class SliceActivity extends Activity {
     private TextView summaryRow(LinearLayout parent, String caption, Runnable action) {
         label(parent, caption, 12, muted, false);
         TextView line = new TextView(this); line.setTextColor(ink); line.setTextSize(15); line.setMinHeight(dp(48)); line.setGravity(android.view.Gravity.CENTER_VERTICAL);
-        line.setCompoundDrawablePadding(dp(8)); line.setText("Loading presets…"); line.setOnClickListener(v -> action.run()); A11y.button(line);
+        line.setCompoundDrawablePadding(dp(8)); line.setText("Loading profiles…"); line.setOnClickListener(v -> action.run()); A11y.button(line);
         TextView chevron = new TextView(this); chevron.setText("▾"); chevron.setTextColor(muted); chevron.setTextSize(16);
         LinearLayout row = new LinearLayout(this); row.setGravity(android.view.Gravity.CENTER_VERTICAL);
         row.addView(line, new LinearLayout.LayoutParams(0, -2, 1)); row.addView(chevron); row.setOnClickListener(v -> action.run());
@@ -2043,10 +2043,10 @@ public final class SliceActivity extends Activity {
     /** The rarer model actions that apply now, as one menu (each opens what its button opened). */
     private void modelMenu() {
         List<String> names = new ArrayList<>(); List<Button> actions = new ArrayList<>();
-        for (Button b : new Button[] {autoLayout, arrangeOptions, objectButton, calibrate, removeModels})
+        for (Button b : new Button[] {autoLayout, arrangeOptions, objectButton, bandsButton, calibrate, removeModels})
             if (b.getVisibility() == View.VISIBLE && b.isEnabled() && b.getText().length() > 0) { names.add(b.getText().toString()); actions.add(b); }
         if (names.isEmpty()) return;
-        new AlertDialog.Builder(this).setTitle("Models").setItems(names.toArray(new String[0]), (d, which) -> actions.get(which).performClick()).setNegativeButton("Close", null).show();
+        new AlertDialog.Builder(this).setTitle("More for the models").setItems(names.toArray(new String[0]), (d, which) -> actions.get(which).performClick()).setNegativeButton("Close", null).show();
     }
 
     private String displayName(Uri uri) {
@@ -2076,7 +2076,7 @@ public final class SliceActivity extends Activity {
     private static String selected(Spinner spinner) { Object item = spinner == null ? null : spinner.getSelectedItem(); return item == null ? null : item.toString(); }
     private void fill(Spinner spinner, List<String> values, String preferred) {
         ArrayAdapter<String> adapter = new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, values) {
-            @Override public View getView(int position, View convert, android.view.ViewGroup parent) { TextView view = (TextView) super.getView(position, convert, parent); view.setTextColor(ink);
+            @Override public View getView(int position, View convert, android.view.ViewGroup parent) { TextView view = (TextView) super.getView(position, convert, parent); view.setTextColor(ink); view.setTextSize(16);
                 view.setSingleLine(false); view.setMaxLines(Integer.MAX_VALUE); return view; } // preset names are long: wrap instead of cutting them off
             @Override public View getDropDownView(int position, View convert, android.view.ViewGroup parent) { TextView view = (TextView) super.getDropDownView(position, convert, parent); view.setSingleLine(false); view.setMaxLines(Integer.MAX_VALUE); return view; }
         };
